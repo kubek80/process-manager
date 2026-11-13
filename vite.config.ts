@@ -45,7 +45,7 @@ function processFilesApi(): Plugin {
     };
     try {
       if (kind === "catalog") {
-        if (req.method === "GET") return send(200, readJson(catalogFile, { tiers: [], teams: [], tools: [] }));
+        if (req.method === "GET") return send(200, readJson(catalogFile, { tiers: [], languages: [], teams: [], tools: [] }));
         if (req.method === "PUT") return body((data) => writeJson(catalogFile, data));
         return send(405, { error: "Method not allowed" });
       }

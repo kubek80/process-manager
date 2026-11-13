@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Braces, Check, Flag, Layers, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Save, Settings2, Sparkles, TriangleAlert, Undo2, Users, Workflow } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Braces, CalendarCheck, Check, Code2, Flag, Layers, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Save, Settings2, Sparkles, TriangleAlert, Undo2, Users, Workflow } from "lucide-react";
 import type { Feedback, Process, Step } from "../types";
 import { addStepAfter, deleteStep, insertStep, moveStep, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
 import { hasErrors, validateProcess } from "../lib/validate";
 import { go, useProgress, type Tab } from "../lib/store";
-import { teamName, tierLabel, useCatalog } from "../lib/catalog";
+import { languageLabel, teamName, tierLabel, useCatalog } from "../lib/catalog";
+import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
+import { Resources } from "./Resources";
 import { FeedbackTab, openCount } from "./Feedback";
 import { useEditor } from "../lib/mode";
 import { FlowView } from "./FlowView";
@@ -60,6 +62,17 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback, onF
     setSaving(true);
     try { await onSave({ ...clean, updatedAt: today() }); } finally { setSaving(false); }
   };
+  const review = reviewInfo(draft);
+  const status = statusOf(draft);
+  const replacement = draft.replacedBy ? all.find((p) => p.id === draft.replacedBy) : undefined;
+  const markReviewed = async () => {
+    let who = "";
+    try { who = localStorage.getItem("pm:author") ?? ""; } catch { /* ignore */ }
+    const next = { ...draft, review: { intervalMonths: draft.review?.intervalMonths ?? 6, lastReviewedAt: today(), ...(who ? { reviewedBy: who } : {}) } };
+    setDraft(next);
+    // a pure "still correct" confirmation is saved straight away
+    if (!dirty && !errors) await onSave({ ...tidy(next), updatedAt: process.updatedAt });
+  };
   const back = () => { if (!dirty || confirm("Leave without saving your changes?")) go({ page: "library" }); };
 
   const mine = renderable ? draft.steps.filter((s) => s.actor === "me").length : 0;
@@ -75,16 +88,25 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback, onF
             <p className="lead">{draft.summary}</p>
             {renderable && (
               <div className="facts">
+                {status !== "active" && <span className={`tier-tag status-${status}`}>{STATUS_LABEL[status]}</span>}
                 <span className={`tier-tag ${draft.tiers?.length ? "some" : ""}`}><Layers size={12} />{tierLabel(catalog, draft.tiers)}</span>
+                <span className={`tier-tag ${draft.languages?.length ? "some" : ""}`}><Code2 size={12} />{languageLabel(catalog, draft.languages)}</span>
                 <span><ListChecks size={14} />{draft.steps.length} steps, {mine} for you</span>
                 <span><Users size={14} />{draft.actors.length - 1} other {draft.actors.length === 2 ? "party" : "parties"}</span>
                 {draft.estimatedDuration && <span><Clock size={14} />{draft.estimatedDuration}</span>}
                 {draft.updatedAt && <span>Updated {draft.updatedAt}</span>}
+                {review.state !== "none" && (
+                  <span className={`review-tag ${review.state}`} title={draft.review?.lastReviewedAt ? `Last reviewed ${draft.review.lastReviewedAt}${draft.review.reviewedBy ? ` by ${draft.review.reviewedBy}` : ""}` : "Never reviewed"}>
+                    <CalendarCheck size={13} />{review.state === "ok" ? `Reviewed ${draft.review?.lastReviewedAt}` : review.label}
+                  </span>
+                )}
               </div>
             )}
           </div>
           <div className="head-actions">
             {editor && <>
+              {review.state !== "none" && <button className={`btn ${review.state === "ok" ? "" : "review-due"}`} onClick={markReviewed} disabled={!renderable}
+                title="Confirm that this process is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
               <button className="btn accent-soft" onClick={() => setDialog("ai")} disabled={!renderable}><Sparkles size={16} />Change with AI</button>
               <button className="btn" onClick={() => setDialog("settings")} disabled={!renderable}><Settings2 size={16} />Details</button>
               <button className="btn" onClick={() => addAfter(selected)} disabled={!renderable}><Plus size={16} />Add step</button>
@@ -113,6 +135,24 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback, onF
         {!dirty && editor && <span className="saved"><Check size={14} />Saved</span>}
       </div>
       {showIssues && issues.length > 0 && <div className="issues-panel"><IssueList issues={issues} /></div>}
+
+      {status === "deprecated" && renderable && (
+        <div className="check warn banner"><TriangleAlert size={16} /><span><b>This process is retired.</b>{" "}
+          {replacement ? <>Use <a href={`#/p/${replacement.id}/flow`}>{replacement.title}</a> instead.</> : "It is kept for reference only."}</span></div>
+      )}
+      {status === "draft" && renderable && (
+        <div className="check warn banner"><TriangleAlert size={16} /><span><b>Draft.</b> Consumers do not see this process until its status is set to Active in Details.</span></div>
+      )}
+      {editor && review.state === "overdue" && renderable && (
+        <div className="check bad banner"><CalendarCheck size={16} /><span><b>{review.label}.</b> Read it through, correct what changed, then press “Mark as reviewed”.</span></div>
+      )}
+
+      {(view === "flow" || view === "list") && renderable && !!draft.resources?.length && (
+        <section className="prereqs">
+          <h2>Do it faster <span>self-service skills and useful links</span></h2>
+          <Resources list={draft.resources} />
+        </section>
+      )}
 
       {(view === "flow" || view === "list") && renderable && draft.prerequisites.length > 0 && (
         <section className="prereqs">
@@ -145,6 +185,7 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback, onF
         onInsert={(at, spec) => { const r = insertStep(draft, at, spec); setDraft(r.process); setSelected(r.id); setEditing(true); }}
         onMoveToLane={(id, actor) => setDraft(updateStep(draft, id, { actor }))} />}
       {view === "list" && renderable && <ListView process={draft} all={all} done={done} toggle={toggle} reset={reset} selectedId={selected} onSelect={select}
+        editable={editor} onInsert={(at, spec) => { const r = insertStep(draft, at, spec); setDraft(r.process); setSelected(r.id); setEditing(true); }}
         feedback={feedback} onReport={(id) => { setSelected(id); setEditing(false); setReporting(true); }} />}
       {view === "feedback" && renderable && <FeedbackTab editable={editor} process={draft} feedback={feedback} onChange={onFeedback} onSelect={select} />}
       {view === "json" && <JsonView process={clean} knownIds={knownIds} onChange={setDraft} />}

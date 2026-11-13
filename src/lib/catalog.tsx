@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 import type { Catalog } from "../types";
 
-export const EMPTY_CATALOG: Catalog = { tiers: [], teams: [], tools: [] };
+export const EMPTY_CATALOG: Catalog = { tiers: [], languages: [], teams: [], tools: [] };
 
 export interface CatalogApi {
   catalog: Catalog;
@@ -15,5 +15,7 @@ export const useCatalog = () => useContext(CatalogContext);
 const nameOf = (list: { id: string; name: string }[], id?: string) => (id ? list.find((x) => x.id === id)?.name ?? id : "");
 export const toolName = (c: Catalog, id?: string) => nameOf(c.tools, id);
 export const teamName = (c: Catalog, id?: string) => nameOf(c.teams, id);
+export const languageLabel = (c: Catalog, langs?: string[]) =>
+  !langs?.length ? "Any language" : langs.map((l) => nameOf(c.languages, l)).join(", ");
 export const tierLabel = (c: Catalog, tiers?: string[]) =>
   !tiers?.length ? "All tiers" : tiers.map((t) => nameOf(c.tiers, t)).join(", ");

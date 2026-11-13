@@ -3,6 +3,7 @@ import type { Feedback, NextLink, Process, Step } from "../types";
 import { slugify, uniqueId } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
 import { FeedbackForm, FeedbackItem } from "./Feedback";
+import { ResourceEditor } from "./Resources";
 import { STEP_META, STEP_TYPES } from "../lib/stepMeta";
 import { Field, TypeIcon } from "./ui";
 import { StepBody } from "./ListView";
@@ -137,6 +138,11 @@ export function StepDrawer({ process, all, step, editing, setEditing, onClose, o
             <Field label="Link text"><input value={step.urlLabel ?? ""} maxLength={60} placeholder="Open the form" onChange={(e) => onChange({ urlLabel: e.target.value })} /></Field>
           </div>
           <Field label="Result of this step"><input value={step.outcome ?? ""} maxLength={200} placeholder="Request number" onChange={(e) => onChange({ outcome: e.target.value })} /></Field>
+
+          <div className="field">
+            <span className="field-label">Skills and links for this step<em>e.g. a skill that does it for you</em></span>
+            <ResourceEditor list={step.resources ?? []} onChange={(resources) => onChange({ resources })} />
+          </div>
 
           <Field label="Explained by sub-process">
             <select value={step.subProcessId ?? ""} onChange={(e) => onChange({ subProcessId: e.target.value || undefined })}>

@@ -18,6 +18,12 @@
     "gateway"
   ],
   "updatedAt": "2026-11-13",
+  "status": "active",
+  "review": {
+    "intervalMonths": 6,
+    "lastReviewedAt": "2026-09-15",
+    "reviewedBy": "Process owner"
+  },
   "prerequisites": [
     {
       "title": "GCP project for the backend",

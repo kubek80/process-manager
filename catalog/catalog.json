@@ -22,6 +22,24 @@
       "description": "Internal tools and experiments."
     }
   ],
+  "languages": [
+    {
+      "id": "go",
+      "name": "Go"
+    },
+    {
+      "id": "java",
+      "name": "Java"
+    },
+    {
+      "id": "javascript",
+      "name": "JavaScript / TypeScript"
+    },
+    {
+      "id": "python",
+      "name": "Python"
+    }
+  ],
   "teams": [
     {
       "id": "api-platform-team",
@@ -74,6 +92,10 @@
     {
       "id": "akamai-control-center",
       "name": "Akamai Control Center"
+    },
+    {
+      "id": "artifact-registry",
+      "name": "Artifact registry"
     },
     {
       "id": "azure-portal",

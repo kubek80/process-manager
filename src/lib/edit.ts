@@ -1,4 +1,4 @@
-import type { Process, Step, StepType } from "../types";
+import type { Process, Resource, Step, StepType } from "../types";
 
 export const slugify = (text: string) =>
   text.toLowerCase().normalize("NFKD").replace(/[^\w\s-]/g, "").trim().replace(/[\s_]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
@@ -22,17 +22,25 @@ const strip = <T extends object>(o: T): T => {
   return out as T;
 };
 
+const cleanResources = (r?: Resource[]) => {
+  const list = r?.filter((x) => x.title.trim() || x.url.trim()).map(strip);
+  return list?.length ? list : undefined;
+};
+
 /** Remove empty optional fields so that what we save is clean, minimal JSON. */
 export function tidy(p: Process): Process {
   const out = strip({
     ...p,
     tags: p.tags?.filter(Boolean).length ? p.tags.filter(Boolean) : undefined,
     tiers: p.tiers?.length ? p.tiers : undefined,
+    languages: p.languages?.length ? p.languages : undefined,
+    replacedBy: p.status === "deprecated" ? p.replacedBy : undefined,
+    resources: cleanResources(p.resources),
     prerequisites: p.prerequisites.map(strip),
     actors: p.actors.map(strip),
     steps: p.steps.map((s) => {
       const instructions = s.instructions?.map((i) => i.trim()).filter(Boolean);
-      return strip({ ...s, instructions: instructions?.length ? instructions : undefined, next: s.next.map(strip) });
+      return strip({ ...s, instructions: instructions?.length ? instructions : undefined, resources: cleanResources(s.resources), next: s.next.map(strip) });
     }),
   });
   return out;
@@ -124,6 +132,8 @@ export function blankProcess(existingIds: string[]): Process {
     summary: "Describe in one or two sentences what the reader gets at the end.",
     category: "General",
     updatedAt: today(),
+    status: "draft",
+    review: { intervalMonths: 6 },
     prerequisites: [],
     actors: [{ id: "me", name: "You" }],
     steps: [{ id: "first-step", title: "First step", actor: "me", type: "task", instructions: ["Describe exactly what to do."], next: [] }],

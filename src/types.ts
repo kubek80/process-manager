@@ -4,6 +4,10 @@ export type StepType =
 
 export interface Actor { id: string; name: string; description?: string; teamId?: string }
 export interface Prerequisite { title: string; description?: string; url?: string; processId?: string }
+export type ResourceKind = "skill" | "repository" | "template" | "documentation" | "other";
+export interface Resource { title: string; url: string; kind?: ResourceKind; description?: string }
+export interface Review { intervalMonths: number; lastReviewedAt?: string; reviewedBy?: string }
+export type Status = "draft" | "active" | "deprecated";
 export interface NextLink { to: string; label?: string }
 
 export interface Step {
@@ -18,6 +22,7 @@ export interface Step {
   urlLabel?: string;
   duration?: string;
   outcome?: string;
+  resources?: Resource[];
   subProcessId?: string;
   next: NextLink[];
 }
@@ -31,9 +36,14 @@ export interface Process {
   category?: string;
   owner?: string;
   tiers?: string[];
+  languages?: string[];
   estimatedDuration?: string;
   tags?: string[];
   updatedAt?: string;
+  status?: Status;
+  replacedBy?: string;
+  review?: Review;
+  resources?: Resource[];
   prerequisites: Prerequisite[];
   actors: Actor[];
   steps: Step[];
@@ -43,8 +53,9 @@ export interface Issue { level: "error" | "warning"; path: string; message: stri
 
 export interface Tier { id: string; name: string; description?: string }
 export interface Team { id: string; name: string; contact?: string; description?: string }
+export interface Language { id: string; name: string; description?: string }
 export interface Tool { id: string; name: string; url?: string; description?: string }
-export interface Catalog { $schema?: string; tiers: Tier[]; teams: Team[]; tools: Tool[] }
+export interface Catalog { $schema?: string; tiers: Tier[]; languages: Language[]; teams: Team[]; tools: Tool[] }
 
 export type FeedbackKind = "broken" | "outdated" | "unclear" | "idea";
 export interface Feedback {

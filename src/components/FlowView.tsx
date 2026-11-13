@@ -1,59 +1,16 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, Clock, Flag, Maximize2, Minus, Plus, User, Workflow, Wrench, X } from "lucide-react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Check, Clock, Flag, Maximize2, Minus, Plus, User, Workflow, Wrench } from "lucide-react";
 import type { Feedback, Process, StepType } from "../types";
 import { L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
-import { LANE_COLORS, STEP_META, STEP_TYPES } from "../lib/stepMeta";
+import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import { toolName, useCatalog } from "../lib/catalog";
 import { openCount } from "./Feedback";
 import { TypeIcon } from "./ui";
 
-export interface InsertAt { afterId: string; beforeId?: string }
+import { QuickAdd, type InsertAt } from "./QuickAdd";
+
+export type { InsertAt };
 interface Adding extends InsertAt { x: number; y: number }
-
-/** Small form that appears on the map exactly where the new step will go. */
-function QuickAdd({ process, at, onAdd, onClose }: {
-  process: Process; at: Adding; onAdd: (spec: { title: string; type: StepType; actor: string }) => void; onClose: () => void;
-}) {
-  const after = process.steps.find((s) => s.id === at.afterId);
-  const before = process.steps.find((s) => s.id === at.beforeId);
-  const [title, setTitle] = useState("");
-  const [type, setType] = useState<StepType>("task");
-  const [actor, setActor] = useState(after?.actor ?? "me");
-  const ok = title.trim().length >= 3;
-  const submit = () => ok && onAdd({ title: title.trim(), type, actor });
-  useEffect(() => {
-    const on = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
-  }, [onClose]);
-
-  return (
-    <div className="quick-add" style={{ left: at.x, top: at.y }} onMouseDown={(e) => e.stopPropagation()}
-      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}>
-      <div className="quick-head">
-        <span>{before ? <>New step between <b>{after?.title}</b> and <b>{before.title}</b></>
-          : after?.type === "decision" ? <>New branch from <b>{after.title}</b></> : <>New step after <b>{after?.title}</b></>}</span>
-        <button className="icon-btn" onClick={onClose} aria-label="Cancel"><X size={15} /></button>
-      </div>
-      <input autoFocus value={title} maxLength={70} placeholder="What happens? e.g. Fill in the access request"
-        onChange={(e) => setTitle(e.target.value)} />
-      <div className="quick-label">Who</div>
-      <div className="chips">
-        {process.actors.map((a) => <button key={a.id} className={`chip ${actor === a.id ? "on" : ""}`} onClick={() => setActor(a.id)}>{a.name}</button>)}
-      </div>
-      <div className="quick-label">Kind <em>{STEP_META[type].label}</em></div>
-      <div className="quick-types">
-        {STEP_TYPES.map((t) => (
-          <button key={t} className={type === t ? "on" : ""} title={`${STEP_META[t].label} - ${STEP_META[t].when}`}
-            style={{ "--c": STEP_META[t].color } as React.CSSProperties} onClick={() => setType(t)}>
-            <TypeIcon type={t} size={28} />
-          </button>
-        ))}
-      </div>
-      <button className="btn primary" disabled={!ok} onClick={submit}><Plus size={15} />Add step</button>
-    </div>
-  );
-}
 
 export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, editable = true, bare }: {
   editable?: boolean; bare?: boolean;
@@ -173,7 +130,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
           })}
 
           {adding && (
-            <QuickAdd process={process} at={adding} onClose={() => setAdding(null)}
+            <QuickAdd process={process} at={adding} style={{ left: adding.x, top: adding.y }} onClose={() => setAdding(null)}
               onAdd={(spec) => { onInsert?.({ afterId: adding.afterId, beforeId: adding.beforeId }, spec); setAdding(null); }} />
           )}
         </div>

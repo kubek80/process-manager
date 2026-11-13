@@ -3,6 +3,9 @@ import type { Process } from "../types";
 import { slugify, uniqueId } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
 import { Field, Modal } from "./ui";
+import { ResourceEditor } from "./Resources";
+import { statusOf, STATUS_LABEL } from "../lib/lifecycle";
+import type { Status } from "../types";
 
 export function ProcessSettings({ process, all, onChange, onClose, onDelete }: {
   process: Process; all: Process[]; onChange: (p: Process) => void; onClose: () => void; onDelete: () => void;
@@ -12,6 +15,8 @@ export function ProcessSettings({ process, all, onChange, onClose, onDelete }: {
   const actors = process.actors;
   const { catalog } = useCatalog();
   const tiers = process.tiers ?? [];
+  const langs = process.languages ?? [];
+  const status = statusOf(process);
   const freeTeams = catalog.teams.filter((t) => !actors.some((a) => a.teamId === t.id || a.id === t.id));
   const used = (id: string) => process.steps.some((s) => s.actor === id);
   const swap = (i: number, j: number) => {
@@ -49,9 +54,50 @@ export function ProcessSettings({ process, all, onChange, onClose, onDelete }: {
           </div>
           <a className="small" href="#/catalog">Manage teams, tools and tiers</a>
         </div>
+        <div className="field">
+          <span className="field-label">Programming language<em>{langs.length ? "only for the selected languages" : "does not depend on the language"}</em></span>
+          <div className="chips">
+            <button className={`chip ${langs.length === 0 ? "on" : ""}`} onClick={() => set({ languages: undefined })}>Any language</button>
+            {catalog.languages.map((l) => (
+              <button key={l.id} className={`chip ${langs.includes(l.id) ? "on" : ""}`} title={l.description}
+                onClick={() => set({ languages: catalog.languages.map((x) => x.id).filter((id) => (id === l.id ? !langs.includes(id) : langs.includes(id))) })}>{l.name}</button>
+            ))}
+          </div>
+        </div>
         <Field label="Tags" hint="comma separated">
           <input value={(process.tags ?? []).join(", ")} onChange={(e) => set({ tags: e.target.value.split(",").map((t) => t.trimStart().slice(0, 30)).slice(0, 12) })} />
         </Field>
+
+        <h4>Life-cycle <span className="muted">who sees it and how often the owner reviews it</span></h4>
+        <div className="grid3">
+          <div className="field">
+            <span className="field-label">Status</span>
+            <div className="chips">
+              {(["draft", "active", "deprecated"] as Status[]).map((s) => (
+                <button key={s} className={`chip ${status === s ? "on" : ""}`} onClick={() => set({ status: s })}
+                  title={s === "draft" ? "Only editors see it" : s === "active" ? "In use, visible to everyone" : "Kept for reference, marked as retired"}>{STATUS_LABEL[s]}</button>
+              ))}
+            </div>
+          </div>
+          <Field label="Owner reviews it every">
+            <select value={process.review?.intervalMonths ?? ""} onChange={(e) => set({ review: e.target.value ? { ...process.review, intervalMonths: Number(e.target.value) } : undefined })}>
+              <option value="">Never (not recommended)</option>
+              {[3, 6, 12, 24].map((m) => <option key={m} value={m}>{m} months</option>)}
+              {process.review && ![3, 6, 12, 24].includes(process.review.intervalMonths) && <option value={process.review.intervalMonths}>{process.review.intervalMonths} months</option>}
+            </select>
+          </Field>
+          {status === "deprecated" && (
+            <Field label="Use instead">
+              <select value={process.replacedBy ?? ""} onChange={(e) => set({ replacedBy: e.target.value || undefined })}>
+                <option value="">Nothing replaces it</option>
+                {all.filter((p) => p.id !== process.id).map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+              </select>
+            </Field>
+          )}
+        </div>
+
+        <h4>Skills and links <span className="muted">ways to do it faster or in self-service</span></h4>
+        <ResourceEditor list={process.resources ?? []} onChange={(resources) => set({ resources })} />
 
         <h4>Who takes part <span className="muted">each one is a lane on the map</span></h4>
         <div className="rows">

@@ -41,6 +41,10 @@ B. OWNER AND TIERS
 - "owner": the id of the team that owns the process, ONLY from the TEAMS list below. If unknown or not on the list, leave it out.
 - "tiers": the ids of the application tiers the process applies to, ONLY from the TIERS list below. If the text does not restrict the process to certain tiers, leave "tiers" out (that means: all tiers).
 
+- "languages": the ids of the programming languages the process is specific to, ONLY from the LANGUAGES list below. If the process does not depend on the language, leave "languages" out.
+- "status": use "draft" for a new process, so that an editor reviews it before consumers see it. Add "review": { "intervalMonths": 6 } unless the text names another review rhythm. Never invent "lastReviewedAt".
+- "resources": links named in the text that help to do or automate the work. Use kind "skill" for instructions an AI assistant can run in self-service, "repository", "template", "documentation" or "other". Put a link on the step it belongs to (step "resources") when it helps with one step only.
+
 C. PREREQUISITES
 - Everything that must exist BEFORE the first step: accounts, approvals, budgets, documents, access rights, other finished processes.
 - If a prerequisite is produced by one of the EXISTING PROCESSES listed below, set "processId" to its id.
@@ -69,7 +73,7 @@ E. FLOW ("next")
 - Every step has id, title, actor, type and next.
 - Every step id used in "next.to" exists; every "actor" exists in "actors".
 - Every decision has 2+ labelled paths. Every "subprocess" step has "subProcessId".
-- "owner", "teamId", "tool" and "tiers" only use ids from the lists below.
+- "owner", "teamId", "tool", "tiers" and "languages" only use ids from the lists below.
 - All ids are kebab-case. No field outside the schema.
 
 # EXISTING PROCESSES (usable in "subProcessId" and prerequisite "processId")
@@ -84,13 +88,16 @@ ${list(catalog?.tools)}
 # TIERS (usable in "tiers")
 ${list(catalog?.tiers)}
 
+# LANGUAGES (usable in "languages")
+${list(catalog?.languages)}
+
 # JSON SCHEMA
 \`\`\`json
 ${JSON.stringify(schema)}
 \`\`\`
 
 # EXAMPLE OF A CORRECT ANSWER
-(The ids in the example are illustrative. For "owner", "teamId", "tool" and "tiers" use only the lists above.)
+(The ids in the example are illustrative. For "owner", "teamId", "tool", "tiers" and "languages" use only the lists above.)
 \`\`\`json
 ${JSON.stringify(example, null, 2)}
 \`\`\`
@@ -111,7 +118,7 @@ ${text.trim() || "(paste the process description here)"}
 export function modifyPrompt(process: Process, request: string, known: KnownProcess[], catalog?: Catalog): string {
   return `${basePrompt(known.filter((k) => k.id !== process.id), catalog)}
 # YOUR TASK
-Below is an existing process in the JSON format, followed by a change request. Apply the change and return the COMPLETE updated JSON (not a diff). Keep the "id" of the process and keep the ids of steps that are not affected. Change nothing that the request does not ask for.
+Below is an existing process in the JSON format, followed by a change request. Apply the change and return the COMPLETE updated JSON (not a diff). Keep the "id", "status" and "review" of the process and keep the ids of steps that are not affected. Change nothing that the request does not ask for.
 
 --- CURRENT PROCESS JSON START ---
 ${JSON.stringify(process, null, 2)}

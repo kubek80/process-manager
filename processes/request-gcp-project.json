@@ -13,6 +13,26 @@
     "terraform"
   ],
   "updatedAt": "2026-11-13",
+  "status": "active",
+  "review": {
+    "intervalMonths": 6,
+    "lastReviewedAt": "2026-11-03",
+    "reviewedBy": "Process owner"
+  },
+  "resources": [
+    {
+      "title": "Skill: add a GCP project",
+      "url": "https://github.example.com/platform/gcp-project-factory/tree/main/.claude/skills/add-project",
+      "kind": "skill",
+      "description": "Lets an AI coding assistant write the project file and open the pull request for you."
+    },
+    {
+      "title": "gcp-project-factory",
+      "url": "https://github.example.com/platform/gcp-project-factory",
+      "kind": "repository",
+      "description": "Terraform that creates every project."
+    }
+  ],
   "prerequisites": [
     {
       "title": "Application registered in the CMDB",
@@ -166,6 +186,14 @@
       "urlLabel": "Open gcp-project-factory",
       "duration": "20 min",
       "outcome": "Open pull request",
+      "resources": [
+        {
+          "title": "Skill: add a GCP project",
+          "url": "https://github.example.com/platform/gcp-project-factory/tree/main/.claude/skills/add-project",
+          "kind": "skill",
+          "description": "Lets an AI coding assistant write the project file and open the pull request for you."
+        }
+      ],
       "next": [
         {
           "to": "review-pull-request"

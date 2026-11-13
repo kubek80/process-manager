@@ -39,6 +39,9 @@ The app has a built-in **Guide** (top bar) that explains every feature, with flo
 | Concept | Meaning |
 | --- | --- |
 | **Owner and tiers** | `owner` is a team from the catalog. `tiers` limits the process to some application tiers (e.g. Tier 0 and Tier 1); leave it out and it applies to all. |
+| **Languages** | `languages` limits the process to some programming languages (e.g. Go, JavaScript); leave it out when it does not depend on the language. |
+| **Life-cycle** | `status` is `draft` (editors only), `active` or `deprecated` (retired, optionally `replacedBy`). `review` sets how often the owner must confirm it is still correct. |
+| **Skills and links** | `resources` on a process or a step: self-service skills for AI assistants, repositories, templates, documentation. |
 | **Prerequisites** | What must be in place before step 1. Can point to another process that produces it. |
 | **Actors** | Who takes part. Each is a lane. `actors[0]` is always `me`. |
 | **Steps** | One action by one actor, with a block type, exact instructions, tool, link, duration and outcome. |
@@ -50,7 +53,21 @@ The format is defined by [`schema/process.schema.json`](schema/process.schema.js
 
 ## Teams, tools and tiers
 
-Processes pick their owner, participants, tools and tiers from shared lists in `catalog/catalog.json` (schema: `schema/catalog.schema.json`). Manage them on the **Teams, tools & tiers** page (Editor mode): pick a list, select an entry, edit it on the right, and see which processes use it. In Consumer mode the same page is a read-only directory. A tool can also be added on the spot from the tool picker of a step. An entry that is still used by a process cannot be removed.
+Processes pick their owner, participants, tools, tiers and languages from shared lists in `catalog/catalog.json` (schema: `schema/catalog.schema.json`). Manage them on the **Teams, tools & tiers** page (Editor mode): pick a list, select an entry, edit it on the right, and see which processes use it. In Consumer mode the same page is a read-only directory. A tool can also be added on the spot from the tool picker of a step. An entry that is still used by a process cannot be removed.
+
+## Life-cycle and reviews
+
+New processes start as **Draft** and are hidden from consumers until an editor sets them to **Active**. An active process has a review interval (3–24 months). When it is due, editors see a badge and a banner; **Mark as reviewed** records the date and restarts the interval. A retired process stays for reference and can point to its replacement.
+
+```bash
+npm run reviews
+```
+
+Lists what is overdue or due within 30 days, grouped by owner team with its contact, and exits non-zero when something is overdue, so a scheduled job can remind the owners.
+
+## For agents (MCP, planned)
+
+The same catalog is meant to be consumed by AI agents through an MCP server. It is not implemented yet; the planned contract and how an agent can read the files today are in [`docs/mcp.md`](docs/mcp.md). The longer-term goal, an agent that follows a process for you, is described in the in-app Guide.
 
 ## Feedback
 
@@ -60,6 +77,7 @@ Anyone can flag a step (or the whole process) that does not work: *This step doe
 
 Switch to **Editor** first.
 
+- **In the checklist** – hover between two steps and press *Insert a step here*; the same small form appears in place.
 - **On the map** – press **+** on an arrow to insert a step exactly there, or **+** on a block to add one after it (on a decision: a new branch). A small form on the map asks what happens, who does it and what kind of step it is. Drag a block to another lane to change who does it.
 - **In the side panel** – click a block → *Edit step* for instructions, tool, link and what comes next. *Details* edits the name, owner, tiers, participants and prerequisites. Changes stay in a draft until you press **Save changes**.
 - **JSON tab** – edit the raw JSON with live checking.
@@ -83,7 +101,7 @@ Checks `catalog/catalog.json` and every file in `processes/` (or the files you p
 
 ```
 processes/            one JSON file per process (the data)
-catalog/catalog.json  teams, tools and application tiers
+catalog/catalog.json  teams, tools, application tiers and languages
 feedback/             one JSON file per process with user feedback
 schema/               JSON schemas + the example used in the LLM prompt
 .claude/skills/       instructions for AI coding assistants

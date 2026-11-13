@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpRight, Check, ExternalLink, Layers, Plus, Save, Search, Trash2, Undo2, Users, Wrench } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpRight, Check, Code2, ExternalLink, Layers, Plus, Save, Search, Trash2, Undo2, Users, Wrench } from "lucide-react";
 import type { Catalog, Process } from "../types";
 import { slugify, uniqueId } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
@@ -9,7 +9,7 @@ import { go } from "../lib/store";
 import { IssueList } from "./AiDialog";
 import { Field } from "./ui";
 
-type Key = "teams" | "tools" | "tiers";
+type Key = "teams" | "tools" | "tiers" | "languages";
 type Row = { id: string; name: string; contact?: string; url?: string; description?: string };
 
 const KINDS: Record<Key, {
@@ -37,8 +37,13 @@ const KINDS: Record<Key, {
     blurb: "A process applies to every tier or to a chosen few. Most critical first.",
     fields: [{ field: "description", label: "What makes an application this tier", placeholder: "e.g. Outage stops the business", long: true }],
   },
+  languages: {
+    title: "Languages", noun: "language", icon: Code2, color: "#db2777",
+    blurb: "Some processes only apply to one language. Most apply to any.",
+    fields: [{ field: "description", label: "Notes", placeholder: "e.g. Includes TypeScript", long: true }],
+  },
 };
-const KEYS: Key[] = ["teams", "tools", "tiers"];
+const KEYS: Key[] = ["teams", "tools", "tiers", "languages"];
 
 interface Use { process: Process; how: string }
 
@@ -52,7 +57,8 @@ function usesOf(key: Key, id: string, processes: Process[]): Use[] {
     } else if (key === "tools") {
       const n = p.steps?.filter((s) => s.tool === id).length ?? 0;
       if (n) how.push(`${n} step${n > 1 ? "s" : ""}`);
-    } else if (p.tiers?.includes(id)) how.push("applies to this tier");
+    } else if (key === "tiers") { if (p.tiers?.includes(id)) how.push("applies to this tier"); }
+    else if (p.languages?.includes(id)) how.push("specific to this language");
     if (how.length) out.push({ process: p, how: how.join(" · ") });
   }
   return out;
@@ -72,7 +78,7 @@ export function CatalogPage({ processes }: { processes: Process[] }) {
   useEffect(() => setDraft(catalog), [catalog]);
   useEffect(() => { if (!editor) { setDraft(catalog); setAdding(false); } }, [editor, catalog]);
 
-  const clean = useMemo<Catalog>(() => ({ ...draft, teams: draft.teams.map(strip), tools: draft.tools.map(strip), tiers: draft.tiers.map(strip) }) as Catalog, [draft]);
+  const clean = useMemo<Catalog>(() => ({ ...draft, teams: draft.teams.map(strip), tools: draft.tools.map(strip), tiers: draft.tiers.map(strip), languages: draft.languages.map(strip) }) as Catalog, [draft]);
   const dirty = JSON.stringify(clean) !== JSON.stringify(catalog);
   const issues = validateCatalog(clean);
 
@@ -105,7 +111,7 @@ export function CatalogPage({ processes }: { processes: Process[] }) {
     <div className="page catalog-page">
       <div className="head-row">
         <div className="head-text">
-          <h1>Teams, tools &amp; tiers</h1>
+          <h1>Teams, tools, tiers &amp; languages</h1>
           <p className="lead">{editor
             ? "The shared lists every process picks from. Change a name here and it changes everywhere."
             : "Who owns what, how to reach them, and which systems the processes use."}</p>
@@ -161,7 +167,7 @@ export function CatalogPage({ processes }: { processes: Process[] }) {
               <h2>New {kind.noun}</h2>
               <p className="muted">Give it the name people already use. You can add the details afterwards.</p>
               <Field label="Name">
-                <input autoFocus value={newName} maxLength={40} placeholder={key === "teams" ? "Cloud Platform team" : key === "tools" ? "ServiceNow" : "Tier 4"}
+                <input autoFocus value={newName} maxLength={40} placeholder={key === "teams" ? "Cloud Platform team" : key === "tools" ? "ServiceNow" : key === "tiers" ? "Tier 4" : "Rust"}
                   onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
               </Field>
               <p className="muted small">Id used in process files: <code>{slugify(newName) ? newId : "…"}</code>. It never changes, even if you rename.</p>
@@ -245,7 +251,7 @@ export function CatalogPage({ processes }: { processes: Process[] }) {
 
       {editor && dirty && (
         <div className="save-bar" role="status">
-          <span><b>Unsaved changes</b> to teams, tools or tiers</span>
+          <span><b>Unsaved changes</b> to the lists</span>
           <button className="btn" onClick={() => setDraft(catalog)}><Undo2 size={16} />Discard</button>
           <button className="btn primary" disabled={hasErrors(issues)} onClick={() => save(clean)}><Save size={16} />Save changes</button>
         </div>

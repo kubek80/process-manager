@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Braces, Check, Eye, Flag, GripVertical, Layers, ListChecks, MousePointerClick, Pencil, Plus, Sparkles, Workflow } from "lucide-react";
+import { Braces, CalendarCheck, Check, Eye, Flag, GripVertical, Layers, ListChecks, MousePointerClick, Pencil, Plus, Sparkles, Workflow } from "lucide-react";
 import type { Process } from "../types";
 import { STEP_META, STEP_TYPES } from "../lib/stepMeta";
-import { aiFlow, feedbackFlow, followFlow } from "../guide/flows";
+import { aiFlow, automationFlow, feedbackFlow, followFlow, reviewFlow } from "../guide/flows";
 import { FlowView } from "./FlowView";
 import { TypeIcon } from "./ui";
 
@@ -14,8 +14,12 @@ const SECTIONS: [string, string][] = [
   ["blocks", "The building blocks"],
   ["edit", "Editing a process"],
   ["ai", "Creating one with AI"],
-  ["catalog", "Teams, tools and tiers"],
+  ["skills", "Skills and links"],
+  ["catalog", "Teams, tools, tiers, languages"],
   ["feedback", "Feedback"],
+  ["lifecycle", "Life-cycle and reviews"],
+  ["agents", "For agents: MCP"],
+  ["roadmap", "Planned: automation"],
   ["files", "Files, schema and checker"],
 ];
 
@@ -102,7 +106,7 @@ export function GuidePage() {
         </Section>
 
         <Section id="read" title="Reading a process">
-          <p>Open a process from the library. The header tells you which <b>application tiers</b> it applies to, who owns it and how long it usually takes. Below it:</p>
+          <p>Open a process from the library. The header tells you which <b>application tiers</b> and <b>programming languages</b> it applies to, who owns it, how long it usually takes and when it was last reviewed. Below it:</p>
           <dl className="guide-dl">
             <div><dt>Before you start</dt><dd>The prerequisites. Tick what you already have. If a prerequisite is itself a process, a link takes you there.</dd></div>
             <div><dt>Map</dt><dd>Time runs left to right, each lane is one participant. Dashed arrows loop back, for example after a rejection. Click a block to open its details on the right.</dd></div>
@@ -130,6 +134,7 @@ export function GuidePage() {
           <div className="guide-cards three">
             <div><Plus size={20} /><h3>Insert on an arrow</h3><p>Hover the map and press the small + on an arrow. A form appears right there: what happens, who does it, what kind. The step lands exactly between the two blocks.</p></div>
             <div><GripVertical size={20} /><h3>Drag between lanes</h3><p>Drag a block to another lane to change who does it. The + on a block adds a step after it; on a decision it adds a branch.</p></div>
+            <div><ListChecks size={20} /><h3>Insert in the checklist</h3><p>The checklist works the same way: hover between two steps and press “Insert a step here”. Use it when you think in order rather than in lanes.</p></div>
             <div><MousePointerClick size={20} /><h3>Click for the rest</h3><p>“Edit step” in the side panel holds the exact actions, tool, link, result, sub-process and what comes next. “Details” holds name, owner, tiers, participants and prerequisites.</p></div>
           </div>
         </Section>
@@ -140,10 +145,16 @@ export function GuidePage() {
           <p>The prompt contains the modelling rules, the JSON schema, your current teams, tools and tiers, the existing processes (so it can reuse them as sub-processes) and one worked example. “Change with AI” on a process works the same way and adds the current process to the prompt.</p>
         </Section>
 
-        <Section id="catalog" title="Teams, tools and tiers">
+        <Section id="skills" title="Skills and links">
+          <p>A process, or a single step, can carry links that help to do the work: repositories, templates, documentation, and <b>self-service skills</b>. A skill is a set of instructions that an AI coding assistant can run, for example “add a GCP project to the IaC repository and open the pull request”. Skills are shown first under “Do it faster”, and on the step they belong to.</p>
+          <p>This is how a description turns into self-service: the process says what must happen, the skill does it.</p>
+        </Section>
+
+        <Section id="catalog" title="Teams, tools, tiers and languages">
           <p>Processes do not type these in; they pick them from shared lists, so a team is spelled the same everywhere and renaming it once renames it in every process.</p>
           <dl className="guide-dl">
             <div><dt><Layers size={14} />Tiers</dt><dd>A process applies to every application tier, or only to the ones selected in its details. The library filter “My application is…” hides processes that do not apply to you.</dd></div>
+            <div><dt>Languages</dt><dd>Most processes do not depend on the programming language. Some do, such as publishing a Go module or an npm package; those name their languages, and the library filter “written in…” hides the rest.</dd></div>
             <div><dt>Teams</dt><dd>A team can own a process and can be added as a participant, which gives it a lane.</dd></div>
             <div><dt>Tools</dt><dd>A step picks its tool from the list. Editors can add a missing tool straight from that picker.</dd></div>
           </dl>
@@ -155,20 +166,52 @@ export function GuidePage() {
           <Chart process={feedbackFlow} caption="A reported problem stays visible on the step until the owner marks it as fixed." />
         </Section>
 
+        <Section id="lifecycle" title="Life-cycle and reviews">
+          <p>A description that nobody checks goes stale. Every process therefore has a status and a review rhythm, both set in Details.</p>
+          <dl className="guide-dl">
+            <div><dt>Draft</dt><dd>Being written. Only editors see it. New processes, including those created with AI, start here.</dd></div>
+            <div><dt>Active</dt><dd>In use and visible to everyone. The owner is asked to review it every 3, 6, 12 or 24 months.</dd></div>
+            <div><dt>Retired</dt><dd>No longer the way to do it. It stays for reference, greyed out, and can point to the process that replaces it.</dd></div>
+          </dl>
+          <Chart process={reviewFlow} caption="The review cycle of an active process. “Mark as reviewed” records the date and who confirmed it." />
+          <p><CalendarCheck size={13} /> In Editor mode the library shows how many processes need a review, and each of them carries a badge. From the command line, <code>npm run reviews</code> lists what is overdue or due within 30 days, grouped by owner team with its contact, and exits with an error when something is overdue. A scheduled job can use that to remind the owners.</p>
+        </Section>
+
+        <Section id="agents" title="For agents: MCP">
+          <p>The same knowledge is meant for people and for AI agents. People use this app. Agents will use an <b>MCP server</b> (Model Context Protocol) that serves the same files. The server is <b>not built yet</b>; the contract below is the plan, described in full in <code>docs/mcp.md</code>.</p>
+          <table className="guide-table">
+            <tbody>
+              <tr><td><code>search_processes</code></td><td>Find processes by words, application tier and language. Returns only active ones.</td></tr>
+              <tr><td><code>get_process</code></td><td>The full process: prerequisites, participants, steps, links and skills.</td></tr>
+              <tr><td><code>get_my_steps</code></td><td>Only the steps of one participant, in order, with exact actions. What an agent acting for you needs.</td></tr>
+              <tr><td><code>get_catalog</code></td><td>Teams with contacts, tools with links, tiers and languages.</td></tr>
+              <tr><td><code>report_problem</code></td><td>File feedback on a step, the same as the flag in the app.</td></tr>
+            </tbody>
+          </table>
+          <p>Until then an agent with access to the repository can read <code>processes/*.json</code> directly; the schema in <code>schema/</code> tells it what every field means.</p>
+        </Section>
+
+        <Section id="roadmap" title="Planned: automation">
+          <p>Today a person follows the checklist. The next stage is an agent that follows it for you: it looks the process up over MCP, does your steps with the linked skills, asks you to approve, and tracks the steps of other teams. Nothing in this section exists yet.</p>
+          <Chart process={automationFlow} caption="Planned, not built: an AI agent follows the process on your behalf. You stay in control of approvals." />
+          <p>This is why steps name their participant, tool and kind precisely, and why skills are linked to the step they perform: the description is already written for a machine to act on.</p>
+        </Section>
+
         <Section id="files" title="Files, schema and checker">
           <p>Everything is a plain file in the repository, so it can be reviewed and versioned like code.</p>
           <table className="guide-table">
             <tbody>
               <tr><td><code>processes/&lt;id&gt;.json</code></td><td>One process per file</td></tr>
-              <tr><td><code>catalog/catalog.json</code></td><td>Teams, tools and tiers</td></tr>
+              <tr><td><code>catalog/catalog.json</code></td><td>Teams, tools, tiers and languages</td></tr>
               <tr><td><code>feedback/&lt;id&gt;.json</code></td><td>Feedback for one process</td></tr>
               <tr><td><code>schema/*.schema.json</code></td><td>The formats (JSON Schema)</td></tr>
               <tr><td><code>docs/llm-prompt.md</code></td><td>The AI prompt as a shareable file</td></tr>
+              <tr><td><code>docs/mcp.md</code></td><td>Planned MCP contract for agents</td></tr>
               <tr><td><code>.claude/skills/</code></td><td>Instructions for AI coding assistants: <code>edit-process</code>, <code>manage-catalog</code></td></tr>
             </tbody>
           </table>
-          <p>The checker runs in the app on every change and from the command line with <code>npm run validate</code>. Beyond the schema it catches steps that point nowhere, unknown participants, decisions without labelled branches, missing sub-processes, unknown tiers, and steps that can never be reached.</p>
-          <p className="muted"><Sparkles size={13} /> The three flow charts on this page are themselves processes, drawn by the same map.</p>
+          <p>The checker runs in the app on every change and from the command line with <code>npm run validate</code>. Beyond the schema it catches steps that point nowhere, unknown participants, decisions without labelled branches, missing sub-processes, unknown tiers or languages, and steps that can never be reached.</p>
+          <p className="muted"><Sparkles size={13} /> The flow charts on this page are themselves processes, drawn by the same map.</p>
         </Section>
       </article>
     </div>

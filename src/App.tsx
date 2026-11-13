@@ -80,7 +80,7 @@ export default function App() {
         </a>
         <nav className="nav">
           <a className={`nav-link ${route.page === "library" || route.page === "process" ? "on" : ""}`} href="#/"><LayoutGrid size={15} /><span>Processes</span></a>
-          <a className={`nav-link ${route.page === "catalog" ? "on" : ""}`} href="#/catalog"><Settings2 size={15} /><span>Teams, tools &amp; tiers</span></a>
+          <a className={`nav-link ${route.page === "catalog" ? "on" : ""}`} href="#/catalog"><Settings2 size={15} /><span>Teams &amp; tools</span></a>
           <a className={`nav-link ${route.page === "guide" ? "on" : ""}`} href="#/guide"><BookOpen size={15} /><span>Guide</span></a>
         </nav>
         <span className="spacer" />

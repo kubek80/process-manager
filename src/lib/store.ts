@@ -20,7 +20,7 @@ export async function removeProcess(id: string): Promise<void> {
 
 export async function loadCatalog(): Promise<Catalog> {
   const c = await (await fetch("/api/catalog")).json();
-  return { ...c, tiers: c.tiers ?? [], teams: c.teams ?? [], tools: c.tools ?? [] };
+  return { ...c, tiers: c.tiers ?? [], languages: c.languages ?? [], teams: c.teams ?? [], tools: c.tools ?? [] };
 }
 export async function putCatalog(c: Catalog): Promise<void> {
   const res = await fetch("/api/catalog", { method: "PUT", body: JSON.stringify(c) });

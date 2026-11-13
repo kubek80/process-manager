@@ -5,9 +5,9 @@ const s = (id: string, title: string, actor: string, type: StepType, next: (stri
   id, title, actor, type, ...(duration ? { duration } : {}),
   next: next.map((n) => (typeof n === "string" ? { to: n } : { to: n[0], label: n[1] })),
 });
-const flow = (id: string, title: string, summary: string, others: [string, string][], steps: Step[]): Process => ({
+const flow = (id: string, title: string, summary: string, others: [string, string][], steps: Step[], me = "You"): Process => ({
   schemaVersion: "1.0", id, title, summary, prerequisites: [],
-  actors: [{ id: "me", name: "You" }, ...others.map(([aid, name]) => ({ id: aid, name }))],
+  actors: [{ id: "me", name: me }, ...others.map(([aid, name]) => ({ id: aid, name }))],
   steps,
 });
 
@@ -48,4 +48,27 @@ export const feedbackFlow = flow("guide-feedback", "Feedback loop", "How a probl
     s("correct", "Correct the step", "owner", "document", ["mark-fixed"], "on the map"),
     s("mark-fixed", "Mark as fixed", "owner", "task", ["cleared"]),
     s("cleared", "Remove the flag", "app", "automation", []),
+  ]);
+
+export const reviewFlow = flow("guide-review", "Periodic review", "How the owner keeps a process correct over time.",
+  [["app", "Process Manager"]],
+  [
+    s("due", "Flag the review as due", "app", "automation", ["read"], "every 3-24 months"),
+    s("read", "Read the process end to end", "me", "review", ["correct"], "and its open feedback"),
+    s("correct", "Still correct?", "me", "decision", [["confirm", "Yes"], ["update", "No"]]),
+    s("update", "Correct what changed", "me", "document", ["confirm"], "on the map or with AI"),
+    s("confirm", "Mark as reviewed", "me", "task", ["restart"], "one click"),
+    s("restart", "Restart the interval", "app", "automation", []),
+  ], "Process owner");
+
+export const automationFlow = flow("guide-automation", "Planned: an agent follows the process", "Where this is heading: the same description drives an AI agent.",
+  [["agent", "AI agent"], ["app", "Process Manager"], ["others", "Other teams"]],
+  [
+    s("ask", "Ask for what you need", "me", "communication", ["lookup"], "“I need a GCP project”"),
+    s("lookup", "Look up the process", "agent", "task", ["serve"], "over MCP"),
+    s("serve", "Return steps, tools and skills", "app", "automation", ["act"]),
+    s("act", "Do your steps with the skills", "agent", "code", ["approve"], "form, pull request"),
+    s("approve", "Approve what was prepared", "me", "approval", ["their-part"]),
+    s("their-part", "Do their part", "others", "wait", ["report"], "approve, review"),
+    s("report", "Track and report back", "agent", "verify", []),
   ]);

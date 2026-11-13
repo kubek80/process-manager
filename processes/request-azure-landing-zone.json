@@ -13,6 +13,12 @@
     "landing-zone"
   ],
   "updatedAt": "2026-11-13",
+  "status": "active",
+  "review": {
+    "intervalMonths": 6,
+    "lastReviewedAt": "2026-06-01",
+    "reviewedBy": "Process owner"
+  },
   "prerequisites": [
     {
       "title": "Application registered in the CMDB",

@@ -1,0 +1,170 @@
+{
+  "$schema": "../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "publish-internal-library",
+  "title": "Publish an internal library",
+  "summary": "Release a shared Go module or npm package to the internal artifact registry so other teams can depend on it.",
+  "category": "Source control",
+  "owner": "developer-experience-team",
+  "languages": [
+    "go",
+    "javascript"
+  ],
+  "estimatedDuration": "1-2 working days",
+  "tags": [
+    "library",
+    "registry",
+    "release"
+  ],
+  "updatedAt": "2026-11-13",
+  "status": "active",
+  "review": {
+    "intervalMonths": 12,
+    "lastReviewedAt": "2026-10-01",
+    "reviewedBy": "Process owner"
+  },
+  "resources": [
+    {
+      "title": "Skill: set up a release workflow",
+      "url": "https://github.example.com/platform/release-workflows/tree/main/.claude/skills/setup-release",
+      "kind": "skill",
+      "description": "Lets an AI coding assistant add the release workflow to your repository."
+    },
+    {
+      "title": "Release workflow templates",
+      "url": "https://github.example.com/platform/release-workflows",
+      "kind": "template"
+    }
+  ],
+  "prerequisites": [
+    {
+      "title": "Repository for the library",
+      "processId": "request-github-repository"
+    },
+    {
+      "title": "Library has an owner in CODEOWNERS",
+      "description": "Unowned libraries are not accepted in the registry."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The engineer publishing the library."
+    },
+    {
+      "id": "devex",
+      "name": "Developer Experience team",
+      "description": "Slack #devex",
+      "teamId": "developer-experience-team"
+    },
+    {
+      "id": "pipeline",
+      "name": "Release pipeline",
+      "description": "GitHub Actions workflow that publishes tagged versions."
+    }
+  ],
+  "steps": [
+    {
+      "id": "request-namespace",
+      "title": "Request a registry namespace",
+      "actor": "me",
+      "type": "form",
+      "tool": "servicenow",
+      "url": "https://servicenow.example.com/catalog/registry-namespace",
+      "urlLabel": "Open namespace request",
+      "duration": "5 min",
+      "instructions": [
+        "Enter the namespace: your team name, lowercase.",
+        "Select the ecosystems: Go modules, npm or both.",
+        "Submit the request."
+      ],
+      "outcome": "Namespace, e.g. @payments or go.example.com/payments",
+      "next": [
+        {
+          "to": "create-namespace"
+        }
+      ]
+    },
+    {
+      "id": "create-namespace",
+      "title": "Create the namespace",
+      "actor": "devex",
+      "type": "task",
+      "tool": "artifact-registry",
+      "duration": "1 working day",
+      "next": [
+        {
+          "to": "add-release-workflow"
+        }
+      ]
+    },
+    {
+      "id": "add-release-workflow",
+      "title": "Add the release workflow",
+      "actor": "me",
+      "type": "code",
+      "tool": "github",
+      "duration": "30 min",
+      "instructions": [
+        "Copy the workflow for your language from the release-workflows templates.",
+        "Set the namespace and the package name.",
+        "Open a pull request and get it merged."
+      ],
+      "resources": [
+        {
+          "title": "Skill: set up a release workflow",
+          "url": "https://github.example.com/platform/release-workflows/tree/main/.claude/skills/setup-release",
+          "kind": "skill",
+          "description": "Lets an AI coding assistant add the release workflow to your repository."
+        }
+      ],
+      "outcome": "Merged release workflow",
+      "next": [
+        {
+          "to": "tag-version"
+        }
+      ]
+    },
+    {
+      "id": "tag-version",
+      "title": "Tag the first version",
+      "actor": "me",
+      "type": "task",
+      "tool": "github",
+      "instructions": [
+        "Create the tag v0.1.0 on the main branch.",
+        "Push the tag."
+      ],
+      "next": [
+        {
+          "to": "publish-version"
+        }
+      ]
+    },
+    {
+      "id": "publish-version",
+      "title": "Build and publish the version",
+      "actor": "pipeline",
+      "type": "automation",
+      "tool": "github-actions",
+      "duration": "5 min",
+      "next": [
+        {
+          "to": "verify-install"
+        }
+      ]
+    },
+    {
+      "id": "verify-install",
+      "title": "Install the library from another project",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "In another repository, add the library as a dependency.",
+        "Check the build downloads it from the internal registry."
+      ],
+      "next": []
+    }
+  ]
+}

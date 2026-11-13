@@ -12,6 +12,20 @@
     "repository"
   ],
   "updatedAt": "2026-11-13",
+  "status": "active",
+  "review": {
+    "intervalMonths": 6,
+    "lastReviewedAt": "2026-08-11",
+    "reviewedBy": "Process owner"
+  },
+  "resources": [
+    {
+      "title": "Skill: add a repository definition",
+      "url": "https://github.example.com/platform/github-repositories/tree/main/.claude/skills/add-repository",
+      "kind": "skill",
+      "description": "Lets an AI coding assistant add the definition file and open the pull request."
+    }
+  ],
   "prerequisites": [
     {
       "title": "GitHub Enterprise account",
@@ -77,6 +91,14 @@
       "urlLabel": "Open github-repositories",
       "duration": "15 min",
       "outcome": "Open pull request",
+      "resources": [
+        {
+          "title": "Skill: add a repository definition",
+          "url": "https://github.example.com/platform/github-repositories/tree/main/.claude/skills/add-repository",
+          "kind": "skill",
+          "description": "Lets an AI coding assistant add the definition file and open the pull request."
+        }
+      ],
       "next": [
         {
           "to": "review-definition"

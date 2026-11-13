@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "validate": "tsx scripts/validate.ts",
     "prompt": "tsx scripts/prompt.ts",
+    "reviews": "tsx scripts/reviews.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

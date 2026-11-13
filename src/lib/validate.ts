@@ -68,10 +68,21 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
     (p.tiers ?? []).forEach((tier, i) => {
       if (!cat.tiers.some((t) => t.id === tier)) err(`tiers[${i}]`, `"${tier}" is not a known tier. Known tiers: ${ids(cat.tiers).join(", ") || "(none)"}`);
     });
+    (p.languages ?? []).forEach((lang, i) => {
+      if (!cat.languages.some((l) => l.id === lang)) err(`languages[${i}]`, `"${lang}" is not a known language. Known languages: ${ids(cat.languages).join(", ") || "(none)"}`);
+    });
     p.actors.forEach((a, i) => {
       if (a.teamId && !cat.teams.some((t) => t.id === a.teamId)) warn(`actors[${i}].teamId`, `"${a.teamId}" is not in the teams list`);
     });
   }
+
+  if (p.replacedBy) {
+    if (p.replacedBy === p.id) err("replacedBy", "a process cannot replace itself");
+    else if (known && !known.has(p.replacedBy)) warn("replacedBy", `no process with id "${p.replacedBy}" exists yet`);
+    if (p.status !== "deprecated") warn("replacedBy", "replacedBy only makes sense when status is \"deprecated\"");
+  }
+  if ((p.status ?? "active") === "active" && !p.review) warn("review", "no review interval is set - the owner will never be asked to confirm this process is still correct");
+  if ((p.status ?? "active") === "active" && !p.owner) warn("owner", "an active process should have an owner team");
 
   const actorIds = new Set<string>();
   p.actors.forEach((a, i) => {
@@ -146,7 +157,7 @@ export function validateCatalog(data: unknown): Issue[] {
     return issues;
   }
   const c = data as unknown as Catalog;
-  (["tiers", "teams", "tools"] as const).forEach((key) => {
+  (["tiers", "languages", "teams", "tools"] as const).forEach((key) => {
     const seen = new Set<string>();
     c[key].forEach((x, i) => {
       if (seen.has(x.id)) issues.push({ level: "error", path: `${key}[${i}].id`, message: `duplicate id "${x.id}"` });
