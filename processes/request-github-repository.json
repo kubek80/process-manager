@@ -1,0 +1,141 @@
+{
+  "$schema": "../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "request-github-repository",
+  "title": "Request a repository",
+  "summary": "Get a new GitHub repository created from a standard template with the right team permissions and branch protection.",
+  "category": "Source control",
+  "owner": "Developer Experience team",
+  "estimatedDuration": "1 working day",
+  "tags": [
+    "github",
+    "repository"
+  ],
+  "updatedAt": "2026-11-13",
+  "prerequisites": [
+    {
+      "title": "GitHub Enterprise account",
+      "description": "Your account is linked to company SSO."
+    },
+    {
+      "title": "A GitHub team for your squad",
+      "description": "The team gets write access to the new repository."
+    },
+    {
+      "title": "Application registered in the CMDB",
+      "description": "You need the application ID (APP-xxxxx)."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The engineer or BA following this process."
+    },
+    {
+      "id": "devex",
+      "name": "Developer Experience team",
+      "description": "Slack #devex"
+    },
+    {
+      "id": "automation",
+      "name": "Repository automation",
+      "description": "Pipeline that applies the repository definitions."
+    }
+  ],
+  "steps": [
+    {
+      "id": "choose-name-and-template",
+      "title": "Choose a name and a template",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Name it <team>-<service>, lowercase with dashes.",
+        "Pick a template: service-java, service-node, terraform-module or empty.",
+        "Decide the visibility: internal (default) or private."
+      ],
+      "duration": "10 min",
+      "next": [
+        {
+          "to": "add-repository-definition"
+        }
+      ]
+    },
+    {
+      "id": "add-repository-definition",
+      "title": "Add the repository definition",
+      "actor": "me",
+      "type": "code",
+      "instructions": [
+        "Create a branch in the github-repositories repo.",
+        "Add repos/<name>.yaml with name, template, team, visibility and application ID.",
+        "Open a pull request."
+      ],
+      "tool": "GitHub",
+      "url": "https://github.example.com/platform/github-repositories",
+      "urlLabel": "Open github-repositories",
+      "duration": "15 min",
+      "outcome": "Open pull request",
+      "next": [
+        {
+          "to": "review-definition"
+        }
+      ]
+    },
+    {
+      "id": "review-definition",
+      "title": "Review and merge the definition",
+      "actor": "devex",
+      "type": "review",
+      "tool": "GitHub",
+      "duration": "up to 4 hours",
+      "next": [
+        {
+          "to": "create-repository"
+        }
+      ]
+    },
+    {
+      "id": "create-repository",
+      "title": "Create the repository",
+      "actor": "automation",
+      "type": "automation",
+      "description": "Creates the repository from the template and applies branch protection and team access.",
+      "duration": "5 min",
+      "next": [
+        {
+          "to": "finish-setup"
+        }
+      ]
+    },
+    {
+      "id": "finish-setup",
+      "title": "Finish the repository setup",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Edit CODEOWNERS with your team.",
+        "Update the README with a one-paragraph description.",
+        "Add the repository secrets your pipeline needs."
+      ],
+      "tool": "GitHub",
+      "next": [
+        {
+          "to": "verify-pipeline"
+        }
+      ]
+    },
+    {
+      "id": "verify-pipeline",
+      "title": "Check the first pipeline run is green",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Push a small change on a branch and open a pull request.",
+        "Check the build pipeline finishes successfully."
+      ],
+      "tool": "GitHub Actions",
+      "next": []
+    }
+  ]
+}

@@ -1,0 +1,217 @@
+{
+  "$schema": "../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "request-gcp-project",
+  "title": "Request a GCP project",
+  "summary": "Get a new Google Cloud project created by the project factory, attached to the right folder and billing account, with your team as owners.",
+  "category": "Cloud",
+  "owner": "Cloud Platform team",
+  "estimatedDuration": "3-5 working days",
+  "tags": [
+    "gcp",
+    "cloud",
+    "terraform"
+  ],
+  "updatedAt": "2026-11-13",
+  "prerequisites": [
+    {
+      "title": "Application registered in the CMDB",
+      "description": "You need the application ID (APP-xxxxx)."
+    },
+    {
+      "title": "Approved cost centre",
+      "description": "Cloud spend is charged to it every month."
+    },
+    {
+      "title": "Google group for your team",
+      "description": "The group becomes owner of the project, e.g. gcp-myteam-admins@example.com."
+    },
+    {
+      "title": "Access to the project-factory repository",
+      "processId": "request-github-repository",
+      "description": "Read access is enough; you contribute through a pull request."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The engineer or BA following this process."
+    },
+    {
+      "id": "budget-owner",
+      "name": "Budget owner",
+      "description": "Owner of the cost centre."
+    },
+    {
+      "id": "cloud-platform",
+      "name": "Cloud Platform team",
+      "description": "Slack #cloud-platform"
+    },
+    {
+      "id": "project-factory",
+      "name": "Project factory",
+      "description": "Terraform pipeline that creates projects."
+    }
+  ],
+  "steps": [
+    {
+      "id": "decide-project-details",
+      "title": "Decide the project details",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Choose the environment: dev, test or prod.",
+        "Build the name as <app>-<env>, e.g. payments-dev.",
+        "Pick the folder that matches your business unit.",
+        "Estimate the monthly budget in EUR."
+      ],
+      "duration": "15 min",
+      "outcome": "Name, environment, folder, budget",
+      "next": [
+        {
+          "to": "raise-request"
+        }
+      ]
+    },
+    {
+      "id": "raise-request",
+      "title": "Raise the 'New GCP project' request",
+      "actor": "me",
+      "type": "subprocess",
+      "description": "Use the catalogue item 'New GCP project'.",
+      "instructions": [
+        "Catalogue item: New GCP project.",
+        "Enter name, environment, folder, budget, application ID and owner group."
+      ],
+      "tool": "ServiceNow",
+      "outcome": "Request number (RITMxxxxxxx)",
+      "subProcessId": "raise-servicenow-request",
+      "next": [
+        {
+          "to": "approve-budget"
+        }
+      ]
+    },
+    {
+      "id": "approve-budget",
+      "title": "Approve the monthly budget",
+      "actor": "budget-owner",
+      "type": "approval",
+      "duration": "up to 2 working days",
+      "next": [
+        {
+          "to": "review-request"
+        }
+      ]
+    },
+    {
+      "id": "review-request",
+      "title": "Check naming, folder and ownership",
+      "actor": "cloud-platform",
+      "type": "review",
+      "duration": "1 working day",
+      "next": [
+        {
+          "to": "details-ok"
+        }
+      ]
+    },
+    {
+      "id": "details-ok",
+      "title": "Details complete?",
+      "actor": "cloud-platform",
+      "type": "decision",
+      "next": [
+        {
+          "to": "add-project-config",
+          "label": "Yes"
+        },
+        {
+          "to": "clarify-request",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "clarify-request",
+      "title": "Answer the platform team's questions",
+      "actor": "me",
+      "type": "communication",
+      "instructions": [
+        "Open the request and read the comment from the Cloud Platform team.",
+        "Reply in the request with the missing details."
+      ],
+      "tool": "ServiceNow",
+      "next": [
+        {
+          "to": "review-request"
+        }
+      ]
+    },
+    {
+      "id": "add-project-config",
+      "title": "Add your project to the project factory",
+      "actor": "me",
+      "type": "code",
+      "instructions": [
+        "Create a branch named after your request number.",
+        "Copy projects/_template.yaml to projects/<project-name>.yaml.",
+        "Fill in name, folder, billing, owner group and labels.",
+        "Open a pull request and put the request number in the title."
+      ],
+      "tool": "GitHub",
+      "url": "https://github.example.com/platform/gcp-project-factory",
+      "urlLabel": "Open gcp-project-factory",
+      "duration": "20 min",
+      "outcome": "Open pull request",
+      "next": [
+        {
+          "to": "review-pull-request"
+        }
+      ]
+    },
+    {
+      "id": "review-pull-request",
+      "title": "Review and merge the pull request",
+      "actor": "cloud-platform",
+      "type": "review",
+      "tool": "GitHub",
+      "duration": "1 working day",
+      "next": [
+        {
+          "to": "create-project"
+        }
+      ]
+    },
+    {
+      "id": "create-project",
+      "title": "Create the project",
+      "actor": "project-factory",
+      "type": "automation",
+      "description": "The pipeline runs on merge and creates the project, budget alert and IAM bindings.",
+      "tool": "Terraform",
+      "duration": "15 min",
+      "next": [
+        {
+          "to": "verify-access"
+        }
+      ]
+    },
+    {
+      "id": "verify-access",
+      "title": "Check you can open the project",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Open the GCP console and select your new project.",
+        "Check your group is listed under IAM as owner.",
+        "Close the ServiceNow request."
+      ],
+      "tool": "GCP console",
+      "url": "https://console.cloud.google.com",
+      "urlLabel": "Open GCP console",
+      "next": []
+    }
+  ]
+}

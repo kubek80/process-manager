@@ -1,0 +1,125 @@
+{
+  "schemaVersion": "1.0",
+  "id": "request-vpn-access",
+  "title": "Request VPN access",
+  "summary": "Get remote access to the company network through the VPN client.",
+  "category": "General",
+  "owner": "Network team",
+  "estimatedDuration": "1-2 working days",
+  "tags": [
+    "vpn"
+  ],
+  "updatedAt": "2026-11-13",
+  "prerequisites": [
+    {
+      "title": "Company laptop",
+      "description": "VPN is only allowed on managed devices."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The engineer or BA following this process."
+    },
+    {
+      "id": "line-manager",
+      "name": "Line manager",
+      "description": "Approves access requests."
+    },
+    {
+      "id": "network-team",
+      "name": "Network team",
+      "description": "Slack #network"
+    }
+  ],
+  "steps": [
+    {
+      "id": "raise-request",
+      "title": "Fill in the VPN access request",
+      "actor": "me",
+      "type": "form",
+      "instructions": [
+        "Select 'Remote access VPN'.",
+        "Enter your laptop asset number.",
+        "Submit the request."
+      ],
+      "tool": "ServiceNow",
+      "url": "https://servicenow.example.com/catalog/vpn",
+      "urlLabel": "Open VPN request form",
+      "duration": "5 min",
+      "outcome": "Request number",
+      "next": [
+        {
+          "to": "approve-access"
+        }
+      ]
+    },
+    {
+      "id": "approve-access",
+      "title": "Approve the access",
+      "actor": "line-manager",
+      "type": "approval",
+      "duration": "up to 1 working day",
+      "next": [
+        {
+          "to": "access-approved"
+        }
+      ]
+    },
+    {
+      "id": "access-approved",
+      "title": "Approved?",
+      "actor": "line-manager",
+      "type": "decision",
+      "next": [
+        {
+          "to": "enable-access",
+          "label": "Approved"
+        },
+        {
+          "to": "clarify-need",
+          "label": "Rejected"
+        }
+      ]
+    },
+    {
+      "id": "clarify-need",
+      "title": "Explain why you need access",
+      "actor": "me",
+      "type": "communication",
+      "instructions": [
+        "Reply to the rejection comment with your business reason.",
+        "Resubmit the request."
+      ],
+      "next": [
+        {
+          "to": "approve-access"
+        }
+      ]
+    },
+    {
+      "id": "enable-access",
+      "title": "Add the user to the VPN group",
+      "actor": "network-team",
+      "type": "task",
+      "duration": "4 hours",
+      "next": [
+        {
+          "to": "test-connection"
+        }
+      ]
+    },
+    {
+      "id": "test-connection",
+      "title": "Connect to the VPN",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Open the VPN client and sign in.",
+        "Check you can open the intranet home page."
+      ],
+      "next": []
+    }
+  ]
+}

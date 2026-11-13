@@ -1,0 +1,196 @@
+{
+  "$schema": "../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "request-azure-landing-zone",
+  "title": "Request an Azure landing zone",
+  "summary": "Get an Azure subscription set up as a landing zone: governance approval, policies, networking and access for your team.",
+  "category": "Cloud",
+  "owner": "Azure Platform team",
+  "estimatedDuration": "2-3 weeks",
+  "tags": [
+    "azure",
+    "cloud",
+    "landing-zone"
+  ],
+  "updatedAt": "2026-11-13",
+  "prerequisites": [
+    {
+      "title": "Application registered in the CMDB",
+      "description": "You need the application ID (APP-xxxxx)."
+    },
+    {
+      "title": "Approved cost centre"
+    },
+    {
+      "title": "Data classification completed",
+      "description": "The classification decides which policies apply."
+    },
+    {
+      "title": "Solution architecture approved",
+      "description": "At least a high-level design reviewed by an architect."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The engineer or BA following this process."
+    },
+    {
+      "id": "cloud-governance",
+      "name": "Cloud Governance board",
+      "description": "Meets every Tuesday."
+    },
+    {
+      "id": "azure-platform",
+      "name": "Azure Platform team",
+      "description": "Slack #azure-platform"
+    },
+    {
+      "id": "pipeline",
+      "name": "Landing zone pipeline",
+      "description": "Terraform pipeline that deploys landing zones."
+    }
+  ],
+  "steps": [
+    {
+      "id": "complete-questionnaire",
+      "title": "Complete the landing zone questionnaire",
+      "actor": "me",
+      "type": "document",
+      "instructions": [
+        "Choose the archetype: corp (internal network) or online (internet facing).",
+        "State the regions, environments and expected monthly spend.",
+        "List who needs Owner, Contributor and Reader access."
+      ],
+      "url": "https://wiki.example.com/azure/lz-questionnaire",
+      "urlLabel": "Open questionnaire",
+      "duration": "1 hour",
+      "outcome": "Completed questionnaire",
+      "next": [
+        {
+          "to": "raise-request"
+        }
+      ]
+    },
+    {
+      "id": "raise-request",
+      "title": "Raise the 'Azure landing zone' request",
+      "actor": "me",
+      "type": "form",
+      "instructions": [
+        "Enter application ID and cost centre.",
+        "Attach the questionnaire and the architecture diagram.",
+        "Submit the request."
+      ],
+      "tool": "ServiceNow",
+      "url": "https://servicenow.example.com/catalog/azure-landing-zone",
+      "urlLabel": "Open request form",
+      "duration": "10 min",
+      "outcome": "Request number (RITMxxxxxxx)",
+      "next": [
+        {
+          "to": "governance-review"
+        }
+      ]
+    },
+    {
+      "id": "governance-review",
+      "title": "Review the request at the governance board",
+      "actor": "cloud-governance",
+      "type": "approval",
+      "duration": "up to 1 week",
+      "next": [
+        {
+          "to": "governance-approved"
+        }
+      ]
+    },
+    {
+      "id": "governance-approved",
+      "title": "Approved?",
+      "actor": "cloud-governance",
+      "type": "decision",
+      "next": [
+        {
+          "to": "add-subscription-config",
+          "label": "Approved"
+        },
+        {
+          "to": "rework-design",
+          "label": "Rejected"
+        }
+      ]
+    },
+    {
+      "id": "rework-design",
+      "title": "Rework the design",
+      "actor": "me",
+      "type": "document",
+      "instructions": [
+        "Read the board's comments in the request.",
+        "Update the questionnaire and the architecture diagram.",
+        "Resubmit for the next board meeting."
+      ],
+      "next": [
+        {
+          "to": "governance-review"
+        }
+      ]
+    },
+    {
+      "id": "add-subscription-config",
+      "title": "Add the subscription configuration",
+      "actor": "azure-platform",
+      "type": "code",
+      "tool": "GitHub",
+      "duration": "2 working days",
+      "next": [
+        {
+          "to": "deploy-landing-zone"
+        }
+      ]
+    },
+    {
+      "id": "deploy-landing-zone",
+      "title": "Deploy the landing zone",
+      "actor": "pipeline",
+      "type": "automation",
+      "description": "Creates the subscription, policies, network spoke and role assignments.",
+      "tool": "Terraform",
+      "duration": "1 hour",
+      "next": [
+        {
+          "to": "hand-over"
+        }
+      ]
+    },
+    {
+      "id": "hand-over",
+      "title": "Hand over the subscription",
+      "actor": "azure-platform",
+      "type": "communication",
+      "description": "You receive the subscription ID and a short guide by email.",
+      "next": [
+        {
+          "to": "verify-access"
+        }
+      ]
+    },
+    {
+      "id": "verify-access",
+      "title": "Check your access",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Open the Azure portal and find the new subscription.",
+        "Check your team has the roles you asked for.",
+        "Deploy a test resource group to confirm policies allow it."
+      ],
+      "tool": "Azure portal",
+      "url": "https://portal.azure.com",
+      "urlLabel": "Open Azure portal",
+      "next": []
+    }
+  ]
+}

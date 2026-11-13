@@ -1,0 +1,155 @@
+{
+  "$schema": "../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "raise-servicenow-request",
+  "title": "Raise a ServiceNow request",
+  "summary": "Generic way to order something from the ServiceNow catalogue and get it approved. Other processes use this as a sub-process.",
+  "category": "General",
+  "owner": "Service Management",
+  "estimatedDuration": "1-3 working days",
+  "tags": [
+    "servicenow",
+    "basics"
+  ],
+  "updatedAt": "2026-11-13",
+  "prerequisites": [
+    {
+      "title": "ServiceNow account",
+      "description": "You can log in with your company SSO account."
+    },
+    {
+      "title": "Cost centre number",
+      "description": "Ask your line manager if you do not know it."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The engineer or BA following this process."
+    },
+    {
+      "id": "line-manager",
+      "name": "Line manager",
+      "description": "Approves requests raised by their team."
+    },
+    {
+      "id": "fulfilment",
+      "name": "Fulfilment team",
+      "description": "The team that delivers the ordered item."
+    }
+  ],
+  "steps": [
+    {
+      "id": "find-catalogue-item",
+      "title": "Find the catalogue item",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Open the service catalogue.",
+        "Search for the item name given in the parent process.",
+        "Open the item and check the description matches what you need."
+      ],
+      "tool": "ServiceNow",
+      "url": "https://servicenow.example.com/catalog",
+      "urlLabel": "Open service catalogue",
+      "duration": "5 min",
+      "next": [
+        {
+          "to": "fill-in-request"
+        }
+      ]
+    },
+    {
+      "id": "fill-in-request",
+      "title": "Fill in and submit the request",
+      "actor": "me",
+      "type": "form",
+      "description": "Complete every mandatory field. Vague requests are the main reason for rejection.",
+      "instructions": [
+        "Fill in all mandatory fields (marked with *).",
+        "In 'Business justification' write one sentence on why you need it.",
+        "Enter your cost centre.",
+        "Press 'Order now'."
+      ],
+      "tool": "ServiceNow",
+      "duration": "10 min",
+      "outcome": "Request number (RITMxxxxxxx)",
+      "next": [
+        {
+          "to": "approve-request"
+        }
+      ]
+    },
+    {
+      "id": "approve-request",
+      "title": "Approve the request",
+      "actor": "line-manager",
+      "type": "approval",
+      "tool": "ServiceNow",
+      "duration": "up to 2 working days",
+      "next": [
+        {
+          "to": "request-approved"
+        }
+      ]
+    },
+    {
+      "id": "request-approved",
+      "title": "Approved?",
+      "actor": "line-manager",
+      "type": "decision",
+      "next": [
+        {
+          "to": "fulfil-request",
+          "label": "Approved"
+        },
+        {
+          "to": "update-request",
+          "label": "Rejected"
+        }
+      ]
+    },
+    {
+      "id": "update-request",
+      "title": "Fix and resubmit the request",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Read the rejection comment on the request.",
+        "Correct the request or add the missing information.",
+        "Resubmit for approval."
+      ],
+      "tool": "ServiceNow",
+      "next": [
+        {
+          "to": "approve-request"
+        }
+      ]
+    },
+    {
+      "id": "fulfil-request",
+      "title": "Deliver the request",
+      "actor": "fulfilment",
+      "type": "task",
+      "duration": "depends on the item",
+      "next": [
+        {
+          "to": "confirm-closure"
+        }
+      ]
+    },
+    {
+      "id": "confirm-closure",
+      "title": "Confirm you got what you ordered",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Wait for the 'Request completed' email.",
+        "Check the delivered item works.",
+        "If not, reopen the request within 5 days."
+      ],
+      "next": []
+    }
+  ]
+}

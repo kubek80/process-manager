@@ -1,0 +1,212 @@
+{
+  "$schema": "../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "onboard-site-to-akamai",
+  "title": "Onboard a site to Akamai",
+  "summary": "Put a public website or API behind Akamai (CDN and WAF): configuration on staging, testing, production activation and DNS switch.",
+  "category": "Network",
+  "owner": "Edge & CDN team",
+  "estimatedDuration": "2-4 weeks",
+  "tags": [
+    "akamai",
+    "cdn",
+    "waf",
+    "dns"
+  ],
+  "updatedAt": "2026-11-13",
+  "prerequisites": [
+    {
+      "title": "Agreed public hostname",
+      "description": "E.g. shop.example.com, approved by the domain owner."
+    },
+    {
+      "title": "Origin reachable over HTTPS",
+      "description": "The origin has a valid TLS certificate and a stable hostname."
+    },
+    {
+      "title": "Approved cost centre",
+      "description": "Akamai traffic is recharged."
+    },
+    {
+      "title": "Named security contact",
+      "description": "Someone who decides on WAF exceptions for your application."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The engineer or BA following this process."
+    },
+    {
+      "id": "edge-team",
+      "name": "Edge & CDN team",
+      "description": "Slack #edge-cdn"
+    },
+    {
+      "id": "security",
+      "name": "Security",
+      "description": "Owns WAF policies."
+    },
+    {
+      "id": "dns-team",
+      "name": "DNS team",
+      "description": "Owns the public DNS zones."
+    }
+  ],
+  "steps": [
+    {
+      "id": "collect-site-details",
+      "title": "Collect the site details",
+      "actor": "me",
+      "type": "document",
+      "instructions": [
+        "Copy the onboarding sheet template.",
+        "Fill in hostname, origin, expected traffic and caching rules.",
+        "List paths that must never be cached (login, checkout, APIs)."
+      ],
+      "url": "https://wiki.example.com/akamai/onboarding-sheet",
+      "urlLabel": "Open onboarding sheet",
+      "duration": "1 hour",
+      "outcome": "Completed onboarding sheet",
+      "next": [
+        {
+          "to": "raise-request"
+        }
+      ]
+    },
+    {
+      "id": "raise-request",
+      "title": "Raise the 'Akamai onboarding' request",
+      "actor": "me",
+      "type": "subprocess",
+      "instructions": [
+        "Catalogue item: Akamai onboarding.",
+        "Attach the onboarding sheet."
+      ],
+      "tool": "ServiceNow",
+      "subProcessId": "raise-servicenow-request",
+      "next": [
+        {
+          "to": "create-property"
+        },
+        {
+          "to": "define-waf-policy"
+        }
+      ]
+    },
+    {
+      "id": "create-property",
+      "title": "Create the property on staging",
+      "actor": "edge-team",
+      "type": "task",
+      "tool": "Akamai Control Center",
+      "duration": "3 working days",
+      "next": [
+        {
+          "to": "test-on-staging"
+        }
+      ]
+    },
+    {
+      "id": "define-waf-policy",
+      "title": "Define the WAF policy",
+      "actor": "security",
+      "type": "review",
+      "description": "Security selects the rule set and starts it in alert-only mode.",
+      "duration": "3 working days",
+      "next": [
+        {
+          "to": "test-on-staging"
+        }
+      ]
+    },
+    {
+      "id": "test-on-staging",
+      "title": "Test the site on Akamai staging",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Point your hosts file to the staging edge IP from the request.",
+        "Click through the main journeys of the site.",
+        "Check cache headers on static and dynamic pages.",
+        "Note every blocked or broken request."
+      ],
+      "duration": "half a day",
+      "next": [
+        {
+          "to": "staging-ok"
+        }
+      ]
+    },
+    {
+      "id": "staging-ok",
+      "title": "Everything works?",
+      "actor": "me",
+      "type": "decision",
+      "instructions": [
+        "Record the test result in the request."
+      ],
+      "next": [
+        {
+          "to": "activate-production",
+          "label": "Yes"
+        },
+        {
+          "to": "fix-configuration",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "fix-configuration",
+      "title": "Fix the configuration",
+      "actor": "edge-team",
+      "type": "task",
+      "duration": "1-2 working days",
+      "next": [
+        {
+          "to": "test-on-staging"
+        }
+      ]
+    },
+    {
+      "id": "activate-production",
+      "title": "Activate on the production network",
+      "actor": "edge-team",
+      "type": "task",
+      "tool": "Akamai Control Center",
+      "duration": "1 hour",
+      "next": [
+        {
+          "to": "switch-dns"
+        }
+      ]
+    },
+    {
+      "id": "switch-dns",
+      "title": "Point DNS to Akamai",
+      "actor": "dns-team",
+      "type": "task",
+      "description": "The hostname becomes a CNAME to the Akamai edge hostname.",
+      "duration": "1 working day",
+      "next": [
+        {
+          "to": "verify-live"
+        }
+      ]
+    },
+    {
+      "id": "verify-live",
+      "title": "Check the live site",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Check the response headers show Akamai is serving the site.",
+        "Watch error rates for one hour.",
+        "Ask Security to switch the WAF from alert to deny after one week."
+      ],
+      "next": []
+    }
+  ]
+}

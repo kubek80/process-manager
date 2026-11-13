@@ -1,0 +1,240 @@
+{
+  "$schema": "../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "onboard-api-to-apigee",
+  "title": "Onboard an API to Apigee",
+  "summary": "Publish a backend API through the Apigee gateway: design review, proxy configuration, test deployment and production approval.",
+  "category": "API",
+  "owner": "API Platform team",
+  "estimatedDuration": "2-3 weeks",
+  "tags": [
+    "apigee",
+    "api",
+    "gateway"
+  ],
+  "updatedAt": "2026-11-13",
+  "prerequisites": [
+    {
+      "title": "GCP project for the backend",
+      "processId": "request-gcp-project",
+      "description": "The backend must already run in a company GCP project."
+    },
+    {
+      "title": "Repository for the proxy configuration",
+      "processId": "request-github-repository"
+    },
+    {
+      "title": "OpenAPI 3 specification",
+      "description": "A spec that passes the company API linting rules."
+    },
+    {
+      "title": "Backend reachable from Apigee",
+      "description": "Private connectivity or an allow-listed endpoint in the test environment."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The engineer or BA following this process."
+    },
+    {
+      "id": "api-platform",
+      "name": "API Platform team",
+      "description": "Slack #api-platform"
+    },
+    {
+      "id": "security",
+      "name": "Security",
+      "description": "Application security team."
+    },
+    {
+      "id": "pipeline",
+      "name": "Deployment pipeline",
+      "description": "CI/CD that deploys proxies to Apigee."
+    }
+  ],
+  "steps": [
+    {
+      "id": "register-api",
+      "title": "Register the API",
+      "actor": "me",
+      "type": "form",
+      "instructions": [
+        "Enter the API name, owner team and application ID.",
+        "Attach the OpenAPI specification.",
+        "State the consumers: internal, partner or public."
+      ],
+      "tool": "ServiceNow",
+      "url": "https://servicenow.example.com/catalog/api-onboarding",
+      "urlLabel": "Open 'API onboarding' form",
+      "duration": "15 min",
+      "outcome": "Onboarding ticket",
+      "next": [
+        {
+          "to": "design-review"
+        }
+      ]
+    },
+    {
+      "id": "design-review",
+      "title": "Hold the API design review",
+      "actor": "api-platform",
+      "type": "meeting",
+      "description": "The API Platform team walks through the spec with you: naming, versioning, authentication and rate limits.",
+      "duration": "45 min",
+      "next": [
+        {
+          "to": "design-approved"
+        }
+      ]
+    },
+    {
+      "id": "design-approved",
+      "title": "Design approved?",
+      "actor": "api-platform",
+      "type": "decision",
+      "next": [
+        {
+          "to": "create-proxy-config",
+          "label": "Approved"
+        },
+        {
+          "to": "update-specification",
+          "label": "Changes needed"
+        }
+      ]
+    },
+    {
+      "id": "update-specification",
+      "title": "Update the specification",
+      "actor": "me",
+      "type": "document",
+      "instructions": [
+        "Apply the review comments to the OpenAPI spec.",
+        "Attach the new version to the onboarding ticket.",
+        "Ask for a re-review in #api-platform."
+      ],
+      "next": [
+        {
+          "to": "design-review"
+        }
+      ]
+    },
+    {
+      "id": "create-proxy-config",
+      "title": "Create the proxy configuration",
+      "actor": "me",
+      "type": "code",
+      "instructions": [
+        "Generate the proxy skeleton with the apigee-template CLI.",
+        "Set the target endpoint for test and prod.",
+        "Add the standard policies: OAuth verification, quota, spike arrest.",
+        "Open a pull request."
+      ],
+      "tool": "GitHub",
+      "duration": "half a day",
+      "outcome": "Open pull request",
+      "next": [
+        {
+          "to": "review-proxy"
+        }
+      ]
+    },
+    {
+      "id": "review-proxy",
+      "title": "Review the proxy pull request",
+      "actor": "api-platform",
+      "type": "review",
+      "tool": "GitHub",
+      "duration": "2 working days",
+      "next": [
+        {
+          "to": "deploy-to-test"
+        }
+      ]
+    },
+    {
+      "id": "deploy-to-test",
+      "title": "Deploy to the test environment",
+      "actor": "pipeline",
+      "type": "automation",
+      "duration": "10 min",
+      "next": [
+        {
+          "to": "test-api"
+        }
+      ]
+    },
+    {
+      "id": "test-api",
+      "title": "Test the API through the gateway",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Request a test client ID in the developer portal.",
+        "Call every operation through the test gateway URL.",
+        "Check authentication, quota and error responses."
+      ],
+      "next": [
+        {
+          "to": "request-production"
+        }
+      ]
+    },
+    {
+      "id": "request-production",
+      "title": "Request production release",
+      "actor": "me",
+      "type": "form",
+      "instructions": [
+        "Raise a standard change 'Apigee proxy release'.",
+        "Attach the test evidence."
+      ],
+      "tool": "ServiceNow",
+      "outcome": "Change number",
+      "next": [
+        {
+          "to": "approve-production"
+        }
+      ]
+    },
+    {
+      "id": "approve-production",
+      "title": "Approve the production release",
+      "actor": "security",
+      "type": "approval",
+      "description": "Security checks authentication, data classification and exposure.",
+      "duration": "up to 3 working days",
+      "next": [
+        {
+          "to": "deploy-to-production"
+        }
+      ]
+    },
+    {
+      "id": "deploy-to-production",
+      "title": "Deploy to production",
+      "actor": "pipeline",
+      "type": "automation",
+      "duration": "10 min",
+      "next": [
+        {
+          "to": "announce-api"
+        }
+      ]
+    },
+    {
+      "id": "announce-api",
+      "title": "Announce the API to consumers",
+      "actor": "me",
+      "type": "communication",
+      "instructions": [
+        "Publish the API product in the developer portal.",
+        "Post the link in #api-announcements."
+      ],
+      "tool": "Developer portal",
+      "next": []
+    }
+  ]
+}
