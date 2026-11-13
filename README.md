@@ -19,6 +19,21 @@ npm run dev
 
 Open http://localhost:5173. Nothing leaves your machine: processes are plain JSON files in `processes/`, written by the app through a small local API in `vite.config.ts`. Commit them to git like any other file.
 
+## Consumer and Editor
+
+The switch in the top bar changes what the app offers:
+
+- **Consumer** – find a process, read the map, follow the checklist, look up teams and tools, flag what does not work.
+- **Editor** – everything above plus creating and changing processes, the JSON tab, the schema check, managing teams, tools and tiers, and closing feedback.
+
+It is a view, not a permission: anyone can flip it, and the choice is remembered in the browser.
+
+## Guide
+
+The app has a built-in **Guide** (top bar) that explains every feature, with flow charts for following a process, creating one with AI, and the feedback loop. The charts are themselves processes, drawn by the same map.
+
+![Guide](docs/guide.png)
+
 ## How a process is described
 
 | Concept | Meaning |
@@ -35,13 +50,15 @@ The format is defined by [`schema/process.schema.json`](schema/process.schema.js
 
 ## Teams, tools and tiers
 
-Processes pick their owner, participants, tools and tiers from shared lists in `catalog/catalog.json` (schema: `schema/catalog.schema.json`). Manage them on the **Teams, tools & tiers** page; a tool can also be added on the spot from the tool picker of a step. An entry that is still used by a process cannot be removed.
+Processes pick their owner, participants, tools and tiers from shared lists in `catalog/catalog.json` (schema: `schema/catalog.schema.json`). Manage them on the **Teams, tools & tiers** page (Editor mode): pick a list, select an entry, edit it on the right, and see which processes use it. In Consumer mode the same page is a read-only directory. A tool can also be added on the spot from the tool picker of a step. An entry that is still used by a process cannot be removed.
 
 ## Feedback
 
 Anyone can flag a step (or the whole process) that does not work: *This step doesn’t work* in the step panel, the flag icon in the checklist, or *Report a problem*. Pick a kind, write a sentence, send. Open feedback shows as a red flag on the map and on the library card; the **Feedback** tab lists everything and lets the owner mark items as fixed. Feedback is stored in `feedback/<process-id>.json`, separate from the process itself.
 
 ## Editing
+
+Switch to **Editor** first.
 
 - **On the map** – press **+** on an arrow to insert a step exactly there, or **+** on a block to add one after it (on a decision: a new branch). A small form on the map asks what happens, who does it and what kind of step it is. Drag a block to another lane to change who does it.
 - **In the side panel** – click a block → *Edit step* for instructions, tool, link and what comes next. *Details* edits the name, owner, tiers, participants and prerequisites. Changes stay in a draft until you press **Save changes**.
@@ -73,7 +90,8 @@ schema/               JSON schemas + the example used in the LLM prompt
 src/lib/validate.ts   schema + semantic checker (shared by app and CLI)
 src/lib/prompt.ts     prompt builder for browser LLMs
 src/lib/layout.ts     swim-lane layout and edge routing
-src/components/       map, checklist, step editor, AI dialog
+src/components/       map, checklist, step editor, AI dialog, catalog, guide
+src/guide/flows.ts    the flow charts shown in the guide
 scripts/              validate + prompt CLI
 ```
 

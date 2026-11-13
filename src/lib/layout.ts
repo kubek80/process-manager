@@ -1,6 +1,8 @@
 import type { Process, Step } from "../types";
 
 export const L = { W: 208, H: 94, GAPX: 64, GAPY: 30, PADY: 26, PADX: 44, HEADER: 172 };
+/** Tighter measures for the small charts in the guide. */
+export const L_COMPACT: typeof L = { W: 188, H: 88, GAPX: 44, GAPY: 26, PADY: 22, PADX: 32, HEADER: 136 };
 
 export interface NodeBox { step: Step; index: number; lane: number; col: number; sub: number; x: number; y: number }
 export interface LaneBox { actorIndex: number; y: number; h: number }
@@ -8,6 +10,8 @@ export interface EdgePath { from: string; to: string; label?: string; d: string;
 export interface Layout { nodes: NodeBox[]; lanes: LaneBox[]; edges: EdgePath[]; width: number; height: number }
 
 type Pt = [number, number];
+type Dims = typeof L;
+const DEFAULT = L;
 
 function roundedPath(pts: Pt[], r = 12): string {
   const p = pts.filter((q, i) => i === 0 || q[0] !== pts[i - 1][0] || q[1] !== pts[i - 1][1]);
@@ -40,7 +44,7 @@ function labelPoint(pts: Pt[]): Pt {
 }
 
 /** Swim-lane layout: lanes are rows (one per actor), time flows left to right. */
-export function layoutProcess(p: Process): Layout {
+export function layoutProcess(p: Process, L: Dims = DEFAULT): Layout {
   const steps = p.steps;
   const idx = new Map(steps.map((s, i) => [s.id, i]));
   const laneOf = new Map(p.actors.map((a, i) => [a.id, i]));

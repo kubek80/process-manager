@@ -61,8 +61,8 @@ export function FeedbackForm({ process, stepId, pickStep, onAdd, onDone }: {
   );
 }
 
-export function FeedbackItem({ item, process, onSelect, onChange, onRemove, hideStep }: {
-  hideStep?: boolean; item: Feedback; process: Process; onSelect?: (id: string) => void; onChange: (f: Feedback) => void; onRemove: () => void;
+export function FeedbackItem({ item, process, onSelect, onChange, onRemove, hideStep, editable = true }: {
+  hideStep?: boolean; editable?: boolean; item: Feedback; process: Process; onSelect?: (id: string) => void; onChange: (f: Feedback) => void; onRemove: () => void;
 }) {
   const idx = item.stepId ? process.steps.findIndex((s) => s.id === item.stepId) : -1;
   return (
@@ -77,17 +77,18 @@ export function FeedbackItem({ item, process, onSelect, onChange, onRemove, hide
         <span className="muted">{item.author ?? "Anonymous"} · {item.createdAt.slice(0, 10)}</span>
       </div>
       <p>{item.text}</p>
-      <div className="fb-actions">
+      {editable && <div className="fb-actions">
         <button className="btn small ghost" onClick={() => onChange({ ...item, resolved: !item.resolved })}>
           {item.resolved ? <RotateCcw size={14} /> : <Check size={14} />}{item.resolved ? "Reopen" : "Mark as fixed"}
         </button>
         <button className="icon-btn danger" onClick={onRemove} aria-label="Delete feedback"><Trash2 size={15} /></button>
-      </div>
+      </div>}
     </li>
   );
 }
 
-export function FeedbackTab({ process, feedback, onChange, onSelect }: {
+export function FeedbackTab({ process, feedback, onChange, onSelect, editable }: {
+  editable: boolean;
   process: Process; feedback: Feedback[]; onChange: (list: Feedback[]) => void; onSelect: (id: string) => void;
 }) {
   const sorted = [...feedback].sort((a, b) => Number(!!a.resolved) - Number(!!b.resolved) || b.createdAt.localeCompare(a.createdAt));
@@ -103,7 +104,7 @@ export function FeedbackTab({ process, feedback, onChange, onSelect }: {
         {feedback.length === 0 && <p className="muted">No feedback yet.</p>}
         <ul className="fb-list">
           {sorted.map((f) => (
-            <FeedbackItem key={f.id} item={f} process={process} onSelect={onSelect}
+            <FeedbackItem key={f.id} item={f} process={process} onSelect={onSelect} editable={editable}
               onChange={(n) => onChange(feedback.map((x) => (x.id === n.id ? n : x)))}
               onRemove={() => onChange(feedback.filter((x) => x.id !== f.id))} />
           ))}

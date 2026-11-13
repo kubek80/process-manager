@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Check, Clock, Flag, Maximize2, Minus, Plus, User, Workflow, Wrench, X } from "lucide-react";
 import type { Feedback, Process, StepType } from "../types";
-import { L, layoutProcess } from "../lib/layout";
+import { L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
 import { LANE_COLORS, STEP_META, STEP_TYPES } from "../lib/stepMeta";
 import { toolName, useCatalog } from "../lib/catalog";
 import { openCount } from "./Feedback";
@@ -55,14 +55,16 @@ function QuickAdd({ process, at, onAdd, onClose }: {
   );
 }
 
-export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane }: {
+export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, editable = true, bare }: {
+  editable?: boolean; bare?: boolean;
   process: Process; selectedId: string | null; done: Set<string>; feedback: Feedback[];
   onSelect: (id: string) => void;
-  onInsert: (at: InsertAt, spec: { title: string; type: StepType; actor: string }) => void;
-  onMoveToLane: (stepId: string, actorId: string) => void;
+  onInsert?: (at: InsertAt, spec: { title: string; type: StepType; actor: string }) => void;
+  onMoveToLane?: (stepId: string, actorId: string) => void;
 }) {
   const { catalog } = useCatalog();
-  const layout = useMemo(() => layoutProcess(process), [process]);
+  const L = bare ? L_COMPACT : L_FULL;
+  const layout = useMemo(() => layoutProcess(process, L), [process, L]);
   const [zoom, setZoom] = useState(1);
   const [hover, setHover] = useState<string | null>(null);
   const [adding, setAdding] = useState<Adding | null>(null);
@@ -71,7 +73,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const scroller = useRef<HTMLDivElement>(null);
   const fit = () => {
     const w = scroller.current?.clientWidth ?? 0;
-    if (w) setZoom(Math.max(0.75, Math.min(1, Math.floor((w / layout.width) * 20) / 20)));
+    if (w) setZoom(Math.max(bare ? 0.6 : 0.75, Math.min(1, Math.floor((w / layout.width) * 20) / 20)));
   };
   // open zoomed to fit the width (never below 75%, where text stops being readable)
   useLayoutEffect(fit, [process.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -87,7 +89,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const height = Math.max(layout.height, adding ? adding.y + POP_H + 12 : 0);
 
   return (
-    <div className="flow-wrap">
+    <div className={`flow-wrap ${bare ? "bare" : ""}`}>
       <div className="flow-scroll" ref={scroller}>
         <div className={`flow-canvas ${drag ? "dragging" : ""}`} style={{ width: layout.width, height, zoom }} onMouseDown={() => setAdding(null)}>
           {layout.lanes.map((lane) => {
@@ -99,7 +101,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                 style={{ top: lane.y, height: lane.h, "--lane": color } as React.CSSProperties}
                 onDragOver={(e) => { if (drag) { e.preventDefault(); setDropLane(actor.id); } }}
                 onDragLeave={() => setDropLane((d) => (d === actor.id ? null : d))}
-                onDrop={(e) => { e.preventDefault(); if (drag) onMoveToLane(drag, actor.id); setDrag(null); setDropLane(null); }}>
+                onDrop={(e) => { e.preventDefault(); if (drag) onMoveToLane?.(drag, actor.id); setDrag(null); setDropLane(null); }}>
                 <div className="lane-head" style={{ width: L.HEADER }}>
                   <span className="lane-avatar">{lane.actorIndex === 0 ? <User size={16} /> : actor.name.slice(0, 1).toUpperCase()}</span>
                   <div className="lane-text">
@@ -134,7 +136,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
               style={{ left: e.lx, top: e.ly }}>{e.label}</span>
           ))}
 
-          {layout.edges.map((e) => (
+          {editable && layout.edges.map((e) => (
             <button key={`a${e.from}>${e.to}`} className="edge-add" style={{ left: e.px, top: e.py }} title="Insert a step here"
               onMouseDown={(ev) => ev.stopPropagation()} onClick={() => openAdd({ afterId: e.from, beforeId: e.to }, e.px, e.py)}><Plus size={12} strokeWidth={3} /></button>
           ))}
@@ -144,14 +146,14 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
             const meta = STEP_META[s.type];
             const flags = openCount(feedback, s.id);
             return (
-              <div key={s.id} draggable
+              <div key={s.id} draggable={editable}
                 onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", s.id); setDrag(s.id); setAdding(null); }}
                 onDragEnd={() => { setDrag(null); setDropLane(null); }}
                 className={`block ${n.lane === 0 ? "mine" : ""} ${selectedId === s.id ? "selected" : ""} ${done.has(s.id) ? "done" : ""} ${s.type === "decision" ? "decision" : ""} ${drag === s.id ? "dragged" : ""}`}
                 style={{ left: n.x, top: n.y, width: L.W, height: L.H, "--c": meta.color } as React.CSSProperties}
                 onMouseEnter={() => setHover(s.id)} onMouseLeave={() => setHover(null)}>
                 <button className="block-main" onClick={() => onSelect(s.id)}>
-                  <TypeIcon type={s.type} size={34} />
+                  <TypeIcon type={s.type} size={bare ? 30 : 34} />
                   <span className="block-text">
                     <span className="block-type">{meta.label}</span>
                     <span className="block-title">{s.title}</span>
@@ -164,15 +166,15 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                 </button>
                 <span className="block-num">{done.has(s.id) ? <Check size={12} strokeWidth={3} /> : n.index + 1}</span>
                 {flags > 0 && <span className="block-flag" title={`${flags} open feedback`}><Flag size={10} strokeWidth={3} />{flags}</span>}
-                <button className="block-add" title={s.type === "decision" ? "Add a branch" : "Add a step after this one"}
-                  onMouseDown={(ev) => ev.stopPropagation()} onClick={() => openAdd({ afterId: s.id }, n.x + L.W, n.y + L.H / 2)}><Plus size={14} /></button>
+                {editable && <button className="block-add" title={s.type === "decision" ? "Add a branch" : "Add a step after this one"}
+                  onMouseDown={(ev) => ev.stopPropagation()} onClick={() => openAdd({ afterId: s.id }, n.x + L.W, n.y + L.H / 2)}><Plus size={14} /></button>}
               </div>
             );
           })}
 
           {adding && (
             <QuickAdd process={process} at={adding} onClose={() => setAdding(null)}
-              onAdd={(spec) => { onInsert({ afterId: adding.afterId, beforeId: adding.beforeId }, spec); setAdding(null); }} />
+              onAdd={(spec) => { onInsert?.({ afterId: adding.afterId, beforeId: adding.beforeId }, spec); setAdding(null); }} />
           )}
         </div>
       </div>
@@ -184,14 +186,14 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
           ))}
           <span className="legend-item"><svg width="26" height="8"><path d="M0,4 H26" className="edge back" /></svg>Loop back</span>
         </div>
-        <div className="zoom">
+        {!bare && <div className="zoom">
           <button className="btn small ghost" onClick={fit}><Maximize2 size={14} />Fit</button>
           <button className="icon-btn" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(1)))} aria-label="Zoom out"><Minus size={16} /></button>
           <button className="zoom-val" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
           <button className="icon-btn" onClick={() => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(1)))} aria-label="Zoom in"><Plus size={16} /></button>
-        </div>
+        </div>}
       </div>
-      <p className="flow-hint"><b>Edit on the map:</b> press <span className="kbd">+</span> on an arrow to insert a step there · <span className="kbd">+</span> on a block to add one after it · drag a block to another lane to change who does it · click a block for details.</p>
+      {editable && <p className="flow-hint"><b>Edit on the map:</b> press <span className="kbd">+</span> on an arrow to insert a step there · <span className="kbd">+</span> on a block to add one after it · drag a block to another lane to change who does it · click a block for details.</p>}
     </div>
   );
 }

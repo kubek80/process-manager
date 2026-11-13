@@ -54,10 +54,11 @@ export function useProgress(processId: string) {
 }
 
 export type Tab = "flow" | "list" | "feedback" | "json";
-export type Route = { page: "library" } | { page: "catalog" } | { page: "process"; id: string; tab: Tab };
+export type Route = { page: "library" } | { page: "catalog" } | { page: "guide" } | { page: "process"; id: string; tab: Tab };
 
 const parse = (): Route => {
   if (location.hash.startsWith("#/catalog")) return { page: "catalog" };
+  if (location.hash.startsWith("#/guide")) return { page: "guide" };
   const m = location.hash.match(/^#\/p\/([a-z0-9-]+)(?:\/(flow|list|feedback|json))?/);
   return m ? { page: "process", id: m[1], tab: (m[2] as Tab) ?? "flow" } : { page: "library" };
 };
@@ -72,7 +73,7 @@ export function useRoute(): Route {
   return route;
 }
 
-export const go = (r: Route) => { location.hash = r.page === "library" ? "#/" : r.page === "catalog" ? "#/catalog" : `#/p/${r.id}/${r.tab}`; };
+export const go = (r: Route) => { location.hash = r.page === "library" ? "#/" : r.page === "catalog" ? "#/catalog" : r.page === "guide" ? "#/guide" : `#/p/${r.id}/${r.tab}`; };
 
 export async function copyText(text: string): Promise<boolean> {
   try { await navigator.clipboard.writeText(text); return true; } catch {

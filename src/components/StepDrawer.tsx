@@ -7,7 +7,8 @@ import { STEP_META, STEP_TYPES } from "../lib/stepMeta";
 import { Field, TypeIcon } from "./ui";
 import { StepBody } from "./ListView";
 
-export function StepDrawer({ process, all, step, editing, setEditing, onClose, onSelect, onChange, onTitleBlur, onDelete, onMove, onAddAfter, feedback, onFeedback, reporting, setReporting }: {
+export function StepDrawer({ process, all, step, editing, setEditing, onClose, onSelect, onChange, onTitleBlur, onDelete, onMove, onAddAfter, feedback, onFeedback, reporting, setReporting, editable }: {
+  editable: boolean;
   feedback: Feedback[]; onFeedback: (list: Feedback[]) => void; reporting: boolean; setReporting: (r: boolean) => void;
   process: Process; all: Process[]; step: Step; editing: boolean; setEditing: (e: boolean) => void;
   onClose: () => void; onSelect: (id: string) => void;
@@ -42,7 +43,7 @@ export function StepDrawer({ process, all, step, editing, setEditing, onClose, o
         <button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
       </header>
 
-      <div className="drawer-tools">
+      {editable && <div className="drawer-tools">
         <button className={`btn small ${editing ? "primary" : ""}`} onClick={() => setEditing(!editing)}>
           {editing ? <Check size={14} /> : <Pencil size={14} />}{editing ? "Done editing" : "Edit step"}
         </button>
@@ -51,19 +52,19 @@ export function StepDrawer({ process, all, step, editing, setEditing, onClose, o
         <button className="icon-btn" title="Move earlier in the list" disabled={index === 0} onClick={() => onMove(-1)}><ArrowUp size={16} /></button>
         <button className="icon-btn" title="Move later in the list" disabled={index === process.steps.length - 1} onClick={() => onMove(1)}><ArrowDown size={16} /></button>
         <button className="icon-btn danger" title="Delete step" disabled={process.steps.length === 1} onClick={onDelete}><Trash2 size={16} /></button>
-      </div>
+      </div>}
 
-      {!editing ? (
+      {!editing || !editable ? (
         <div className="drawer-body">
           <StepBody step={step} process={process} all={all} onSelect={onSelect} />
           {!step.description && !step.instructions?.length && !step.subProcessId && (
-            <p className="muted">No details yet. Press “Edit step” to describe what to do.</p>
+            <p className="muted">{editable ? "No details yet. Press “Edit step” to describe what to do." : "No further details for this step."}</p>
           )}
           <section className="drawer-fb">
             {mine.length > 0 && (
               <ul className="fb-list">
                 {mine.map((f) => (
-                  <FeedbackItem key={f.id} item={f} process={process} hideStep
+                  <FeedbackItem key={f.id} item={f} process={process} hideStep editable={editable}
                     onChange={(n) => onFeedback(feedback.map((x) => (x.id === f.id ? n : x)))}
                     onRemove={() => onFeedback(feedback.filter((x) => x.id !== f.id))} />
                 ))}

@@ -3,6 +3,7 @@ import { ArrowRight, CircleAlert, Clock, Flag, Layers, Plus, Search, Sparkles, U
 import type { Feedback, Process } from "../types";
 import { teamName, tierLabel, useCatalog } from "../lib/catalog";
 import { openCount } from "./Feedback";
+import { useEditor } from "../lib/mode";
 import { hasErrors, validateProcess } from "../lib/validate";
 import { go } from "../lib/store";
 import { TypeIcon } from "./ui";
@@ -16,6 +17,7 @@ export function Library({ processes, broken, onNew, onAi, feedback }: {
   const [cat, setCat] = useState<string | null>(null);
   const [tier, setTier] = useState<string | null>(null);
   const { catalog } = useCatalog();
+  const editor = useEditor();
   const ids = useMemo(() => processes.map((p) => p.id), [processes]);
   const cats = useMemo(() => [...new Set(processes.map((p) => p.category ?? "General"))].sort(), [processes]);
   const usedBy = (id: string) => processes.filter((p) => Array.isArray(p.steps) && p.steps.some((s) => s.subProcessId === id)).length;
@@ -34,10 +36,12 @@ export function Library({ processes, broken, onNew, onAi, feedback }: {
           <h1>How do I get…?</h1>
           <p className="lead">Platform processes, step by step. See who does what on the map, then follow your own checklist.</p>
         </div>
-        <div className="hero-actions">
-          <button className="btn primary" onClick={onAi}><Sparkles size={16} />Create from text with AI</button>
-          <button className="btn" onClick={onNew}><Plus size={16} />Blank process</button>
-        </div>
+        {editor && (
+          <div className="hero-actions">
+            <button className="btn primary" onClick={onAi}><Sparkles size={16} />Create from text with AI</button>
+            <button className="btn" onClick={onNew}><Plus size={16} />Blank process</button>
+          </div>
+        )}
       </section>
 
       <div className="filters">
@@ -71,10 +75,10 @@ export function Library({ processes, broken, onNew, onAi, feedback }: {
           const steps = Array.isArray(p.steps) ? p.steps : [];
           const used = usedBy(p.id);
           return (
-            <button key={p.id} className="card" style={{ "--c": color } as React.CSSProperties} onClick={() => go({ page: "process", id: p.id, tab: bad ? "json" : "flow" })}>
+            <button key={p.id} className="card" style={{ "--c": color } as React.CSSProperties} onClick={() => go({ page: "process", id: p.id, tab: bad && editor ? "json" : "flow" })}>
               <div className="card-top">
                 <span className="card-cat">{p.category ?? "General"}</span>
-                {bad && <span className="badge bad"><CircleAlert size={12} />Needs fixing</span>}
+                {bad && editor && <span className="badge bad"><CircleAlert size={12} />Needs fixing</span>}
                 {!bad && used > 0 && <span className="badge">Used by {used} process{used > 1 ? "es" : ""}</span>}
               </div>
               <h3>{p.title}</h3>
