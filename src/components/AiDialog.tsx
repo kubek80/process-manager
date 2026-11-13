@@ -4,6 +4,7 @@ import type { Issue, Process } from "../types";
 import { createPrompt, fixPrompt, modifyPrompt } from "../lib/prompt";
 import { extractJson, hasErrors, validateProcess } from "../lib/validate";
 import { download } from "../lib/store";
+import { useCatalog } from "../lib/catalog";
 import { CopyButton, Modal } from "./ui";
 
 export function IssueList({ issues }: { issues: Issue[] }) {
@@ -25,13 +26,14 @@ export function AiDialog({ current, all, onImport, onClose }: {
 }) {
   const [text, setText] = useState("");
   const [answer, setAnswer] = useState("");
+  const { catalog } = useCatalog();
   const known = useMemo(() => all.map((p) => ({ id: p.id, title: p.title })), [all]);
-  const prompt = () => (current ? modifyPrompt(current, text, known) : createPrompt(text, known));
+  const prompt = () => (current ? modifyPrompt(current, text, known, catalog) : createPrompt(text, known, catalog));
 
   const parsed = useMemo(() => (answer.trim() ? extractJson(answer) : null), [answer]);
   const issues = useMemo(
-    () => (parsed?.value ? validateProcess(parsed.value, [...all.map((p) => p.id), (parsed.value as Process).id]) : []),
-    [parsed, all],
+    () => (parsed?.value ? validateProcess(parsed.value, { processIds: [...all.map((p) => p.id), (parsed.value as Process).id], catalog }) : []),
+    [parsed, all, catalog],
   );
   const ok = !!parsed?.value && !hasErrors(issues);
   const result = parsed?.value as Process | undefined;
@@ -66,7 +68,7 @@ export function AiDialog({ current, all, onImport, onClose }: {
           <span className="ai-n">2</span>
           <div>
             <h4>Copy the prompt and paste it into your AI chat</h4>
-            <p className="muted small">The prompt contains the rules, the JSON schema, an example{current ? ", the current process" : ""} and your text. Send it as one message.</p>
+            <p className="muted small">The prompt contains the rules, the JSON schema, your teams, tools and tiers, an example{current ? ", the current process" : ""} and your text. Send it as one message.</p>
             <div className="btn-row">
               <CopyButton primary label="Copy prompt" text={prompt} />
               <button className="btn" onClick={() => download("process-prompt.md", prompt())}><Download size={16} />Download as file</button>

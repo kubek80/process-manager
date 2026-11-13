@@ -1,10 +1,14 @@
 import Ajv2020 from "ajv/dist/2020";
 import type { ErrorObject } from "ajv";
 import schema from "../../schema/process.schema.json";
-import type { Issue, Process } from "../types";
+import catalogSchema from "../../schema/catalog.schema.json";
+import type { Catalog, Issue, Process } from "../types";
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 const validateSchema = ajv.compile(schema);
+const validateCatalogSchema = ajv.compile(catalogSchema);
+
+export interface CheckContext { processIds?: Iterable<string>; catalog?: Catalog }
 
 export { schema as processSchema };
 
@@ -36,9 +40,10 @@ function describe(e: ErrorObject): string {
 
 /**
  * Full check of a process: JSON schema first, then the rules a schema cannot express
- * (references, uniqueness, reachability). `knownIds` enables sub-process reference checks.
+ * (references, uniqueness, reachability). The context enables checks against other processes
+ * and against the catalog (tiers, teams, tools).
  */
-export function validateProcess(data: unknown, knownIds?: Iterable<string>): Issue[] {
+export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] {
   const issues: Issue[] = [];
   if (!validateSchema(data)) {
     const seen = new Set<string>();
@@ -53,7 +58,20 @@ export function validateProcess(data: unknown, knownIds?: Iterable<string>): Iss
   const p = data as unknown as Process;
   const err = (path: string, message: string) => issues.push({ level: "error", path, message });
   const warn = (path: string, message: string) => issues.push({ level: "warning", path, message });
-  const known = knownIds ? new Set(knownIds) : null;
+  const known = ctx.processIds ? new Set(ctx.processIds) : null;
+  const cat = ctx.catalog;
+  const ids = (list: { id: string }[]) => list.map((x) => x.id);
+
+  if (cat) {
+    if (p.owner && !cat.teams.some((t) => t.id === p.owner))
+      warn("owner", `"${p.owner}" is not in the teams list. Known teams: ${ids(cat.teams).join(", ") || "(none)"}`);
+    (p.tiers ?? []).forEach((tier, i) => {
+      if (!cat.tiers.some((t) => t.id === tier)) err(`tiers[${i}]`, `"${tier}" is not a known tier. Known tiers: ${ids(cat.tiers).join(", ") || "(none)"}`);
+    });
+    p.actors.forEach((a, i) => {
+      if (a.teamId && !cat.teams.some((t) => t.id === a.teamId)) warn(`actors[${i}].teamId`, `"${a.teamId}" is not in the teams list`);
+    });
+  }
 
   const actorIds = new Set<string>();
   p.actors.forEach((a, i) => {
@@ -83,6 +101,8 @@ export function validateProcess(data: unknown, knownIds?: Iterable<string>): Iss
       if (s.next.length < 2) err(`${at}.next`, "a decision needs at least two outgoing paths");
       if (s.next.some((n) => !n.label)) err(`${at}.next`, "every path out of a decision needs a label (e.g. \"Approved\" / \"Rejected\")");
     }
+    if (cat && s.tool && !cat.tools.some((t) => t.id === s.tool))
+      warn(`${at}.tool`, `"${s.tool}" is not in the tools list. Known tools: ${ids(cat.tools).join(", ") || "(none)"}`);
     if (s.type === "subprocess" && !s.subProcessId) err(`${at}.subProcessId`, "a subprocess step must name the process in subProcessId");
     if (s.subProcessId) {
       if (s.subProcessId === p.id) err(`${at}.subProcessId`, "a process cannot use itself as a sub-process");
@@ -116,6 +136,23 @@ export function validateProcess(data: unknown, knownIds?: Iterable<string>): Iss
   });
   if (!p.steps.some((s) => s.next.length === 0)) warn("steps", "the process never ends - at least one step should have an empty next list");
 
+  return issues;
+}
+
+export function validateCatalog(data: unknown): Issue[] {
+  const issues: Issue[] = [];
+  if (!validateCatalogSchema(data)) {
+    for (const e of validateCatalogSchema.errors ?? []) issues.push({ level: "error", path: prettyPath(e.instancePath), message: describe(e) });
+    return issues;
+  }
+  const c = data as unknown as Catalog;
+  (["tiers", "teams", "tools"] as const).forEach((key) => {
+    const seen = new Set<string>();
+    c[key].forEach((x, i) => {
+      if (seen.has(x.id)) issues.push({ level: "error", path: `${key}[${i}].id`, message: `duplicate id "${x.id}"` });
+      seen.add(x.id);
+    });
+  });
   return issues;
 }
 

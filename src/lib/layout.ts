@@ -4,7 +4,7 @@ export const L = { W: 208, H: 94, GAPX: 64, GAPY: 30, PADY: 26, PADX: 44, HEADER
 
 export interface NodeBox { step: Step; index: number; lane: number; col: number; sub: number; x: number; y: number }
 export interface LaneBox { actorIndex: number; y: number; h: number }
-export interface EdgePath { from: string; to: string; label?: string; d: string; back: boolean; lx: number; ly: number }
+export interface EdgePath { from: string; to: string; label?: string; d: string; back: boolean; lx: number; ly: number; px: number; py: number }
 export interface Layout { nodes: NodeBox[]; lanes: LaneBox[]; edges: EdgePath[]; width: number; height: number }
 
 type Pt = [number, number];
@@ -23,10 +23,20 @@ function roundedPath(pts: Pt[], r = 12): string {
   return d + ` L${last[0]},${last[1]}`;
 }
 
+/** Middle of the longest segment: where the "insert a step here" button goes. */
+function midPoint(pts: Pt[]): Pt {
+  let best = -1, at: Pt = pts[0];
+  for (let i = 1; i < pts.length; i++) {
+    const len = Math.abs(pts[i][0] - pts[i - 1][0]) + Math.abs(pts[i][1] - pts[i - 1][1]);
+    if (len > best) { best = len; at = [(pts[i][0] + pts[i - 1][0]) / 2, (pts[i][1] + pts[i - 1][1]) / 2]; }
+  }
+  return at;
+}
+
 /** Labels sit on the last bend before the target, so each branch is named where it arrives. */
 function labelPoint(pts: Pt[]): Pt {
   if (pts.length > 2) return pts[pts.length - 2];
-  return [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2];
+  return [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2 - 15]; // straight arrow: above the line
 }
 
 /** Swim-lane layout: lanes are rows (one per actor), time flows left to right. */
@@ -140,7 +150,9 @@ export function layoutProcess(p: Process): Layout {
       pts = [[sr, sy], [x1, sy], [x1, cy], [x2, cy], [x2, ty], [tl, ty]];
     }
     const [lx, ly] = labelPoint(pts);
-    edges.push({ from: s.step.id, to: t.step.id, label: n.label, d: roundedPath(pts), back: isBack, lx, ly });
+    let [px, py] = midPoint(pts);
+    if (n.label && Math.abs(px - lx) < 30 && Math.abs(py - ly) < 14) py += 18; // keep clear of the label
+    edges.push({ from: s.step.id, to: t.step.id, label: n.label, d: roundedPath(pts), back: isBack, lx, ly, px, py });
   }));
 
   return { nodes, lanes, edges, width: colX(maxCol) + L.W + L.PADX, height: y };

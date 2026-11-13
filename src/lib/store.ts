@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Process } from "../types";
+import type { Catalog, Feedback, Process } from "../types";
 
 export interface Loaded { processes: Process[]; broken: { file: string; error: string }[] }
 
@@ -16,6 +16,22 @@ export async function putProcess(p: Process): Promise<void> {
 
 export async function removeProcess(id: string): Promise<void> {
   await fetch(`/api/processes/${id}`, { method: "DELETE" });
+}
+
+export async function loadCatalog(): Promise<Catalog> {
+  const c = await (await fetch("/api/catalog")).json();
+  return { ...c, tiers: c.tiers ?? [], teams: c.teams ?? [], tools: c.tools ?? [] };
+}
+export async function putCatalog(c: Catalog): Promise<void> {
+  const res = await fetch("/api/catalog", { method: "PUT", body: JSON.stringify(c) });
+  if (!res.ok) throw new Error(`Save failed (${res.status})`);
+}
+export async function loadFeedback(): Promise<Record<string, Feedback[]>> {
+  return (await fetch("/api/feedback")).json();
+}
+export async function putFeedback(processId: string, list: Feedback[]): Promise<void> {
+  const res = await fetch(`/api/feedback/${processId}`, { method: "PUT", body: JSON.stringify(list) });
+  if (!res.ok) throw new Error(`Save failed (${res.status})`);
 }
 
 /** Personal "done" ticks, kept in the browser only - they are not part of the process definition. */
@@ -37,11 +53,13 @@ export function useProgress(processId: string) {
   return { done, toggle, reset };
 }
 
-export type Route = { page: "library" } | { page: "process"; id: string; tab: "flow" | "list" | "json" };
+export type Tab = "flow" | "list" | "feedback" | "json";
+export type Route = { page: "library" } | { page: "catalog" } | { page: "process"; id: string; tab: Tab };
 
 const parse = (): Route => {
-  const m = location.hash.match(/^#\/p\/([a-z0-9-]+)(?:\/(flow|list|json))?/);
-  return m ? { page: "process", id: m[1], tab: (m[2] as "flow" | "list" | "json") ?? "flow" } : { page: "library" };
+  if (location.hash.startsWith("#/catalog")) return { page: "catalog" };
+  const m = location.hash.match(/^#\/p\/([a-z0-9-]+)(?:\/(flow|list|feedback|json))?/);
+  return m ? { page: "process", id: m[1], tab: (m[2] as Tab) ?? "flow" } : { page: "library" };
 };
 
 export function useRoute(): Route {
@@ -54,7 +72,7 @@ export function useRoute(): Route {
   return route;
 }
 
-export const go = (r: Route) => { location.hash = r.page === "library" ? "#/" : `#/p/${r.id}/${r.tab}`; };
+export const go = (r: Route) => { location.hash = r.page === "library" ? "#/" : r.page === "catalog" ? "#/catalog" : `#/p/${r.id}/${r.tab}`; };
 
 export async function copyText(text: string): Promise<boolean> {
   try { await navigator.clipboard.writeText(text); return true; } catch {

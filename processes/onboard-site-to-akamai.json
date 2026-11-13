@@ -5,7 +5,11 @@
   "title": "Onboard a site to Akamai",
   "summary": "Put a public website or API behind Akamai (CDN and WAF): configuration on staging, testing, production activation and DNS switch.",
   "category": "Network",
-  "owner": "Edge & CDN team",
+  "owner": "edge-cdn-team",
+  "tiers": [
+    "tier-0",
+    "tier-1"
+  ],
   "estimatedDuration": "2-4 weeks",
   "tags": [
     "akamai",
@@ -41,17 +45,20 @@
     {
       "id": "edge-team",
       "name": "Edge & CDN team",
-      "description": "Slack #edge-cdn"
+      "description": "Slack #edge-cdn",
+      "teamId": "edge-cdn-team"
     },
     {
       "id": "security",
       "name": "Security",
-      "description": "Owns WAF policies."
+      "description": "Owns WAF policies.",
+      "teamId": "security"
     },
     {
       "id": "dns-team",
       "name": "DNS team",
-      "description": "Owns the public DNS zones."
+      "description": "Owns the public DNS zones.",
+      "teamId": "dns-team"
     }
   ],
   "steps": [
@@ -84,7 +91,7 @@
         "Catalogue item: Akamai onboarding.",
         "Attach the onboarding sheet."
       ],
-      "tool": "ServiceNow",
+      "tool": "servicenow",
       "subProcessId": "raise-servicenow-request",
       "next": [
         {
@@ -100,7 +107,7 @@
       "title": "Create the property on staging",
       "actor": "edge-team",
       "type": "task",
-      "tool": "Akamai Control Center",
+      "tool": "akamai-control-center",
       "duration": "3 working days",
       "next": [
         {
@@ -175,7 +182,7 @@
       "title": "Activate on the production network",
       "actor": "edge-team",
       "type": "task",
-      "tool": "Akamai Control Center",
+      "tool": "akamai-control-center",
       "duration": "1 hour",
       "next": [
         {

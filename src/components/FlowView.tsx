@@ -1,16 +1,73 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, Clock, Maximize2, Minus, Plus, User, Workflow, Wrench } from "lucide-react";
-import type { Process } from "../types";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Check, Clock, Flag, Maximize2, Minus, Plus, User, Workflow, Wrench, X } from "lucide-react";
+import type { Feedback, Process, StepType } from "../types";
 import { L, layoutProcess } from "../lib/layout";
-import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
+import { LANE_COLORS, STEP_META, STEP_TYPES } from "../lib/stepMeta";
+import { toolName, useCatalog } from "../lib/catalog";
+import { openCount } from "./Feedback";
 import { TypeIcon } from "./ui";
 
-export function FlowView({ process, selectedId, done, onSelect, onAddAfter }: {
-  process: Process; selectedId: string | null; done: Set<string>;
-  onSelect: (id: string) => void; onAddAfter: (id: string) => void;
+export interface InsertAt { afterId: string; beforeId?: string }
+interface Adding extends InsertAt { x: number; y: number }
+
+/** Small form that appears on the map exactly where the new step will go. */
+function QuickAdd({ process, at, onAdd, onClose }: {
+  process: Process; at: Adding; onAdd: (spec: { title: string; type: StepType; actor: string }) => void; onClose: () => void;
 }) {
+  const after = process.steps.find((s) => s.id === at.afterId);
+  const before = process.steps.find((s) => s.id === at.beforeId);
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState<StepType>("task");
+  const [actor, setActor] = useState(after?.actor ?? "me");
+  const ok = title.trim().length >= 3;
+  const submit = () => ok && onAdd({ title: title.trim(), type, actor });
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, [onClose]);
+
+  return (
+    <div className="quick-add" style={{ left: at.x, top: at.y }} onMouseDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}>
+      <div className="quick-head">
+        <span>{before ? <>New step between <b>{after?.title}</b> and <b>{before.title}</b></>
+          : after?.type === "decision" ? <>New branch from <b>{after.title}</b></> : <>New step after <b>{after?.title}</b></>}</span>
+        <button className="icon-btn" onClick={onClose} aria-label="Cancel"><X size={15} /></button>
+      </div>
+      <input autoFocus value={title} maxLength={70} placeholder="What happens? e.g. Fill in the access request"
+        onChange={(e) => setTitle(e.target.value)} />
+      <div className="quick-label">Who</div>
+      <div className="chips">
+        {process.actors.map((a) => <button key={a.id} className={`chip ${actor === a.id ? "on" : ""}`} onClick={() => setActor(a.id)}>{a.name}</button>)}
+      </div>
+      <div className="quick-label">Kind <em>{STEP_META[type].label}</em></div>
+      <div className="quick-types">
+        {STEP_TYPES.map((t) => (
+          <button key={t} className={type === t ? "on" : ""} title={`${STEP_META[t].label} - ${STEP_META[t].when}`}
+            style={{ "--c": STEP_META[t].color } as React.CSSProperties} onClick={() => setType(t)}>
+            <TypeIcon type={t} size={28} />
+          </button>
+        ))}
+      </div>
+      <button className="btn primary" disabled={!ok} onClick={submit}><Plus size={15} />Add step</button>
+    </div>
+  );
+}
+
+export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane }: {
+  process: Process; selectedId: string | null; done: Set<string>; feedback: Feedback[];
+  onSelect: (id: string) => void;
+  onInsert: (at: InsertAt, spec: { title: string; type: StepType; actor: string }) => void;
+  onMoveToLane: (stepId: string, actorId: string) => void;
+}) {
+  const { catalog } = useCatalog();
   const layout = useMemo(() => layoutProcess(process), [process]);
   const [zoom, setZoom] = useState(1);
+  const [hover, setHover] = useState<string | null>(null);
+  const [adding, setAdding] = useState<Adding | null>(null);
+  const [drag, setDrag] = useState<string | null>(null);
+  const [dropLane, setDropLane] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const fit = () => {
     const w = scroller.current?.clientWidth ?? 0;
@@ -18,21 +75,31 @@ export function FlowView({ process, selectedId, done, onSelect, onAddAfter }: {
   };
   // open zoomed to fit the width (never below 75%, where text stops being readable)
   useLayoutEffect(fit, [process.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [hover, setHover] = useState<string | null>(null);
+
   const focus = hover ?? selectedId;
   const usedTypes = [...new Set(process.steps.map((s) => s.type))];
+  const POP_W = 340, POP_H = 330;
+  const openAdd = (at: InsertAt, x: number, y: number) => setAdding({
+    ...at,
+    x: Math.max(L.HEADER + 8, Math.min(x - POP_W / 2, layout.width - POP_W - 8)),
+    y: Math.max(8, Math.min(y + 14, Math.max(8, layout.height - POP_H))),
+  });
+  const height = Math.max(layout.height, adding ? adding.y + POP_H + 12 : 0);
 
   return (
     <div className="flow-wrap">
       <div className="flow-scroll" ref={scroller}>
-        <div className="flow-canvas" style={{ width: layout.width, height: layout.height, zoom }}>
+        <div className={`flow-canvas ${drag ? "dragging" : ""}`} style={{ width: layout.width, height, zoom }} onMouseDown={() => setAdding(null)}>
           {layout.lanes.map((lane) => {
             const actor = process.actors[lane.actorIndex];
             const count = process.steps.filter((s) => s.actor === actor.id).length;
             const color = LANE_COLORS[lane.actorIndex % LANE_COLORS.length];
             return (
-              <div key={actor.id} className={`lane ${lane.actorIndex === 0 ? "me" : ""}`}
-                style={{ top: lane.y, height: lane.h, "--lane": color } as React.CSSProperties}>
+              <div key={actor.id} className={`lane ${lane.actorIndex === 0 ? "me" : ""} ${dropLane === actor.id ? "drop" : ""}`}
+                style={{ top: lane.y, height: lane.h, "--lane": color } as React.CSSProperties}
+                onDragOver={(e) => { if (drag) { e.preventDefault(); setDropLane(actor.id); } }}
+                onDragLeave={() => setDropLane((d) => (d === actor.id ? null : d))}
+                onDrop={(e) => { e.preventDefault(); if (drag) onMoveToLane(drag, actor.id); setDrag(null); setDropLane(null); }}>
                 <div className="lane-head" style={{ width: L.HEADER }}>
                   <span className="lane-avatar">{lane.actorIndex === 0 ? <User size={16} /> : actor.name.slice(0, 1).toUpperCase()}</span>
                   <div className="lane-text">
@@ -53,7 +120,7 @@ export function FlowView({ process, selectedId, done, onSelect, onAddAfter }: {
               ))}
             </defs>
             {layout.edges.map((e) => {
-              const hot = focus === e.from || focus === e.to;
+              const hot = focus === e.from || focus === e.to || (adding?.afterId === e.from && adding?.beforeId === e.to);
               return (
                 <path key={`${e.from}>${e.to}`} d={e.d}
                   className={`edge ${e.back ? "back" : ""} ${hot ? "hot" : ""}`}
@@ -67,12 +134,20 @@ export function FlowView({ process, selectedId, done, onSelect, onAddAfter }: {
               style={{ left: e.lx, top: e.ly }}>{e.label}</span>
           ))}
 
+          {layout.edges.map((e) => (
+            <button key={`a${e.from}>${e.to}`} className="edge-add" style={{ left: e.px, top: e.py }} title="Insert a step here"
+              onMouseDown={(ev) => ev.stopPropagation()} onClick={() => openAdd({ afterId: e.from, beforeId: e.to }, e.px, e.py)}><Plus size={12} strokeWidth={3} /></button>
+          ))}
+
           {layout.nodes.map((n) => {
             const s = n.step;
             const meta = STEP_META[s.type];
+            const flags = openCount(feedback, s.id);
             return (
-              <div key={s.id}
-                className={`block ${n.lane === 0 ? "mine" : ""} ${selectedId === s.id ? "selected" : ""} ${done.has(s.id) ? "done" : ""} ${s.type === "decision" ? "decision" : ""}`}
+              <div key={s.id} draggable
+                onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", s.id); setDrag(s.id); setAdding(null); }}
+                onDragEnd={() => { setDrag(null); setDropLane(null); }}
+                className={`block ${n.lane === 0 ? "mine" : ""} ${selectedId === s.id ? "selected" : ""} ${done.has(s.id) ? "done" : ""} ${s.type === "decision" ? "decision" : ""} ${drag === s.id ? "dragged" : ""}`}
                 style={{ left: n.x, top: n.y, width: L.W, height: L.H, "--c": meta.color } as React.CSSProperties}
                 onMouseEnter={() => setHover(s.id)} onMouseLeave={() => setHover(null)}>
                 <button className="block-main" onClick={() => onSelect(s.id)}>
@@ -81,17 +156,24 @@ export function FlowView({ process, selectedId, done, onSelect, onAddAfter }: {
                     <span className="block-type">{meta.label}</span>
                     <span className="block-title">{s.title}</span>
                     <span className="block-meta">
-                      {s.tool && <span><Wrench size={11} />{s.tool}</span>}
+                      {s.tool && <span><Wrench size={11} />{toolName(catalog, s.tool)}</span>}
                       {s.duration && <span><Clock size={11} />{s.duration}</span>}
                       {s.subProcessId && !s.tool && <span><Workflow size={11} />opens a sub-process</span>}
                     </span>
                   </span>
                 </button>
                 <span className="block-num">{done.has(s.id) ? <Check size={12} strokeWidth={3} /> : n.index + 1}</span>
-                <button className="block-add" title="Add a step after this one" onClick={() => onAddAfter(s.id)}><Plus size={14} /></button>
+                {flags > 0 && <span className="block-flag" title={`${flags} open feedback`}><Flag size={10} strokeWidth={3} />{flags}</span>}
+                <button className="block-add" title={s.type === "decision" ? "Add a branch" : "Add a step after this one"}
+                  onMouseDown={(ev) => ev.stopPropagation()} onClick={() => openAdd({ afterId: s.id }, n.x + L.W, n.y + L.H / 2)}><Plus size={14} /></button>
               </div>
             );
           })}
+
+          {adding && (
+            <QuickAdd process={process} at={adding} onClose={() => setAdding(null)}
+              onAdd={(spec) => { onInsert({ afterId: adding.afterId, beforeId: adding.beforeId }, spec); setAdding(null); }} />
+          )}
         </div>
       </div>
 
@@ -109,6 +191,7 @@ export function FlowView({ process, selectedId, done, onSelect, onAddAfter }: {
           <button className="icon-btn" onClick={() => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(1)))} aria-label="Zoom in"><Plus size={16} /></button>
         </div>
       </div>
+      <p className="flow-hint"><b>Edit on the map:</b> press <span className="kbd">+</span> on an arrow to insert a step there · <span className="kbd">+</span> on a block to add one after it · drag a block to another lane to change who does it · click a block for details.</p>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { Process, Step } from "../types";
+import type { Process, Step, StepType } from "../types";
 
 export const slugify = (text: string) =>
   text.toLowerCase().normalize("NFKD").replace(/[^\w\s-]/g, "").trim().replace(/[\s_]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
@@ -27,6 +27,7 @@ export function tidy(p: Process): Process {
   const out = strip({
     ...p,
     tags: p.tags?.filter(Boolean).length ? p.tags.filter(Boolean) : undefined,
+    tiers: p.tiers?.length ? p.tiers : undefined,
     prerequisites: p.prerequisites.map(strip),
     actors: p.actors.map(strip),
     steps: p.steps.map((s) => {
@@ -53,6 +54,30 @@ export function addStepAfter(p: Process, afterId: string | null): { process: Pro
   }
   step.next = after.next;
   const steps = p.steps.flatMap((s) => (s.id === after.id ? [{ ...s, next: [{ to: id }] }, step] : [s]));
+  return { process: { ...p, steps }, id };
+}
+
+/**
+ * Insert a ready-made step at an exact place in the flow: on the arrow from `afterId` to
+ * `beforeId`, or (without `beforeId`) directly after `afterId`.
+ */
+export function insertStep(p: Process, at: { afterId: string; beforeId?: string }, spec: { title: string; type: StepType; actor: string }): { process: Process; id: string } {
+  const id = uniqueId(slugify(spec.title) || "new-step", p.steps.map((s) => s.id));
+  const after = p.steps.find((s) => s.id === at.afterId);
+  if (!after) return { process: p, id };
+  const step: Step = { id, title: spec.title, actor: spec.actor, type: spec.type, next: [] };
+  let patched: Step;
+  if (at.beforeId) {
+    step.next = [{ to: at.beforeId }];
+    patched = { ...after, next: after.next.map((n) => (n.to === at.beforeId ? { ...n, to: id } : n)) };
+  } else if (after.type === "decision") {
+    patched = { ...after, next: [...after.next, { to: id, label: "Other" }] };
+  } else {
+    step.next = after.next;
+    patched = { ...after, next: [{ to: id }] };
+  }
+  // keep the list order close to the flow order: right after the source step
+  const steps = p.steps.flatMap((s) => (s.id === after.id ? [patched, step] : [s]));
   return { process: { ...p, steps }, id };
 }
 

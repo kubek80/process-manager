@@ -5,7 +5,12 @@
   "title": "Onboard an API to Apigee",
   "summary": "Publish a backend API through the Apigee gateway: design review, proxy configuration, test deployment and production approval.",
   "category": "API",
-  "owner": "API Platform team",
+  "owner": "api-platform-team",
+  "tiers": [
+    "tier-0",
+    "tier-1",
+    "tier-2"
+  ],
   "estimatedDuration": "2-3 weeks",
   "tags": [
     "apigee",
@@ -41,12 +46,14 @@
     {
       "id": "api-platform",
       "name": "API Platform team",
-      "description": "Slack #api-platform"
+      "description": "Slack #api-platform",
+      "teamId": "api-platform-team"
     },
     {
       "id": "security",
       "name": "Security",
-      "description": "Application security team."
+      "description": "Application security team.",
+      "teamId": "security"
     },
     {
       "id": "pipeline",
@@ -65,7 +72,7 @@
         "Attach the OpenAPI specification.",
         "State the consumers: internal, partner or public."
       ],
-      "tool": "ServiceNow",
+      "tool": "servicenow",
       "url": "https://servicenow.example.com/catalog/api-onboarding",
       "urlLabel": "Open 'API onboarding' form",
       "duration": "15 min",
@@ -132,7 +139,7 @@
         "Add the standard policies: OAuth verification, quota, spike arrest.",
         "Open a pull request."
       ],
-      "tool": "GitHub",
+      "tool": "github",
       "duration": "half a day",
       "outcome": "Open pull request",
       "next": [
@@ -146,7 +153,7 @@
       "title": "Review the proxy pull request",
       "actor": "api-platform",
       "type": "review",
-      "tool": "GitHub",
+      "tool": "github",
       "duration": "2 working days",
       "next": [
         {
@@ -191,7 +198,7 @@
         "Raise a standard change 'Apigee proxy release'.",
         "Attach the test evidence."
       ],
-      "tool": "ServiceNow",
+      "tool": "servicenow",
       "outcome": "Change number",
       "next": [
         {
@@ -233,7 +240,7 @@
         "Publish the API product in the developer portal.",
         "Post the link in #api-announcements."
       ],
-      "tool": "Developer portal",
+      "tool": "developer-portal",
       "next": []
     }
   ]

@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
 import type { Process } from "../types";
 import { slugify, uniqueId } from "../lib/edit";
+import { useCatalog } from "../lib/catalog";
 import { Field, Modal } from "./ui";
 
 export function ProcessSettings({ process, all, onChange, onClose, onDelete }: {
@@ -9,6 +10,9 @@ export function ProcessSettings({ process, all, onChange, onClose, onDelete }: {
   const set = (patch: Partial<Process>) => onChange({ ...process, ...patch });
   const pre = process.prerequisites;
   const actors = process.actors;
+  const { catalog } = useCatalog();
+  const tiers = process.tiers ?? [];
+  const freeTeams = catalog.teams.filter((t) => !actors.some((a) => a.teamId === t.id || a.id === t.id));
   const used = (id: string) => process.steps.some((s) => s.actor === id);
   const swap = (i: number, j: number) => {
     const a = [...actors];
@@ -25,8 +29,25 @@ export function ProcessSettings({ process, all, onChange, onClose, onDelete }: {
         <Field label="Summary" hint="what the reader gets at the end"><textarea rows={2} maxLength={400} value={process.summary} onChange={(e) => set({ summary: e.target.value })} /></Field>
         <div className="grid3">
           <Field label="Category"><input value={process.category ?? ""} maxLength={40} placeholder="Cloud" onChange={(e) => set({ category: e.target.value })} /></Field>
-          <Field label="Owning team"><input value={process.owner ?? ""} maxLength={80} onChange={(e) => set({ owner: e.target.value })} /></Field>
+          <Field label="Owning team">
+            <select value={process.owner ?? ""} onChange={(e) => set({ owner: e.target.value || undefined })}>
+              <option value="">Not set</option>
+              {catalog.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {process.owner && !catalog.teams.some((t) => t.id === process.owner) && <option value={process.owner}>{process.owner} (not in the list)</option>}
+            </select>
+          </Field>
           <Field label="Typical lead time"><input value={process.estimatedDuration ?? ""} maxLength={40} placeholder="3-5 working days" onChange={(e) => set({ estimatedDuration: e.target.value })} /></Field>
+        </div>
+        <div className="field">
+          <span className="field-label">Applies to application tiers<em>{tiers.length ? "only the selected tiers" : "every application, whatever its tier"}</em></span>
+          <div className="chips">
+            <button className={`chip ${tiers.length === 0 ? "on" : ""}`} onClick={() => set({ tiers: undefined })}>All tiers</button>
+            {catalog.tiers.map((t) => (
+              <button key={t.id} className={`chip ${tiers.includes(t.id) ? "on" : ""}`} title={t.description}
+                onClick={() => set({ tiers: catalog.tiers.map((x) => x.id).filter((id) => (id === t.id ? !tiers.includes(id) : tiers.includes(id))) })}>{t.name}</button>
+            ))}
+          </div>
+          <a className="small" href="#/catalog">Manage teams, tools and tiers</a>
         </div>
         <Field label="Tags" hint="comma separated">
           <input value={(process.tags ?? []).join(", ")} onChange={(e) => set({ tags: e.target.value.split(",").map((t) => t.trimStart().slice(0, 30)).slice(0, 12) })} />
@@ -47,10 +68,21 @@ export function ProcessSettings({ process, all, onChange, onClose, onDelete }: {
                 onClick={() => set({ actors: actors.filter((_, j) => j !== i) })}><X size={15} /></button>
             </div>
           ))}
-          <button className="btn small ghost" onClick={() => {
-            const name = `Team ${actors.length}`;
-            set({ actors: [...actors, { id: uniqueId(slugify(name), actors.map((a) => a.id)), name }] });
-          }}><Plus size={14} />Add participant</button>
+          <select className="add-select" value="" onChange={(e) => {
+            const v = e.target.value;
+            if (!v) return;
+            const taken = actors.map((a) => a.id);
+            if (v === "__custom") {
+              const name = `Participant ${actors.length}`;
+              return set({ actors: [...actors, { id: uniqueId(slugify(name), taken), name }] });
+            }
+            const team = catalog.teams.find((t) => t.id === v)!;
+            set({ actors: [...actors, { id: uniqueId(team.id, taken), name: team.name, description: team.contact, teamId: team.id }] });
+          }}>
+            <option value="">＋ Add participant…</option>
+            {freeTeams.length > 0 && <optgroup label="Teams">{freeTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>}
+            <option value="__custom">Someone else (role, person or system)</option>
+          </select>
         </div>
 
         <h4>Prerequisites <span className="muted">what must be in place before step 1</span></h4>

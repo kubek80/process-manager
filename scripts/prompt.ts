@@ -9,5 +9,6 @@ const known = fs.readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => 
   return { id: p.id as string, title: p.title as string };
 });
 fs.mkdirSync("docs", { recursive: true });
-fs.writeFileSync("docs/llm-prompt.md", createPrompt("", known));
+const catalog = JSON.parse(fs.readFileSync("catalog/catalog.json", "utf8"));
+fs.writeFileSync("docs/llm-prompt.md", createPrompt("", known, catalog));
 console.log("Wrote docs/llm-prompt.md");

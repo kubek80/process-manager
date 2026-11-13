@@ -13,7 +13,8 @@
     "title": { "type": "string", "minLength": 3, "maxLength": 80, "description": "Short name starting with a verb, e.g. \"Request a GCP project\"." },
     "summary": { "type": "string", "minLength": 10, "maxLength": 400, "description": "One or two sentences: what the reader gets at the end and when to use this process." },
     "category": { "type": "string", "maxLength": 40, "description": "Grouping shown in the library, e.g. \"Cloud\", \"API\", \"Network\", \"Source control\", \"General\"." },
-    "owner": { "type": "string", "maxLength": 80, "description": "Team that owns and maintains this process description." },
+    "owner": { "$ref": "#/$defs/slug", "description": "Id of the team (from the teams list) that owns and maintains this process." },
+    "tiers": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/slug" }, "description": "Ids of the application tiers this process applies to, e.g. [\"tier-0\", \"tier-1\"]. Leave out when it applies to ALL tiers." },
     "estimatedDuration": { "type": "string", "maxLength": 40, "description": "Typical end-to-end lead time in plain words, e.g. \"3-5 working days\"." },
     "tags": { "type": "array", "items": { "type": "string", "maxLength": 30 }, "maxItems": 12 },
     "updatedAt": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "description": "Date of last change, YYYY-MM-DD." },
@@ -52,7 +53,8 @@
       "properties": {
         "id": { "$ref": "#/$defs/slug", "description": "Kebab-case id referenced by steps, e.g. \"platform-team\"." },
         "name": { "type": "string", "minLength": 1, "maxLength": 40, "description": "Lane title, e.g. \"You\", \"Platform team\", \"Security\", \"ServiceNow\"." },
-        "description": { "type": "string", "maxLength": 200, "description": "Who this is and how to reach them." }
+        "description": { "type": "string", "maxLength": 200, "description": "Who this is and how to reach them." },
+        "teamId": { "$ref": "#/$defs/slug", "description": "Id of the team (from the teams list) when this actor is a known team." }
       }
     },
     "prerequisite": {
@@ -85,7 +87,7 @@
           "items": { "type": "string", "minLength": 1, "maxLength": 300 },
           "maxItems": 15
         },
-        "tool": { "type": "string", "maxLength": 40, "description": "System used, e.g. \"ServiceNow\", \"GitHub\", \"Terraform\", \"Teams\"." },
+        "tool": { "$ref": "#/$defs/slug", "description": "Id of the system used, taken from the tools list, e.g. \"servicenow\". Leave out if no listed tool fits." },
         "url": { "$ref": "#/$defs/url", "description": "Direct link to the form, repository or page." },
         "urlLabel": { "type": "string", "maxLength": 60, "description": "Text for the link button." },
         "duration": { "type": "string", "maxLength": 40, "description": "Typical time, e.g. \"10 min\" or \"up to 2 working days\"." },

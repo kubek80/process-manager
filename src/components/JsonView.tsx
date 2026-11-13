@@ -4,22 +4,25 @@ import type { Issue, Process } from "../types";
 import { extractJson, hasErrors, processSchema, validateProcess } from "../lib/validate";
 import { download } from "../lib/store";
 import { CopyButton } from "./ui";
+import { useCatalog } from "../lib/catalog";
 import { IssueList } from "./AiDialog";
 
 export function JsonView({ process, knownIds, onChange }: { process: Process; knownIds: string[]; onChange: (p: Process) => void }) {
+  const { catalog } = useCatalog();
+  const ctx = useMemo(() => ({ processIds: knownIds, catalog }), [knownIds, catalog]);
   const canonical = useMemo(() => JSON.stringify(process, null, 2), [process]);
   const [text, setText] = useState(canonical);
   const [focused, setFocused] = useState(false);
   useEffect(() => { if (!focused) setText(canonical); }, [canonical, focused]);
 
   const parsed = useMemo(() => extractJson(text), [text]);
-  const issues: Issue[] = useMemo(() => (parsed.value ? validateProcess(parsed.value, knownIds) : []), [parsed, knownIds]);
+  const issues: Issue[] = useMemo(() => (parsed.value ? validateProcess(parsed.value, ctx) : []), [parsed, ctx]);
   const ok = !!parsed.value && !hasErrors(issues);
 
   const edit = (t: string) => {
     setText(t);
     const r = extractJson(t);
-    if (r.value && !hasErrors(validateProcess(r.value, knownIds)) && (r.value as Process).id === process.id) onChange(r.value as Process);
+    if (r.value && !hasErrors(validateProcess(r.value, ctx)) && (r.value as Process).id === process.id) onChange(r.value as Process);
   };
   const idChanged = ok && (parsed.value as Process).id !== process.id;
 

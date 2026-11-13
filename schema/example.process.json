@@ -4,7 +4,7 @@
   "title": "Request VPN access",
   "summary": "Get remote access to the company network through the VPN client.",
   "category": "General",
-  "owner": "Network team",
+  "owner": "network-team",
   "estimatedDuration": "1-2 working days",
   "tags": [
     "vpn"
@@ -30,7 +30,8 @@
     {
       "id": "network-team",
       "name": "Network team",
-      "description": "Slack #network"
+      "description": "Slack #network",
+      "teamId": "network-team"
     }
   ],
   "steps": [
@@ -44,7 +45,7 @@
         "Enter your laptop asset number.",
         "Submit the request."
       ],
-      "tool": "ServiceNow",
+      "tool": "servicenow",
       "url": "https://servicenow.example.com/catalog/vpn",
       "urlLabel": "Open VPN request form",
       "duration": "5 min",

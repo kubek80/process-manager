@@ -5,7 +5,7 @@
   "title": "Request a GCP project",
   "summary": "Get a new Google Cloud project created by the project factory, attached to the right folder and billing account, with your team as owners.",
   "category": "Cloud",
-  "owner": "Cloud Platform team",
+  "owner": "cloud-platform-team",
   "estimatedDuration": "3-5 working days",
   "tags": [
     "gcp",
@@ -46,7 +46,8 @@
     {
       "id": "cloud-platform",
       "name": "Cloud Platform team",
-      "description": "Slack #cloud-platform"
+      "description": "Slack #cloud-platform",
+      "teamId": "cloud-platform-team"
     },
     {
       "id": "project-factory",
@@ -84,7 +85,7 @@
         "Catalogue item: New GCP project.",
         "Enter name, environment, folder, budget, application ID and owner group."
       ],
-      "tool": "ServiceNow",
+      "tool": "servicenow",
       "outcome": "Request number (RITMxxxxxxx)",
       "subProcessId": "raise-servicenow-request",
       "next": [
@@ -142,7 +143,7 @@
         "Open the request and read the comment from the Cloud Platform team.",
         "Reply in the request with the missing details."
       ],
-      "tool": "ServiceNow",
+      "tool": "servicenow",
       "next": [
         {
           "to": "review-request"
@@ -160,7 +161,7 @@
         "Fill in name, folder, billing, owner group and labels.",
         "Open a pull request and put the request number in the title."
       ],
-      "tool": "GitHub",
+      "tool": "github",
       "url": "https://github.example.com/platform/gcp-project-factory",
       "urlLabel": "Open gcp-project-factory",
       "duration": "20 min",
@@ -176,7 +177,7 @@
       "title": "Review and merge the pull request",
       "actor": "cloud-platform",
       "type": "review",
-      "tool": "GitHub",
+      "tool": "github",
       "duration": "1 working day",
       "next": [
         {
@@ -190,7 +191,7 @@
       "actor": "project-factory",
       "type": "automation",
       "description": "The pipeline runs on merge and creates the project, budget alert and IAM bindings.",
-      "tool": "Terraform",
+      "tool": "terraform",
       "duration": "15 min",
       "next": [
         {
@@ -208,7 +209,7 @@
         "Check your group is listed under IAM as owner.",
         "Close the ServiceNow request."
       ],
-      "tool": "GCP console",
+      "tool": "gcp-console",
       "url": "https://console.cloud.google.com",
       "urlLabel": "Open GCP console",
       "next": []

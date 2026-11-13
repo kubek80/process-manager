@@ -1,0 +1,111 @@
+{
+  "$schema": "../schema/catalog.schema.json",
+  "tiers": [
+    {
+      "id": "tier-0",
+      "name": "Tier 0",
+      "description": "Mission critical - outage stops the business."
+    },
+    {
+      "id": "tier-1",
+      "name": "Tier 1",
+      "description": "Business critical."
+    },
+    {
+      "id": "tier-2",
+      "name": "Tier 2",
+      "description": "Important, tolerates short outages."
+    },
+    {
+      "id": "tier-3",
+      "name": "Tier 3",
+      "description": "Internal tools and experiments."
+    }
+  ],
+  "teams": [
+    {
+      "id": "api-platform-team",
+      "name": "API Platform team",
+      "contact": "Slack #api-platform"
+    },
+    {
+      "id": "azure-platform-team",
+      "name": "Azure Platform team",
+      "contact": "Slack #azure-platform"
+    },
+    {
+      "id": "cloud-platform-team",
+      "name": "Cloud Platform team",
+      "contact": "Slack #cloud-platform"
+    },
+    {
+      "id": "dns-team",
+      "name": "DNS team"
+    },
+    {
+      "id": "developer-experience-team",
+      "name": "Developer Experience team",
+      "contact": "Slack #devex"
+    },
+    {
+      "id": "edge-cdn-team",
+      "name": "Edge & CDN team",
+      "contact": "Slack #edge-cdn"
+    },
+    {
+      "id": "fulfilment-team",
+      "name": "Fulfilment team"
+    },
+    {
+      "id": "network-team",
+      "name": "Network team",
+      "contact": "Slack #network"
+    },
+    {
+      "id": "security",
+      "name": "Security"
+    },
+    {
+      "id": "service-management",
+      "name": "Service Management"
+    }
+  ],
+  "tools": [
+    {
+      "id": "akamai-control-center",
+      "name": "Akamai Control Center"
+    },
+    {
+      "id": "azure-portal",
+      "name": "Azure portal",
+      "url": "https://portal.azure.com"
+    },
+    {
+      "id": "developer-portal",
+      "name": "Developer portal"
+    },
+    {
+      "id": "gcp-console",
+      "name": "GCP console",
+      "url": "https://console.cloud.google.com"
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "url": "https://github.example.com"
+    },
+    {
+      "id": "github-actions",
+      "name": "GitHub Actions"
+    },
+    {
+      "id": "servicenow",
+      "name": "ServiceNow",
+      "url": "https://servicenow.example.com"
+    },
+    {
+      "id": "terraform",
+      "name": "Terraform"
+    }
+  ]
+}

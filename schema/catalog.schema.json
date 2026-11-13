@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://process-manager.local/schema/catalog.schema.json",
+  "title": "Catalog",
+  "description": "Shared lists that processes pick from: application tiers, teams and tools.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tiers", "teams", "tools"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "tiers": { "type": "array", "description": "Application tiers, most critical first.", "items": { "$ref": "#/$defs/tier" } },
+    "teams": { "type": "array", "description": "Teams that own processes or take part in them.", "items": { "$ref": "#/$defs/team" } },
+    "tools": { "type": "array", "description": "Systems used in steps.", "items": { "$ref": "#/$defs/tool" } }
+  },
+  "$defs": {
+    "slug": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
+    "tier": {
+      "type": "object", "additionalProperties": false, "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "description": { "type": "string", "maxLength": 200 }
+      }
+    },
+    "team": {
+      "type": "object", "additionalProperties": false, "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "contact": { "type": "string", "maxLength": 120, "description": "How to reach the team: channel, mailbox, queue." },
+        "description": { "type": "string", "maxLength": 200 }
+      }
+    },
+    "tool": {
+      "type": "object", "additionalProperties": false, "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "url": { "type": "string", "pattern": "^https?://\\S+$" },
+        "description": { "type": "string", "maxLength": 200 }
+      }
+    }
+  }
+}

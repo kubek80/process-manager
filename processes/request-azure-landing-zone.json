@@ -5,7 +5,7 @@
   "title": "Request an Azure landing zone",
   "summary": "Get an Azure subscription set up as a landing zone: governance approval, policies, networking and access for your team.",
   "category": "Cloud",
-  "owner": "Azure Platform team",
+  "owner": "azure-platform-team",
   "estimatedDuration": "2-3 weeks",
   "tags": [
     "azure",
@@ -44,7 +44,8 @@
     {
       "id": "azure-platform",
       "name": "Azure Platform team",
-      "description": "Slack #azure-platform"
+      "description": "Slack #azure-platform",
+      "teamId": "azure-platform-team"
     },
     {
       "id": "pipeline",
@@ -83,7 +84,7 @@
         "Attach the questionnaire and the architecture diagram.",
         "Submit the request."
       ],
-      "tool": "ServiceNow",
+      "tool": "servicenow",
       "url": "https://servicenow.example.com/catalog/azure-landing-zone",
       "urlLabel": "Open request form",
       "duration": "10 min",
@@ -143,7 +144,7 @@
       "title": "Add the subscription configuration",
       "actor": "azure-platform",
       "type": "code",
-      "tool": "GitHub",
+      "tool": "github",
       "duration": "2 working days",
       "next": [
         {
@@ -157,7 +158,7 @@
       "actor": "pipeline",
       "type": "automation",
       "description": "Creates the subscription, policies, network spoke and role assignments.",
-      "tool": "Terraform",
+      "tool": "terraform",
       "duration": "1 hour",
       "next": [
         {
@@ -187,7 +188,7 @@
         "Check your team has the roles you asked for.",
         "Deploy a test resource group to confirm policies allow it."
       ],
-      "tool": "Azure portal",
+      "tool": "azure-portal",
       "url": "https://portal.azure.com",
       "urlLabel": "Open Azure portal",
       "next": []

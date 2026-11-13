@@ -1,10 +1,14 @@
-import { ArrowDown, ArrowUp, Pencil, Plus, Trash2, X, Check } from "lucide-react";
-import type { NextLink, Process, Step } from "../types";
+import { ArrowDown, ArrowUp, Flag, Pencil, Plus, Trash2, X, Check } from "lucide-react";
+import type { Feedback, NextLink, Process, Step } from "../types";
+import { slugify, uniqueId } from "../lib/edit";
+import { useCatalog } from "../lib/catalog";
+import { FeedbackForm, FeedbackItem } from "./Feedback";
 import { STEP_META, STEP_TYPES } from "../lib/stepMeta";
 import { Field, TypeIcon } from "./ui";
 import { StepBody } from "./ListView";
 
-export function StepDrawer({ process, all, step, editing, setEditing, onClose, onSelect, onChange, onTitleBlur, onDelete, onMove, onAddAfter }: {
+export function StepDrawer({ process, all, step, editing, setEditing, onClose, onSelect, onChange, onTitleBlur, onDelete, onMove, onAddAfter, feedback, onFeedback, reporting, setReporting }: {
+  feedback: Feedback[]; onFeedback: (list: Feedback[]) => void; reporting: boolean; setReporting: (r: boolean) => void;
   process: Process; all: Process[]; step: Step; editing: boolean; setEditing: (e: boolean) => void;
   onClose: () => void; onSelect: (id: string) => void;
   onChange: (patch: Partial<Step>) => void; onTitleBlur: () => void;
@@ -16,6 +20,16 @@ export function StepDrawer({ process, all, step, editing, setEditing, onClose, o
   const others = process.steps.filter((s) => s.id !== step.id);
   const setNext = (next: NextLink[]) => onChange({ next });
   const instructions = step.instructions ?? [];
+  const { catalog, save } = useCatalog();
+  const mine = feedback.filter((f) => f.stepId === step.id && !f.resolved);
+  const pickTool = async (value: string) => {
+    if (value !== "__new") return onChange({ tool: value || undefined });
+    const name = window.prompt("Name of the new tool")?.trim();
+    if (!name || !slugify(name)) return;
+    const id = uniqueId(slugify(name), catalog.tools.map((t) => t.id));
+    await save({ ...catalog, tools: [...catalog.tools, { id, name }] });
+    onChange({ tool: id });
+  };
 
   return (
     <aside className="drawer" style={{ "--c": meta.color } as React.CSSProperties}>
@@ -45,6 +59,20 @@ export function StepDrawer({ process, all, step, editing, setEditing, onClose, o
           {!step.description && !step.instructions?.length && !step.subProcessId && (
             <p className="muted">No details yet. Press “Edit step” to describe what to do.</p>
           )}
+          <section className="drawer-fb">
+            {mine.length > 0 && (
+              <ul className="fb-list">
+                {mine.map((f) => (
+                  <FeedbackItem key={f.id} item={f} process={process} hideStep
+                    onChange={(n) => onFeedback(feedback.map((x) => (x.id === f.id ? n : x)))}
+                    onRemove={() => onFeedback(feedback.filter((x) => x.id !== f.id))} />
+                ))}
+              </ul>
+            )}
+            {reporting
+              ? <><h4>What is wrong with this step?</h4><FeedbackForm process={process} stepId={step.id} onAdd={(f) => onFeedback([...feedback, f])} onDone={() => setReporting(false)} /></>
+              : <button className="btn small report-btn" onClick={() => setReporting(true)}><Flag size={14} />This step doesn’t work</button>}
+          </section>
         </div>
       ) : (
         <div className="drawer-body form">
@@ -93,7 +121,14 @@ export function StepDrawer({ process, all, step, editing, setEditing, onClose, o
           </Field>
 
           <div className="grid2">
-            <Field label="Tool"><input value={step.tool ?? ""} maxLength={40} placeholder="ServiceNow" onChange={(e) => onChange({ tool: e.target.value })} /></Field>
+            <Field label="Tool">
+              <select value={step.tool ?? ""} onChange={(e) => pickTool(e.target.value)}>
+                <option value="">None</option>
+                {catalog.tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {step.tool && !catalog.tools.some((t) => t.id === step.tool) && <option value={step.tool}>{step.tool} (not in the list)</option>}
+                <option value="__new">＋ Add a new tool…</option>
+              </select>
+            </Field>
             <Field label="Typical time"><input value={step.duration ?? ""} maxLength={40} placeholder="10 min" onChange={(e) => onChange({ duration: e.target.value })} /></Field>
           </div>
           <div className="grid2">

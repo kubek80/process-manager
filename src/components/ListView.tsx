@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ArrowUpRight, Check, ChevronDown, ChevronRight, Clock, CornerDownRight, ExternalLink, Flag, RotateCcw, Workflow, Wrench } from "lucide-react";
-import type { Process, Step } from "../types";
+import type { Feedback, Process, Step } from "../types";
+import { toolName, useCatalog } from "../lib/catalog";
+import { openCount } from "./Feedback";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import { go } from "../lib/store";
 import { TypeIcon } from "./ui";
@@ -67,11 +69,12 @@ export function StepBody({ step, process, all, onSelect, compact }: {
   );
 }
 
-export function ListView({ process, all, done, toggle, reset, selectedId, onSelect }: {
-  process: Process; all: Process[]; done: Set<string>; toggle: (id: string) => void; reset: () => void;
+export function ListView({ process, all, done, toggle, reset, selectedId, onSelect, feedback, onReport }: {
+  process: Process; all: Process[]; feedback: Feedback[]; onReport: (id: string) => void; done: Set<string>; toggle: (id: string) => void; reset: () => void;
   selectedId: string | null; onSelect: (id: string) => void;
 }) {
   const [onlyMine, setOnlyMine] = useState(false);
+  const { catalog } = useCatalog();
   const mine = process.steps.filter((s) => s.actor === "me");
   const mineDone = mine.filter((s) => done.has(s.id)).length;
   const laneIdx = (id: string) => Math.max(0, process.actors.findIndex((a) => a.id === id));
@@ -108,10 +111,14 @@ export function ListView({ process, all, done, toggle, reset, selectedId, onSele
                     <span className="step-kicker">
                       <span className="who">{isMine ? "You" : actor?.name}</span>
                       <span>{meta.label}</span>
-                      {s.tool && <span><Wrench size={11} />{s.tool}</span>}
+                      {s.tool && <span><Wrench size={11} />{toolName(catalog, s.tool)}</span>}
                       {s.duration && <span><Clock size={11} />{s.duration}</span>}
                     </span>
                     <span className="step-title">{s.title}</span>
+                  </button>
+                  <button className={`report ${openCount(feedback, s.id) ? "has" : ""}`} onClick={() => onReport(s.id)}
+                    title={openCount(feedback, s.id) ? `${openCount(feedback, s.id)} open feedback` : "This step doesn’t work? Tell us"}>
+                    <Flag size={14} />{openCount(feedback, s.id) || ""}
                   </button>
                   {isMine
                     ? <button className={`tick ${done.has(s.id) ? "on" : ""}`} onClick={() => toggle(s.id)} aria-label="Mark as done"><Check size={16} strokeWidth={3} /></button>

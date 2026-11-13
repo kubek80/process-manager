@@ -5,7 +5,7 @@
   "title": "Request a repository",
   "summary": "Get a new GitHub repository created from a standard template with the right team permissions and branch protection.",
   "category": "Source control",
-  "owner": "Developer Experience team",
+  "owner": "developer-experience-team",
   "estimatedDuration": "1 working day",
   "tags": [
     "github",
@@ -35,7 +35,8 @@
     {
       "id": "devex",
       "name": "Developer Experience team",
-      "description": "Slack #devex"
+      "description": "Slack #devex",
+      "teamId": "developer-experience-team"
     },
     {
       "id": "automation",
@@ -71,7 +72,7 @@
         "Add repos/<name>.yaml with name, template, team, visibility and application ID.",
         "Open a pull request."
       ],
-      "tool": "GitHub",
+      "tool": "github",
       "url": "https://github.example.com/platform/github-repositories",
       "urlLabel": "Open github-repositories",
       "duration": "15 min",
@@ -87,7 +88,7 @@
       "title": "Review and merge the definition",
       "actor": "devex",
       "type": "review",
-      "tool": "GitHub",
+      "tool": "github",
       "duration": "up to 4 hours",
       "next": [
         {
@@ -118,7 +119,7 @@
         "Update the README with a one-paragraph description.",
         "Add the repository secrets your pipeline needs."
       ],
-      "tool": "GitHub",
+      "tool": "github",
       "next": [
         {
           "to": "verify-pipeline"
@@ -134,7 +135,7 @@
         "Push a small change on a branch and open a pull request.",
         "Check the build pipeline finishes successfully."
       ],
-      "tool": "GitHub Actions",
+      "tool": "github-actions",
       "next": []
     }
   ]

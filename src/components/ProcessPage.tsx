@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Braces, Check, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Save, Settings2, Sparkles, TriangleAlert, Undo2, Users, Workflow } from "lucide-react";
-import type { Process, Step } from "../types";
-import { addStepAfter, deleteStep, moveStep, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
+import { ArrowLeft, ArrowUpRight, Braces, Check, Flag, Layers, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Save, Settings2, Sparkles, TriangleAlert, Undo2, Users, Workflow } from "lucide-react";
+import type { Feedback, Process, Step } from "../types";
+import { addStepAfter, deleteStep, insertStep, moveStep, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
 import { hasErrors, validateProcess } from "../lib/validate";
-import { go, useProgress } from "../lib/store";
+import { go, useProgress, type Tab } from "../lib/store";
+import { teamName, tierLabel, useCatalog } from "../lib/catalog";
+import { FeedbackTab, openCount } from "./Feedback";
 import { FlowView } from "./FlowView";
 import { ListView } from "./ListView";
 import { StepDrawer } from "./StepDrawer";
@@ -11,10 +13,8 @@ import { ProcessSettings } from "./ProcessSettings";
 import { AiDialog, IssueList } from "./AiDialog";
 import { JsonView } from "./JsonView";
 
-type Tab = "flow" | "list" | "json";
-
-export function ProcessPage({ process, all, tab, onSave, onDelete }: {
-  process: Process; all: Process[]; tab: Tab; onSave: (p: Process) => Promise<void>; onDelete: () => void;
+export function ProcessPage({ process, all, tab, onSave, onDelete, feedback, onFeedback }: {
+  process: Process; all: Process[]; tab: Tab; feedback: Feedback[]; onFeedback: (list: Feedback[]) => void; onSave: (p: Process) => Promise<void>; onDelete: () => void;
 }) {
   const [draft, setDraft] = useState<Process>(process);
   const [selected, setSelected] = useState<string | null>(null);
@@ -22,13 +22,15 @@ export function ProcessPage({ process, all, tab, onSave, onDelete }: {
   const [dialog, setDialog] = useState<null | "settings" | "ai">(null);
   const [showIssues, setShowIssues] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const { catalog } = useCatalog();
   const { done, toggle, reset } = useProgress(process.id);
 
   useEffect(() => setDraft(process), [process]);
 
   const knownIds = useMemo(() => all.map((p) => p.id), [all]);
   const clean = useMemo(() => tidy(draft), [draft]);
-  const issues = useMemo(() => validateProcess(clean, knownIds), [clean, knownIds]);
+  const issues = useMemo(() => validateProcess(clean, { processIds: knownIds, catalog }), [clean, knownIds, catalog]);
   const errors = issues.filter((i) => i.level === "error").length;
   const dirty = JSON.stringify(clean) !== JSON.stringify(process);
   // A file that is broken on disk can only be repaired in the JSON tab.
@@ -43,7 +45,8 @@ export function ProcessPage({ process, all, tab, onSave, onDelete }: {
   }, [dirty]);
 
   const select = (id: string) => {
-    setSelected(id);
+    setSelected(id); setReporting(false);
+    if (view === "feedback") go({ page: "process", id: process.id, tab: "flow" });
     if (view === "list") document.getElementById(`step-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
   const addAfter = (id: string | null) => {
@@ -64,11 +67,12 @@ export function ProcessPage({ process, all, tab, onSave, onDelete }: {
         <button className="back" onClick={back}><ArrowLeft size={16} />All processes</button>
         <div className="head-row">
           <div className="head-text">
-            <div className="eyebrow">{draft.category ?? "Process"}{draft.owner && <> · owned by {draft.owner}</>}</div>
+            <div className="eyebrow">{draft.category ?? "Process"}{draft.owner && <> · owned by {teamName(catalog, draft.owner)}</>}</div>
             <h1>{draft.title}</h1>
             <p className="lead">{draft.summary}</p>
             {renderable && (
               <div className="facts">
+                <span className={`tier-tag ${draft.tiers?.length ? "some" : ""}`}><Layers size={12} />{tierLabel(catalog, draft.tiers)}</span>
                 <span><ListChecks size={14} />{draft.steps.length} steps, {mine} for you</span>
                 <span><Users size={14} />{draft.actors.length - 1} other {draft.actors.length === 2 ? "party" : "parties"}</span>
                 {draft.estimatedDuration && <span><Clock size={14} />{draft.estimatedDuration}</span>}
@@ -80,15 +84,16 @@ export function ProcessPage({ process, all, tab, onSave, onDelete }: {
             <button className="btn accent-soft" onClick={() => setDialog("ai")} disabled={!renderable}><Sparkles size={16} />Change with AI</button>
             <button className="btn" onClick={() => setDialog("settings")} disabled={!renderable}><Settings2 size={16} />Details</button>
             <button className="btn" onClick={() => addAfter(selected)} disabled={!renderable}><Plus size={16} />Add step</button>
+            <button className="btn report-btn" onClick={() => go({ page: "process", id: process.id, tab: "feedback" })} disabled={!renderable}><Flag size={16} />Report a problem</button>
           </div>
         </div>
       </div>
 
       <div className="tabs-row">
         <div className="tabs" role="tablist">
-          {([["flow", "Map", Workflow], ["list", "Checklist", ListChecks], ["json", "JSON", Braces]] as const).map(([id, label, Icon]) => (
+          {([["flow", "Map", Workflow], ["list", "Checklist", ListChecks], ["feedback", "Feedback", Flag], ["json", "JSON", Braces]] as const).map(([id, label, Icon]) => (
             <button key={id} role="tab" aria-selected={view === id} className={view === id ? "on" : ""} disabled={!renderable && id !== "json"}
-              onClick={() => go({ page: "process", id: process.id, tab: id })}><Icon size={16} />{label}</button>
+              onClick={() => go({ page: "process", id: process.id, tab: id })}><Icon size={16} />{label}{id === "feedback" && openCount(feedback) > 0 && <span className="tab-count">{openCount(feedback)}</span>}</button>
           ))}
         </div>
         <span className="spacer" />
@@ -104,7 +109,7 @@ export function ProcessPage({ process, all, tab, onSave, onDelete }: {
       </div>
       {showIssues && issues.length > 0 && <div className="issues-panel"><IssueList issues={issues} /></div>}
 
-      {view !== "json" && renderable && draft.prerequisites.length > 0 && (
+      {(view === "flow" || view === "list") && renderable && draft.prerequisites.length > 0 && (
         <section className="prereqs">
           <h2>Before you start <span>{draft.prerequisites.filter((_, i) => done.has(`pre:${i}`)).length}/{draft.prerequisites.length} ready</span></h2>
           <div className="prereq-grid">
@@ -131,12 +136,17 @@ export function ProcessPage({ process, all, tab, onSave, onDelete }: {
         </section>
       )}
 
-      {view === "flow" && renderable && <FlowView process={draft} selectedId={selected} done={done} onSelect={select} onAddAfter={addAfter} />}
-      {view === "list" && renderable && <ListView process={draft} all={all} done={done} toggle={toggle} reset={reset} selectedId={selected} onSelect={select} />}
+      {view === "flow" && renderable && <FlowView process={draft} selectedId={selected} done={done} feedback={feedback} onSelect={select}
+        onInsert={(at, spec) => { const r = insertStep(draft, at, spec); setDraft(r.process); setSelected(r.id); setEditing(true); }}
+        onMoveToLane={(id, actor) => setDraft(updateStep(draft, id, { actor }))} />}
+      {view === "list" && renderable && <ListView process={draft} all={all} done={done} toggle={toggle} reset={reset} selectedId={selected} onSelect={select}
+        feedback={feedback} onReport={(id) => { setSelected(id); setEditing(false); setReporting(true); }} />}
+      {view === "feedback" && renderable && <FeedbackTab process={draft} feedback={feedback} onChange={onFeedback} onSelect={select} />}
       {view === "json" && <JsonView process={clean} knownIds={knownIds} onChange={setDraft} />}
 
-      {step && view !== "json" && (
+      {step && (view === "flow" || view === "list") && (
         <StepDrawer process={draft} all={all} step={step} editing={editing} setEditing={setEditing}
+          feedback={feedback} onFeedback={onFeedback} reporting={reporting} setReporting={setReporting}
           onClose={() => { setSelected(null); setEditing(false); }} onSelect={select}
           onChange={(patch: Partial<Step>) => setDraft(updateStep(draft, step.id, patch))}
           onTitleBlur={() => {

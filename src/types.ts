@@ -2,7 +2,7 @@ export type StepType =
   | "form" | "code" | "approval" | "review" | "wait" | "communication" | "meeting"
   | "automation" | "document" | "verify" | "decision" | "subprocess" | "task";
 
-export interface Actor { id: string; name: string; description?: string }
+export interface Actor { id: string; name: string; description?: string; teamId?: string }
 export interface Prerequisite { title: string; description?: string; url?: string; processId?: string }
 export interface NextLink { to: string; label?: string }
 
@@ -30,6 +30,7 @@ export interface Process {
   summary: string;
   category?: string;
   owner?: string;
+  tiers?: string[];
   estimatedDuration?: string;
   tags?: string[];
   updatedAt?: string;
@@ -39,3 +40,19 @@ export interface Process {
 }
 
 export interface Issue { level: "error" | "warning"; path: string; message: string }
+
+export interface Tier { id: string; name: string; description?: string }
+export interface Team { id: string; name: string; contact?: string; description?: string }
+export interface Tool { id: string; name: string; url?: string; description?: string }
+export interface Catalog { $schema?: string; tiers: Tier[]; teams: Team[]; tools: Tool[] }
+
+export type FeedbackKind = "broken" | "outdated" | "unclear" | "idea";
+export interface Feedback {
+  id: string;
+  stepId?: string;
+  kind: FeedbackKind;
+  text: string;
+  author?: string;
+  createdAt: string;
+  resolved?: boolean;
+}

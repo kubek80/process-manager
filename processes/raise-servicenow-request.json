@@ -5,7 +5,7 @@
   "title": "Raise a ServiceNow request",
   "summary": "Generic way to order something from the ServiceNow catalogue and get it approved. Other processes use this as a sub-process.",
   "category": "General",
-  "owner": "Service Management",
+  "owner": "service-management",
   "estimatedDuration": "1-3 working days",
   "tags": [
     "servicenow",
@@ -36,7 +36,8 @@
     {
       "id": "fulfilment",
       "name": "Fulfilment team",
-      "description": "The team that delivers the ordered item."
+      "description": "The team that delivers the ordered item.",
+      "teamId": "fulfilment-team"
     }
   ],
   "steps": [
@@ -50,7 +51,7 @@
         "Search for the item name given in the parent process.",
         "Open the item and check the description matches what you need."
       ],
-      "tool": "ServiceNow",
+      "tool": "servicenow",
       "url": "https://servicenow.example.com/catalog",
       "urlLabel": "Open service catalogue",
       "duration": "5 min",
@@ -72,7 +73,7 @@
         "Enter your cost centre.",
         "Press 'Order now'."
       ],
-      "tool": "ServiceNow",
+      "tool": "servicenow",
       "duration": "10 min",
       "outcome": "Request number (RITMxxxxxxx)",
       "next": [
@@ -86,7 +87,7 @@
       "title": "Approve the request",
       "actor": "line-manager",
       "type": "approval",
-      "tool": "ServiceNow",
+      "tool": "servicenow",
       "duration": "up to 2 working days",
       "next": [
         {
@@ -120,7 +121,7 @@
         "Correct the request or add the missing information.",
         "Resubmit for approval."
       ],
-      "tool": "ServiceNow",
+      "tool": "servicenow",
       "next": [
         {
           "to": "approve-request"
