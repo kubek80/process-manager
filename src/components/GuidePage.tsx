@@ -98,7 +98,7 @@ export function GuidePage() {
                 <li><Check size={14} />Create processes, blank or from text with AI</li>
                 <li><Check size={14} />Add, move and change steps directly on the map</li>
                 <li><Check size={14} />Edit details, owner, tiers, participants, prerequisites</li>
-                <li><Check size={14} />Edit the raw JSON, see the schema check</li>
+                <li><Check size={14} />Edit the raw JSON in a code editor with problems marked on the line</li>
                 <li><Check size={14} />Manage teams, tools and tiers; close feedback</li>
               </ul>
             </div>

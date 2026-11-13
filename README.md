@@ -80,7 +80,7 @@ Switch to **Editor** first.
 - **In the checklist** – hover between two steps and press *Insert a step here*; the same small form appears in place.
 - **On the map** – press **+** on an arrow to insert a step exactly there, or **+** on a block to add one after it (on a decision: a new branch). A small form on the map asks what happens, who does it and what kind of step it is. Drag a block to another lane to change who does it.
 - **In the side panel** – click a block → *Edit step* for instructions, tool, link and what comes next. *Details* edits the name, owner, tiers, participants and prerequisites. Changes stay in a draft until you press **Save changes**.
-- **JSON tab** – edit the raw JSON with live checking.
+- **JSON tab** – a code editor for the raw JSON: syntax colours, line numbers, folding, find, and format. Syntax errors and checker findings are marked on the line they belong to; click a finding in the side list to jump to it.
 - **With AI, any chat assistant** – *Create from text with AI* / *Change with AI*:
   1. paste the description (or the change you want),
   2. copy the generated prompt into Gemini / Copilot / ChatGPT / Claude,
