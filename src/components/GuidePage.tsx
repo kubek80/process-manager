@@ -2,26 +2,38 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Braces, CalendarCheck, Check, Eye, Flag, GripVertical, Layers, ListChecks, MousePointerClick, Pencil, Plus, Sparkles, Workflow } from "lucide-react";
 import type { Process } from "../types";
 import { STEP_META, STEP_TYPES } from "../lib/stepMeta";
-import { aiFlow, automationFlow, feedbackFlow, followFlow, reviewFlow } from "../guide/flows";
+import { aiFlow, automationFlow, feedbackFlow, followFlow, reviewFlow, signInFlow } from "../guide/flows";
 import { FlowView } from "./FlowView";
 import { TypeIcon } from "./ui";
 
-const SECTIONS: [string, string][] = [
-  ["what", "What it is"],
-  ["modes", "Consumer and Editor"],
-  ["read", "Reading a process"],
-  ["follow", "Following a process"],
-  ["blocks", "The building blocks"],
-  ["edit", "Editing a process"],
-  ["ai", "Creating one with AI"],
-  ["skills", "Skills and links"],
-  ["catalog", "Teams, tools, tiers, languages"],
-  ["feedback", "Feedback"],
-  ["lifecycle", "Life-cycle and reviews"],
-  ["agents", "For agents: MCP"],
-  ["roadmap", "Planned: automation"],
-  ["files", "Files, schema and checker"],
+const GROUPS: { title: string; items: [string, string][] }[] = [
+  { title: "Using it", items: [
+    ["what", "What it is"],
+    ["modes", "Signing in and your rights"],
+    ["read", "Reading a process"],
+    ["follow", "Following a process"],
+    ["blocks", "The building blocks"],
+    ["edit", "Editing a process"],
+    ["ai", "Creating one with AI"],
+    ["skills", "Skills and links"],
+    ["catalog", "Teams, tools, tiers, languages"],
+    ["feedback", "Feedback"],
+    ["lifecycle", "Life-cycle and reviews"],
+  ] },
+  { title: "Where it is heading", items: [
+    ["agents", "For agents: MCP"],
+    ["roadmap", "Planned: automation"],
+  ] },
+  { title: "Running it", items: [
+    ["architecture", "How it is built"],
+    ["local", "Running it locally"],
+    ["tests", "Tests"],
+    ["deploy", "Deploying"],
+    ["files", "Files, schema and checker"],
+    ["docs", "Keeping this guide current"],
+  ] },
 ];
+const SECTIONS = GROUPS.flatMap((g) => g.items);
 
 const NONE = new Set<string>();
 
@@ -57,9 +69,13 @@ export function GuidePage() {
   return (
     <div className="page guide">
       <aside className="guide-toc">
-        <span className="eyebrow">Guide</span>
-        {SECTIONS.map(([id, title]) => (
-          <button key={id} className={active === id ? "on" : ""} onClick={() => jump(id)}>{title}</button>
+        {GROUPS.map((g) => (
+          <div key={g.title} className="guide-toc-group">
+            <span className="eyebrow">{g.title}</span>
+            {g.items.map(([id, title]) => (
+              <button key={id} className={active === id ? "on" : ""} onClick={() => jump(id)}>{title}</button>
+            ))}
+          </div>
         ))}
       </aside>
 
@@ -77,8 +93,21 @@ export function GuidePage() {
           </div>
         </Section>
 
-        <Section id="modes" title="Consumer and Editor">
-          <p>You sign in with your company account. Everyone is a consumer. People listed as editors also get a switch in the top bar to turn the editing controls on; the server checks the same rights, so a hidden button is never the only protection.</p>
+        <Section id="modes" title="Signing in and your rights">
+          <p>You sign in with your company account, through Entra ID or Google depending on how the app was set up. The app never sees your password; it only learns your name and email.</p>
+          <Chart process={signInFlow} caption="Signing in. Your rights are looked up on every request, so a change to them applies at once." />
+          <p>Everyone who can sign in is a <b>consumer</b>. Two things give you more: being listed as an <b>editor</b>, and being a member of the <b>team that owns</b> a process. Both are set in the file <code>config/access.json</code> in the repository, not in Entra or Google. Open your account menu (top right) to see what you have.</p>
+          <table className="guide-table rights">
+            <thead><tr><th>You can…</th><th>Consumer</th><th>Owner team</th><th>Editor</th></tr></thead>
+            <tbody>
+              <tr><td>Read processes, tick steps, report a problem, say “I hit this too”</td><td>✓</td><td>✓</td><td>✓</td></tr>
+              <tr><td>Delete your own feedback</td><td>✓</td><td>✓</td><td>✓</td></tr>
+              <tr><td>Mark feedback as fixed, reopen or delete it, on your team’s processes</td><td></td><td>✓</td><td>✓</td></tr>
+              <tr><td>The same on every process</td><td></td><td></td><td>✓</td></tr>
+              <tr><td>Switch on the Editor view and change processes and lists</td><td></td><td></td><td>✓</td></tr>
+            </tbody>
+          </table>
+          <p>Editors get a switch in the top bar to turn the editing controls on and off. The server checks the same rights on every change, so a hidden button is never the only protection.</p>
           <div className="guide-cards two">
             <div className="mode-card">
               <h3><Eye size={18} />Consumer</h3>
@@ -99,7 +128,7 @@ export function GuidePage() {
                 <li><Check size={14} />Add, move and change steps directly on the map</li>
                 <li><Check size={14} />Edit details, owner, tiers, participants, prerequisites</li>
                 <li><Check size={14} />Edit the raw JSON in a code editor with problems marked on the line</li>
-                <li><Check size={14} />Manage teams, tools and tiers; close feedback</li>
+                <li><Check size={14} />Manage teams, tools, tiers and languages; close any feedback</li>
               </ul>
             </div>
           </div>
@@ -202,6 +231,80 @@ export function GuidePage() {
           <p>This is why steps name their participant, tool and kind precisely, and why skills are linked to the step they perform: the description is already written for a machine to act on.</p>
         </Section>
 
+        <Section id="architecture" title="How it is built">
+          <p>The process descriptions are files in a git repository. A small server adds only what files cannot do: signing people in, deciding what they may do, and storing feedback from people who have no access to the repository.</p>
+          <figure className="guide-fig">
+            <div className="arch">
+              <div className="arch-col">
+                <div className="arch-box who"><strong>People</strong><span>in a browser</span></div>
+                <div className="arch-box who planned"><strong>AI agents</strong><span>over MCP, planned</span></div>
+              </div>
+              <div className="arch-arrow" aria-hidden="true">→</div>
+              <div className="arch-col">
+                <div className="arch-group">
+                  <em>One container</em>
+                  <div className="arch-box core"><strong>The app</strong><span>built, static files</span></div>
+                  <div className="arch-box core"><strong>Go server</strong><span>sign-in, rights, feedback API</span></div>
+                </div>
+              </div>
+              <div className="arch-arrow" aria-hidden="true">→</div>
+              <div className="arch-col">
+                <div className="arch-box ext"><strong>Repository</strong><span>processes, lists, access file; copied in when the container is built</span></div>
+                <div className="arch-box ext"><strong>Postgres</strong><span>feedback</span></div>
+                <div className="arch-box ext"><strong>Entra ID or Google</strong><span>sign-in</span></div>
+                <div className="arch-box ext"><strong>Team channel</strong><span>notifications, optional</span></div>
+              </div>
+            </div>
+            <figcaption>What runs where. A new version of a process goes live by merging it and deploying the new container.</figcaption>
+          </figure>
+          <dl className="guide-dl">
+            <div><dt>In the repository</dt><dd>Processes, the lists, the schemas, the checker, the AI prompt, the skills, and who has which rights. Reviewed and versioned like code.</dd></div>
+            <div><dt>In the database</dt><dd>Feedback and who else hit the same problem. Nothing else yet.</dd></div>
+            <div><dt>Read-only content</dt><dd>A deployed app never writes process files. An editor prepares a change in the app, downloads the file, and commits it. Only local development writes files directly.</dd></div>
+          </dl>
+        </Section>
+
+        <Section id="local" title="Running it locally">
+          <p>You need Node 22, Go 1.26 and Docker. One command starts everything: a Postgres container, the server (rebuilt when you change its code) and the app with live reload.</p>
+          <pre className="guide-code">npm install{"\n"}npm run dev</pre>
+          <p>Open <code>http://localhost:5173</code>. Instead of a company sign-in you choose who to be, so you can try each set of rights:</p>
+          <dl className="guide-dl">
+            <div><dt>Sam Consumer</dt><dd>Follows processes and reports problems.</dd></div>
+            <div><dt>Alex Editor</dt><dd>Editor: changes processes and the lists. Changes are written to <code>processes/</code> in your working copy, ready to commit.</dd></div>
+            <div><dt>Casey Owner</dt><dd>Member of the Cloud Platform team, which owns “Request a GCP project”, so can close feedback there.</dd></div>
+          </dl>
+          <p><code>npm run db:reset</code> empties the feedback and adds the samples again. To use a Postgres you already run instead of Docker, set <code>PM_PG</code>, for example <code>PM_PG=postgres://pm:pm@localhost:5432</code>.</p>
+        </Section>
+
+        <Section id="tests" title="Tests">
+          <p>Every level is tested, and <code>npm run test:all</code> runs all of it. The same runs on every pull request.</p>
+          <table className="guide-table">
+            <tbody>
+              <tr><td><code>npm test</code></td><td>The logic of the app: checker, editing, map layout, review dates, AI prompt, and that every process file in the repository is valid.</td></tr>
+              <tr><td><code>npm run test:server</code></td><td>The server against a real Postgres: sign-in (with a stand-in for Entra and Google that signs real tokens), rights, feedback, file handling.</td></tr>
+              <tr><td><code>npm run test:e2e</code></td><td>A real browser against the real server and database: signing in, following a process, editing on the map and in the checklist, feedback, the lists, AI import, and a read-only deployment.</td></tr>
+              <tr><td><code>npm run validate</code></td><td>Process files and lists against the schemas and the rules.</td></tr>
+            </tbody>
+          </table>
+          <p>The browser tests work on a copy of the content, never on your files.</p>
+        </Section>
+
+        <Section id="deploy" title="Deploying">
+          <p>The <code>Dockerfile</code> builds one container with the server, the app and the content of the repository at that commit. It needs a Postgres database and a few settings:</p>
+          <table className="guide-table">
+            <tbody>
+              <tr><td><code>DATABASE_URL</code></td><td>Where the Postgres database is.</td></tr>
+              <tr><td><code>PM_AUTH</code></td><td><code>entra</code> or <code>google</code>. There is no default, so a deployment cannot fall back to the local user picker by accident.</td></tr>
+              <tr><td><code>PM_BASE_URL</code></td><td>The public address. Register <code>&lt;address&gt;/auth/callback</code> with Entra or Google.</td></tr>
+              <tr><td><code>PM_OIDC_CLIENT_ID</code>, <code>PM_OIDC_CLIENT_SECRET</code></td><td>The app registration.</td></tr>
+              <tr><td><code>PM_ENTRA_TENANT</code> or <code>PM_GOOGLE_HOSTED_DOMAIN</code></td><td>Your tenant, or the Workspace domain to accept.</td></tr>
+              <tr><td><code>PM_SESSION_SECRET</code></td><td>At least 32 random characters.</td></tr>
+              <tr><td><code>PM_NOTIFY</code>, <code>PM_NOTIFY_WEBHOOK_URL</code></td><td>Optional: send notifications to a chat webhook instead of the server log.</td></tr>
+            </tbody>
+          </table>
+          <p>The full list, the API and the rights are in <code>docs/backend.md</code>; a template is in <code>.env.example</code>.</p>
+        </Section>
+
         <Section id="files" title="Files, schema and checker">
           <p>Every process is a plain file in the repository, so it can be reviewed and versioned like code. Feedback is the exception: it lives in a database, because the people who give it have no access to the repository.</p>
           <table className="guide-table">
@@ -217,6 +320,10 @@ export function GuidePage() {
             </tbody>
           </table>
           <p>The checker runs in the app on every change and from the command line with <code>npm run validate</code>. Beyond the schema it catches steps that point nowhere, unknown participants, decisions without labelled branches, missing sub-processes, unknown tiers or languages, and steps that can never be reached.</p>
+        </Section>
+
+        <Section id="docs" title="Keeping this guide current">
+          <p>This guide is part of the app’s code (<code>src/components/GuidePage.tsx</code>, with the flow charts in <code>src/guide/flows.ts</code>), so it is changed in the same commit as the feature it describes. An instruction for AI coding assistants, the <code>update-docs</code> skill, makes that the last step of every task that changes code.</p>
           <p className="muted"><Sparkles size={13} /> The flow charts on this page are themselves processes, drawn by the same map.</p>
         </Section>
       </article>

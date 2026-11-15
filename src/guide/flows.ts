@@ -72,3 +72,14 @@ export const automationFlow = flow("guide-automation", "Planned: an agent follow
     s("their-part", "Do their part", "others", "wait", ["report"], "approve, review"),
     s("report", "Track and report back", "agent", "verify", []),
   ]);
+
+export const signInFlow = flow("guide-sign-in", "Signing in", "How you get into the app and how your rights are decided.",
+  [["app", "Process Manager"], ["idp", "Entra ID or Google"]],
+  [
+    s("open", "Open Process Manager", "me", "task", ["redirect"]),
+    s("redirect", "Send you to the company sign-in", "app", "automation", ["sign-in"]),
+    s("sign-in", "Sign in as usual", "me", "form", ["confirm"], "password, MFA"),
+    s("confirm", "Confirm who you are", "idp", "verify", ["rights"], "name and email"),
+    s("rights", "Look up your rights", "app", "automation", ["use"], "editor? owner team?"),
+    s("use", "Use the app", "me", "task", [], "signed in for 12 hours"),
+  ]);

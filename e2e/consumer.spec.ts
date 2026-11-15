@@ -112,11 +112,24 @@ test("the guide explains the app with flow charts that fit the page", async ({ p
   const errors = watchErrors(page);
   await open(page, "/guide");
   await expect(page.getByRole("heading", { name: "How Process Manager works" })).toBeVisible();
-  await expect(page.locator(".guide-fig")).toHaveCount(5);
   await expect(page.locator(".guide-fig .block").first()).toBeVisible();
+  // every flow chart fits its column: nothing to scroll sideways
   const overflow = await page.locator(".guide-fig .flow-scroll").evaluateAll((els) => els.map((e) => e.scrollWidth - e.clientWidth));
-  expect(overflow).toEqual([0, 0, 0, 0, 0]);
-  await page.locator(".guide-toc").getByRole("button", { name: "For agents: MCP" }).click();
-  await expect(page.locator("#guide-agents")).toBeInViewport();
+  expect(overflow.length).toBeGreaterThanOrEqual(6);
+  expect(overflow.every((px) => px === 0)).toBe(true);
+
+  // the guide covers using the app and running it
+  const toc = page.locator(".guide-toc");
+  await expect(toc.locator(".eyebrow")).toHaveText(["Using it", "Where it is heading", "Running it"]);
+  for (const id of ["modes", "feedback", "lifecycle", "agents", "architecture", "local", "tests", "deploy", "files", "docs"])
+    await expect(page.locator(`#guide-${id} h2`)).toBeVisible();
+  await expect(page.locator("#guide-modes .guide-table.rights tbody tr")).toHaveCount(5);
+  await expect(page.locator("#guide-architecture .arch-box")).toHaveCount(8);
+  await expect(page.locator("#guide-local")).toContainText("npm run dev");
+  await expect(page.locator("#guide-deploy")).toContainText("PM_AUTH");
+
+  await toc.getByRole("button", { name: "How it is built" }).click();
+  await expect(page.locator("#guide-architecture")).toBeInViewport();
+  await expect(toc.getByRole("button", { name: "How it is built" })).toHaveClass(/on/);
   expect(errors).toEqual([]);
 });

@@ -67,7 +67,9 @@ Who is an editor is set in `config/access.json`; the switch only appears for edi
 
 ## Guide
 
-The app has a built-in **Guide** (top bar) that explains every feature, with flow charts for following a process, creating one with AI, and the feedback loop. The charts are themselves processes, drawn by the same map.
+The app has a built-in **Guide** (top bar). It is the main documentation, in three parts: using the app (signing in and rights, reading, editing, AI, feedback, reviews), where it is heading (agents, automation), and running it (how it is built, local setup, tests, deploying). Its flow charts are themselves processes, drawn by the same map.
+
+The Guide is kept current as part of every change: `CLAUDE.md` and the `update-docs` skill tell AI coding assistants to update the documentation as the last step of any task that changes code.
 
 ![Guide](docs/guide.png)
 
@@ -124,7 +126,7 @@ Switch to **Editor** first.
   1. paste the description (or the change you want),
   2. copy the generated prompt into Gemini / Copilot / ChatGPT / Claude,
   3. paste the answer back. The checker validates it and, if something is wrong, gives you a *fix request* to send to the same chat.
-- **With an AI coding assistant** – edit files in `processes/` directly and run the checker. Two Claude Code skills in `.claude/skills/` describe how: `edit-process` (create or change a process) and `manage-catalog` (add or change teams, tools and tiers).
+- **With an AI coding assistant** – edit files in `processes/` directly and run the checker. Claude Code skills in `.claude/skills/` describe how: `edit-process` (create or change a process), `manage-catalog` (add or change teams, tools, tiers and languages) and `update-docs` (bring the documentation in line after a code change).
 
 The prompt is also available as a file for sharing: [`docs/llm-prompt.md`](docs/llm-prompt.md) (regenerate with `npm run prompt`). Append the process description at the bottom.
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { extractJson, hasErrors, validateCatalog, validateProcess } from "../validate";
-import { aiFlow, automationFlow, feedbackFlow, followFlow, reviewFlow } from "../../guide/flows";
+import * as guideFlows from "../../guide/flows";
 import { base, catalog, example, processFiles, processes } from "./fixtures";
 
 const ctx = { processIds: processes.map((p) => p.id), catalog };
@@ -14,8 +14,11 @@ describe("the content in the repository", () => {
     expect(file).toBe(`${p.id}.json`);
   });
 
-  it("has a valid prompt example and valid guide flows", () => {
-    for (const p of [example, followFlow, aiFlow, feedbackFlow, reviewFlow, automationFlow]) expect(hasErrors(validateProcess(p)), p.id).toBe(false);
+  it("has a valid prompt example", () => expect(hasErrors(validateProcess(example))).toBe(false));
+
+  // every flow chart in the guide is a process; a new one is checked without touching this test
+  it.each(Object.entries(guideFlows))("guide flow chart %s is a valid process", (_name, flow) => {
+    expect(validateProcess(flow).filter((i) => i.level === "error")).toEqual([]);
   });
 });
 

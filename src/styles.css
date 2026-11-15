@@ -606,3 +606,24 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: .8; }
 .fb-actions .btn.on { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); color: var(--accent); }
 .fb-count { font-size: 12px; font-weight: 600; color: var(--text-2); }
 .fb-send { align-items: center; }
+
+/* ---------- guide: groups, code, architecture ---------- */
+.guide-toc { gap: 18px; max-height: calc(100vh - 110px); overflow: auto; }
+.guide-toc-group { display: flex; flex-direction: column; gap: 2px; }
+.guide-code { margin: 0; padding: 14px 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); font: 13px/1.7 ui-monospace, "SF Mono", Menlo, Consolas, monospace; max-width: 760px; overflow-x: auto; }
+.guide-table th { text-align: left; font-size: 12px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); padding: 0 12px 8px 0; border-bottom: 1px solid var(--line-strong); }
+.guide-table.rights td:first-child { white-space: normal; width: auto; }
+.guide-table.rights td:not(:first-child), .guide-table.rights th:not(:first-child) { text-align: center; width: 110px; color: var(--good); font-weight: 700; padding-right: 0; }
+.guide-table.rights th:not(:first-child) { color: var(--text-3); }
+.arch { display: grid; grid-template-columns: minmax(150px, 1fr) auto minmax(220px, 1.2fr) auto minmax(240px, 1.6fr); gap: 14px; align-items: center; padding: 24px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-1); }
+@media (max-width: 860px) { .arch { grid-template-columns: 1fr; } .arch-arrow { transform: rotate(90deg); justify-self: center; } }
+.arch-col { display: grid; gap: 10px; }
+.arch-arrow { font-size: 22px; color: var(--text-3); }
+.arch-box { display: flex; flex-direction: column; gap: 1px; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface-2); line-height: 1.35; }
+.arch-box strong { font-size: 14px; }
+.arch-box span { font-size: 12.5px; color: var(--text-3); }
+.arch-box.who { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.arch-box.planned { border-style: dashed; background: transparent; }
+.arch-box.core { background: var(--surface); border-color: var(--accent); }
+.arch-group { display: grid; gap: 10px; padding: 12px; border-radius: 16px; border: 1.5px dashed var(--line-strong); }
+.arch-group em { font-style: normal; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
