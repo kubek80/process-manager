@@ -1,0 +1,105 @@
+{
+  "$schema": "../schema/standard.schema.json",
+  "schemaVersion": "1.0",
+  "id": "code-review",
+  "title": "Code review",
+  "summary": "How changes are reviewed before they are merged, so that every change has a second pair of eyes and a record of why it was made.",
+  "owner": "engineering-practice",
+  "scope": "Every repository that holds code or configuration that reaches a shared environment.",
+  "tags": [
+    "pull-request",
+    "review"
+  ],
+  "updatedAt": "2026-11-15",
+  "status": "active",
+  "review": {
+    "intervalMonths": 12,
+    "lastReviewedAt": "2026-10-10",
+    "reviewedBy": "Unit lead"
+  },
+  "requirements": [
+    {
+      "id": "REV-01",
+      "title": "Every change is reviewed",
+      "level": "must",
+      "statement": "Changes reach the main branch only through a pull request approved by at least one person who did not write them.",
+      "guidance": [
+        "Protect the main branch: require one approval and passing checks.",
+        "For Tier 0 applications require two approvals."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Branch protection applied by the repository automation."
+      },
+      "processId": "request-github-repository"
+    },
+    {
+      "id": "REV-02",
+      "title": "Say what and why",
+      "level": "should",
+      "statement": "The pull request description says what changes and why, and links the ticket or request it belongs to.",
+      "rationale": "The description is what people read in a year to understand the change.",
+      "examples": {
+        "good": [
+          "Add retry to the billing client. The billing API returns 503 during deploys (INC-4821); three retries with backoff remove the errors."
+        ],
+        "bad": [
+          "fix",
+          "updates"
+        ]
+      },
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "An empty description, or one that only repeats the title",
+          "No reference to a ticket, incident or request"
+        ],
+        "severity": "info"
+      }
+    },
+    {
+      "id": "REV-03",
+      "title": "Small pull requests",
+      "level": "should",
+      "statement": "A pull request changes one thing and stays under about 400 changed lines, generated files aside.",
+      "rationale": "Reviewers miss more in large changes.",
+      "guidance": [
+        "Split refactoring from behaviour change.",
+        "Put generated code and lock files in their own commit."
+      ],
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "More than about 400 changed lines of hand-written code",
+          "Unrelated changes mixed together"
+        ],
+        "severity": "info"
+      }
+    },
+    {
+      "id": "REV-04",
+      "title": "Tests with behaviour changes",
+      "level": "must",
+      "statement": "A change in behaviour comes with a test that fails without it.",
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "Changed logic with no added or changed test",
+          "Tests removed or skipped to make the build pass"
+        ],
+        "severity": "blocker"
+      },
+      "tiers": [
+        "tier-0",
+        "tier-1",
+        "tier-2"
+      ]
+    }
+  ]
+}

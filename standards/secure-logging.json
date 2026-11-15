@@ -1,0 +1,160 @@
+{
+  "$schema": "../schema/standard.schema.json",
+  "schemaVersion": "1.0",
+  "id": "secure-logging",
+  "title": "Secure logging",
+  "summary": "What services must and must not write to their logs, so that incidents can be investigated without logs becoming a leak.",
+  "owner": "security",
+  "scope": "All services and jobs that run in a company cloud project or subscription. Developer laptops are out of scope.",
+  "tags": [
+    "logging",
+    "secrets",
+    "audit"
+  ],
+  "updatedAt": "2026-11-15",
+  "status": "active",
+  "review": {
+    "intervalMonths": 12,
+    "lastReviewedAt": "2026-09-01",
+    "reviewedBy": "Unit lead"
+  },
+  "resources": [
+    {
+      "title": "Information security policy",
+      "url": "https://wiki.example.com/security/policy",
+      "kind": "documentation"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "SEC-LOG-01",
+      "title": "No secrets in logs",
+      "level": "must",
+      "statement": "Passwords, API keys, tokens, private keys and session ids are never written to logs, traces or error messages.",
+      "rationale": "Logs are read by many people and copied to many systems. A secret in a log has to be treated as leaked.",
+      "guidance": [
+        "Log the name of a credential, never its value.",
+        "Mask the Authorization header and cookies before logging a request.",
+        "Use the logging library's redaction list for known secret field names."
+      ],
+      "examples": {
+        "good": [
+          "log.Info(\"calling billing API\", \"key_id\", key.ID)"
+        ],
+        "bad": [
+          "log.Info(\"calling billing API\", \"key\", apiKey)",
+          "fmt.Printf(\"request: %+v\", req) // prints the Authorization header"
+        ]
+      },
+      "verification": {
+        "method": "automated",
+        "description": "Secret scanner on log statements in the build pipeline, plus code review."
+      },
+      "review": {
+        "lookFor": [
+          "A variable named like password, secret, token, apiKey or authorization passed to a log call",
+          "Whole request, header or config objects printed with %v, %+v, JSON.stringify or similar",
+          "Secrets interpolated into error messages that are later logged"
+        ],
+        "severity": "blocker"
+      }
+    },
+    {
+      "id": "SEC-LOG-02",
+      "title": "No personal data in logs",
+      "level": "must",
+      "statement": "Names, email addresses, phone numbers, payment data and national ids are not logged. Use an internal id instead.",
+      "rationale": "Logs are kept longer and shared wider than the systems the data came from.",
+      "guidance": [
+        "Log the customer id, not the customer.",
+        "If an email is needed to investigate, log a salted hash."
+      ],
+      "examples": {
+        "good": [
+          "logger.info('order placed', { customerId })"
+        ],
+        "bad": [
+          "logger.info('order placed', { email: customer.email, card: customer.card })"
+        ]
+      },
+      "verification": {
+        "method": "review",
+        "description": "Code review."
+      },
+      "review": {
+        "lookFor": [
+          "Fields named email, phone, name, address, card, iban or ssn in a log call",
+          "User or customer objects logged as a whole"
+        ],
+        "severity": "blocker"
+      }
+    },
+    {
+      "id": "SEC-LOG-03",
+      "title": "Log security events",
+      "level": "must",
+      "statement": "Sign-in success and failure, permission changes and access to sensitive data are logged with who, what, when and from where.",
+      "rationale": "Without these events an incident cannot be reconstructed.",
+      "guidance": [
+        "Use the audit logger of the platform library; do not write your own format.",
+        "Include the acting user id, the target and the outcome."
+      ],
+      "verification": {
+        "method": "review",
+        "description": "Design and code review."
+      },
+      "review": {
+        "lookFor": [
+          "A new sign-in, role change or data export path with no audit log call"
+        ],
+        "severity": "warning"
+      },
+      "tiers": [
+        "tier-0",
+        "tier-1"
+      ]
+    },
+    {
+      "id": "SEC-LOG-04",
+      "title": "Central log shipping in production",
+      "level": "must",
+      "statement": "Production services send their logs to the central log platform and keep them for at least 90 days.",
+      "guidance": [
+        "Use the platform's logging sidecar or agent.",
+        "Do not write logs only to local disk."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Platform policy check on the deployment."
+      },
+      "environments": [
+        "production"
+      ]
+    },
+    {
+      "id": "SEC-LOG-05",
+      "title": "Structured logs",
+      "level": "should",
+      "statement": "Logs are written as structured key/value records, not free text.",
+      "rationale": "Structured logs can be searched and redacted reliably.",
+      "guidance": [
+        "Use the standard logger of your language: slog for Go, pino for Node."
+      ],
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "fmt.Println, console.log or print used for application logging"
+        ],
+        "paths": [
+          "**/*.go",
+          "**/*.ts",
+          "**/*.js",
+          "**/*.py"
+        ],
+        "severity": "info"
+      }
+    }
+  ]
+}

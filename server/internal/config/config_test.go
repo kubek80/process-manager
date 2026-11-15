@@ -8,11 +8,12 @@ import (
 func env(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 
 func TestLoadDev(t *testing.T) {
-	c, err := Load(env(map[string]string{"PM_AUTH": "dev", "DATABASE_URL": "postgres://x", "PM_CONTENT_DIR": "/data", "PM_CONTENT_WRITABLE": "true"}))
+	c, err := Load(env(map[string]string{"PM_AUTH": "dev", "DATABASE_URL": "postgres://x", "PM_SEED_DIR": "/data"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Addr != "127.0.0.1:8080" || !c.ContentWritable || c.AccessFile != "/data/config/access.json" || len(c.SessionSecret) == 0 || c.Notify != "log" {
+	if c.Addr != "127.0.0.1:8080" || c.SeedDir != "/data" || c.SchemaDir != "/data/schema" || len(c.SessionSecret) == 0 || c.Notify != "log" ||
+		len(c.Admins) != 1 || c.Admins[0] != "dana@example.com" {
 		t.Fatalf("unexpected config: %+v", c)
 	}
 	if c.Secure() {
@@ -22,7 +23,7 @@ func TestLoadDev(t *testing.T) {
 
 func TestLoadProviders(t *testing.T) {
 	secret := strings.Repeat("s", 32)
-	base := map[string]string{"DATABASE_URL": "postgres://x", "PM_OIDC_CLIENT_ID": "id", "PM_OIDC_CLIENT_SECRET": "sec", "PM_SESSION_SECRET": secret, "PM_BASE_URL": "https://pm.example.com/"}
+	base := map[string]string{"DATABASE_URL": "postgres://x", "PM_OIDC_CLIENT_ID": "id", "PM_OIDC_CLIENT_SECRET": "sec", "PM_SESSION_SECRET": secret, "PM_BASE_URL": "https://pm.example.com/", "PM_ADMINS": " Root@Example.com , second@example.com,"}
 	with := func(extra map[string]string) map[string]string {
 		m := map[string]string{}
 		for k, v := range base {
@@ -40,6 +41,9 @@ func TestLoadProviders(t *testing.T) {
 	}
 	if !c.Secure() || c.BaseURL != "https://pm.example.com" {
 		t.Fatalf("base url: %q", c.BaseURL)
+	}
+	if len(c.Admins) != 2 || c.Admins[0] != "root@example.com" || c.Admins[1] != "second@example.com" {
+		t.Fatalf("admins: %v", c.Admins)
 	}
 
 	c, err = Load(env(with(map[string]string{"PM_AUTH": "google", "PM_GOOGLE_HOSTED_DOMAIN": "example.com"})))
@@ -59,6 +63,7 @@ func TestLoadRejects(t *testing.T) {
 		"DATABASE_URL is required":       {"PM_AUTH": "dev"},
 		"not supported":                  {"PM_AUTH": "ldap", "DATABASE_URL": "x"},
 		"PM_ENTRA_TENANT is required":    {"PM_AUTH": "entra", "DATABASE_URL": "x", "PM_OIDC_CLIENT_ID": "a", "PM_OIDC_CLIENT_SECRET": "b", "PM_SESSION_SECRET": strings.Repeat("s", 32)},
+		"PM_ADMINS is required":          {"PM_AUTH": "google", "DATABASE_URL": "x", "PM_OIDC_CLIENT_ID": "a", "PM_OIDC_CLIENT_SECRET": "b", "PM_SESSION_SECRET": strings.Repeat("s", 32)},
 		"PM_OIDC_CLIENT_ID":              {"PM_AUTH": "google", "DATABASE_URL": "x", "PM_SESSION_SECRET": strings.Repeat("s", 32)},
 		"at least 32 characters":         {"PM_AUTH": "google", "DATABASE_URL": "x", "PM_OIDC_CLIENT_ID": "a", "PM_OIDC_CLIENT_SECRET": "b", "PM_SESSION_SECRET": "short"},
 		"PM_NOTIFY_WEBHOOK_URL":          {"PM_AUTH": "dev", "DATABASE_URL": "x", "PM_NOTIFY": "webhook"},

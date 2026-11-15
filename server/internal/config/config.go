@@ -16,13 +16,13 @@ const (
 )
 
 type Config struct {
-	Addr            string // listen address
-	BaseURL         string // public URL of the app, used for the sign-in redirect
-	DatabaseURL     string
-	ContentDir      string // folder that holds processes/ and catalog/
-	ContentWritable bool   // true only where the app may write process files (local development)
-	AccessFile      string // who is an editor and who belongs to which team
-	StaticDir       string // built frontend; empty when the frontend is served separately
+	Addr        string // listen address
+	BaseURL     string // public URL of the app, used for the sign-in redirect
+	DatabaseURL string
+	SeedDir     string   // folder with processes/, standards/ and catalog/ used to fill an empty database
+	SchemaDir   string   // folder with the JSON schemas
+	Admins      []string // emails that are always admin, so there is always a way in
+	StaticDir   string   // built frontend; empty when the frontend is served separately
 
 	Auth          string
 	SessionSecret []byte
@@ -44,20 +44,24 @@ func Load(getenv func(string) string) (Config, error) {
 		return fallback
 	}
 	c := Config{
-		Addr:            get("PM_ADDR", "127.0.0.1:8080"),
-		BaseURL:         strings.TrimRight(get("PM_BASE_URL", "http://localhost:5173"), "/"),
-		DatabaseURL:     get("DATABASE_URL", ""),
-		ContentDir:      get("PM_CONTENT_DIR", "."),
-		ContentWritable: get("PM_CONTENT_WRITABLE", "false") == "true",
-		StaticDir:       get("PM_STATIC_DIR", ""),
-		Auth:            get("PM_AUTH", ""),
-		ClientID:        get("PM_OIDC_CLIENT_ID", ""),
-		ClientSecret:    get("PM_OIDC_CLIENT_SECRET", ""),
-		HostedDomain:    get("PM_GOOGLE_HOSTED_DOMAIN", ""),
-		Notify:          get("PM_NOTIFY", "log"),
-		WebhookURL:      get("PM_NOTIFY_WEBHOOK_URL", ""),
+		Addr:         get("PM_ADDR", "127.0.0.1:8080"),
+		BaseURL:      strings.TrimRight(get("PM_BASE_URL", "http://localhost:5173"), "/"),
+		DatabaseURL:  get("DATABASE_URL", ""),
+		SeedDir:      get("PM_SEED_DIR", "."),
+		StaticDir:    get("PM_STATIC_DIR", ""),
+		Auth:         get("PM_AUTH", ""),
+		ClientID:     get("PM_OIDC_CLIENT_ID", ""),
+		ClientSecret: get("PM_OIDC_CLIENT_SECRET", ""),
+		HostedDomain: get("PM_GOOGLE_HOSTED_DOMAIN", ""),
+		Notify:       get("PM_NOTIFY", "log"),
+		WebhookURL:   get("PM_NOTIFY_WEBHOOK_URL", ""),
 	}
-	c.AccessFile = get("PM_ACCESS_FILE", filepath.Join(c.ContentDir, "config", "access.json"))
+	c.SchemaDir = get("PM_SCHEMA_DIR", filepath.Join(c.SeedDir, "schema"))
+	for _, email := range strings.Split(get("PM_ADMINS", ""), ",") {
+		if email = strings.ToLower(strings.TrimSpace(email)); email != "" {
+			c.Admins = append(c.Admins, email)
+		}
+	}
 
 	var problems []string
 	if c.DatabaseURL == "" {
@@ -70,6 +74,9 @@ func Load(getenv func(string) string) (Config, error) {
 		// Local development only: anyone can sign in as any built-in user.
 		if secret == "" {
 			secret = "dev-only-session-secret-not-for-production"
+		}
+		if len(c.Admins) == 0 {
+			c.Admins = []string{"dana@example.com"} // the built-in admin of the dev user picker
 		}
 	case AuthEntra:
 		tenant := get("PM_ENTRA_TENANT", "")
@@ -91,6 +98,9 @@ func Load(getenv func(string) string) (Config, error) {
 		}
 		if len(secret) < 32 {
 			problems = append(problems, "PM_SESSION_SECRET must be at least 32 characters")
+		}
+		if len(c.Admins) == 0 {
+			problems = append(problems, "PM_ADMINS is required: the email of at least one person who can open the Admin panel and give others access")
 		}
 	}
 	c.SessionSecret = []byte(secret)

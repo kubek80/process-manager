@@ -1,6 +1,6 @@
-// Package feedbacktest gives tests a feedback store on a real Postgres database.
-// Every test gets its own schema, so tests can run in parallel and leave nothing behind.
-package feedbacktest
+// Package dbtest gives tests a real, migrated Postgres database. Every test gets its own
+// schema, so tests can run in parallel and leave nothing behind.
+package dbtest
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/kubek80/process-manager/server/internal/feedback"
+	"github.com/kubek80/process-manager/server/internal/db"
 )
 
 var counter atomic.Int64
@@ -26,11 +26,11 @@ func URL() string {
 	return "postgres://pm:pm@localhost:54329/pm_test?sslmode=disable"
 }
 
-// NewStore returns a migrated store in a fresh schema. Without a reachable database the test
-// is skipped locally and fails in CI, so a green CI run always includes the database tests.
-func NewStore(t testing.TB) *feedback.Store {
+// NewPool returns a pool on a fresh, migrated schema. Without a reachable database the test is
+// skipped locally and fails in CI, so a green CI run always includes the database tests.
+func NewPool(t testing.TB) *pgxpool.Pool {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	admin, err := pgx.Connect(ctx, URL())
 	if err != nil {
@@ -57,9 +57,8 @@ func NewStore(t testing.TB) *feedback.Store {
 		_, _ = admin.Exec(context.Background(), "drop schema "+schema+" cascade")
 		_ = admin.Close(context.Background())
 	})
-	store := &feedback.Store{Pool: pool}
-	if err := store.Migrate(ctx); err != nil {
+	if err := db.Migrate(ctx, pool); err != nil {
 		t.Fatal(err)
 	}
-	return store
+	return pool
 }

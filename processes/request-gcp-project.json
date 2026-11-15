@@ -33,6 +33,9 @@
       "description": "Terraform that creates every project."
     }
   ],
+  "standards": [
+    "infrastructure-as-code"
+  ],
   "prerequisites": [
     {
       "title": "Application registered in the CMDB",

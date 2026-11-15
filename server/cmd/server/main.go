@@ -15,20 +15,35 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kubek80/process-manager/server/internal/audit"
 	"github.com/kubek80/process-manager/server/internal/auth"
 	"github.com/kubek80/process-manager/server/internal/config"
-	"github.com/kubek80/process-manager/server/internal/content"
+	"github.com/kubek80/process-manager/server/internal/db"
+	"github.com/kubek80/process-manager/server/internal/docs"
 	"github.com/kubek80/process-manager/server/internal/feedback"
 	"github.com/kubek80/process-manager/server/internal/httpapi"
 	"github.com/kubek80/process-manager/server/internal/notify"
+	"github.com/kubek80/process-manager/server/internal/rbac"
+	"github.com/kubek80/process-manager/server/internal/schema"
+	"github.com/kubek80/process-manager/server/internal/skills"
 )
 
+type options struct {
+	seed      bool   // add sample feedback when there is none
+	reset     bool   // delete all feedback, then exit
+	importDir string // load files into the database, then exit
+	exportDir string // write the database to files, then exit
+}
+
 func main() {
-	seed := flag.Bool("seed", false, "add sample feedback when the database is empty (local development)")
-	reset := flag.Bool("reset", false, "delete all feedback, then exit (combine with -seed to refill)")
+	var o options
+	flag.BoolVar(&o.seed, "seed", false, "add sample feedback when the database has none (local development)")
+	flag.BoolVar(&o.reset, "reset", false, "delete all feedback, then exit (combine with -seed to refill)")
+	flag.StringVar(&o.importDir, "import", "", "load processes/, standards/ and catalog/ from this folder into the database, then exit")
+	flag.StringVar(&o.exportDir, "export", "", "write processes, standards, lists and generated skills to this folder, then exit")
 	flag.Parse()
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if err := run(log, *seed, *reset); err != nil {
+	if err := run(log, o); err != nil {
 		log.Error("stopped", "error", err)
 		os.Exit(1)
 	}
@@ -55,7 +70,15 @@ func connect(ctx context.Context, url string, log *slog.Logger) (*pgxpool.Pool, 
 	}
 }
 
-func run(log *slog.Logger, seed, reset bool) error {
+type stores struct {
+	docs     *docs.Store
+	roles    *rbac.Store
+	skills   *skills.Store
+	feedback *feedback.Store
+	audit    *audit.Log
+}
+
+func run(log *slog.Logger, o options) error {
 	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		return fmt.Errorf("configuration: %w", err)
@@ -68,29 +91,50 @@ func run(log *slog.Logger, seed, reset bool) error {
 		return err
 	}
 	defer pool.Close()
-	store := &feedback.Store{Pool: pool}
-	if err := store.Migrate(ctx); err != nil {
+	if err := db.Migrate(ctx, pool); err != nil {
 		return fmt.Errorf("database setup: %w", err)
 	}
-	files := &content.Store{Dir: cfg.ContentDir}
+	st := stores{
+		docs: &docs.Store{Pool: pool}, roles: &rbac.Store{Pool: pool, Bootstrap: cfg.Admins},
+		skills: &skills.Store{Pool: pool}, feedback: &feedback.Store{Pool: pool}, audit: &audit.Log{Pool: pool},
+	}
 
-	if reset {
-		if err := store.Reset(ctx); err != nil {
+	// one-off commands
+	if o.importDir != "" {
+		if err := importFiles(ctx, st, o.importDir, log); err != nil {
+			return err
+		}
+		return st.skills.SyncAll(ctx, st.docs)
+	}
+	if o.exportDir != "" {
+		return exportFiles(ctx, st, o.exportDir, log)
+	}
+	if o.reset {
+		if err := st.feedback.Reset(ctx); err != nil {
 			return err
 		}
 		log.Info("all feedback deleted")
 	}
-	if seed {
-		if err := seedFeedback(ctx, store, files, log); err != nil {
+
+	if err := prepare(ctx, cfg, st, log); err != nil {
+		return err
+	}
+	if o.seed {
+		if err := seedFeedback(ctx, st, log); err != nil {
 			return err
 		}
 	}
-	if reset {
+	if o.reset {
 		return nil
 	}
 
+	schemas, err := schema.Load(cfg.SchemaDir)
+	if err != nil {
+		return err
+	}
 	sessions := auth.NewSessions(cfg.SessionSecret, cfg.Secure())
-	deps := httpapi.Deps{Cfg: cfg, Sessions: sessions, Content: files, Feedback: store, Log: log, Notifier: notify.Log{Logger: log}}
+	deps := httpapi.Deps{Cfg: cfg, Sessions: sessions, Docs: st.docs, Schemas: schemas, Roles: st.roles, Audit: st.audit,
+		Skills: st.skills, Feedback: st.feedback, Log: log, Notifier: notify.Log{Logger: log}}
 	if cfg.Notify == "webhook" {
 		deps.Notifier = notify.NewWebhook(cfg.WebhookURL, log)
 	}
@@ -110,31 +154,94 @@ func run(log *slog.Logger, seed, reset bool) error {
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
 	}()
-	log.Info("listening", "addr", cfg.Addr, "auth", cfg.Auth, "content", cfg.ContentDir, "writable", cfg.ContentWritable)
+	log.Info("listening", "addr", cfg.Addr, "auth", cfg.Auth, "admins", len(cfg.Admins))
 	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 	return nil
 }
 
+// prepare makes a database usable: an empty one is filled from the seed folder, development
+// users get their roles, and the generated skills are brought up to date.
+func prepare(ctx context.Context, cfg config.Config, st stores, log *slog.Logger) error {
+	n, err := st.docs.Count(ctx)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		if err := importFiles(ctx, st, cfg.SeedDir, log); err != nil {
+			return err
+		}
+	}
+	if cfg.Auth == config.AuthDev {
+		if count, err := st.roles.Count(ctx); err != nil {
+			return err
+		} else if count == 0 {
+			for _, r := range auth.DevRoles {
+				if err := st.roles.Grant(ctx, rbac.Assignment{Email: r.Email, Role: r.Role, Scope: r.Scope, GrantedBy: "development setup"}); err != nil {
+					return err
+				}
+			}
+			log.Info("development roles added", "roles", len(auth.DevRoles))
+		}
+	}
+	return st.skills.SyncAll(ctx, st.docs)
+}
+
+func importFiles(ctx context.Context, st stores, dir string, log *slog.Logger) error {
+	n, problems, err := st.docs.ImportDir(ctx, dir, "import")
+	if err != nil {
+		return err
+	}
+	for _, p := range problems {
+		log.Warn("not imported", "problem", p)
+	}
+	log.Info("content imported", "from", dir, "changed", n, "skipped", len(problems))
+	if n > 0 {
+		_ = st.audit.Add(ctx, "import", "Import", "content.import", dir, fmt.Sprintf("%d documents added or changed", n))
+	}
+	return nil
+}
+
+func exportFiles(ctx context.Context, st stores, dir string, log *slog.Logger) error {
+	n, err := st.docs.ExportDir(ctx, dir)
+	if err != nil {
+		return err
+	}
+	if err := st.skills.SyncAll(ctx, st.docs); err != nil {
+		return err
+	}
+	k, err := st.skills.ExportDir(ctx, dir)
+	if err != nil {
+		return err
+	}
+	log.Info("exported", "to", dir, "documents", n, "skills", k)
+	return nil
+}
+
 // seedFeedback gives a fresh local database something to look at.
-func seedFeedback(ctx context.Context, store *feedback.Store, files *content.Store, log *slog.Logger) error {
-	n, err := store.Count(ctx)
+func seedFeedback(ctx context.Context, st stores, log *slog.Logger) error {
+	n, err := st.feedback.Count(ctx)
 	if err != nil || n > 0 {
 		return err
 	}
 	samples := []feedback.New{
-		{ProcessID: "request-gcp-project", StepID: "raise-request", Kind: "outdated", Text: "The catalogue item is now called “Cloud project (GCP)”.", AuthorEmail: "sam@example.com", AuthorName: "Sam Consumer"},
-		{ProcessID: "onboard-site-to-akamai", Kind: "idea", Text: "A checklist of the DNS records to prepare would save a round trip with the DNS team.", AuthorEmail: "sam@example.com", AuthorName: "Sam Consumer"},
+		{TargetKind: docs.Process, TargetID: "request-gcp-project", ItemID: "raise-request", Kind: "outdated", Text: "The catalogue item is now called “Cloud project (GCP)”.", AuthorEmail: "sam@example.com", AuthorName: "Sam Consumer"},
+		{TargetKind: docs.Process, TargetID: "onboard-site-to-akamai", Kind: "idea", Text: "A checklist of the DNS records to prepare would save a round trip with the DNS team.", AuthorEmail: "sam@example.com", AuthorName: "Sam Consumer"},
+		{TargetKind: docs.Standard, TargetID: "secure-logging", ItemID: "SEC-LOG-05", Kind: "unclear", Text: "Does this apply to one-off migration scripts too?", AuthorEmail: "sam@example.com", AuthorName: "Sam Consumer"},
 	}
 	added := 0
 	for _, s := range samples {
-		info, ok := files.Info(s.ProcessID)
-		if !ok || (s.StepID != "" && info.Steps[s.StepID] == "") {
+		d, err := st.docs.Get(ctx, s.TargetKind, s.TargetID)
+		if err != nil {
 			continue
 		}
-		s.StepHash = info.Steps[s.StepID]
-		if _, err := store.Create(ctx, s); err != nil {
+		t, ok := docs.TargetOf(d)
+		if !ok || (s.ItemID != "" && t.Items[s.ItemID] == "") {
+			continue
+		}
+		s.ItemHash = t.Items[s.ItemID]
+		if _, err := st.feedback.Create(ctx, s); err != nil {
 			return err
 		}
 		added++

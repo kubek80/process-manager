@@ -1,0 +1,153 @@
+{
+  "$schema": "../schema/standard.schema.json",
+  "schemaVersion": "1.0",
+  "id": "infrastructure-as-code",
+  "title": "Infrastructure as code",
+  "summary": "How cloud resources are created and changed, so that every environment can be rebuilt and every change is reviewed.",
+  "owner": "cloud-platform-team",
+  "scope": "Everything created in GCP or Azure for an application. Sandboxes for experiments are out of scope.",
+  "tags": [
+    "terraform",
+    "cloud"
+  ],
+  "updatedAt": "2026-11-15",
+  "status": "active",
+  "review": {
+    "intervalMonths": 12,
+    "lastReviewedAt": "2026-09-01",
+    "reviewedBy": "Unit lead"
+  },
+  "exceptionProcessId": "raise-servicenow-request",
+  "resources": [
+    {
+      "title": "Terraform module catalogue",
+      "url": "https://github.example.com/platform/terraform-modules",
+      "kind": "repository"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "IAC-01",
+      "title": "No manual changes",
+      "level": "must",
+      "statement": "Resources in test, staging and production are created and changed only through Terraform in a pipeline, never by hand in a console.",
+      "rationale": "A manual change cannot be reviewed, is lost on the next apply, and makes environments drift apart.",
+      "guidance": [
+        "Make the change in the Terraform code and open a pull request.",
+        "For an emergency fix in a console, raise a follow-up to bring the code in line within one working day."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Drift detection runs nightly and reports differences to the owning team."
+      },
+      "environments": [
+        "test",
+        "staging",
+        "production"
+      ],
+      "processId": "request-gcp-project"
+    },
+    {
+      "id": "IAC-02",
+      "title": "Use the platform modules",
+      "level": "should",
+      "statement": "Resources are created with the modules from the platform catalogue where one exists.",
+      "rationale": "The modules already apply naming, labels, encryption and network rules.",
+      "guidance": [
+        "Search the module catalogue before writing a raw resource.",
+        "If no module fits, ask in #cloud-platform before writing your own."
+      ],
+      "examples": {
+        "good": [
+          "module \"bucket\" {\n  source = \"git::https://github.example.com/platform/terraform-modules//gcs-bucket\"\n}"
+        ],
+        "bad": [
+          "resource \"google_storage_bucket\" \"data\" {\n  name = \"my-bucket\"\n}"
+        ]
+      },
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "A raw google_* or azurerm_* resource for which a platform module exists (bucket, database, service account, network)"
+        ],
+        "paths": [
+          "**/*.tf"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "id": "IAC-03",
+      "title": "Pin versions",
+      "level": "must",
+      "statement": "Providers and modules are pinned to an exact version or tag.",
+      "rationale": "An unpinned version changes what an apply does without any change in your code.",
+      "examples": {
+        "good": [
+          "source = \"git::https://github.example.com/platform/terraform-modules//gcs-bucket?ref=v2.4.1\""
+        ],
+        "bad": [
+          "source = \"git::https://github.example.com/platform/terraform-modules//gcs-bucket\"",
+          "version = \">= 4.0\""
+        ]
+      },
+      "verification": {
+        "method": "automated",
+        "description": "Lint rule in the Terraform pipeline."
+      },
+      "review": {
+        "lookFor": [
+          "A module source without ?ref=",
+          "A provider version constraint using >=, ~> or no version at all"
+        ],
+        "paths": [
+          "**/*.tf"
+        ],
+        "severity": "blocker"
+      }
+    },
+    {
+      "id": "IAC-04",
+      "title": "Labels on every resource",
+      "level": "must",
+      "statement": "Every resource carries the labels application-id, environment and cost-centre.",
+      "rationale": "Cost and ownership reports are built from these labels.",
+      "verification": {
+        "method": "automated",
+        "description": "Organisation policy rejects unlabeled resources."
+      },
+      "review": {
+        "lookFor": [
+          "A resource or module block without labels or tags"
+        ],
+        "paths": [
+          "**/*.tf"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "id": "IAC-05",
+      "title": "Remote, locked state",
+      "level": "must",
+      "statement": "Terraform state is stored in the platform's remote backend with locking. State files are never committed.",
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "A committed *.tfstate file",
+          "A backend \"local\" block",
+          "No backend block at all in a root module"
+        ],
+        "paths": [
+          "**/*.tf",
+          "**/*.tfstate"
+        ],
+        "severity": "blocker"
+      }
+    }
+  ]
+}

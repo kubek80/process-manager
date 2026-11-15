@@ -2,11 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://process-manager.local/schema/catalog.schema.json",
   "title": "Catalog",
-  "description": "Shared lists that processes pick from: application tiers, programming languages, teams and tools.",
+  "description": "Shared lists that processes and standards pick from: application tiers, environments, programming languages, teams and tools.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "tiers",
+    "environments",
     "languages",
     "teams",
     "tools"
@@ -20,6 +21,13 @@
       "description": "Application tiers, most critical first.",
       "items": {
         "$ref": "#/$defs/tier"
+      }
+    },
+    "environments": {
+      "type": "array",
+      "description": "Environments, in the order work moves through them.",
+      "items": {
+        "$ref": "#/$defs/environment"
       }
     },
     "languages": {
@@ -88,6 +96,15 @@
           "minLength": 1,
           "maxLength": 60
         },
+        "kind": {
+          "enum": [
+            "team",
+            "security",
+            "platform",
+            "practice"
+          ],
+          "description": "What kind of unit this is. \"team\" (default) delivers and takes part in processes. \"security\", \"platform\" and \"practice\" are units that can also issue standards."
+        },
         "contact": {
           "type": "string",
           "maxLength": 120,
@@ -126,6 +143,28 @@
       }
     },
     "language": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "environment": {
       "type": "object",
       "additionalProperties": false,
       "required": [

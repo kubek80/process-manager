@@ -24,6 +24,10 @@
     "lastReviewedAt": "2026-03-02",
     "reviewedBy": "Process owner"
   },
+  "environments": [
+    "staging",
+    "production"
+  ],
   "prerequisites": [
     {
       "title": "Agreed public hostname",

@@ -4,54 +4,34 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"sync"
 	"testing"
 
+	"github.com/kubek80/process-manager/server/internal/db/dbtest"
 	"github.com/kubek80/process-manager/server/internal/feedback"
-	"github.com/kubek80/process-manager/server/internal/feedback/feedbacktest"
 )
 
 var ctx = context.Background()
 
-func sample(step string) feedback.New {
-	return feedback.New{ProcessID: "request-gcp-project", StepID: step, Kind: "broken", Text: "The form was renamed.",
-		AuthorEmail: "sam@example.com", AuthorName: "Sam", StepHash: "abc123"}
-}
+func newStore(t *testing.T) *feedback.Store { return &feedback.Store{Pool: dbtest.NewPool(t)} }
 
-func TestMigrateIsRepeatableAndConcurrent(t *testing.T) {
-	s := feedbacktest.NewStore(t) // already migrated once
-	var wg sync.WaitGroup
-	errs := make(chan error, 4)
-	for i := 0; i < 4; i++ {
-		wg.Add(1)
-		go func() { defer wg.Done(); errs <- s.Migrate(ctx) }()
-	}
-	wg.Wait()
-	close(errs)
-	for err := range errs {
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	var n int
-	if err := s.Pool.QueryRow(ctx, `select count(*) from schema_migrations`).Scan(&n); err != nil || n != 1 {
-		t.Fatalf("migrations recorded: %d, %v", n, err)
-	}
+func sample(step string) feedback.New {
+	return feedback.New{TargetKind: "process", TargetID: "request-gcp-project", ItemID: step, Kind: "broken", Text: "The form was renamed.",
+		AuthorEmail: "sam@example.com", AuthorName: "Sam", ItemHash: "abc123"}
 }
 
 func TestCreateGetList(t *testing.T) {
-	s := feedbacktest.NewStore(t)
+	s := newStore(t)
 	a, err := s.Create(ctx, sample("raise-request"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.ID == "" || a.StepID != "raise-request" || a.StepHash != "abc123" || a.ResolvedAt != nil || a.CreatedAt.IsZero() || a.AlsoHit == nil || len(a.AlsoHit) != 0 {
+	if a.ID == "" || a.ItemID != "raise-request" || a.ItemHash != "abc123" || a.TargetKind != "process" || a.TargetID != "request-gcp-project" || a.ResolvedAt != nil || a.CreatedAt.IsZero() || a.AlsoHit == nil || len(a.AlsoHit) != 0 {
 		t.Fatalf("unexpected item: %+v", a)
 	}
 	whole := sample("")
-	whole.StepHash = ""
+	whole.ItemHash = ""
 	b, err := s.Create(ctx, whole)
-	if err != nil || b.StepID != "" || b.StepHash != "" {
+	if err != nil || b.ItemID != "" || b.ItemHash != "" {
 		t.Fatalf("process-level item: %+v %v", b, err)
 	}
 	got, err := s.Get(ctx, a.ID)
@@ -68,7 +48,7 @@ func TestCreateGetList(t *testing.T) {
 }
 
 func TestCreateRejectsUnknownKind(t *testing.T) {
-	s := feedbacktest.NewStore(t)
+	s := newStore(t)
 	bad := sample("x")
 	bad.Kind = "rant"
 	if _, err := s.Create(ctx, bad); err == nil || !strings.Contains(err.Error(), "check") {
@@ -80,7 +60,7 @@ func TestCreateRejectsUnknownKind(t *testing.T) {
 }
 
 func TestNotFound(t *testing.T) {
-	s := feedbacktest.NewStore(t)
+	s := newStore(t)
 	for _, id := range []string{"", "nope", "'; drop table feedback; --", "00000000-0000-0000-0000-000000000000"} {
 		if _, err := s.Get(ctx, id); !errors.Is(err, feedback.ErrNotFound) {
 			t.Errorf("Get(%q): %v", id, err)
@@ -98,7 +78,7 @@ func TestNotFound(t *testing.T) {
 }
 
 func TestAlsoHitIsIdempotentPerPerson(t *testing.T) {
-	s := feedbacktest.NewStore(t)
+	s := newStore(t)
 	it, _ := s.Create(ctx, sample("raise-request"))
 	for i := 0; i < 3; i++ {
 		if _, err := s.SetAlsoHit(ctx, it.ID, "kim@example.com", true); err != nil {
@@ -117,7 +97,7 @@ func TestAlsoHitIsIdempotentPerPerson(t *testing.T) {
 }
 
 func TestResolveAndReopen(t *testing.T) {
-	s := feedbacktest.NewStore(t)
+	s := newStore(t)
 	it, _ := s.Create(ctx, sample("raise-request"))
 	done, err := s.SetResolved(ctx, it.ID, true, "casey@example.com")
 	if err != nil || done.ResolvedAt == nil || done.ResolvedBy != "casey@example.com" {
@@ -134,7 +114,7 @@ func TestResolveAndReopen(t *testing.T) {
 }
 
 func TestDeleteRemovesAlsoHitRows(t *testing.T) {
-	s := feedbacktest.NewStore(t)
+	s := newStore(t)
 	it, _ := s.Create(ctx, sample("raise-request"))
 	s.SetAlsoHit(ctx, it.ID, "kim@example.com", true)
 	if err := s.Delete(ctx, it.ID); err != nil {
@@ -147,18 +127,34 @@ func TestDeleteRemovesAlsoHitRows(t *testing.T) {
 	}
 }
 
-func TestDeleteByProcessAndReset(t *testing.T) {
-	s := feedbacktest.NewStore(t)
+func TestDeleteByTargetAndReset(t *testing.T) {
+	s := newStore(t)
 	s.Create(ctx, sample("a"))
-	s.Create(ctx, sample("b"))
+	done, _ := s.Create(ctx, sample("b"))
+	s.SetResolved(ctx, done.ID, true, "casey")
 	other := sample("c")
-	other.ProcessID = "request-repository"
+	other.TargetID = "request-repository"
 	keep, _ := s.Create(ctx, other)
-	if err := s.DeleteByProcess(ctx, "request-gcp-project"); err != nil {
+	// a standard with the same id as a process is a different thing
+	std := sample("SEC-LOG-01")
+	std.TargetKind = "standard"
+	onStandard, _ := s.Create(ctx, std)
+	if onStandard.TargetKind != "standard" {
+		t.Fatalf("standard feedback: %+v", onStandard)
+	}
+	bad := sample("x")
+	bad.TargetKind = "catalog"
+	if _, err := s.Create(ctx, bad); err == nil {
+		t.Fatal("the database must refuse an unknown target kind")
+	}
+	if n, _ := s.OpenCount(ctx); n != 3 {
+		t.Fatalf("open count: %d", n)
+	}
+	if err := s.DeleteByTarget(ctx, "process", "request-gcp-project"); err != nil {
 		t.Fatal(err)
 	}
 	list, _ := s.List(ctx)
-	if len(list) != 1 || list[0].ID != keep.ID {
+	if len(list) != 2 || list[0].ID != keep.ID || list[1].ID != onStandard.ID {
 		t.Fatalf("got %+v", list)
 	}
 	if err := s.Reset(ctx); err != nil {

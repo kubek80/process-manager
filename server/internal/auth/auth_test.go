@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -70,43 +68,18 @@ func TestSessionRejectsTamperedExpiredAndForeign(t *testing.T) {
 	}
 }
 
-func TestAccessRoles(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "access.json")
-	os.WriteFile(path, []byte(`{"editors":["Alex@Example.com"],"teams":{"cloud":["casey@example.com","alex@example.com"],"net":["casey@example.com"]}}`), 0o644)
-	a, err := LoadAccess(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	alex := a.RolesOf("alex@example.com")
-	if !alex.Editor || len(alex.Teams) != 1 || !alex.MemberOf("cloud") || alex.MemberOf("net") {
-		t.Fatalf("alex: %+v", alex)
-	}
-	casey := a.RolesOf("CASEY@example.com")
-	if casey.Editor || strings.Join(casey.Teams, ",") != "cloud,net" {
-		t.Fatalf("casey: %+v", casey)
-	}
-	sam := a.RolesOf("sam@example.com")
-	if sam.Editor || sam.Teams == nil || len(sam.Teams) != 0 || sam.MemberOf("") {
-		t.Fatalf("sam: %+v", sam)
-	}
-
-	missing, err := LoadAccess(filepath.Join(dir, "nope.json"))
-	if err != nil || missing.RolesOf("alex@example.com").Editor {
-		t.Fatalf("missing file must mean no rights: %v", err)
-	}
-	os.WriteFile(path, []byte(`{broken`), 0o644)
-	if _, err := LoadAccess(path); err == nil {
-		t.Fatal("broken access file must be an error")
-	}
-}
-
 func TestDevUsers(t *testing.T) {
 	if u, ok := DevUserByEmail("alex@example.com"); !ok || u.Name != "Alex Editor" {
 		t.Fatalf("got %+v %v", u, ok)
 	}
 	if _, ok := DevUserByEmail("mallory@example.com"); ok {
 		t.Fatal("unknown dev user accepted")
+	}
+	// every role belongs to a built-in user
+	for _, r := range DevRoles {
+		if _, ok := DevUserByEmail(r.Email); !ok {
+			t.Errorf("role for unknown dev user %s", r.Email)
+		}
 	}
 }
 

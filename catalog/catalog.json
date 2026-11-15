@@ -22,6 +22,25 @@
       "description": "Internal tools and experiments."
     }
   ],
+  "environments": [
+    {
+      "id": "development",
+      "name": "Development"
+    },
+    {
+      "id": "test",
+      "name": "Test"
+    },
+    {
+      "id": "staging",
+      "name": "Staging",
+      "description": "Production-like, used for final checks."
+    },
+    {
+      "id": "production",
+      "name": "Production"
+    }
+  ],
   "languages": [
     {
       "id": "go",
@@ -44,17 +63,26 @@
     {
       "id": "api-platform-team",
       "name": "API Platform team",
+      "kind": "platform",
       "contact": "Slack #api-platform"
     },
     {
       "id": "azure-platform-team",
       "name": "Azure Platform team",
+      "kind": "platform",
       "contact": "Slack #azure-platform"
     },
     {
       "id": "cloud-platform-team",
       "name": "Cloud Platform team",
+      "kind": "platform",
       "contact": "Slack #cloud-platform"
+    },
+    {
+      "id": "security",
+      "name": "Cyber Security",
+      "kind": "security",
+      "contact": "Slack #security"
     },
     {
       "id": "dns-team",
@@ -63,12 +91,21 @@
     {
       "id": "developer-experience-team",
       "name": "Developer Experience team",
+      "kind": "platform",
       "contact": "Slack #devex"
     },
     {
       "id": "edge-cdn-team",
       "name": "Edge & CDN team",
+      "kind": "platform",
       "contact": "Slack #edge-cdn"
+    },
+    {
+      "id": "engineering-practice",
+      "name": "Engineering practice",
+      "kind": "practice",
+      "contact": "Slack #engineering-practice",
+      "description": "Guild that agrees how we write and review code."
     },
     {
       "id": "fulfilment-team",
@@ -78,10 +115,6 @@
       "id": "network-team",
       "name": "Network team",
       "contact": "Slack #network"
-    },
-    {
-      "id": "security",
-      "name": "Security"
     },
     {
       "id": "service-management",

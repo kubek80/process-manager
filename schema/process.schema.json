@@ -63,6 +63,14 @@
       },
       "description": "Ids of the programming languages this process is specific to, e.g. [\"go\"]. Leave out when the process does not depend on the language."
     },
+    "environments": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/slug"
+      },
+      "description": "Ids of the environments this process applies to, e.g. [\"production\"]. Leave out when it applies to ALL environments."
+    },
     "estimatedDuration": {
       "type": "string",
       "maxLength": 40,
@@ -126,6 +134,14 @@
       "items": {
         "$ref": "#/$defs/resource"
       }
+    },
+    "standards": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/slug"
+      },
+      "description": "Ids of the standards this process helps to meet."
     },
     "prerequisites": {
       "type": "array",

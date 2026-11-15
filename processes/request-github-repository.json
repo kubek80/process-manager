@@ -26,6 +26,9 @@
       "description": "Lets an AI coding assistant add the definition file and open the pull request."
     }
   ],
+  "standards": [
+    "code-review"
+  ],
   "prerequisites": [
     {
       "title": "GitHub Enterprise account",
