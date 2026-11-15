@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
 import type { Process } from "../types";
 import { slugify, uniqueId } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
+import { useMe } from "../lib/session";
 import { Field, Modal } from "./ui";
 import { ResourceEditor } from "./Resources";
 import { statusOf, STATUS_LABEL } from "../lib/lifecycle";
@@ -13,6 +14,7 @@ export function ProcessSettings({ process, all, onChange, onClose, onDelete }: {
   const set = (patch: Partial<Process>) => onChange({ ...process, ...patch });
   const pre = process.prerequisites;
   const actors = process.actors;
+  const writable = useMe().contentWritable;
   const { catalog } = useCatalog();
   const tiers = process.tiers ?? [];
   const langs = process.languages ?? [];
@@ -27,7 +29,7 @@ export function ProcessSettings({ process, all, onChange, onClose, onDelete }: {
 
   return (
     <Modal wide title="Process details" subtitle="Changes are applied to the draft. Press Save on the process page to write them to the file." onClose={onClose}
-      footer={<><button className="btn danger" onClick={onDelete}><Trash2 size={15} />Delete process</button><span className="spacer" /><button className="btn primary" onClick={onClose}>Done</button></>}>
+      footer={<>{writable && <button className="btn danger" onClick={onDelete}><Trash2 size={15} />Delete process</button>}<span className="spacer" /><button className="btn primary" onClick={onClose}>Done</button></>}>
       <div className="form">
         <h4>About</h4>
         <Field label="Name" hint="start with a verb"><input value={process.title} maxLength={80} onChange={(e) => set({ title: e.target.value })} /></Field>

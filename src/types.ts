@@ -58,12 +58,31 @@ export interface Tool { id: string; name: string; url?: string; description?: st
 export interface Catalog { $schema?: string; tiers: Tier[]; languages: Language[]; teams: Team[]; tools: Tool[] }
 
 export type FeedbackKind = "broken" | "outdated" | "unclear" | "idea";
+/** A feedback item as the signed-in user sees it (the server decides mine / canManage / stale). */
 export interface Feedback {
   id: string;
+  processId: string;
   stepId?: string;
   kind: FeedbackKind;
   text: string;
-  author?: string;
+  author: { name: string; email: string };
   createdAt: string;
-  resolved?: boolean;
+  resolved: boolean;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  alsoHit: number;
+  alsoHitByMe: boolean;
+  stale: boolean;
+  mine: boolean;
+  canManage: boolean;
+}
+
+export interface Me {
+  authenticated: boolean;
+  provider: "dev" | "entra" | "google";
+  contentWritable: boolean;
+  user?: { email: string; name: string };
+  editor?: boolean;
+  teams?: string[];
+  devUsers?: { email: string; name: string; about: string }[];
 }

@@ -167,6 +167,13 @@ export function validateCatalog(data: unknown): Issue[] {
   return issues;
 }
 
+/**
+ * True when the data has the shape of a process, so the map and checklist can draw it.
+ * Logic problems (a decision without paths, an unknown actor) do not count: those are fixed
+ * in the normal editor.
+ */
+export const isWellFormed = (data: unknown): boolean => validateSchema(data) as boolean;
+
 export const hasErrors = (issues: Issue[]) => issues.some((i) => i.level === "error");
 
 /** Pull a JSON object out of an LLM answer (tolerates ```json fences and chatter around it). */

@@ -8,7 +8,7 @@ Process Manager holds one description of each process. People read it in the app
 
 ```mermaid
 flowchart LR
-  files[("processes/*.json<br/>catalog/catalog.json<br/>feedback/*.json")]
+  files[("processes/*.json<br/>catalog/catalog.json")]
   app["Process Manager app"] --> files
   mcp["MCP server (planned)"] --> files
   human(["People"]) --> app
@@ -26,7 +26,7 @@ Read-only except for feedback. Every tool returns JSON that follows `schema/proc
 | `get_process` | `id` | The complete process, with team and tool ids resolved to names, contacts and links. Includes `status`, `replacedBy` and `review`. |
 | `get_my_steps` | `id`, `actor?` (default `me`) | Only that participant's steps in flow order, each with `instructions`, `tool`, `url`, `outcome`, `resources`, and what it waits for before and after. |
 | `get_catalog` | – | Teams (with contact), tools (with link), tiers, languages. |
-| `report_problem` | `processId`, `stepId?`, `kind`, `text`, `author` | Appends an entry to `feedback/<processId>.json`, the same as the flag in the app. |
+| `report_problem` | `processId`, `stepId?`, `kind`, `text` | Calls the backend's `POST /api/feedback` on behalf of the signed-in person, the same as the flag in the app. |
 
 Resources (for clients that prefer browsing to tool calls):
 

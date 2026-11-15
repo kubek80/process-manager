@@ -36,4 +36,6 @@ The task is done only when this reports 0 errors. Fix warnings too unless they a
 
 To see which processes are due for review, run `npm run reviews`.
 
-Open feedback from users is in `feedback/<process-id>.json` (`stepId`, `kind`, `text`, `resolved`). When a change fixes a reported problem, set `"resolved": true` on that entry.
+Feedback from users is stored in the backend database, not in this repository; the owner marks it as fixed in the app. Do not create a `feedback/` folder.
+
+If you changed code as well as content, run the tests: `npm run test:all` (see the README).

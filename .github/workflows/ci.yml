@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pm
+          POSTGRES_PASSWORD: pm
+          POSTGRES_DB: pm_dev
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pm -d pm_dev" --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      CI: "true"
+      PM_PG: postgres://pm:pm@localhost:5432
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - run: npm ci
+      - name: Create the test databases
+        run: psql "$PM_PG/pm_dev" -f docker/init-databases.sql
+
+      - name: Types
+        run: npm run typecheck
+      - name: Process files and catalog
+        run: npm run validate
+      - name: Frontend unit tests
+        run: npm test
+      - name: Go formatting and vet
+        working-directory: server
+        run: |
+          test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+          go vet ./...
+      - name: Go tests
+        run: npm run test:server
+      - name: Install the browser
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end tests
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results

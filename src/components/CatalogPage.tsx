@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpRight, Check, Code2, ExternalLink, Layers, Plus, Save, Search, Trash2, Undo2, Users, Wrench } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpRight, Check, Code2, Download, ExternalLink, Layers, Plus, Save, Search, Trash2, Undo2, Users, Wrench } from "lucide-react";
 import type { Catalog, Process } from "../types";
 import { slugify, uniqueId } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
 import { useEditor } from "../lib/mode";
+import { useMe } from "../lib/session";
+import { download, go } from "../lib/store";
 import { hasErrors, validateCatalog } from "../lib/validate";
-import { go } from "../lib/store";
 import { IssueList } from "./AiDialog";
 import { Field } from "./ui";
 
@@ -69,6 +70,7 @@ const strip = (r: Row): Row => Object.fromEntries(Object.entries(r).filter(([k, 
 export function CatalogPage({ processes }: { processes: Process[] }) {
   const { catalog, save } = useCatalog();
   const editor = useEditor();
+  const writable = useMe().contentWritable;
   const [draft, setDraft] = useState<Catalog>(catalog);
   const [key, setKey] = useState<Key>("teams");
   const [selected, setSelected] = useState<string | null>(null);
@@ -253,7 +255,10 @@ export function CatalogPage({ processes }: { processes: Process[] }) {
         <div className="save-bar" role="status">
           <span><b>Unsaved changes</b> to the lists</span>
           <button className="btn" onClick={() => setDraft(catalog)}><Undo2 size={16} />Discard</button>
-          <button className="btn primary" disabled={hasErrors(issues)} onClick={() => save(clean)}><Save size={16} />Save changes</button>
+          {writable
+            ? <button className="btn primary" disabled={hasErrors(issues)} onClick={() => save(clean)}><Save size={16} />Save changes</button>
+            : <button className="btn primary" disabled={hasErrors(issues)} title="The lists are read-only here. Download the file and commit it to the repository."
+                onClick={() => download("catalog.json", JSON.stringify(clean, null, 2) + "\n")}><Download size={16} />Download catalog.json</button>}
         </div>
       )}
       {editor && !dirty && <p className="saved cat-saved"><Check size={14} />All changes saved to <code>catalog/catalog.json</code></p>}

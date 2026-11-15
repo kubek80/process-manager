@@ -1,38 +1,53 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Catalog, Feedback, Process } from "../types";
+import type { Catalog, Feedback, Me, Process } from "../types";
 
 export interface Loaded { processes: Process[]; broken: { file: string; error: string }[] }
 
-export async function loadProcesses(): Promise<Loaded> {
-  const res = await fetch("/api/processes");
-  if (!res.ok) throw new Error(`Could not load processes (${res.status})`);
-  return res.json();
+export class ApiError extends Error {
+  constructor(public status: number, message: string) { super(message); }
 }
 
-export async function putProcess(p: Process): Promise<void> {
-  const res = await fetch(`/api/processes/${p.id}`, { method: "PUT", body: JSON.stringify(p) });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Save failed (${res.status})`);
+/** One place for every call to the server: JSON in and out, the CSRF header, readable errors. */
+async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: method === "GET" ? undefined : { "Content-Type": "application/json", "X-Requested-With": "process-manager" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(0, "The server cannot be reached. Is it running?");
+  }
+  if (res.status === 204) return undefined as T;
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    // the session ended: start again from the sign-in screen
+    if (res.status === 401 && path !== "/api/me") window.location.reload();
+    throw new ApiError(res.status, data?.error ?? `The server answered ${res.status}.`);
+  }
+  return data as T;
 }
 
-export async function removeProcess(id: string): Promise<void> {
-  await fetch(`/api/processes/${id}`, { method: "DELETE" });
-}
+export const loadMe = () => call<Me>("GET", "/api/me");
+export const devLogin = (email: string) => call<void>("POST", "/auth/dev/login", { email });
+export const logout = () => call<void>("POST", "/auth/logout");
+
+export const loadProcesses = () => call<Loaded>("GET", "/api/processes");
+export const putProcess = (p: Process) => call<void>("PUT", `/api/processes/${p.id}`, p);
+export const removeProcess = (id: string) => call<void>("DELETE", `/api/processes/${id}`);
 
 export async function loadCatalog(): Promise<Catalog> {
-  const c = await (await fetch("/api/catalog")).json();
+  const c = await call<Partial<Catalog>>("GET", "/api/catalog");
   return { ...c, tiers: c.tiers ?? [], languages: c.languages ?? [], teams: c.teams ?? [], tools: c.tools ?? [] };
 }
-export async function putCatalog(c: Catalog): Promise<void> {
-  const res = await fetch("/api/catalog", { method: "PUT", body: JSON.stringify(c) });
-  if (!res.ok) throw new Error(`Save failed (${res.status})`);
-}
-export async function loadFeedback(): Promise<Record<string, Feedback[]>> {
-  return (await fetch("/api/feedback")).json();
-}
-export async function putFeedback(processId: string, list: Feedback[]): Promise<void> {
-  const res = await fetch(`/api/feedback/${processId}`, { method: "PUT", body: JSON.stringify(list) });
-  if (!res.ok) throw new Error(`Save failed (${res.status})`);
-}
+export const putCatalog = (c: Catalog) => call<void>("PUT", "/api/catalog", c);
+
+export const loadFeedback = () => call<Record<string, Feedback[]>>("GET", "/api/feedback");
+export const createFeedback = (f: { processId: string; stepId?: string; kind: string; text: string }) => call<Feedback>("POST", "/api/feedback", f);
+export const setAlsoHit = (id: string, on: boolean) => call<Feedback>(on ? "POST" : "DELETE", `/api/feedback/${id}/also-hit`);
+export const setResolved = (id: string, resolved: boolean) => call<Feedback>("PATCH", `/api/feedback/${id}`, { resolved });
+export const deleteFeedback = (id: string) => call<void>("DELETE", `/api/feedback/${id}`);
 
 /** Personal "done" ticks, kept in the browser only - they are not part of the process definition. */
 export function useProgress(processId: string) {

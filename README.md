@@ -9,6 +9,8 @@ Capture platform processes (request a GCP project, a repository, Apigee or Akama
 
 ## Run it locally
 
+You need Node 22, Go 1.26 and Docker.
+
 ```bash
 npm install
 ```
@@ -17,7 +19,42 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. Nothing leaves your machine: processes are plain JSON files in `processes/`, written by the app through a small local API in `vite.config.ts`. Commit them to git like any other file.
+Open http://localhost:5173 and pick who to be:
+
+| User | Rights |
+| --- | --- |
+| Sam Consumer | Follows processes, reports problems |
+| Alex Editor | Editor: changes processes and the lists |
+| Casey Owner | Member of the Cloud Platform team, which owns “Request a GCP project” |
+
+`npm run dev` starts three things in one terminal: a Postgres container (docker compose, port 54329), the Go server (rebuilt and restarted when a `.go` file changes) and Vite with hot reload. Processes are read from and written to `processes/` in your working copy, so you can commit them. Sample feedback is added to an empty database.
+
+```bash
+npm run db:reset
+```
+
+empties the feedback tables and adds the samples again. To use a Postgres you already run instead of Docker, set `PM_PG`, for example `PM_PG=postgres://pm:pm@localhost:5432` (it needs the databases listed in `docker/init-databases.sql`).
+
+To try real sign-in locally, set `PM_AUTH=entra` or `google` with the variables in `.env.example` before `npm run dev`, and register `http://localhost:5173/auth/callback` with the provider.
+
+## Architecture
+
+Process descriptions live in this repository. A small Go server adds sign-in (Entra ID or Google), permissions, and feedback stored in Postgres. In a deployment the content is read-only and changes go through the repository; locally the app writes the files directly. Details, API and settings: [`docs/backend.md`](docs/backend.md).
+
+## Tests
+
+```bash
+npm run test:all
+```
+
+| Command | What it covers |
+| --- | --- |
+| `npm test` | Frontend logic (Vitest): checker, editing helpers, layout, life-cycle, prompt, and that every file in the repository is valid |
+| `npm run test:server` | Go server against a real Postgres: sign-in incl. a fake OpenID Connect provider, permissions, feedback, content files |
+| `npm run test:e2e` | Playwright against the real server and database: sign-in, consumer and editor journeys, feedback, lists, AI import, read-only deployment |
+| `npm run typecheck`, `npm run validate` | Types; process files and catalog |
+
+The end-to-end tests work on a copy of the content (`.e2e/`), never on your files. CI runs all of this (`.github/workflows/ci.yml`).
 
 ## Consumer and Editor
 
@@ -26,7 +63,7 @@ The switch in the top bar changes what the app offers:
 - **Consumer** – find a process, read the map, follow the checklist, look up teams and tools, flag what does not work.
 - **Editor** – everything above plus creating and changing processes, the JSON tab, the schema check, managing teams, tools and tiers, and closing feedback.
 
-It is a view, not a permission: anyone can flip it, and the choice is remembered in the browser.
+Who is an editor is set in `config/access.json`; the switch only appears for editors. The server enforces the rights, so hiding a button is never the only protection.
 
 ## Guide
 
@@ -71,7 +108,9 @@ The same catalog is meant to be consumed by AI agents through an MCP server. It 
 
 ## Feedback
 
-Anyone can flag a step (or the whole process) that does not work: *This step doesn’t work* in the step panel, the flag icon in the checklist, or *Report a problem*. Pick a kind, write a sentence, send. Open feedback shows as a red flag on the map and on the library card; the **Feedback** tab lists everything and lets the owner mark items as fixed. Feedback is stored in `feedback/<process-id>.json`, separate from the process itself.
+Anyone signed in can flag a step (or the whole process) that does not work: *This step doesn’t work* in the step panel, the flag icon in the checklist, or *Report a problem*. Pick a kind, write a sentence, send; your name comes from your sign-in. Others can add *I hit this too*, which tells the owner what to fix first. Open feedback shows as a red flag on the map and on the library card.
+
+The owner team is notified. Its members, and editors, can mark an item as fixed, which tells the reporter. If the step was changed after the feedback was written, the item says it may already be fixed. Feedback is stored in the database, not in the repository.
 
 ## Editing
 
@@ -102,7 +141,9 @@ Checks `catalog/catalog.json` and every file in `processes/` (or the files you p
 ```
 processes/            one JSON file per process (the data)
 catalog/catalog.json  teams, tools, application tiers and languages
-feedback/             one JSON file per process with user feedback
+config/access.json    who is an editor, who belongs to which team
+server/               Go backend: sign-in, permissions, feedback
+e2e/                  end-to-end tests
 schema/               JSON schemas + the example used in the LLM prompt
 .claude/skills/       instructions for AI coding assistants
 src/lib/validate.ts   schema + semantic checker (shared by app and CLI)

@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Braces, CalendarCheck, Check, Code2, Flag, Layers, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Save, Settings2, Sparkles, TriangleAlert, Undo2, Users, Workflow } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Braces, CalendarCheck, Check, Download, Code2, Flag, Layers, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Save, Settings2, Sparkles, TriangleAlert, Undo2, Users, Workflow } from "lucide-react";
 import type { Feedback, Process, Step } from "../types";
 import { addStepAfter, deleteStep, insertStep, moveStep, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
-import { hasErrors, validateProcess } from "../lib/validate";
+import { isWellFormed, validateProcess } from "../lib/validate";
 import { go, useProgress, type Tab } from "../lib/store";
 import { languageLabel, teamName, tierLabel, useCatalog } from "../lib/catalog";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { Resources } from "./Resources";
 import { FeedbackTab, openCount } from "./Feedback";
 import { useEditor } from "../lib/mode";
+import { useMe } from "../lib/session";
+import { download } from "../lib/store";
 import { FlowView } from "./FlowView";
 import { ListView } from "./ListView";
 import { StepDrawer } from "./StepDrawer";
@@ -16,8 +18,8 @@ import { ProcessSettings } from "./ProcessSettings";
 import { AiDialog, IssueList } from "./AiDialog";
 import { JsonView } from "./JsonView";
 
-export function ProcessPage({ process, all, tab, onSave, onDelete, feedback, onFeedback }: {
-  process: Process; all: Process[]; tab: Tab; feedback: Feedback[]; onFeedback: (list: Feedback[]) => void; onSave: (p: Process) => Promise<void>; onDelete: () => void;
+export function ProcessPage({ process, all, tab, onSave, onDelete, feedback }: {
+  process: Process; all: Process[]; tab: Tab; feedback: Feedback[]; onSave: (p: Process) => Promise<void>; onDelete: () => void;
 }) {
   const [draft, setDraft] = useState<Process>(process);
   const [selected, setSelected] = useState<string | null>(null);
@@ -28,6 +30,7 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback, onF
   const [reporting, setReporting] = useState(false);
   const { catalog } = useCatalog();
   const editor = useEditor();
+  const me = useMe();
   const { done, toggle, reset } = useProgress(process.id);
 
   useEffect(() => setDraft(process), [process]);
@@ -39,7 +42,7 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback, onF
   const errors = issues.filter((i) => i.level === "error").length;
   const dirty = JSON.stringify(clean) !== JSON.stringify(process);
   // A file that is broken on disk can only be repaired in the JSON tab.
-  const renderable = useMemo(() => !hasErrors(validateProcess(draft)) || !hasErrors(validateProcess(clean)), [draft, clean]);
+  const renderable = useMemo(() => isWellFormed(draft) || isWellFormed(clean), [draft, clean]);
   const view: Tab = !renderable ? "json" : tab === "json" && !editor ? "flow" : tab;
   const step = renderable ? draft.steps.find((s) => s.id === selected) : undefined;
 
@@ -66,12 +69,11 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback, onF
   const status = statusOf(draft);
   const replacement = draft.replacedBy ? all.find((p) => p.id === draft.replacedBy) : undefined;
   const markReviewed = async () => {
-    let who = "";
-    try { who = localStorage.getItem("pm:author") ?? ""; } catch { /* ignore */ }
+    const who = me.user?.name ?? "";
     const next = { ...draft, review: { intervalMonths: draft.review?.intervalMonths ?? 6, lastReviewedAt: today(), ...(who ? { reviewedBy: who } : {}) } };
     setDraft(next);
     // a pure "still correct" confirmation is saved straight away
-    if (!dirty && !errors) await onSave({ ...tidy(next), updatedAt: process.updatedAt });
+    if (!dirty && !errors && me.contentWritable) await onSave({ ...tidy(next), updatedAt: process.updatedAt });
   };
   const back = () => { if (!dirty || confirm("Leave without saving your changes?")) go({ page: "library" }); };
 
@@ -130,12 +132,18 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback, onF
         </button>}
         {dirty && <>
           <button className="btn" onClick={() => { setDraft(process); setEditing(false); }}><Undo2 size={16} />Discard</button>
-          <button className="btn primary" disabled={!!errors || saving} onClick={save} title={errors ? "Fix the problems first" : ""}><Save size={16} />Save changes</button>
+          {me.contentWritable
+            ? <button className="btn primary" disabled={!!errors || saving} onClick={save} title={errors ? "Fix the problems first" : ""}><Save size={16} />Save changes</button>
+            : <button className="btn primary" disabled={!!errors} title="Processes are read-only here. Download the file and commit it to the repository."
+                onClick={() => download(`${process.id}.json`, JSON.stringify({ ...clean, updatedAt: today() }, null, 2) + "\n")}><Download size={16} />Download file</button>}
         </>}
         {!dirty && editor && <span className="saved"><Check size={14} />Saved</span>}
       </div>
       {showIssues && issues.length > 0 && <div className="issues-panel"><IssueList issues={issues} /></div>}
 
+      {editor && dirty && !me.contentWritable && (
+        <div className="check warn banner"><TriangleAlert size={16} /><span><b>Processes are read-only here.</b> Your changes stay in this browser tab. Download the file and commit it to the repository to publish them.</span></div>
+      )}
       {status === "deprecated" && renderable && (
         <div className="check warn banner"><TriangleAlert size={16} /><span><b>This process is retired.</b>{" "}
           {replacement ? <>Use <a href={`#/p/${replacement.id}/flow`}>{replacement.title}</a> instead.</> : "It is kept for reference only."}</span></div>
@@ -187,12 +195,12 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback, onF
       {view === "list" && renderable && <ListView process={draft} all={all} done={done} toggle={toggle} reset={reset} selectedId={selected} onSelect={select}
         editable={editor} onInsert={(at, spec) => { const r = insertStep(draft, at, spec); setDraft(r.process); setSelected(r.id); setEditing(true); }}
         feedback={feedback} onReport={(id) => { setSelected(id); setEditing(false); setReporting(true); }} />}
-      {view === "feedback" && renderable && <FeedbackTab editable={editor} process={draft} feedback={feedback} onChange={onFeedback} onSelect={select} />}
+      {view === "feedback" && renderable && <FeedbackTab process={draft} feedback={feedback} onSelect={select} />}
       {view === "json" && <JsonView process={clean} knownIds={knownIds} onChange={setDraft} />}
 
       {step && (view === "flow" || view === "list") && (
         <StepDrawer editable={editor} process={draft} all={all} step={step} editing={editing} setEditing={setEditing}
-          feedback={feedback} onFeedback={onFeedback} reporting={reporting} setReporting={setReporting}
+          feedback={feedback} reporting={reporting} setReporting={setReporting}
           onClose={() => { setSelected(null); setEditing(false); }} onSelect={select}
           onChange={(patch: Partial<Step>) => setDraft(updateStep(draft, step.id, patch))}
           onTitleBlur={() => {

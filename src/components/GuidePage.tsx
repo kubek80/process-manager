@@ -78,7 +78,7 @@ export function GuidePage() {
         </Section>
 
         <Section id="modes" title="Consumer and Editor">
-          <p>The switch in the top bar decides what the app offers you. It is a view, not a permission: anyone can flip it, and it is remembered in your browser.</p>
+          <p>You sign in with your company account. Everyone is a consumer. People listed as editors also get a switch in the top bar to turn the editing controls on; the server checks the same rights, so a hidden button is never the only protection.</p>
           <div className="guide-cards two">
             <div className="mode-card">
               <h3><Eye size={18} />Consumer</h3>
@@ -87,7 +87,7 @@ export function GuidePage() {
                 <li><Check size={14} />Find a process, filter by application tier</li>
                 <li><Check size={14} />Read the map and follow the checklist</li>
                 <li><Check size={14} />Tick prerequisites and steps (kept in your browser)</li>
-                <li><Check size={14} />Flag a step that does not work</li>
+                <li><Check size={14} />Flag a step that does not work, or say “I hit this too”</li>
                 <li><Check size={14} />Look up teams and tools</li>
               </ul>
             </div>
@@ -164,6 +164,11 @@ export function GuidePage() {
         <Section id="feedback" title="Feedback">
           <p>When a step does not work, say so where you are: <Flag size={13} /> “This step doesn’t work” in the step panel, the flag on a checklist step, or “Report a problem” for the whole process. Pick a kind, write a sentence, send.</p>
           <Chart process={feedbackFlow} caption="A reported problem stays visible on the step until the owner marks it as fixed." />
+          <dl className="guide-dl">
+            <div><dt>I hit this too</dt><dd>If someone already reported your problem, add yourself with one click. The count tells the owner what to fix first.</dd></div>
+            <div><dt>Who can close it</dt><dd>Members of the team that owns the process, and editors. The reporter is told when it is marked as fixed.</dd></div>
+            <div><dt>May already be fixed</dt><dd>When a step is changed after feedback was written about it, the feedback says so. Owners can then close old items quickly.</dd></div>
+          </dl>
         </Section>
 
         <Section id="lifecycle" title="Life-cycle and reviews">
@@ -198,12 +203,13 @@ export function GuidePage() {
         </Section>
 
         <Section id="files" title="Files, schema and checker">
-          <p>Everything is a plain file in the repository, so it can be reviewed and versioned like code.</p>
+          <p>Every process is a plain file in the repository, so it can be reviewed and versioned like code. Feedback is the exception: it lives in a database, because the people who give it have no access to the repository.</p>
           <table className="guide-table">
             <tbody>
               <tr><td><code>processes/&lt;id&gt;.json</code></td><td>One process per file</td></tr>
               <tr><td><code>catalog/catalog.json</code></td><td>Teams, tools, tiers and languages</td></tr>
-              <tr><td><code>feedback/&lt;id&gt;.json</code></td><td>Feedback for one process</td></tr>
+              <tr><td><code>config/access.json</code></td><td>Who is an editor and who belongs to which team</td></tr>
+              <tr><td><code>server/</code></td><td>The backend: sign-in, permissions, feedback (<code>docs/backend.md</code>)</td></tr>
               <tr><td><code>schema/*.schema.json</code></td><td>The formats (JSON Schema)</td></tr>
               <tr><td><code>docs/llm-prompt.md</code></td><td>The AI prompt as a shareable file</td></tr>
               <tr><td><code>docs/mcp.md</code></td><td>Planned MCP contract for agents</td></tr>

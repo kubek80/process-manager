@@ -4,6 +4,7 @@ import type { Feedback, Process } from "../types";
 import { teamName, tierLabel, useCatalog } from "../lib/catalog";
 import { openCount } from "./Feedback";
 import { useEditor } from "../lib/mode";
+import { useMe } from "../lib/session";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { languageLabel } from "../lib/catalog";
 import { hasErrors, validateProcess } from "../lib/validate";
@@ -22,6 +23,7 @@ export function Library({ processes: allProcesses, broken, onNew, onAi, feedback
   const [dueOnly, setDueOnly] = useState(false);
   const { catalog } = useCatalog();
   const editor = useEditor();
+  const writable = useMe().contentWritable;
   // drafts are work in progress: only editors see them
   const processes = useMemo(() => allProcesses.filter((p) => editor || statusOf(p) !== "draft"), [allProcesses, editor]);
   const needsReview = (p: Process) => ["overdue", "soon"].includes(reviewInfo(p).state);
@@ -46,7 +48,8 @@ export function Library({ processes: allProcesses, broken, onNew, onAi, feedback
           <h1>How do I get…?</h1>
           <p className="lead">Platform processes, step by step. See who does what on the map, then follow your own checklist.</p>
         </div>
-        {editor && (
+        {editor && !writable && <p className="muted hero-note">Processes are managed in the repository here. Open one to prepare a change and download the file.</p>}
+        {editor && writable && (
           <div className="hero-actions">
             <button className="btn primary" onClick={onAi}><Sparkles size={16} />Create from text with AI</button>
             <button className="btn" onClick={onNew}><Plus size={16} />Blank process</button>

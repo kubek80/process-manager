@@ -4,13 +4,21 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "db:up": "docker compose up -d --wait db",
+    "db:down": "docker compose down",
+    "db:reset": "node scripts/dev.mjs --reset",
+    "typecheck": "tsc --noEmit",
     "validate": "tsx scripts/validate.ts",
     "prompt": "tsx scripts/prompt.ts",
     "reviews": "tsx scripts/reviews.ts",
-    "typecheck": "tsc --noEmit"
+    "test": "vitest run",
+    "test:server": "node scripts/go-test.mjs",
+    "test:e2e": "npm run build && playwright test",
+    "test:all": "npm run typecheck && npm run validate && npm test && npm run test:server && npm run test:e2e"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",
@@ -29,12 +37,14 @@
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vite": "^8.3.8"
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
   }
 }

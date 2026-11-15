@@ -8,9 +8,9 @@ import { STEP_META, STEP_TYPES } from "../lib/stepMeta";
 import { Field, TypeIcon } from "./ui";
 import { StepBody } from "./ListView";
 
-export function StepDrawer({ process, all, step, editing, setEditing, onClose, onSelect, onChange, onTitleBlur, onDelete, onMove, onAddAfter, feedback, onFeedback, reporting, setReporting, editable }: {
+export function StepDrawer({ process, all, step, editing, setEditing, onClose, onSelect, onChange, onTitleBlur, onDelete, onMove, onAddAfter, feedback, reporting, setReporting, editable }: {
   editable: boolean;
-  feedback: Feedback[]; onFeedback: (list: Feedback[]) => void; reporting: boolean; setReporting: (r: boolean) => void;
+  feedback: Feedback[]; reporting: boolean; setReporting: (r: boolean) => void;
   process: Process; all: Process[]; step: Step; editing: boolean; setEditing: (e: boolean) => void;
   onClose: () => void; onSelect: (id: string) => void;
   onChange: (patch: Partial<Step>) => void; onTitleBlur: () => void;
@@ -65,14 +65,12 @@ export function StepDrawer({ process, all, step, editing, setEditing, onClose, o
             {mine.length > 0 && (
               <ul className="fb-list">
                 {mine.map((f) => (
-                  <FeedbackItem key={f.id} item={f} process={process} hideStep editable={editable}
-                    onChange={(n) => onFeedback(feedback.map((x) => (x.id === f.id ? n : x)))}
-                    onRemove={() => onFeedback(feedback.filter((x) => x.id !== f.id))} />
+                  <FeedbackItem key={f.id} item={f} process={process} hideStep />
                 ))}
               </ul>
             )}
             {reporting
-              ? <><h4>What is wrong with this step?</h4><FeedbackForm process={process} stepId={step.id} onAdd={(f) => onFeedback([...feedback, f])} onDone={() => setReporting(false)} /></>
+              ? <><h4>What is wrong with this step?</h4><FeedbackForm process={process} stepId={step.id} onDone={() => setReporting(false)} /></>
               : <button className="btn small report-btn" onClick={() => setReporting(true)}><Flag size={14} />This step doesn’t work</button>}
           </section>
         </div>
