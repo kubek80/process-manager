@@ -1,57 +1,57 @@
-# Consuming the process catalog over MCP (planned)
+# Consuming the portal over MCP (planned)
 
 > **Status: design only.** No MCP server exists in this repository yet. This document fixes the contract so that the data model, the app and future agents move in the same direction.
 
 ## Why
 
-Process Manager holds one description of each process. People read it in the app. AI agents should read the **same** description, so that "how do I get a GCP project" has one answer whether a person or an agent asks. The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is the standard way to give an agent that access.
+Process Manager holds one description of each process and each standard. People read them in the app. AI agents should read the **same** content, so that "how do I get a GCP project" and "what must my service meet" have one answer whether a person or an agent asks. The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is the standard way to give an agent that access.
 
 ```mermaid
 flowchart LR
-  files[("processes/*.json<br/>catalog/catalog.json")]
-  app["Process Manager app"] --> files
-  mcp["MCP server (planned)"] --> files
+  db[("Database<br/>processes, standards, lists, skills")]
+  app["Process Manager app"] --> server["Server"] --> db
+  mcp["MCP server (planned)"] --> server
   human(["People"]) --> app
   agent(["AI agents"]) --> mcp
-  agent -. "runs linked skills" .-> repos["IaC and other repositories"]
+  agent -. "follows generated skills" .-> repos["Repositories"]
 ```
 
-## What the server exposes
+## What exists today
 
-Read-only except for feedback. Every tool returns JSON that follows `schema/process.schema.json` and `schema/catalog.schema.json`.
+Agents already get the knowledge as **generated skills** (see `docs/backend.md` and the Guide):
+
+- a skill per active process ("follow this process for a person"),
+- a skill per active standard ("write code that complies"),
+- a review agent per standard that has review hints ("check this pull request").
+
+They are downloaded from the portal or written to files with `npm run export -- <folder>`, and committed to the repository the agent works in. They are a snapshot: each names its version and the revision of its source.
+
+## What the MCP server will expose
+
+Read-only except for feedback. Content follows `schema/process.schema.json`, `schema/standard.schema.json` and `schema/catalog.schema.json`.
 
 | Tool | Input | Returns |
 | --- | --- | --- |
-| `search_processes` | `query?`, `tier?`, `language?`, `category?` | Matching **active** processes: `id`, `title`, `summary`, `owner`, `tiers`, `languages`, `estimatedDuration`, review state. A process without `tiers` / `languages` matches every tier / language. |
-| `get_process` | `id` | The complete process, with team and tool ids resolved to names, contacts and links. Includes `status`, `replacedBy` and `review`. |
-| `get_my_steps` | `id`, `actor?` (default `me`) | Only that participant's steps in flow order, each with `instructions`, `tool`, `url`, `outcome`, `resources`, and what it waits for before and after. |
-| `get_catalog` | – | Teams (with contact), tools (with link), tiers, languages. |
-| `report_problem` | `processId`, `stepId?`, `kind`, `text` | Calls the backend's `POST /api/feedback` on behalf of the signed-in person, the same as the flag in the app. |
+| `search_processes` | `query?`, `tier?`, `environment?`, `language?` | Matching **active** processes: `id`, `title`, `summary`, `owner`, where they apply, review state. A process without `tiers` / `environments` / `languages` matches every one. |
+| `search_standards` | `query?`, `unit?`, `tier?`, `environment?`, `language?` | Matching **active** standards, with the requirements that apply to that profile. |
+| `get_process` | `id` | The complete process, with team and tool ids resolved to names, contacts and links. |
+| `get_standard` | `id`, profile? | The complete standard; with a profile, only the requirements that apply. |
+| `get_my_steps` | `id`, `actor?` (default `me`) | Only that participant's steps in flow order, with `instructions`, `tool`, `url`, `outcome`, `resources`, and what it waits for before and after. |
+| `get_skill` | `id`, `version?` | The text of a generated skill or review agent, latest by default, with its version. |
+| `get_catalog` | – | Teams and units (with contact), tools (with link), tiers, environments, languages. |
+| `report_problem` | `targetKind`, `targetId`, `itemId?`, `kind`, `text` | Files feedback on behalf of the person the agent acts for, the same as the flag in the app. |
 
-Resources (for clients that prefer browsing to tool calls):
-
-- `process://<id>` – one process as JSON
-- `catalog://teams`, `catalog://tools`, `catalog://tiers`, `catalog://languages`
+It needs something the server does not have yet: access for machines (tokens tied to a person or a repository). Today every API call needs a browser session.
 
 ## Rules an agent must be able to rely on
 
-- `actors[0]` is always `me`: the party the agent acts for.
-- A step with `subProcessId` is described by another process; fetch it with `get_process`.
-- `resources` with `kind: "skill"` point to instructions the agent can run to do the step in self-service (for example, a skill that adds a file to the IaC repository and opens a pull request). A skill on a step applies to that step; a skill on the process applies to the whole.
-- `status: "deprecated"` means do not follow it; use `replacedBy` when present. Drafts are never returned.
-- A process whose review is overdue is still returned, with `review.state: "overdue"`, so the agent can warn the person.
+- `actors[0]` of a process is always `me`: the party the agent acts for.
+- A step with `subProcessId` is described by another process.
 - Steps of type `approval`, and anything done by an actor other than `me`, are **not** for the agent to perform. It waits and reports.
-
-## Until the server exists
-
-An agent with access to this repository can already consume the catalog:
-
-1. List `processes/*.json`; read `id`, `title`, `summary`, `tiers`, `languages`, `status` to choose one.
-2. Read the chosen file. Field meanings are in `schema/process.schema.json`.
-3. Resolve `owner`, `teamId` and `tool` ids in `catalog/catalog.json`.
-4. Follow the steps whose `actor` is `me`, in the order given by `next`.
-
-The skills in `.claude/skills/` (`edit-process`, `manage-catalog`) cover changing the data; `npm run validate` checks it.
+- A requirement of level `must` cannot be waived by the agent. If it cannot be met, the agent stops and tells the person; exceptions go through `exceptionProcessId`.
+- A requirement with `tiers`, `environments` or `languages` applies only there.
+- `status: "deprecated"` means do not follow it; use `replacedBy` when present. Drafts are never returned.
+- A process or standard whose review is overdue is still returned, marked as such, so the agent can warn the person.
 
 ## Where this leads
 

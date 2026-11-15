@@ -4,7 +4,7 @@ import { ALEX, CASEY, clearFeedback, open, report, SAM, signIn } from "./helpers
 const GCP = "request-gcp-project"; // owned by the Cloud Platform team (Casey)
 const REPO = "request-github-repository"; // owned by another team
 
-test.beforeEach(async ({ request }) => { await clearFeedback(request, GCP); await clearFeedback(request, REPO); });
+test.beforeEach(async ({ request }) => { await clearFeedback(request, "process", GCP); await clearFeedback(request, "process", REPO); });
 
 test("a consumer flags a step from the checklist and everyone sees the flag", async ({ page }) => {
   await signIn(page, SAM);
@@ -47,8 +47,8 @@ test("report on the whole process from the feedback tab; send needs a sentence",
 });
 
 test("a consumer cannot mark feedback as fixed, but can delete their own", async ({ page, request }) => {
-  await report(request, CASEY, { processId: REPO, text: "Reported by someone else." });
-  await report(request, SAM, { processId: REPO, text: "Reported by me." });
+  await report(request, CASEY, { targetId: REPO, text: "Reported by someone else." });
+  await report(request, SAM, { targetId: REPO, text: "Reported by me." });
   await signIn(page, SAM);
   await open(page, `/p/${REPO}/feedback`);
   await expect(page.locator(".fb-item")).toHaveCount(2);
@@ -63,7 +63,7 @@ test("a consumer cannot mark feedback as fixed, but can delete their own", async
 });
 
 test("“I hit this too” adds one per person and can be withdrawn", async ({ page, request }) => {
-  await report(request, SAM, { processId: GCP, stepId: "raise-request", text: "Form renamed." });
+  await report(request, SAM, { targetId: GCP, itemId: "raise-request", text: "Form renamed." });
   await signIn(page, CASEY);
   await open(page, `/p/${GCP}/feedback`);
   const item = page.locator(".fb-item");
@@ -77,8 +77,8 @@ test("“I hit this too” adds one per person and can be withdrawn", async ({ p
 });
 
 test("the owner team closes feedback on its own process only", async ({ page, request }) => {
-  await report(request, SAM, { processId: GCP, stepId: "raise-request", text: "Form renamed." });
-  await report(request, SAM, { processId: REPO, text: "Template is gone." });
+  await report(request, SAM, { targetId: GCP, itemId: "raise-request", text: "Form renamed." });
+  await report(request, SAM, { targetId: REPO, text: "Template is gone." });
   await signIn(page, CASEY); // owner of the GCP process, not an editor
 
   await open(page, `/p/${REPO}/feedback`);
@@ -99,8 +99,8 @@ test("the owner team closes feedback on its own process only", async ({ page, re
   await expect(page.getByRole("heading", { name: /1 open/ })).toBeVisible();
 });
 
-test("an editor closes feedback anywhere; feedback on a step that changed is marked", async ({ page, request }) => {
-  await report(request, SAM, { processId: REPO, stepId: "finish-setup", text: "CODEOWNERS format changed." });
+test("a process editor closes feedback on any process; feedback on a step that changed is marked", async ({ page, request }) => {
+  await report(request, SAM, { targetId: REPO, itemId: "finish-setup", text: "CODEOWNERS format changed." });
   await signIn(page, ALEX, { editor: true });
   await open(page, `/p/${REPO}/flow`);
 

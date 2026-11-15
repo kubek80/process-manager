@@ -1,6 +1,6 @@
-# One image: the Go server, the built app, and the process files from the repository.
+# One image: the Go server, the built app, the formats, and sample content for a first start.
 # Build:  docker build -t process-manager .
-# Run:    see docs/backend.md for the settings it needs (database, sign-in).
+# Run:    see docs/backend.md for the settings it needs (database, sign-in, first admins).
 
 FROM node:22-alpine AS web
 WORKDIR /app
@@ -20,13 +20,14 @@ FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 COPY --from=server /out/server /app/server
 COPY --from=web /app/dist /app/dist
-COPY processes /app/content/processes
-COPY catalog /app/content/catalog
-COPY config /app/content/config
-# Content comes from the repository: the running app never writes it.
+# The formats the server checks every save against.
+COPY schema /app/seed/schema
+# Loaded only when the database is empty. After that the database is the only source.
+COPY processes /app/seed/processes
+COPY standards /app/seed/standards
+COPY catalog /app/seed/catalog
 ENV PM_ADDR=0.0.0.0:8080 \
     PM_STATIC_DIR=/app/dist \
-    PM_CONTENT_DIR=/app/content \
-    PM_CONTENT_WRITABLE=false
+    PM_SEED_DIR=/app/seed
 EXPOSE 8080
 ENTRYPOINT ["/app/server"]

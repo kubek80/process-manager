@@ -1,4 +1,4 @@
-import type { Process, Resource, Step, StepType } from "../types";
+import type { Process, Requirement, Resource, Standard, Step, StepType } from "../types";
 
 export const slugify = (text: string) =>
   text.toLowerCase().normalize("NFKD").replace(/[^\w\s-]/g, "").trim().replace(/[\s_]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
@@ -34,6 +34,8 @@ export function tidy(p: Process): Process {
     tags: p.tags?.filter(Boolean).length ? p.tags.filter(Boolean) : undefined,
     tiers: p.tiers?.length ? p.tiers : undefined,
     languages: p.languages?.length ? p.languages : undefined,
+    environments: p.environments?.length ? p.environments : undefined,
+    standards: p.standards?.length ? p.standards : undefined,
     replacedBy: p.status === "deprecated" ? p.replacedBy : undefined,
     resources: cleanResources(p.resources),
     prerequisites: p.prerequisites.map(strip),
@@ -138,4 +140,97 @@ export function blankProcess(existingIds: string[]): Process {
     actors: [{ id: "me", name: "You" }],
     steps: [{ id: "first-step", title: "First step", actor: "me", type: "task", instructions: ["Describe exactly what to do."], next: [] }],
   };
+}
+
+// ---------- standards
+
+const list = (items?: string[]) => {
+  const out = items?.map((x) => x.trim()).filter(Boolean);
+  return out?.length ? out : undefined;
+};
+const codeList = (items?: string[]) => {
+  const out = items?.map((x) => x.replace(/\s+$/, "")).filter((x) => x.trim());
+  return out?.length ? out : undefined;
+};
+const ids = (items?: string[]) => (items?.length ? items : undefined);
+
+/** Remove empty optional fields of a standard so that what we save is clean, minimal JSON. */
+export function tidyStandard(s: Standard): Standard {
+  return strip({
+    ...s,
+    tags: list(s.tags),
+    tiers: ids(s.tiers), languages: ids(s.languages), environments: ids(s.environments),
+    replacedBy: s.status === "deprecated" ? s.replacedBy : undefined,
+    resources: cleanResources(s.resources),
+    requirements: s.requirements.map((r) => {
+      const good = codeList(r.examples?.good), bad = codeList(r.examples?.bad);
+      const lookFor = list(r.review?.lookFor);
+      return strip({
+        ...r,
+        guidance: list(r.guidance),
+        examples: good || bad ? strip({ good, bad }) : undefined,
+        verification: strip(r.verification),
+        // without anything to look for there is nothing for a reviewer: drop the block
+        review: lookFor ? strip({ ...r.review, lookFor, paths: list(r.review?.paths) }) : undefined,
+        tiers: ids(r.tiers), languages: ids(r.languages), environments: ids(r.environments),
+      });
+    }),
+  });
+}
+
+/** The next free requirement id with the prefix the standard already uses, e.g. SEC-LOG-06. */
+export function nextRequirementId(s: Standard): string {
+  const taken = new Set(s.requirements.map((r) => r.id));
+  const last = s.requirements[s.requirements.length - 1]?.id ?? "REQ-00";
+  const m = last.match(/^(.*-)(\d+)$/);
+  const prefix = m ? m[1] : `${last}-`;
+  const width = m ? m[2].length : 2;
+  for (let n = (m ? Number(m[2]) : 0) + 1; ; n++) {
+    const id = `${prefix}${String(n).padStart(width, "0")}`;
+    if (!taken.has(id)) return id;
+  }
+}
+
+export function addRequirement(s: Standard, afterId?: string): { standard: Standard; id: string } {
+  const id = nextRequirementId(s);
+  const fresh: Requirement = { id, title: "New requirement", level: "should", statement: "Say in one testable sentence what must be true.", verification: { method: "review" } };
+  const at = s.requirements.findIndex((r) => r.id === afterId);
+  const requirements = at < 0 ? [...s.requirements, fresh] : [...s.requirements.slice(0, at + 1), fresh, ...s.requirements.slice(at + 1)];
+  return { standard: { ...s, requirements }, id };
+}
+
+export const updateRequirement = (s: Standard, id: string, patch: Partial<Requirement>): Standard =>
+  ({ ...s, requirements: s.requirements.map((r) => (r.id === id ? { ...r, ...patch } : r)) });
+
+export const deleteRequirement = (s: Standard, id: string): Standard =>
+  (s.requirements.length <= 1 ? s : { ...s, requirements: s.requirements.filter((r) => r.id !== id) });
+
+export function moveRequirement(s: Standard, id: string, dir: -1 | 1): Standard {
+  const i = s.requirements.findIndex((r) => r.id === id), j = i + dir;
+  if (i < 0 || j < 0 || j >= s.requirements.length) return s;
+  const requirements = [...s.requirements];
+  [requirements[i], requirements[j]] = [requirements[j], requirements[i]];
+  return { ...s, requirements };
+}
+
+export function blankStandard(existingIds: string[], owner: string): Standard {
+  return {
+    $schema: "../schema/standard.schema.json",
+    schemaVersion: "1.0",
+    id: uniqueId("new-standard", existingIds),
+    title: "New standard",
+    summary: "Describe in one or two sentences what this standard protects or achieves.",
+    owner,
+    updatedAt: today(),
+    status: "draft",
+    review: { intervalMonths: 12 },
+    requirements: [{ id: "REQ-01", title: "First requirement", level: "must", statement: "Say in one testable sentence what must be true.", rationale: "Say which risk this removes.", verification: { method: "review" } }],
+  };
+}
+
+/** Does something limited to these tiers / languages / environments apply to this application? */
+export interface Profile { tier?: string; language?: string; environment?: string }
+export function appliesTo(holder: { tiers?: string[]; languages?: string[]; environments?: string[] }, p: Profile): boolean {
+  const ok = (ids: string[] | undefined, want?: string) => !want || !ids?.length || ids.includes(want);
+  return ok(holder.tiers, p.tier) && ok(holder.languages, p.language) && ok(holder.environments, p.environment);
 }

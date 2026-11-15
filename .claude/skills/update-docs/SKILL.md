@@ -23,8 +23,10 @@ For each change ask: would someone who uses, edits, runs or deploys the app now 
 | A flow that the Guide shows as a chart, or a new flow worth showing | `src/guide/flows.ts` (the charts are ordinary processes drawn by the app's own map) |
 | How to run, test or lay out the project; the short feature overview | `README.md` |
 | The server: API, settings, rights, database, notifications, deployment | `docs/backend.md`, `.env.example`, and the “Running it” sections of the Guide |
-| The process or catalog format (`schema/*.json`) | Field `description`s in the schema, the modelling rules in `src/lib/prompt.ts`, the “What a process is” table in `README.md`, the Guide, `docs/mcp.md`, and the skills `edit-process` / `manage-catalog` |
-| The prompt, the schema, the catalog or the list of processes | Regenerate `docs/llm-prompt.md` with `npm run prompt`. Never edit that file by hand. |
+| A format (`schema/*.json`) | Field `description`s in the schema, the modelling rules in `src/lib/prompt.ts`, the generators in `server/internal/skills`, the Guide, `docs/mcp.md`, and the skills `edit-process` / `edit-standard` / `manage-catalog` |
+| A prompt, a schema, or the sample content | Regenerate `docs/llm-prompt.md` and `docs/llm-prompt-standards.md` with `npm run prompt`. Never edit those files by hand. |
+| Roles or what they allow | The roles table in the Guide (“Signing in and your rights”), `README.md`, `docs/backend.md`, and the texts in `src/components/AdminPage.tsx` |
+| What a generated skill or review agent says | The “Skills and review agents” section of the Guide |
 | What agents will get over MCP, or anything it promises | `docs/mcp.md` (it describes a plan: keep it marked as not built) |
 | npm scripts, commands, folder names | Every place that names them: `README.md`, the Guide, `docs/backend.md`, `CLAUDE.md`, the skills in `.claude/skills/` |
 | A screen shown in a screenshot (`docs/*.png`) so that the picture is now misleading | Retake it, or say in your summary that it is out of date |

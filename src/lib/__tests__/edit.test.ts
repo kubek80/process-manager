@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { addStepAfter, blankProcess, deleteStep, insertStep, moveStep, renameStepId, slugify, tidy, uniqueId, updateStep } from "../edit";
-import { hasErrors, validateProcess } from "../validate";
-import { base } from "./fixtures";
+import {
+  addRequirement, addStepAfter, appliesTo, blankProcess, blankStandard, deleteRequirement, deleteStep, insertStep, moveRequirement, moveStep, nextRequirementId,
+  renameStepId, slugify, tidy, tidyStandard, uniqueId, updateRequirement, updateStep,
+} from "../edit";
+import { hasErrors, validateProcess, validateStandard } from "../validate";
+import { base, baseStandard } from "./fixtures";
 
 const flow = (p: ReturnType<typeof base>) => p.steps.map((s) => `${s.id}>${s.next.map((n) => (n.label ? `${n.to}(${n.label})` : n.to)).join(",")}`).join(" ");
 const spec = { title: "Check the budget", type: "review" as const, actor: "boss" };
@@ -26,6 +29,8 @@ describe("tidy", () => {
     p.category = "  ";
     p.tiers = [];
     p.languages = [];
+    p.environments = [];
+    p.standards = [];
     p.tags = ["", "gcp"];
     p.resources = [{ title: "", url: "" }, { title: "Repo", url: "https://x.example", description: "" }];
     p.steps[0] = { ...p.steps[0], tool: "", duration: " ", instructions: ["  Do it ", "", "  "], resources: [] };
@@ -36,6 +41,8 @@ describe("tidy", () => {
     expect(t).not.toHaveProperty("category");
     expect(t).not.toHaveProperty("tiers");
     expect(t).not.toHaveProperty("languages");
+    expect(t).not.toHaveProperty("environments");
+    expect(t).not.toHaveProperty("standards");
     expect(t).not.toHaveProperty("replacedBy"); // only meaningful when deprecated
     expect(t.tags).toEqual(["gcp"]);
     expect(t.resources).toEqual([{ title: "Repo", url: "https://x.example" }]);
@@ -130,5 +137,81 @@ describe("blankProcess", () => {
     expect(p.id).toBe("new-process-2");
     expect(p.status).toBe("draft");
     expect(hasErrors(validateProcess(p))).toBe(false);
+  });
+});
+
+describe("standards", () => {
+  it("tidyStandard drops what is empty and keeps what is required", () => {
+    const s = baseStandard();
+    s.scope = " ";
+    s.tiers = [];
+    s.tags = ["", "logs"];
+    s.replacedBy = "other";
+    s.requirements[0] = { ...s.requirements[0], guidance: ["  Do it ", ""], examples: { good: ["", "  ok()  \n"], bad: [] }, review: { lookFor: ["", "  A sign "], paths: [" ", "**/*.go"], severity: undefined }, tiers: [], rationale: "" };
+    s.requirements[1] = { ...s.requirements[1], review: { lookFor: ["", " "] }, examples: { good: [], bad: [""] }, verification: { method: "automated", description: "" } };
+    const t = tidyStandard(s);
+    expect(t).not.toHaveProperty("scope");
+    expect(t).not.toHaveProperty("tiers");
+    expect(t).not.toHaveProperty("replacedBy");
+    expect(t.tags).toEqual(["logs"]);
+    expect(t.requirements[0].guidance).toEqual(["Do it"]);
+    expect(t.requirements[0].examples).toEqual({ good: ["  ok()"] }); // leading spaces are part of code
+    expect(t.requirements[0].review).toEqual({ lookFor: ["A sign"], paths: ["**/*.go"] });
+    expect(t.requirements[0]).not.toHaveProperty("rationale");
+    expect(t.requirements[0]).not.toHaveProperty("tiers");
+    expect(t.requirements[1]).not.toHaveProperty("review"); // nothing to look for: no review block
+    expect(t.requirements[1]).not.toHaveProperty("examples");
+    expect(t.requirements[1].verification).toEqual({ method: "automated" });
+    expect(hasErrors(validateStandard(t))).toBe(false);
+  });
+
+  it("numbers new requirements after the last one, keeping the prefix and width", () => {
+    expect(nextRequirementId(baseStandard())).toBe("DEMO-03");
+    const s = baseStandard();
+    s.requirements[1].id = "SEC-LOG-009";
+    expect(nextRequirementId(s)).toBe("SEC-LOG-010");
+    s.requirements.push({ ...s.requirements[0], id: "SEC-LOG-010" }, { ...s.requirements[0], id: "SEC-LOG-009" });
+    s.requirements[1].id = "SEC-LOG-011";
+    expect(nextRequirementId(s)).toBe("SEC-LOG-012"); // skips ids that are taken
+    s.requirements = [{ ...s.requirements[0], id: "ODD" }];
+    expect(nextRequirementId(s)).toBe("ODD-01");
+    expect(nextRequirementId({ ...baseStandard(), requirements: [] })).toBe("REQ-01");
+  });
+
+  it("adds, changes, moves and deletes requirements", () => {
+    const added = addRequirement(baseStandard(), "DEMO-01");
+    expect(added.id).toBe("DEMO-03");
+    expect(added.standard.requirements.map((r) => r.id)).toEqual(["DEMO-01", "DEMO-03", "DEMO-02"]);
+    expect(addRequirement(baseStandard()).standard.requirements.at(-1)!.id).toBe("DEMO-03");
+    expect(hasErrors(validateStandard(added.standard))).toBe(false);
+
+    expect(updateRequirement(baseStandard(), "DEMO-02", { level: "may" }).requirements[1].level).toBe("may");
+    expect(moveRequirement(baseStandard(), "DEMO-02", -1).requirements.map((r) => r.id)).toEqual(["DEMO-02", "DEMO-01"]);
+    const s = baseStandard();
+    expect(moveRequirement(s, "DEMO-01", -1)).toBe(s);
+    expect(moveRequirement(s, "DEMO-02", 1)).toBe(s);
+    expect(moveRequirement(s, "nope", 1)).toBe(s);
+    expect(deleteRequirement(s, "DEMO-01").requirements.map((r) => r.id)).toEqual(["DEMO-02"]);
+    const one = { ...s, requirements: [s.requirements[0]] };
+    expect(deleteRequirement(one, "DEMO-01")).toBe(one); // a standard keeps at least one
+  });
+
+  it("blankStandard is a valid draft for the given unit", () => {
+    const s = blankStandard(["new-standard"], "security");
+    expect(s).toMatchObject({ id: "new-standard-2", status: "draft", owner: "security" });
+    expect(hasErrors(validateStandard(s))).toBe(false);
+  });
+});
+
+describe("appliesTo", () => {
+  const doc = { tiers: ["tier-0", "tier-1"], environments: ["production"] };
+  it("everything applies when nothing is asked", () => expect(appliesTo(doc, {})).toBe(true));
+  it("something without limits applies everywhere", () => expect(appliesTo({}, { tier: "tier-3", language: "go", environment: "test" })).toBe(true));
+  it("checks every dimension that is asked", () => {
+    expect(appliesTo(doc, { tier: "tier-0" })).toBe(true);
+    expect(appliesTo(doc, { tier: "tier-3" })).toBe(false);
+    expect(appliesTo(doc, { tier: "tier-0", environment: "test" })).toBe(false);
+    expect(appliesTo(doc, { tier: "tier-1", environment: "production", language: "python" })).toBe(true); // no language limit
+    expect(appliesTo({ tiers: [] }, { tier: "tier-3" })).toBe(true); // an empty list means all
   });
 });

@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Catalog, Feedback, Me, Process } from "../types";
-
-export interface Loaded { processes: Process[]; broken: { file: string; error: string }[] }
+import type { Assignment, AuditEntry, Catalog, DocVersion, Feedback, FeedbackByTarget, Me, Process, Role, Skill, SkillDetail, Standard, TargetKind } from "../types";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -33,21 +31,46 @@ export const loadMe = () => call<Me>("GET", "/api/me");
 export const devLogin = (email: string) => call<void>("POST", "/auth/dev/login", { email });
 export const logout = () => call<void>("POST", "/auth/logout");
 
-export const loadProcesses = () => call<Loaded>("GET", "/api/processes");
+// content: processes, standards and the lists live in the database; every save is a new revision
+export const loadProcesses = async () => (await call<{ processes: Process[] }>("GET", "/api/processes")).processes;
 export const putProcess = (p: Process) => call<void>("PUT", `/api/processes/${p.id}`, p);
 export const removeProcess = (id: string) => call<void>("DELETE", `/api/processes/${id}`);
+export const loadStandards = async () => (await call<{ standards: Standard[] }>("GET", "/api/standards")).standards;
+export const putStandard = (s: Standard) => call<void>("PUT", `/api/standards/${s.id}`, s);
+export const removeStandard = (id: string) => call<void>("DELETE", `/api/standards/${id}`);
 
 export async function loadCatalog(): Promise<Catalog> {
   const c = await call<Partial<Catalog>>("GET", "/api/catalog");
-  return { ...c, tiers: c.tiers ?? [], languages: c.languages ?? [], teams: c.teams ?? [], tools: c.tools ?? [] };
+  return { ...c, tiers: c.tiers ?? [], environments: c.environments ?? [], languages: c.languages ?? [], teams: c.teams ?? [], tools: c.tools ?? [] };
 }
 export const putCatalog = (c: Catalog) => call<void>("PUT", "/api/catalog", c);
 
-export const loadFeedback = () => call<Record<string, Feedback[]>>("GET", "/api/feedback");
-export const createFeedback = (f: { processId: string; stepId?: string; kind: string; text: string }) => call<Feedback>("POST", "/api/feedback", f);
+export const loadHistory = async (kind: TargetKind | "catalog", id: string) => (await call<{ versions: DocVersion[] }>("GET", `/api/history/${kind}/${id}`)).versions;
+export const loadVersion = <T>(kind: TargetKind | "catalog", id: string, version: number) => call<T>("GET", `/api/history/${kind}/${id}/${version}`);
+
+export async function loadFeedback(): Promise<FeedbackByTarget> {
+  const f = await call<Partial<FeedbackByTarget>>("GET", "/api/feedback");
+  return { process: f.process ?? {}, standard: f.standard ?? {} };
+}
+export const createFeedback = (f: { targetKind: TargetKind; targetId: string; itemId?: string; kind: string; text: string }) => call<Feedback>("POST", "/api/feedback", f);
 export const setAlsoHit = (id: string, on: boolean) => call<Feedback>(on ? "POST" : "DELETE", `/api/feedback/${id}/also-hit`);
 export const setResolved = (id: string, resolved: boolean) => call<Feedback>("PATCH", `/api/feedback/${id}`, { resolved });
 export const deleteFeedback = (id: string) => call<void>("DELETE", `/api/feedback/${id}`);
+
+// skills and review agents generated from processes and standards
+export const loadSkills = async () => (await call<{ skills: Skill[] }>("GET", "/api/skills")).skills;
+export const loadSkill = (id: string) => call<SkillDetail>("GET", `/api/skills/${id}`);
+export const loadSkillVersion = async (id: string, version: number) => (await call<{ content: string }>("GET", `/api/skills/${id}/versions/${version}`)).content;
+export const putSkillExtra = (id: string, extra: string) => call<SkillDetail>("PUT", `/api/skills/${id}/extra`, { extra });
+
+// admin panel
+export interface Access { assignments: Assignment[]; bootstrapAdmins: string[]; roles: Role[] }
+export const loadAccess = () => call<Access>("GET", "/api/admin/access");
+export const grantAccess = (a: { email: string; role: Role; scope: string }) => call<Access>("POST", "/api/admin/access", a);
+export const revokeAccess = (a: { email: string; role: Role; scope: string }) => call<Access>("DELETE", "/api/admin/access", a);
+export const loadAudit = async (limit = 100) => (await call<{ entries: AuditEntry[] }>("GET", `/api/admin/audit?limit=${limit}`)).entries;
+export interface SystemInfo { provider: string; baseUrl: string; notify: string; processes: number; standards: number; skills: number; assignments: number; openFeedback: number }
+export const loadSystem = () => call<SystemInfo>("GET", "/api/admin/system");
 
 /** Personal "done" ticks, kept in the browser only - they are not part of the process definition. */
 export function useProgress(processId: string) {
@@ -68,13 +91,25 @@ export function useProgress(processId: string) {
   return { done, toggle, reset };
 }
 
-export type Tab = "flow" | "list" | "feedback" | "json";
-export type Route = { page: "library" } | { page: "catalog" } | { page: "guide" } | { page: "process"; id: string; tab: Tab };
+export type Tab = "flow" | "list" | "feedback" | "skills" | "json";
+export type StandardTab = "doc" | "feedback" | "skills" | "json";
+export type AdminSection = "access" | "lists" | "skills" | "health" | "activity" | "system";
+export type Route =
+  | { page: "library" } | { page: "standards" } | { page: "catalog" } | { page: "guide" }
+  | { page: "admin"; section: AdminSection }
+  | { page: "process"; id: string; tab: Tab }
+  | { page: "standard"; id: string; tab: StandardTab };
 
 const parse = (): Route => {
-  if (location.hash.startsWith("#/catalog")) return { page: "catalog" };
-  if (location.hash.startsWith("#/guide")) return { page: "guide" };
-  const m = location.hash.match(/^#\/p\/([a-z0-9-]+)(?:\/(flow|list|feedback|json))?/);
+  const h = location.hash;
+  if (h.startsWith("#/catalog")) return { page: "catalog" };
+  if (h.startsWith("#/guide")) return { page: "guide" };
+  if (h.startsWith("#/standards")) return { page: "standards" };
+  const admin = h.match(/^#\/admin(?:\/(access|lists|skills|health|activity|system))?/);
+  if (admin) return { page: "admin", section: (admin[1] as AdminSection) ?? "access" };
+  const s = h.match(/^#\/s\/([a-z0-9-]+)(?:\/(doc|feedback|skills|json))?/);
+  if (s) return { page: "standard", id: s[1], tab: (s[2] as StandardTab) ?? "doc" };
+  const m = h.match(/^#\/p\/([a-z0-9-]+)(?:\/(flow|list|feedback|skills|json))?/);
   return m ? { page: "process", id: m[1], tab: (m[2] as Tab) ?? "flow" } : { page: "library" };
 };
 
@@ -88,7 +123,18 @@ export function useRoute(): Route {
   return route;
 }
 
-export const go = (r: Route) => { location.hash = r.page === "library" ? "#/" : r.page === "catalog" ? "#/catalog" : r.page === "guide" ? "#/guide" : `#/p/${r.id}/${r.tab}`; };
+export const href = (r: Route): string => {
+  switch (r.page) {
+    case "library": return "#/";
+    case "standards": return "#/standards";
+    case "catalog": return "#/catalog";
+    case "guide": return "#/guide";
+    case "admin": return `#/admin/${r.section}`;
+    case "standard": return `#/s/${r.id}/${r.tab}`;
+    case "process": return `#/p/${r.id}/${r.tab}`;
+  }
+};
+export const go = (r: Route) => { location.hash = href(r); };
 
 export async function copyText(text: string): Promise<boolean> {
   try { await navigator.clipboard.writeText(text); return true; } catch {

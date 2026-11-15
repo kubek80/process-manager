@@ -1,9 +1,11 @@
 # Process Manager
 
-Capture platform processes (request a GCP project, a repository, Apigee or Akamai onboarding, an Azure landing zone…) once, and read them two ways:
+A portal for two questions:
 
-- **Map** – a swim-lane flow. One lane per participant, and **the first lane is always you**.
-- **Checklist** – a numbered list that says exactly what to do, with your steps expanded and ticks to track progress.
+- **“How do I get…?”** A **process** (request a GCP project, a repository, an Akamai onboarding…) shown as a swim-lane map, where the first lane is always you, and as a checklist with the exact actions.
+- **“What must I meet?”** A **standard** issued by a unit (cyber security, a platform owner, a practice): requirements with the reason, how to comply, and how each is checked.
+
+From both, the portal generates **skills for AI coding assistants** and, for standards, **pull request review agents**, and keeps them up to date as the content changes.
 
 ![Map view](docs/map.png)
 
@@ -23,23 +25,60 @@ Open http://localhost:5173 and pick who to be:
 
 | User | Rights |
 | --- | --- |
-| Sam Consumer | Follows processes, reports problems |
-| Alex Editor | Editor: changes processes and the lists |
-| Casey Owner | Member of the Cloud Platform team, which owns “Request a GCP project” |
+| Sam Consumer | Reads, follows, reports problems |
+| Alex Editor | Edits processes and manages the lists |
+| Casey Owner | Owner for the Cloud Platform team: closes feedback on what it owns |
+| Riley Security | Edits the standards of Cyber Security |
+| Dana Admin | Everything, including who has which role |
 
-`npm run dev` starts three things in one terminal: a Postgres container (docker compose, port 54329), the Go server (rebuilt and restarted when a `.go` file changes) and Vite with hot reload. Processes are read from and written to `processes/` in your working copy, so you can commit them. Sample feedback is added to an empty database.
+`npm run dev` starts three things in one terminal: a Postgres container (docker compose, port 54329), the Go server (rebuilt and restarted when a `.go` file changes) and Vite with hot reload. An empty database is filled from the sample content in `processes/`, `standards/` and `catalog/`.
 
-```bash
-npm run db:reset
-```
+| Command | Does |
+| --- | --- |
+| `npm run db:reset` | Empties the feedback and adds the samples again |
+| `npm run db:import` | Loads the files of the repository over what is in the database |
+| `npm run export -- <folder>` | Writes the content and the generated skills to files |
 
-empties the feedback tables and adds the samples again. To use a Postgres you already run instead of Docker, set `PM_PG`, for example `PM_PG=postgres://pm:pm@localhost:5432` (it needs the databases listed in `docker/init-databases.sql`).
+To use a Postgres you already run instead of Docker, set `PM_PG`, for example `PM_PG=postgres://pm:pm@localhost:5432` (it needs the databases listed in `docker/init-databases.sql`). To try real sign-in locally, set `PM_AUTH=entra` or `google` with the variables in `.env.example`, and register `http://localhost:5173/auth/callback` with the provider.
 
-To try real sign-in locally, set `PM_AUTH=entra` or `google` with the variables in `.env.example` before `npm run dev`, and register `http://localhost:5173/auth/callback` with the provider.
+## How it is built
 
-## Architecture
+React + Vite frontend; Go server; Postgres. Everything people change lives in the database: processes, standards, the lists, roles, feedback and the generated skills, with a revision for every save. The files in this repository are the code, the formats (`schema/`) and sample content for a first start. Details, API and settings: [`docs/backend.md`](docs/backend.md).
 
-Process descriptions live in this repository. A small Go server adds sign-in (Entra ID or Google), permissions, and feedback stored in Postgres. In a deployment the content is read-only and changes go through the repository; locally the app writes the files directly. Details, API and settings: [`docs/backend.md`](docs/backend.md).
+## What is in it
+
+| | |
+| --- | --- |
+| **Processes** | Map and checklist, sub-processes, prerequisites, block types, editing on the map and in the checklist |
+| **Standards** | Requirements with level (must / should / may), reason, how to comply, examples, how it is checked, and what a reviewer looks for |
+| **Where it applies** | Application tiers, environments and programming languages, on a process, a standard or a single requirement; “My application” hides the rest |
+| **Life-cycle** | Draft, active, retired; periodic reviews by the owner; a history of every save |
+| **Feedback** | On a step or a requirement, “I hit this too”, closed by the owner, flagged when the text changed since |
+| **Skills** | Generated per process and per standard, versioned automatically, with optional hand-written guidance |
+| **Admin panel** | Roles, the lists (teams and units, tools, tiers, environments, languages), the skills registry, health, activity |
+| **AI authoring** | A self-contained prompt for any chat assistant turns text into a process or a standard; the checker validates what comes back |
+
+![A standard](docs/standard.png)
+
+The in-app **Guide** (top bar) is the main documentation and describes all of this, with flow charts drawn by the app's own map.
+
+![Guide](docs/guide.png)
+
+## Roles
+
+Everyone who signs in (Entra ID or Google) can read, tick and give feedback. Roles are given in **Admin › Access** and stored in the database:
+
+| Role | Adds |
+| --- | --- |
+| Owner (for one team or unit) | Close feedback on what it owns |
+| Process editor | Create and change processes |
+| Standards editor (one unit or all) | Create and change standards |
+| Lists manager | Teams, tools, tiers, environments, languages |
+| Admin | Everything, including roles |
+
+The first admins are named in the server setting `PM_ADMINS`.
+
+![Admin panel](docs/admin.png)
 
 ## Tests
 
@@ -49,111 +88,38 @@ npm run test:all
 
 | Command | What it covers |
 | --- | --- |
-| `npm test` | Frontend logic (Vitest): checker, editing helpers, layout, life-cycle, prompt, and that every file in the repository is valid |
-| `npm run test:server` | Go server against a real Postgres: sign-in incl. a fake OpenID Connect provider, permissions, feedback, content files |
-| `npm run test:e2e` | Playwright against the real server and database: sign-in, consumer and editor journeys, feedback, lists, AI import, read-only deployment |
-| `npm run typecheck`, `npm run validate` | Types; process files and catalog |
+| `npm test` | Frontend logic (Vitest): both checkers, editing helpers, layout, life-cycle, prompts, rights, and that every sample file is valid |
+| `npm run test:server` | Go server against a real Postgres: sign-in incl. a fake OpenID Connect provider, roles, content with revisions, skill generators, feedback, admin |
+| `npm run test:e2e` | Playwright against the real server and database: consumer and editor journeys for processes and standards, feedback, the Admin panel, skills, AI import |
+| `npm run typecheck`, `npm run validate` | Types; the sample files (or an exported folder) against the schemas and rules |
 
-The end-to-end tests work on a copy of the content (`.e2e/`), never on your files. CI runs all of this (`.github/workflows/ci.yml`).
+The end-to-end tests use their own database, emptied at the start of every run. CI runs all of this (`.github/workflows/ci.yml`).
 
-## Consumer and Editor
+## Formats and command line
 
-The switch in the top bar changes what the app offers:
+- `schema/process.schema.json`, `schema/standard.schema.json`, `schema/catalog.schema.json` define the formats (JSON Schema 2020-12). The app, the server and the command line all use them.
+- `npm run validate [folder]` checks files against the schemas and the rules a schema cannot express.
+- `npm run reviews [folder]` lists processes and standards whose review is overdue or due within 30 days, grouped by owner, and exits non-zero when something is overdue. Run it on an exported folder for live content.
+- `npm run prompt` regenerates `docs/llm-prompt.md` and `docs/llm-prompt-standards.md`, the prompts for chat assistants as shareable files.
 
-- **Consumer** – find a process, read the map, follow the checklist, look up teams and tools, flag what does not work.
-- **Editor** – everything above plus creating and changing processes, the JSON tab, the schema check, managing teams, tools and tiers, and closing feedback.
+## For agents
 
-Who is an editor is set in `config/access.json`; the switch only appears for editors. The server enforces the rights, so hiding a button is never the only protection.
+![Skills registry](docs/skills.png)
 
-## Guide
+Generated skills are how an assistant gets this knowledge today. An MCP server for live access is planned, not built: [`docs/mcp.md`](docs/mcp.md).
 
-The app has a built-in **Guide** (top bar). It is the main documentation, in three parts: using the app (signing in and rights, reading, editing, AI, feedback, reviews), where it is heading (agents, automation), and running it (how it is built, local setup, tests, deploying). Its flow charts are themselves processes, drawn by the same map.
-
-The Guide is kept current as part of every change: `CLAUDE.md` and the `update-docs` skill tell AI coding assistants to update the documentation as the last step of any task that changes code.
-
-![Guide](docs/guide.png)
-
-## How a process is described
-
-| Concept | Meaning |
-| --- | --- |
-| **Owner and tiers** | `owner` is a team from the catalog. `tiers` limits the process to some application tiers (e.g. Tier 0 and Tier 1); leave it out and it applies to all. |
-| **Languages** | `languages` limits the process to some programming languages (e.g. Go, JavaScript); leave it out when it does not depend on the language. |
-| **Life-cycle** | `status` is `draft` (editors only), `active` or `deprecated` (retired, optionally `replacedBy`). `review` sets how often the owner must confirm it is still correct. |
-| **Skills and links** | `resources` on a process or a step: self-service skills for AI assistants, repositories, templates, documentation. |
-| **Prerequisites** | What must be in place before step 1. Can point to another process that produces it. |
-| **Actors** | Who takes part. Each is a lane. `actors[0]` is always `me`. |
-| **Steps** | One action by one actor, with a block type, exact instructions, tool, link, duration and outcome. |
-| **Block types** | `form`, `code`, `approval`, `review`, `wait`, `communication`, `meeting`, `automation`, `document`, `verify`, `decision`, `subprocess`, `task` – each has its own icon and colour. |
-| **Flow** | `next` on every step. Decisions have labelled branches; loops (reject → fix → resubmit) are drawn dashed. |
-| **Sub-processes** | A step can set `subProcessId` to delegate to another process (e.g. “Raise a ServiceNow request”). |
-
-The format is defined by [`schema/process.schema.json`](schema/process.schema.json) (JSON Schema 2020-12).
-
-## Teams, tools and tiers
-
-Processes pick their owner, participants, tools, tiers and languages from shared lists in `catalog/catalog.json` (schema: `schema/catalog.schema.json`). Manage them on the **Teams, tools & tiers** page (Editor mode): pick a list, select an entry, edit it on the right, and see which processes use it. In Consumer mode the same page is a read-only directory. A tool can also be added on the spot from the tool picker of a step. An entry that is still used by a process cannot be removed.
-
-## Life-cycle and reviews
-
-New processes start as **Draft** and are hidden from consumers until an editor sets them to **Active**. An active process has a review interval (3–24 months). When it is due, editors see a badge and a banner; **Mark as reviewed** records the date and restarts the interval. A retired process stays for reference and can point to its replacement.
-
-```bash
-npm run reviews
-```
-
-Lists what is overdue or due within 30 days, grouped by owner team with its contact, and exits non-zero when something is overdue, so a scheduled job can remind the owners.
-
-## For agents (MCP, planned)
-
-The same catalog is meant to be consumed by AI agents through an MCP server. It is not implemented yet; the planned contract and how an agent can read the files today are in [`docs/mcp.md`](docs/mcp.md). The longer-term goal, an agent that follows a process for you, is described in the in-app Guide.
-
-## Feedback
-
-Anyone signed in can flag a step (or the whole process) that does not work: *This step doesn’t work* in the step panel, the flag icon in the checklist, or *Report a problem*. Pick a kind, write a sentence, send; your name comes from your sign-in. Others can add *I hit this too*, which tells the owner what to fix first. Open feedback shows as a red flag on the map and on the library card.
-
-The owner team is notified. Its members, and editors, can mark an item as fixed, which tells the reporter. If the step was changed after the feedback was written, the item says it may already be fixed. Feedback is stored in the database, not in the repository.
-
-## Editing
-
-Switch to **Editor** first.
-
-- **In the checklist** – hover between two steps and press *Insert a step here*; the same small form appears in place.
-- **On the map** – press **+** on an arrow to insert a step exactly there, or **+** on a block to add one after it (on a decision: a new branch). A small form on the map asks what happens, who does it and what kind of step it is. Drag a block to another lane to change who does it.
-- **In the side panel** – click a block → *Edit step* for instructions, tool, link and what comes next. *Details* edits the name, owner, tiers, participants and prerequisites. Changes stay in a draft until you press **Save changes**.
-- **JSON tab** – a code editor for the raw JSON: syntax colours, line numbers, folding, find, and format. Syntax errors and checker findings are marked on the line they belong to; click a finding in the side list to jump to it.
-- **With AI, any chat assistant** – *Create from text with AI* / *Change with AI*:
-  1. paste the description (or the change you want),
-  2. copy the generated prompt into Gemini / Copilot / ChatGPT / Claude,
-  3. paste the answer back. The checker validates it and, if something is wrong, gives you a *fix request* to send to the same chat.
-- **With an AI coding assistant** – edit files in `processes/` directly and run the checker. Claude Code skills in `.claude/skills/` describe how: `edit-process` (create or change a process), `manage-catalog` (add or change teams, tools, tiers and languages) and `update-docs` (bring the documentation in line after a code change).
-
-The prompt is also available as a file for sharing: [`docs/llm-prompt.md`](docs/llm-prompt.md) (regenerate with `npm run prompt`). Append the process description at the bottom.
-
-## Schema checker
-
-```bash
-npm run validate
-```
-
-Checks `catalog/catalog.json` and every file in `processes/` (or the files you pass as arguments) against the JSON schema **and** the rules a schema cannot express: unknown actors, step ids, teams, tools or tiers, duplicate ids, decisions without labelled branches, missing sub-processes, unreachable steps, processes that never end. Exits non-zero on errors, so it can run in CI. The same checker runs inside the app.
+Working on this repository with an AI coding assistant: `CLAUDE.md` and the skills in `.claude/skills/` (`edit-process`, `edit-standard`, `manage-catalog`, `update-docs`) describe how. Documentation is updated as the last step of every change.
 
 ## Layout
 
 ```
-processes/            one JSON file per process (the data)
-catalog/catalog.json  teams, tools, application tiers and languages
-config/access.json    who is an editor, who belongs to which team
-server/               Go backend: sign-in, permissions, feedback
+src/                  frontend (components, lib with checker / layout / prompts, guide)
+server/               Go backend
+schema/               formats + the examples used in the prompts
+processes/ standards/ catalog/   sample content that fills an empty database
 e2e/                  end-to-end tests
-schema/               JSON schemas + the example used in the LLM prompt
-.claude/skills/       instructions for AI coding assistants
-src/lib/validate.ts   schema + semantic checker (shared by app and CLI)
-src/lib/prompt.ts     prompt builder for browser LLMs
-src/lib/layout.ts     swim-lane layout and edge routing
-src/components/       map, checklist, step editor, AI dialog, catalog, guide
-src/guide/flows.ts    the flow charts shown in the guide
-scripts/              validate + prompt CLI
+scripts/              dev, test, validate, prompt, reviews
+docs/                 backend.md, mcp.md, generated prompts, screenshots
 ```
 
-> The six sample processes are illustrative placeholders (links point to `example.com`). Replace them with your real ones.
+> The sample processes and standards are illustrative placeholders (links point to `example.com`). Replace them with your real ones in the portal.

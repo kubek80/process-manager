@@ -1,5 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import { ALEX, open, readProcess, signIn, watchErrors } from "./helpers";
+import { expect, test } from "@playwright/test";
+import { ALEX, open, readProcess, save, signIn, watchErrors } from "./helpers";
 
 const LIB = "publish-internal-library";
 const AZURE = "request-azure-landing-zone";
@@ -9,11 +9,6 @@ test.beforeEach(async ({ page }) => {
   await page.clock.install({ time: new Date(`${NOW}T10:00:00Z`) }); // review dates depend on "today"; time still runs
   await signIn(page, ALEX, { editor: true });
 });
-
-const save = async (page: Page) => {
-  await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.locator(".saved")).toBeVisible();
-};
 
 test("insert a step on an arrow of the map, exactly between two blocks", async ({ page }) => {
   const errors = watchErrors(page);
@@ -32,11 +27,11 @@ test("insert a step on an arrow of the map, exactly between two blocks", async (
   await expect(page.locator(".block")).toHaveCount(7);
   await save(page);
 
-  const steps = readProcess(LIB).steps;
+  const steps = (await readProcess(page, LIB))!.steps;
   expect(steps.map((s: { id: string }) => s.id).slice(0, 3)).toEqual(["request-namespace", "agree-the-namespace-name", "create-namespace"]);
   expect(steps[0].next).toEqual([{ to: "agree-the-namespace-name" }]);
   expect(steps[1]).toMatchObject({ actor: "devex", type: "meeting", next: [{ to: "create-namespace" }] });
-  expect(readProcess(LIB).updatedAt).toBe(NOW);
+  expect((await readProcess(page, LIB))!.updatedAt).toBe(NOW);
   expect(errors).toEqual([]);
 });
 
@@ -44,7 +39,7 @@ test("drag a block to another lane to change who does it", async ({ page }) => {
   await open(page, `/p/${LIB}/flow`);
   await page.locator(".block", { hasText: "Tag the first version" }).dragTo(page.locator(".lane").nth(2), { targetPosition: { x: 320, y: 30 } });
   await save(page);
-  expect(readProcess(LIB).steps.find((s: { id: string }) => s.id === "tag-version").actor).toBe("pipeline");
+  expect((await readProcess(page, LIB))!.steps.find((s: { id: string }) => s.id === "tag-version").actor).toBe("pipeline");
 });
 
 test("insert a step in the checklist", async ({ page }) => {
@@ -59,7 +54,7 @@ test("insert a step in the checklist", async ({ page }) => {
   await expect(last).toContainText("Install the library from another project");
   await save(page);
 
-  const steps = readProcess(LIB).steps;
+  const steps = (await readProcess(page, LIB))!.steps;
   const i = steps.findIndex((s: { id: string }) => s.id === "announce-the-release");
   expect(steps[i - 1].id).toBe("publish-version");
   expect(steps[i - 1].next).toEqual([{ to: "announce-the-release" }]);
@@ -71,6 +66,12 @@ test("edit a step in the side panel; the checker blocks saving until it is right
   await page.locator(".block", { hasText: "Install the library from another project" }).click();
   const drawer = page.locator(".drawer");
   await drawer.getByRole("button", { name: "Edit step" }).click();
+
+  // retyping the name does not throw you out of the map, it only blocks saving
+  await drawer.getByLabel("What happens", { exact: true }).fill("x");
+  await expect(page.locator(".status.bad")).toContainText("problem");
+  await expect(page.locator(".block").first()).toBeVisible();
+  await drawer.getByLabel("What happens", { exact: true }).fill("Install the library from another project");
 
   // a decision needs two labelled paths: this one has none
   await drawer.locator(".type-opt", { hasText: "Decision" }).click();
@@ -89,7 +90,7 @@ test("edit a step in the side panel; the checker blocks saving until it is right
   await expect(drawer).toContainText("Tell the team in the channel.");
   await save(page);
 
-  const step = readProcess(LIB).steps.find((s: { id: string }) => s.id === "verify-install");
+  const step = (await readProcess(page, LIB))!.steps.find((s: { id: string }) => s.id === "verify-install");
   expect(step).toMatchObject({ type: "verify", tool: "github", duration: "15 min" });
   expect(step.instructions.at(-1)).toBe("Tell the team in the channel.");
 });
@@ -103,33 +104,35 @@ test("discard throws the draft away", async ({ page }) => {
   await page.getByRole("button", { name: "Discard" }).click();
   await expect(page.locator(".block", { hasText: "Something else entirely" })).toHaveCount(0);
   await expect(page.locator(".saved")).toBeVisible();
-  expect(readProcess(AZURE).steps[0].title).toBe("Complete the landing zone questionnaire");
+  expect((await readProcess(page, AZURE))!.steps[0].title).toBe("Complete the landing zone questionnaire");
 });
 
-test("details: restrict to tiers and a language, retire with a replacement", async ({ page }) => {
+test("details: restrict to tiers, an environment and a language, retire with a replacement", async ({ page }) => {
   await open(page, `/p/${AZURE}/flow`);
   await page.getByRole("button", { name: "Details", exact: true }).click();
   const modal = page.locator(".modal");
   await modal.getByRole("button", { name: "Tier 0", exact: true }).click();
   await modal.getByRole("button", { name: "Tier 1", exact: true }).click();
   await modal.getByRole("button", { name: "Python" }).click();
+  await modal.getByRole("button", { name: "Production", exact: true }).click();
   await modal.getByRole("button", { name: "Retired" }).click();
   await modal.getByLabel("Use instead").selectOption({ label: "Request a GCP project" });
   await modal.getByRole("button", { name: "Done" }).click();
 
   await expect(page.locator(".facts")).toContainText("Tier 0, Tier 1");
   await expect(page.locator(".facts")).toContainText("Python");
+  await expect(page.locator(".facts")).toContainText("Production");
   await expect(page.locator(".banner", { hasText: "This process is retired." }).getByRole("link", { name: "Request a GCP project" })).toBeVisible();
   await save(page);
-  expect(readProcess(AZURE)).toMatchObject({ tiers: ["tier-0", "tier-1"], languages: ["python"], status: "deprecated", replacedBy: "request-gcp-project" });
+  expect((await readProcess(page, AZURE))!).toMatchObject({ tiers: ["tier-0", "tier-1"], languages: ["python"], environments: ["production"], status: "deprecated", replacedBy: "request-gcp-project" });
 
   // put it back to active for the tests that follow
   await page.getByRole("button", { name: "Details", exact: true }).click();
   await modal.getByRole("button", { name: "Active" }).click();
   await modal.getByRole("button", { name: "Done" }).click();
   await save(page);
-  expect(readProcess(AZURE).status).toBe("active");
-  expect(readProcess(AZURE).replacedBy).toBeUndefined();
+  expect((await readProcess(page, AZURE))!.status).toBe("active");
+  expect((await readProcess(page, AZURE))!.replacedBy).toBeUndefined();
 });
 
 test("reviews: the library shows what is due, and one click confirms a process", async ({ page }) => {
@@ -145,7 +148,7 @@ test("reviews: the library shows what is due, and one click confirms a process",
   await page.getByRole("button", { name: "Mark as reviewed" }).click();
   await expect(page.locator(".banner", { hasText: "Review overdue" })).toHaveCount(0);
   await expect(page.locator(".facts")).toContainText(`Reviewed ${NOW}`);
-  await expect.poll(() => readProcess("onboard-site-to-akamai").review).toEqual({ intervalMonths: 6, lastReviewedAt: NOW, reviewedBy: "Alex Editor" });
+  await expect.poll(async () => (await readProcess(page, "onboard-site-to-akamai"))!.review).toEqual({ intervalMonths: 6, lastReviewedAt: NOW, reviewedBy: "Alex Editor" });
 });
 
 test("the JSON editor marks problems on the line and applies valid edits", async ({ page }) => {
@@ -153,7 +156,7 @@ test("the JSON editor marks problems on the line and applies valid edits", async
   const editor = page.locator(".cm-content");
   await expect(editor).toContainText('"schemaVersion"');
   const replaceAll = async (text: string) => { await editor.click(); await page.keyboard.press("ControlOrMeta+A"); await page.keyboard.insertText(text); };
-  const original = JSON.stringify(readProcess(AZURE), null, 2);
+  const original = JSON.stringify(await readProcess(page, AZURE), null, 2);
 
   await replaceAll(original.replace('"actor": "cloud-governance"', '"actor": "nobody"'));
   const finding = page.locator(".json-side .issues li", { hasText: '"nobody" is not an actor id' });
@@ -169,7 +172,26 @@ test("the JSON editor marks problems on the line and applies valid edits", async
   await replaceAll(original.replace('"estimatedDuration": "2-3 weeks"', '"estimatedDuration": "about a month"'));
   await expect(page.locator(".json-side .check.good")).toBeVisible();
   await save(page);
-  expect(readProcess(AZURE).estimatedDuration).toBe("about a month");
+  expect((await readProcess(page, AZURE))!.estimatedDuration).toBe("about a month");
   await page.getByRole("tab", { name: "Map" }).click();
   await expect(page.locator(".facts")).toContainText("about a month");
+});
+
+test("every save is a revision that can be loaded back", async ({ page }) => {
+  await open(page, `/p/${AZURE}/flow`);
+  const before = (await readProcess(page, AZURE))!.summary;
+  await page.getByRole("button", { name: "Details", exact: true }).click();
+  await page.locator(".modal").getByLabel("Summary").fill("A summary that will be taken back in a moment.");
+  await page.locator(".modal").getByRole("button", { name: "Done" }).click();
+  await save(page);
+
+  await page.getByRole("button", { name: "History" }).click();
+  const rows = page.locator(".history li");
+  await expect(rows.first()).toContainText("Current revision");
+  await expect(rows.first()).toContainText("alex@example.com");
+  await expect(rows.last()).toContainText("import"); // where it all started
+  await rows.nth(1).getByRole("button", { name: "Load into draft" }).click();
+  await expect(page.locator(".lead")).toHaveText(before);
+  await save(page);
+  expect((await readProcess(page, AZURE))!.summary).toBe(before);
 });

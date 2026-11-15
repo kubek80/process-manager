@@ -1,35 +1,42 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Braces, CalendarCheck, Check, Download, Code2, Flag, Layers, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Save, Settings2, Sparkles, TriangleAlert, Undo2, Users, Workflow } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Braces, CalendarCheck, Check, Flag, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Save, Settings2, Sparkles, TriangleAlert, Undo2, Users, Workflow, Bot, History, ShieldCheck } from "lucide-react";
 import type { Feedback, Process, Step } from "../types";
 import { addStepAfter, deleteStep, insertStep, moveStep, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
-import { isWellFormed, validateProcess } from "../lib/validate";
+import { isDrawableProcess, validateProcess } from "../lib/validate";
 import { go, useProgress, type Tab } from "../lib/store";
-import { languageLabel, teamName, tierLabel, useCatalog } from "../lib/catalog";
+import { teamName, useCatalog } from "../lib/catalog";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { Resources } from "./Resources";
-import { FeedbackTab, openCount } from "./Feedback";
+import { FeedbackTab, openCount, processTarget } from "./Feedback";
 import { useEditor } from "../lib/mode";
-import { useMe } from "../lib/session";
-import { download } from "../lib/store";
+import { useMe, usePerms } from "../lib/session";
+import { href } from "../lib/store";
 import { FlowView } from "./FlowView";
 import { ListView } from "./ListView";
 import { StepDrawer } from "./StepDrawer";
 import { ProcessSettings } from "./ProcessSettings";
-import { AiDialog, IssueList } from "./AiDialog";
+import { AiDialog, IssueList, type AiSpec } from "./AiDialog";
+import { DimTags, ReviewTag } from "./Governance";
+import { HistoryDialog } from "./HistoryDialog";
+import { SourceSkills } from "./SkillPanel";
+import { createPrompt, modifyPrompt } from "../lib/prompt";
+import { processSchema } from "../lib/validate";
+import type { Catalog, Standard } from "../types";
 import { JsonView } from "./JsonView";
 
-export function ProcessPage({ process, all, tab, onSave, onDelete, feedback }: {
-  process: Process; all: Process[]; tab: Tab; feedback: Feedback[]; onSave: (p: Process) => Promise<void>; onDelete: () => void;
+export function ProcessPage({ process, all, standards, tab, onSave, onDelete, feedback }: {
+  process: Process; all: Process[]; standards: Standard[]; tab: Tab; feedback: Feedback[]; onSave: (p: Process) => Promise<void>; onDelete: () => void;
 }) {
   const [draft, setDraft] = useState<Process>(process);
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [dialog, setDialog] = useState<null | "settings" | "ai">(null);
+  const [dialog, setDialog] = useState<null | "settings" | "ai" | "history">(null);
   const [showIssues, setShowIssues] = useState(false);
   const [saving, setSaving] = useState(false);
   const [reporting, setReporting] = useState(false);
   const { catalog } = useCatalog();
-  const editor = useEditor();
+  const perms = usePerms();
+  const editor = useEditor() && perms.processes;
   const me = useMe();
   const { done, toggle, reset } = useProgress(process.id);
 
@@ -38,11 +45,12 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback }: {
 
   const knownIds = useMemo(() => all.map((p) => p.id), [all]);
   const clean = useMemo(() => tidy(draft), [draft]);
-  const issues = useMemo(() => validateProcess(clean, { processIds: knownIds, catalog }), [clean, knownIds, catalog]);
+  const ctx = useMemo(() => ({ processIds: knownIds, standardIds: standards.map((s) => s.id), catalog }), [knownIds, standards, catalog]);
+  const issues = useMemo(() => validateProcess(clean, ctx), [clean, ctx]);
   const errors = issues.filter((i) => i.level === "error").length;
   const dirty = JSON.stringify(clean) !== JSON.stringify(process);
   // A file that is broken on disk can only be repaired in the JSON tab.
-  const renderable = useMemo(() => isWellFormed(draft) || isWellFormed(clean), [draft, clean]);
+  const renderable = useMemo(() => isDrawableProcess(draft), [draft]);
   const view: Tab = !renderable ? "json" : tab === "json" && !editor ? "flow" : tab;
   const step = renderable ? draft.steps.find((s) => s.id === selected) : undefined;
 
@@ -73,7 +81,7 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback }: {
     const next = { ...draft, review: { intervalMonths: draft.review?.intervalMonths ?? 6, lastReviewedAt: today(), ...(who ? { reviewedBy: who } : {}) } };
     setDraft(next);
     // a pure "still correct" confirmation is saved straight away
-    if (!dirty && !errors && me.contentWritable) await onSave({ ...tidy(next), updatedAt: process.updatedAt });
+    if (!dirty && !errors) await onSave({ ...tidy(next), updatedAt: process.updatedAt });
   };
   const back = () => { if (!dirty || confirm("Leave without saving your changes?")) go({ page: "library" }); };
 
@@ -91,17 +99,12 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback }: {
             {renderable && (
               <div className="facts">
                 {status !== "active" && <span className={`tier-tag status-${status}`}>{STATUS_LABEL[status]}</span>}
-                <span className={`tier-tag ${draft.tiers?.length ? "some" : ""}`}><Layers size={12} />{tierLabel(catalog, draft.tiers)}</span>
-                <span className={`tier-tag ${draft.languages?.length ? "some" : ""}`}><Code2 size={12} />{languageLabel(catalog, draft.languages)}</span>
+                <DimTags doc={draft} />
                 <span><ListChecks size={14} />{draft.steps.length} steps, {mine} for you</span>
                 <span><Users size={14} />{draft.actors.length - 1} other {draft.actors.length === 2 ? "party" : "parties"}</span>
                 {draft.estimatedDuration && <span><Clock size={14} />{draft.estimatedDuration}</span>}
                 {draft.updatedAt && <span>Updated {draft.updatedAt}</span>}
-                {review.state !== "none" && (
-                  <span className={`review-tag ${review.state}`} title={draft.review?.lastReviewedAt ? `Last reviewed ${draft.review.lastReviewedAt}${draft.review.reviewedBy ? ` by ${draft.review.reviewedBy}` : ""}` : "Never reviewed"}>
-                    <CalendarCheck size={13} />{review.state === "ok" ? `Reviewed ${draft.review?.lastReviewedAt}` : review.label}
-                  </span>
-                )}
+                <ReviewTag doc={draft} />
               </div>
             )}
           </div>
@@ -111,6 +114,7 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback }: {
                 title="Confirm that this process is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
               <button className="btn accent-soft" onClick={() => setDialog("ai")} disabled={!renderable}><Sparkles size={16} />Change with AI</button>
               <button className="btn" onClick={() => setDialog("settings")} disabled={!renderable}><Settings2 size={16} />Details</button>
+              <button className="btn" onClick={() => setDialog("history")}><History size={16} />History</button>
               <button className="btn" onClick={() => addAfter(selected)} disabled={!renderable}><Plus size={16} />Add step</button>
             </>}
             <button className="btn report-btn" onClick={() => go({ page: "process", id: process.id, tab: "feedback" })} disabled={!renderable}><Flag size={16} />Report a problem</button>
@@ -120,7 +124,7 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback }: {
 
       <div className="tabs-row">
         <div className="tabs" role="tablist">
-          {([["flow", "Map", Workflow], ["list", "Checklist", ListChecks], ["feedback", "Feedback", Flag], ["json", "JSON", Braces]] as const).filter(([id]) => editor || id !== "json").map(([id, label, Icon]) => (
+          {([["flow", "Map", Workflow], ["list", "Checklist", ListChecks], ["feedback", "Feedback", Flag], ["skills", "Skill", Bot], ["json", "JSON", Braces]] as const).filter(([id]) => editor || id !== "json").map(([id, label, Icon]) => (
             <button key={id} role="tab" aria-selected={view === id} className={view === id ? "on" : ""} disabled={!renderable && id !== "json"}
               onClick={() => go({ page: "process", id: process.id, tab: id })}><Icon size={16} />{label}{id === "feedback" && openCount(feedback) > 0 && <span className="tab-count">{openCount(feedback)}</span>}</button>
           ))}
@@ -132,18 +136,12 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback }: {
         </button>}
         {dirty && <>
           <button className="btn" onClick={() => { setDraft(process); setEditing(false); }}><Undo2 size={16} />Discard</button>
-          {me.contentWritable
-            ? <button className="btn primary" disabled={!!errors || saving} onClick={save} title={errors ? "Fix the problems first" : ""}><Save size={16} />Save changes</button>
-            : <button className="btn primary" disabled={!!errors} title="Processes are read-only here. Download the file and commit it to the repository."
-                onClick={() => download(`${process.id}.json`, JSON.stringify({ ...clean, updatedAt: today() }, null, 2) + "\n")}><Download size={16} />Download file</button>}
+          <button className="btn primary" disabled={!!errors || saving} onClick={save} title={errors ? "Fix the problems first" : ""}><Save size={16} />Save changes</button>
         </>}
         {!dirty && editor && <span className="saved"><Check size={14} />Saved</span>}
       </div>
       {showIssues && issues.length > 0 && <div className="issues-panel"><IssueList issues={issues} /></div>}
 
-      {editor && dirty && !me.contentWritable && (
-        <div className="check warn banner"><TriangleAlert size={16} /><span><b>Processes are read-only here.</b> Your changes stay in this browser tab. Download the file and commit it to the repository to publish them.</span></div>
-      )}
       {status === "deprecated" && renderable && (
         <div className="check warn banner"><TriangleAlert size={16} /><span><b>This process is retired.</b>{" "}
           {replacement ? <>Use <a href={`#/p/${replacement.id}/flow`}>{replacement.title}</a> instead.</> : "It is kept for reference only."}</span></div>
@@ -159,6 +157,18 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback }: {
         <section className="prereqs">
           <h2>Do it faster <span>self-service skills and useful links</span></h2>
           <Resources list={draft.resources} />
+        </section>
+      )}
+
+      {(view === "flow" || view === "list") && renderable && !!draft.standards?.length && (
+        <section className="prereqs">
+          <h2>Standards this helps to meet</h2>
+          <ul className="link-list row">
+            {draft.standards.map((sid) => {
+              const s = standards.find((x) => x.id === sid);
+              return <li key={sid}>{s ? <a href={href({ page: "standard", id: s.id, tab: "doc" })}><ShieldCheck size={13} />{s.title}</a> : <span className="muted">“{sid}” is not described yet</span>}</li>;
+            })}
+          </ul>
         </section>
       )}
 
@@ -195,8 +205,9 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback }: {
       {view === "list" && renderable && <ListView process={draft} all={all} done={done} toggle={toggle} reset={reset} selectedId={selected} onSelect={select}
         editable={editor} onInsert={(at, spec) => { const r = insertStep(draft, at, spec); setDraft(r.process); setSelected(r.id); setEditing(true); }}
         feedback={feedback} onReport={(id) => { setSelected(id); setEditing(false); setReporting(true); }} />}
-      {view === "feedback" && renderable && <FeedbackTab process={draft} feedback={feedback} onSelect={select} />}
-      {view === "json" && <JsonView process={clean} knownIds={knownIds} onChange={setDraft} />}
+      {view === "feedback" && renderable && <FeedbackTab target={processTarget(draft)} feedback={feedback} onSelect={select} />}
+      {view === "skills" && renderable && <SourceSkills kind="process" id={process.id} revision={process} />}
+      {view === "json" && <JsonView doc={clean} noun="process" validate={(v) => validateProcess(v, ctx)} schema={processSchema} schemaFile="schema/process.schema.json" onChange={setDraft} />}
 
       {step && (view === "flow" || view === "list") && (
         <StepDrawer editable={editor} process={draft} all={all} step={step} editing={editing} setEditing={setEditing}
@@ -214,13 +225,29 @@ export function ProcessPage({ process, all, tab, onSave, onDelete, feedback }: {
       )}
 
       {dialog === "settings" && (
-        <ProcessSettings process={draft} all={all} onChange={setDraft} onClose={() => setDialog(null)}
+        <ProcessSettings process={draft} all={all} standards={standards} onChange={setDraft} onClose={() => setDialog(null)}
           onDelete={() => { if (confirm(`Delete the process “${process.title}”? The file processes/${process.id}.json is removed.`)) onDelete(); }} />
       )}
       {dialog === "ai" && (
-        <AiDialog current={clean} all={all} onClose={() => setDialog(null)}
+        <AiDialog spec={processAiSpec(clean, all, standards, catalog)} onClose={() => setDialog(null)}
           onImport={(p) => { setDraft(p); setSelected(null); setDialog(null); }} />
       )}
+      {dialog === "history" && <HistoryDialog<Process> kind="process" id={process.id} title={process.title} onClose={() => setDialog(null)}
+        onRestore={(doc) => { setDraft(doc); setDialog(null); }} />}
     </div>
   );
+}
+
+/** Builds what the AI dialog needs for processes. */
+export function processAiSpec(current: Process | undefined, all: Process[], standards: Standard[], catalog: Catalog): AiSpec<Process> {
+  const known = all.map((p) => ({ id: p.id, title: p.title }));
+  const knownStandards = standards.map((s) => ({ id: s.id, title: s.title }));
+  return {
+    noun: "process", current, existingIds: all.map((p) => p.id),
+    prompt: (text) => (current ? modifyPrompt(current, text, known, catalog, knownStandards) : createPrompt(text, known, catalog, knownStandards)),
+    validate: (value) => validateProcess(value, { processIds: [...all.map((p) => p.id), (value as Process)?.id], standardIds: standards.map((s) => s.id), catalog }),
+    describe: (p) => `${p.steps.length} steps, ${p.actors.length} participants, ${p.prerequisites.length} prerequisites`,
+    describePlaceholder: "To get a new GCP project you first need a cost centre. Then you fill in the ‘New GCP project’ form in ServiceNow…",
+    changeExample: "After the budget approval add a security review by the Security team. If they reject, the requester updates the design.",
+  };
 }

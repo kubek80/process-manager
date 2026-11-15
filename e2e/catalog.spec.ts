@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { ALEX, open, readCatalog, readProcess, signIn } from "./helpers";
+import { ALEX, open, readCatalog, readProcess, save, signIn } from "./helpers";
+
+// Alex manages the lists: for him the Admin panel has the Lists section only.
 
 test.beforeEach(async ({ page }) => { await signIn(page, ALEX, { editor: true }); });
 
 test("add a tool, fill in its details and save", async ({ page }) => {
-  await open(page, "/catalog");
+  await open(page, "/admin/lists");
   await page.getByRole("tab", { name: /Tools/ }).click();
   await page.getByRole("button", { name: "New tool" }).click();
   await page.locator(".cat-new").getByLabel("Name").fill("Jira Service Desk");
@@ -18,27 +20,27 @@ test("add a tool, fill in its details and save", async ({ page }) => {
   await page.locator(".save-bar").getByRole("button", { name: "Save changes" }).click();
   await expect(page.locator(".cat-saved")).toBeVisible();
 
-  expect(readCatalog().tools).toContainEqual({ id: "jira-service-desk", name: "Jira Service Desk", url: "https://jira.example.com" });
+  expect((await readCatalog(page)).tools).toContainEqual({ id: "jira-service-desk", name: "Jira Service Desk", url: "https://jira.example.com" });
 });
 
 test("an entry that is in use cannot be removed; an unused one can", async ({ page }) => {
-  await open(page, "/catalog");
+  await open(page, "/admin/lists");
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   await expect(page.getByRole("button", { name: "Remove this team" })).toBeDisabled();
   await expect(page.locator(".cat-danger")).toContainText("Still used by");
   await expect(page.locator(".cat-usage")).toContainText("Request a GCP project");
 
   await page.locator(".cat-item", { hasText: "Network team" }).click();
-  await expect(page.locator(".cat-usage")).toContainText("no process yet");
+  await expect(page.locator(".cat-usage")).toContainText("nothing yet");
   await page.getByRole("button", { name: "Remove this team" }).click();
   await expect(page.locator(".cat-item", { hasText: "Network team" })).toHaveCount(0);
   await page.locator(".save-bar").getByRole("button", { name: "Save changes" }).click();
   await expect(page.locator(".cat-saved")).toBeVisible();
-  expect(readCatalog().teams.map((t: { id: string }) => t.id)).not.toContain("network-team");
+  expect((await readCatalog(page)).teams.map((t: { id: string }) => t.id)).not.toContain("network-team");
 });
 
 test("discard restores the lists; renaming keeps the id", async ({ page }) => {
-  await open(page, "/catalog");
+  await open(page, "/admin/lists");
   await page.getByRole("tab", { name: /Application tiers/ }).click();
   await page.locator(".cat-item", { hasText: "Tier 3" }).click();
   await page.locator(".cat-detail").getByLabel("Name").fill("Tier 3 (sandbox)");
@@ -56,8 +58,31 @@ test("a missing tool can be added straight from a step", async ({ page }) => {
   await drawer.getByRole("button", { name: "Edit step" }).click();
   await drawer.getByLabel("Tool").selectOption("__new");
   await expect(drawer.getByLabel("Tool")).toHaveValue("confluence");
-  await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.locator(".saved")).toBeVisible();
-  expect(readCatalog().tools).toContainEqual({ id: "confluence", name: "Confluence" });
-  expect(readProcess("raise-servicenow-request").steps[0].tool).toBe("confluence");
+  await save(page);
+  expect((await readCatalog(page)).tools).toContainEqual({ id: "confluence", name: "Confluence" });
+  expect((await readProcess(page, "raise-servicenow-request"))!.steps[0].tool).toBe("confluence");
+});
+
+test("a team becomes a unit that can issue standards; a new environment can be chosen in a process", async ({ page }) => {
+  await open(page, "/admin/lists");
+  await expect(page.locator(".admin-nav a")).toHaveText(["Lists", "Skills", "Health"]); // no Access, Activity or System for a lists manager
+  await page.locator(".cat-item", { hasText: "DNS team" }).click();
+  await expect(page.locator(".cat-detail .eyebrow")).toHaveText("Team");
+  await page.locator(".cat-detail").getByRole("button", { name: "Platform owner" }).click();
+  await expect(page.locator(".cat-detail .eyebrow")).toHaveText("Platform owner");
+
+  await page.getByRole("tab", { name: /Environments/ }).click();
+  await page.getByRole("button", { name: "New environment" }).click();
+  await page.locator(".cat-new").getByLabel("Name").fill("Pre-production");
+  await page.keyboard.press("Enter");
+  await page.locator(".save-bar").getByRole("button", { name: "Save changes" }).click();
+  await expect(page.locator(".cat-saved")).toBeVisible();
+  const catalog = await readCatalog(page);
+  expect(catalog.teams.find((t: { id: string }) => t.id === "dns-team").kind).toBe("platform");
+  expect(catalog.environments.at(-1)).toEqual({ id: "pre-production", name: "Pre-production" });
+
+  await signIn(page, ALEX, { editor: true });
+  await open(page, "/p/raise-servicenow-request/flow");
+  await page.getByRole("button", { name: "Details", exact: true }).click();
+  await expect(page.locator(".modal").getByRole("button", { name: "Pre-production" })).toBeVisible();
 });

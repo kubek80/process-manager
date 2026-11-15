@@ -133,6 +133,11 @@
       "title": "Remote, locked state",
       "level": "must",
       "statement": "Terraform state is stored in the platform's remote backend with locking. State files are never committed.",
+      "rationale": "State holds secrets and is the only record of what Terraform manages. A lost or conflicting state breaks every later change.",
+      "guidance": [
+        "Use the backend block from the platform template.",
+        "Add *.tfstate to .gitignore."
+      ],
       "verification": {
         "method": "review"
       },

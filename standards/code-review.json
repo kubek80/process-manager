@@ -85,6 +85,7 @@
       "title": "Tests with behaviour changes",
       "level": "must",
       "statement": "A change in behaviour comes with a test that fails without it.",
+      "rationale": "Without a test the behaviour can silently change back, and the reviewer has to take the change on trust.",
       "verification": {
         "method": "review"
       },

@@ -2,15 +2,17 @@ import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { json } from "@codemirror/lang-json";
-import { languageLabel, teamName, tierLabel, toolName } from "../catalog";
+import { environmentLabel, isUnit, languageLabel, teamName, tierLabel, toolName } from "../catalog";
 import { reviewInfo, statusOf } from "../lifecycle";
 import { locate } from "../jsonLocate";
-import { basePrompt, createPrompt, fixPrompt, modifyPrompt } from "../prompt";
+import { basePrompt, createPrompt, createStandardPrompt, fixPrompt, modifyPrompt, modifyStandardPrompt } from "../prompt";
+import { canEditAnyStandard, canEditSomething, canEditStandard, canOpenAdmin, roleLabel } from "../session";
+import standardSchema from "../../../schema/standard.schema.json";
 import { STEP_META, STEP_TYPES } from "../stepMeta";
 import { openCount } from "../../components/Feedback";
 import type { Feedback } from "../../types";
 import schema from "../../../schema/process.schema.json";
-import { base, catalog } from "./fixtures";
+import { base, baseStandard, catalog } from "./fixtures";
 
 describe("review life-cycle", () => {
   const today = "2026-11-15";
@@ -48,6 +50,15 @@ describe("catalog names", () => {
     expect(tierLabel(catalog, ["tier-0", "tier-1"])).toBe("Tier 0, Tier 1");
     expect(languageLabel(catalog)).toBe("Any language");
     expect(languageLabel(catalog, ["go", "javascript"])).toBe("Go, JavaScript / TypeScript");
+    expect(environmentLabel(catalog)).toBe("All environments");
+    expect(environmentLabel(catalog, ["staging", "production"])).toBe("Staging, Production");
+  });
+  it("tells units from plain teams", () => {
+    expect(isUnit(catalog, "security")).toBe(true);
+    expect(isUnit(catalog, "cloud-platform-team")).toBe(true);
+    expect(isUnit(catalog, "dns-team")).toBe(false);
+    expect(isUnit(catalog, "ghost")).toBe(false);
+    expect(isUnit(catalog)).toBe(false);
   });
 });
 
@@ -55,7 +66,9 @@ describe("the prompt for chat assistants", () => {
   const known = [{ id: "raise-servicenow-request", title: "Raise a ServiceNow request" }];
 
   it("carries the rules, the schema, the lists and an example", () => {
-    const p = createPrompt("To get VPN access you fill in a form.", known, catalog);
+    const p = createPrompt("To get VPN access you fill in a form.", known, catalog, [{ id: "secure-logging", title: "Secure logging" }]);
+    expect(p).toContain('"production" - Production');
+    expect(p).toContain('"secure-logging" - Secure logging');
     expect(p).toContain(JSON.stringify(schema));
     expect(p).toContain('"raise-servicenow-request" - Raise a ServiceNow request');
     expect(p).toContain('"cloud-platform-team" - Cloud Platform team');
@@ -121,12 +134,63 @@ describe("finding a checker path in the JSON text", () => {
 });
 
 describe("open feedback count", () => {
-  const item = (stepId: string | undefined, resolved: boolean) => ({ stepId, resolved }) as Feedback;
+  const item = (itemId: string | undefined, resolved: boolean) => ({ itemId, resolved }) as unknown as Feedback;
   const list = [item("a", false), item("a", true), item("b", false), item(undefined, false)];
   it("counts open items, optionally for one step", () => {
     expect(openCount(list)).toBe(3);
     expect(openCount(list, "a")).toBe(1);
     expect(openCount(list, "c")).toBe(0);
     expect(openCount()).toBe(0);
+  });
+});
+
+describe("the prompt for standards", () => {
+  const known = [{ id: "raise-servicenow-request", title: "Raise a ServiceNow request" }];
+  it("carries the rules, the schema, the units and an example", () => {
+    const p = createStandardPrompt("Passwords must never be logged.", catalog, known);
+    expect(p).toContain(JSON.stringify(standardSchema));
+    expect(p).toContain('"security" - Cyber Security');
+    expect(p).not.toContain('"dns-team" - DNS team'); // a plain team cannot issue a standard
+    expect(p).toContain('"production" - Production');
+    expect(p).toContain('"raise-servicenow-request" - Raise a ServiceNow request');
+    expect(p).toContain('"id": "dependency-updates"');
+    expect(p).toContain('"status": always "draft"');
+    expect(p).toContain("Passwords must never be logged.");
+    expect(createStandardPrompt(" ")).toContain("(paste the policy or guideline here)");
+  });
+  it("includes the current standard when changing one", () => {
+    const p = modifyStandardPrompt(baseStandard(), "Add a rule about audit logs.", catalog, known);
+    expect(p).toContain("CURRENT STANDARD JSON START");
+    expect(p).toContain('"id": "DEMO-01"');
+    expect(p).toContain("Add a rule about audit logs.");
+    expect(modifyStandardPrompt(baseStandard(), "")).toContain("(describe the change here)");
+  });
+});
+
+describe("rights helpers", () => {
+  const none = { admin: false, catalog: false, processes: false, standards: false, standardUnits: [] as string[], owns: [] as string[] };
+  it("a consumer can do nothing extra", () => {
+    expect(canEditSomething(none)).toBe(false);
+    expect(canOpenAdmin(none)).toBe(false);
+    expect(canEditStandard(none, "security")).toBe(false);
+    expect(roleLabel(none)).toBe("Consumer");
+  });
+  it("a unit's standards editor edits that unit only", () => {
+    const p = { ...none, standardUnits: ["security"], owns: ["security"] };
+    expect(canEditStandard(p, "security")).toBe(true);
+    expect(canEditStandard(p, "engineering-practice")).toBe(false);
+    expect(canEditStandard(p)).toBe(false);
+    expect(canEditAnyStandard(p)).toBe(true);
+    expect(canEditSomething(p)).toBe(true);
+    expect(canOpenAdmin(p)).toBe(false);
+    expect(roleLabel(p)).toBe("Standards editor · Owner");
+  });
+  it("the lists manager and the admin get the Admin panel", () => {
+    expect(canOpenAdmin({ ...none, catalog: true })).toBe(true);
+    expect(roleLabel({ ...none, catalog: true, processes: true })).toBe("Process editor · Manages the lists");
+    const admin = { admin: true, catalog: true, processes: true, standards: true, standardUnits: [], owns: [] };
+    expect(canOpenAdmin(admin)).toBe(true);
+    expect(canEditStandard(admin, "anything")).toBe(true);
+    expect(roleLabel(admin)).toBe("Admin");
   });
 });

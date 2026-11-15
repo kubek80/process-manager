@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractJson, hasErrors, validateCatalog, validateProcess } from "../validate";
+import { extractJson, hasErrors, isDrawableProcess, isDrawableStandard, validateCatalog, validateProcess, validateStandard } from "../validate";
 import * as guideFlows from "../../guide/flows";
-import { base, catalog, example, processFiles, processes } from "./fixtures";
+import { base, baseStandard, catalog, example, processFiles, processes, standardExample, standardFiles, standards } from "./fixtures";
 
-const ctx = { processIds: processes.map((p) => p.id), catalog };
+const ctx = { processIds: processes.map((p) => p.id), standardIds: standards.map((s) => s.id), catalog };
 const find = (issues: ReturnType<typeof validateProcess>, path: string) => issues.filter((i) => i.path === path);
 
 describe("the content in the repository", () => {
@@ -14,7 +14,15 @@ describe("the content in the repository", () => {
     expect(file).toBe(`${p.id}.json`);
   });
 
-  it("has a valid prompt example", () => expect(hasErrors(validateProcess(example))).toBe(false));
+  it.each(standards.map((s, i) => [standardFiles[i], s] as const))("standard %s is valid with no warnings and matches its file name", (file, s) => {
+    expect(validateStandard(s, ctx)).toEqual([]);
+    expect(file).toBe(`${s.id}.json`);
+  });
+
+  it("has valid prompt examples", () => {
+    expect(hasErrors(validateProcess(example))).toBe(false);
+    expect(hasErrors(validateStandard(standardExample, ctx))).toBe(false);
+  });
 
   // every flow chart in the guide is a process; a new one is checked without touching this test
   it.each(Object.entries(guideFlows))("guide flow chart %s is a valid process", (_name, flow) => {
@@ -77,6 +85,12 @@ describe("rules the schema cannot express", () => {
     expect(check((p) => { p.tiers = ["tier-0"]; p.languages = ["go"]; p.steps[0].tool = "servicenow"; })).toEqual([]);
   });
   it("skips catalog checks without a catalog", () => expect(validateProcess({ ...base(), tiers: ["tier-9"], owner: "ghost" })).toEqual([]));
+  it("environments and standards", () => {
+    expect(find(check((p) => (p.environments = ["moon"])), "environments[0]")[0].level).toBe("error");
+    expect(check((p) => (p.environments = ["production"]))).toEqual([]);
+    expect(find(check((p) => (p.standards = ["not-written-yet"])), "standards[0]")[0].level).toBe("warning");
+    expect(check((p) => (p.standards = ["secure-logging"]))).toEqual([]);
+  });
 
   it("life-cycle", () => {
     expect(find(check((p) => delete p.review), "review")[0].level).toBe("warning");
@@ -107,15 +121,86 @@ describe("extractJson", () => {
   it("explains broken JSON", () => expect(extractJson('{"a":}').error).toContain("not valid JSON"));
 });
 
-describe("isWellFormed", () => {
-  it("accepts a process with logic problems but rejects a wrong shape", async () => {
-    const { isWellFormed } = await import("../validate");
+describe("can it be drawn?", () => {
+  it("a process with problems can still be drawn, so it is fixed in the editor and not in the JSON tab", () => {
     const p: any = base();
-    p.steps[2].next = []; // a decision without paths: wrong, but drawable
-    expect(isWellFormed(p)).toBe(true);
+    p.steps[2].next = []; // a decision without paths
+    p.steps[0].title = ""; // a name being retyped
+    p.steps[1].actor = "nobody";
     expect(hasErrors(validateProcess(p))).toBe(true);
-    delete p.steps;
-    expect(isWellFormed(p)).toBe(false);
-    expect(isWellFormed(null)).toBe(false);
+    expect(isDrawableProcess(p)).toBe(true);
+    for (const real of processes) expect(isDrawableProcess(real), real.id).toBe(true);
   });
+  it("a process without the structure the map needs cannot", () => {
+    const broken: ((p: any) => void)[] = [
+      (p) => delete p.steps, (p) => (p.steps = []), (p) => (p.steps[0].type = "magic"), (p) => delete p.steps[0].next, (p) => (p.steps[0].next = [{}]),
+      (p) => (p.actors = []), (p) => delete p.actors[0].name, (p) => delete p.prerequisites, (p) => (p.steps[0].instructions = "do it"), (p) => (p.tiers = "tier-0"),
+      (p) => delete p.title, (p) => (p.steps[0].resources = [{ title: "x" }]),
+    ];
+    for (const mutate of broken) { const p: any = base(); mutate(p); expect(isDrawableProcess(p), mutate.toString()).toBe(false); }
+    for (const v of [null, "nope", [], 7]) expect(isDrawableProcess(v)).toBe(false);
+  });
+  it("the same for a standard", () => {
+    const s: any = baseStandard();
+    s.requirements[1].id = "DEMO-01"; // duplicate
+    s.requirements[0].title = "x"; // too short
+    expect(hasErrors(validateStandard(s))).toBe(true);
+    expect(isDrawableStandard(s)).toBe(true);
+    for (const real of standards) expect(isDrawableStandard(real), real.id).toBe(true);
+    const broken: ((s: any) => void)[] = [
+      (s) => delete s.requirements, (s) => (s.requirements = []), (s) => (s.requirements[0].level = "always"), (s) => delete s.requirements[0].verification,
+      (s) => (s.requirements[0].verification.method = "magic"), (s) => (s.requirements[0].review = {}), (s) => (s.requirements[0].examples = { good: "ok" }),
+      (s) => delete s.owner, (s) => (s.requirements[0].guidance = "do it"),
+    ];
+    for (const mutate of broken) { const x: any = baseStandard(); mutate(x); expect(isDrawableStandard(x), mutate.toString()).toBe(false); }
+    expect(isDrawableStandard(null)).toBe(false);
+  });
+});
+
+describe("standards", () => {
+  const check = (mutate: (s: any) => void, c = ctx) => { const s: any = baseStandard(); mutate(s); return validateStandard(s, c); };
+
+  it("a clean standard has no findings", () => expect(check(() => {})).toEqual([]));
+  it("explains schema errors in plain words", () => {
+    expect(check((s) => delete s.owner)[0]).toMatchObject({ level: "error", message: 'is missing the required field "owner"' });
+    expect(check((s) => (s.requirements[0].id = "demo-1"))[0].message).toContain('upper case with dashes');
+    expect(check((s) => (s.requirements[0].level = "always"))[0].message).toContain("must, should, may");
+    expect(check((s) => (s.requirements = []))[0].message).toContain("at least 1");
+    expect(check((s) => (s.requirements[0].verification = {}))[0].message).toContain('"method"');
+    expect(check((s) => (s.requirements[0].review = { lookFor: [] }))[0].message).toContain("at least 1");
+    expect(hasErrors(validateStandard("nope"))).toBe(true);
+  });
+  it("requirement ids are unique", () => expect(check((s) => (s.requirements[1].id = "DEMO-01")).some((i) => i.message.includes('duplicate requirement id "DEMO-01"'))).toBe(true));
+  it("the owner must be a unit, not a plain team", () => {
+    expect(find(check((s) => (s.owner = "ghost")), "owner")[0].message).toContain("not in the teams list");
+    expect(find(check((s) => (s.owner = "dns-team")), "owner")[0].message).toContain("is a team, not a unit");
+    expect(check((s) => (s.owner = "engineering-practice"))).toEqual([]);
+  });
+  it("tiers, languages and environments must exist, on the standard and on a requirement", () => {
+    expect(find(check((s) => (s.tiers = ["tier-9"])), "tiers[0]")[0].level).toBe("error");
+    expect(find(check((s) => (s.requirements[0].environments = ["moon"])), "requirements[0].environments[0]")[0].level).toBe("error");
+    expect(check((s) => { s.environments = ["production"]; s.requirements[0].languages = ["go"]; })).toEqual([]);
+  });
+  it("a requirement cannot be wider than its standard", () => {
+    const issues = check((s) => { s.environments = ["production"]; s.requirements[0].environments = ["production", "test"]; });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ level: "warning", path: "requirements[0].environments[1]" });
+  });
+  it("warns when a review-checked rule gives reviewers nothing to look for", () =>
+    expect(find(check((s) => delete s.requirements[0].review), "requirements[0].review")[0].message).toContain("the review agent will skip it"));
+  it("warns when a mandatory rule gives neither a reason nor how to comply", () =>
+    expect(find(check((s) => delete s.requirements[0].rationale), "requirements[0].guidance")[0].level).toBe("warning"));
+  it("references to processes and other standards", () => {
+    expect(find(check((s) => (s.exceptionProcessId = "later")), "exceptionProcessId")[0].level).toBe("warning");
+    expect(find(check((s) => (s.requirements[0].processId = "later")), "requirements[0].processId")[0].level).toBe("warning");
+    expect(check((s) => { s.exceptionProcessId = "raise-servicenow-request"; s.requirements[0].processId = "request-gcp-project"; })).toEqual([]);
+  });
+  it("life-cycle", () => {
+    expect(find(check((s) => delete s.review), "review")[0].level).toBe("warning");
+    expect(check((s) => { s.status = "draft"; delete s.review; })).toEqual([]);
+    expect(find(check((s) => (s.replacedBy = "secure-logging")), "replacedBy")[0].message).toContain("deprecated");
+    expect(hasErrors(check((s) => { s.status = "deprecated"; s.replacedBy = "demo-standard"; }))).toBe(true);
+    expect(check((s) => { s.status = "deprecated"; s.replacedBy = "secure-logging"; })).toEqual([]);
+  });
+  it("skips list checks without a catalog", () => expect(validateStandard({ ...baseStandard(), owner: "ghost", tiers: ["tier-9"] })).toEqual([]));
 });

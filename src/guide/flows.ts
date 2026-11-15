@@ -83,3 +83,16 @@ export const signInFlow = flow("guide-sign-in", "Signing in", "How you get into 
     s("rights", "Look up your rights", "app", "automation", ["use"], "editor? owner team?"),
     s("use", "Use the app", "me", "task", [], "signed in for 12 hours"),
   ]);
+
+export const standardFlow = flow("guide-standard", "From a standard to a reviewed pull request", "How a rule written by a unit reaches the code.",
+  [["app", "Process Manager"], ["dev", "Developer and AI assistant"]],
+  [
+    s("write", "Write or change the standard", "me", "document", ["generate"], "requirements"),
+    s("generate", "Generate skill and review agent", "app", "automation", ["install"], "a new version each save"),
+    s("install", "Put both files in the repository", "dev", "code", ["code"], "download or export"),
+    s("code", "Write code with the skill", "dev", "task", ["check"], "the assistant follows it"),
+    s("check", "Review agent checks the change", "dev", "review", ["found"], "cites requirement ids"),
+    s("found", "Violations?", "dev", "decision", [["fix", "Yes"], ["merge", "No"]]),
+    s("fix", "Fix, or ask for an exception", "dev", "code", ["check"]),
+    s("merge", "Merge", "dev", "verify", []),
+  ], "Unit");

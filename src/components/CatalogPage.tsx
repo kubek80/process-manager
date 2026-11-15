@@ -1,25 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpRight, Check, Code2, Download, ExternalLink, Layers, Plus, Save, Search, Trash2, Undo2, Users, Wrench } from "lucide-react";
-import type { Catalog, Process } from "../types";
+import { ArrowDown, ArrowUp, ArrowUpRight, Check, Code2, Server, ExternalLink, Layers, Plus, Save, Search, Trash2, Undo2, Users, Wrench } from "lucide-react";
+import type { Catalog, Process, Standard } from "../types";
 import { slugify, uniqueId } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
-import { useEditor } from "../lib/mode";
-import { useMe } from "../lib/session";
-import { download, go } from "../lib/store";
+import { UNIT_KINDS } from "../lib/catalog";
+import { go } from "../lib/store";
 import { hasErrors, validateCatalog } from "../lib/validate";
 import { IssueList } from "./AiDialog";
 import { Field } from "./ui";
 
-type Key = "teams" | "tools" | "tiers" | "languages";
-type Row = { id: string; name: string; contact?: string; url?: string; description?: string };
+type Key = "teams" | "tools" | "tiers" | "environments" | "languages";
+type Row = { id: string; name: string; kind?: string; contact?: string; url?: string; description?: string };
 
 const KINDS: Record<Key, {
   title: string; noun: string; icon: typeof Users; color: string; blurb: string;
   fields: { field: "contact" | "url" | "description"; label: string; placeholder: string; long?: boolean }[];
 }> = {
   teams: {
-    title: "Teams", noun: "team", icon: Users, color: "#0d9488",
-    blurb: "Teams own processes and appear as lanes on the map.",
+    title: "Teams and units", noun: "team", icon: Users, color: "#0d9488",
+    blurb: "Teams own processes. Units also issue standards.",
     fields: [
       { field: "contact", label: "How to reach them", placeholder: "Slack #cloud-platform, a mailbox or a queue" },
       { field: "description", label: "What they do", placeholder: "One sentence on what this team is responsible for", long: true },
@@ -38,28 +37,38 @@ const KINDS: Record<Key, {
     blurb: "A process applies to every tier or to a chosen few. Most critical first.",
     fields: [{ field: "description", label: "What makes an application this tier", placeholder: "e.g. Outage stops the business", long: true }],
   },
+  environments: {
+    title: "Environments", noun: "environment", icon: Server, color: "#0284c7",
+    blurb: "Where things run. In the order work moves through them.",
+    fields: [{ field: "description", label: "Notes", placeholder: "e.g. Production-like, used for final checks", long: true }],
+  },
   languages: {
     title: "Languages", noun: "language", icon: Code2, color: "#db2777",
     blurb: "Some processes only apply to one language. Most apply to any.",
     fields: [{ field: "description", label: "Notes", placeholder: "e.g. Includes TypeScript", long: true }],
   },
 };
-const KEYS: Key[] = ["teams", "tools", "tiers", "languages"];
+const KEYS: Key[] = ["teams", "tools", "tiers", "environments", "languages"];
+const ORDERED: Key[] = ["tiers", "environments"]; // lists whose order means something
 
-interface Use { process: Process; how: string }
+interface Use { process: Process | Standard; how: string }
 
-function usesOf(key: Key, id: string, processes: Process[]): Use[] {
+function usesOf(key: Key, id: string, processes: (Process | Standard)[]): Use[] {
   const out: Use[] = [];
   for (const p of processes) {
     const how: string[] = [];
     if (key === "teams") {
       if (p.owner === id) how.push("owns it");
-      if (p.actors?.some((a) => a.teamId === id)) how.push("takes part");
+      if ("actors" in p && p.actors?.some((a) => a.teamId === id)) how.push("takes part");
+      if ("requirements" in p && p.owner === id) { how.pop(); how.push("issues this standard"); }
     } else if (key === "tools") {
-      const n = p.steps?.filter((s) => s.tool === id).length ?? 0;
+      const n = "steps" in p ? p.steps?.filter((s) => s.tool === id).length ?? 0 : 0;
       if (n) how.push(`${n} step${n > 1 ? "s" : ""}`);
-    } else if (key === "tiers") { if (p.tiers?.includes(id)) how.push("applies to this tier"); }
-    else if (p.languages?.includes(id)) how.push("specific to this language");
+    } else {
+      const inReq = "requirements" in p && p.requirements.some((r) => r[key]?.includes(id));
+      if (p[key]?.includes(id)) how.push(key === "languages" ? "specific to this language" : `applies to this ${key === "tiers" ? "tier" : "environment"}`);
+      else if (inReq) how.push("one of its requirements");
+    }
     if (how.length) out.push({ process: p, how: how.join(" · ") });
   }
   return out;
@@ -67,10 +76,10 @@ function usesOf(key: Key, id: string, processes: Process[]): Use[] {
 
 const strip = (r: Row): Row => Object.fromEntries(Object.entries(r).filter(([k, v]) => k === "id" || k === "name" || (v ?? "").trim() !== "")) as Row;
 
-export function CatalogPage({ processes }: { processes: Process[] }) {
+/** The lists. Read-only it is a directory for everyone; editable it is the Lists section of the Admin panel. */
+export function CatalogPage({ processes, standards, editable: editor }: { processes: Process[]; standards: Standard[]; editable: boolean }) {
   const { catalog, save } = useCatalog();
-  const editor = useEditor();
-  const writable = useMe().contentWritable;
+  const docs = useMemo<(Process | Standard)[]>(() => [...processes, ...standards], [processes, standards]);
   const [draft, setDraft] = useState<Catalog>(catalog);
   const [key, setKey] = useState<Key>("teams");
   const [selected, setSelected] = useState<string | null>(null);
@@ -78,9 +87,8 @@ export function CatalogPage({ processes }: { processes: Process[] }) {
   const [newName, setNewName] = useState("");
   const [q, setQ] = useState("");
   useEffect(() => setDraft(catalog), [catalog]);
-  useEffect(() => { if (!editor) { setDraft(catalog); setAdding(false); } }, [editor, catalog]);
 
-  const clean = useMemo<Catalog>(() => ({ ...draft, teams: draft.teams.map(strip), tools: draft.tools.map(strip), tiers: draft.tiers.map(strip), languages: draft.languages.map(strip) }) as Catalog, [draft]);
+  const clean = useMemo<Catalog>(() => ({ ...draft, teams: draft.teams.map(strip), tools: draft.tools.map(strip), tiers: draft.tiers.map(strip), environments: draft.environments.map(strip), languages: draft.languages.map(strip) }) as Catalog, [draft]);
   const dirty = JSON.stringify(clean) !== JSON.stringify(catalog);
   const issues = validateCatalog(clean);
 
@@ -88,7 +96,7 @@ export function CatalogPage({ processes }: { processes: Process[] }) {
   const rows = draft[key] as Row[];
   const shown = rows.filter((r) => `${r.name} ${r.contact ?? ""} ${r.description ?? ""} ${r.url ?? ""}`.toLowerCase().includes(q.toLowerCase()));
   const current = adding ? undefined : rows.find((r) => r.id === selected) ?? shown[0];
-  const uses = current ? usesOf(key, current.id, processes) : [];
+  const uses = current ? usesOf(key, current.id, docs) : [];
   const isNew = (id: string) => !(catalog[key] as Row[]).some((r) => r.id === id);
 
   const setRows = (next: Row[]) => setDraft({ ...draft, [key]: next });
@@ -110,15 +118,15 @@ export function CatalogPage({ processes }: { processes: Process[] }) {
   const switchTo = (k: Key) => { setKey(k); setSelected(null); setAdding(false); setQ(""); };
 
   return (
-    <div className="page catalog-page">
-      <div className="head-row">
-        <div className="head-text">
-          <h1>Teams, tools, tiers &amp; languages</h1>
-          <p className="lead">{editor
-            ? "The shared lists every process picks from. Change a name here and it changes everywhere."
-            : "Who owns what, how to reach them, and which systems the processes use."}</p>
+    <div className={editor ? "catalog-page" : "page catalog-page"}>
+      {!editor && (
+        <div className="head-row">
+          <div className="head-text">
+            <h1>Teams, tools &amp; more</h1>
+            <p className="lead">Who owns what, how to reach them, and which systems, tiers and environments the processes and standards refer to.</p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="cat-tabs" role="tablist">
         {KEYS.map((k) => {
@@ -143,12 +151,12 @@ export function CatalogPage({ processes }: { processes: Process[] }) {
           </div>
           <ul>
             {shown.map((r) => {
-              const n = usesOf(key, r.id, processes).length;
+              const n = usesOf(key, r.id, docs).length;
               const rank = rows.findIndex((x) => x.id === r.id);
               return (
                 <li key={r.id}>
                   <button className={`cat-item ${current?.id === r.id ? "on" : ""}`} onClick={() => { setSelected(r.id); setAdding(false); }}>
-                    <span className="cat-avatar">{key === "tiers" ? rank : r.name.slice(0, 1).toUpperCase()}</span>
+                    <span className="cat-avatar">{ORDERED.includes(key) ? rank + (key === "tiers" ? 0 : 1) : r.name.slice(0, 1).toUpperCase()}</span>
                     <span className="cat-item-text">
                       <strong>{r.name || "Unnamed"}{isNew(r.id) && <i>new</i>}</strong>
                       <em>{r.contact ?? r.url?.replace(/^https?:\/\//, "") ?? r.description ?? "No details yet"}</em>
@@ -169,7 +177,7 @@ export function CatalogPage({ processes }: { processes: Process[] }) {
               <h2>New {kind.noun}</h2>
               <p className="muted">Give it the name people already use. You can add the details afterwards.</p>
               <Field label="Name">
-                <input autoFocus value={newName} maxLength={40} placeholder={key === "teams" ? "Cloud Platform team" : key === "tools" ? "ServiceNow" : key === "tiers" ? "Tier 4" : "Rust"}
+                <input autoFocus value={newName} maxLength={40} placeholder={key === "teams" ? "Cloud Platform team" : key === "tools" ? "ServiceNow" : key === "tiers" ? "Tier 4" : key === "environments" ? "Pre-production" : "Rust"}
                   onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
               </Field>
               <p className="muted small">Id used in process files: <code>{slugify(newName) ? newId : "…"}</code>. It never changes, even if you rename.</p>
@@ -183,16 +191,16 @@ export function CatalogPage({ processes }: { processes: Process[] }) {
           {!adding && current && (
             <>
               <header className="cat-detail-head">
-                <span className="cat-avatar big">{key === "tiers" ? rows.findIndex((x) => x.id === current.id) : current.name.slice(0, 1).toUpperCase()}</span>
+                <span className="cat-avatar big">{ORDERED.includes(key) ? rows.findIndex((x) => x.id === current.id) + (key === "tiers" ? 0 : 1) : current.name.slice(0, 1).toUpperCase()}</span>
                 <div>
-                  <span className="eyebrow">{kind.noun}</span>
+                  <span className="eyebrow">{key === "teams" ? UNIT_KINDS[current.kind ?? "team"] : kind.noun}</span>
                   <h2>{current.name || "Unnamed"}</h2>
                   <code>{current.id}</code>
                 </div>
-                {editor && key === "tiers" && (
+                {editor && ORDERED.includes(key) && (
                   <div className="cat-order">
-                    <button className="icon-btn" title="More critical" onClick={() => move(-1)} disabled={rows[0]?.id === current.id}><ArrowUp size={16} /></button>
-                    <button className="icon-btn" title="Less critical" onClick={() => move(1)} disabled={rows[rows.length - 1]?.id === current.id}><ArrowDown size={16} /></button>
+                    <button className="icon-btn" title="Move up" onClick={() => move(-1)} disabled={rows[0]?.id === current.id}><ArrowUp size={16} /></button>
+                    <button className="icon-btn" title="Move down" onClick={() => move(1)} disabled={rows[rows.length - 1]?.id === current.id}><ArrowDown size={16} /></button>
                   </div>
                 )}
               </header>
@@ -200,6 +208,16 @@ export function CatalogPage({ processes }: { processes: Process[] }) {
               {editor ? (
                 <div className="form">
                   <Field label="Name"><input value={current.name} maxLength={40} onChange={(e) => upd({ name: e.target.value })} /></Field>
+                  {key === "teams" && (
+                    <div className="field">
+                      <span className="field-label">Kind<em>{current.kind && current.kind !== "team" ? "a unit: can issue standards" : "a team: owns and takes part in processes"}</em></span>
+                      <div className="chips">
+                        {Object.entries(UNIT_KINDS).map(([k, label]) => (
+                          <button key={k} className={`chip ${(current.kind ?? "team") === k ? "on" : ""}`} onClick={() => upd({ kind: k === "team" ? undefined : k })}>{label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {kind.fields.map((f) => (
                     <Field key={f.field} label={f.label}>
                       {f.long
@@ -223,11 +241,11 @@ export function CatalogPage({ processes }: { processes: Process[] }) {
               )}
 
               <div className="cat-usage">
-                <h3>Used by {uses.length ? `${uses.length} process${uses.length > 1 ? "es" : ""}` : "no process yet"}</h3>
+                <h3>Used by {uses.length ? `${uses.length} process${uses.length > 1 ? "es" : ""} and standards` : "nothing yet"}</h3>
                 <ul>
                   {uses.map((u) => (
-                    <li key={u.process.id}>
-                      <button onClick={() => go({ page: "process", id: u.process.id, tab: "flow" })}>
+                    <li key={("requirements" in u.process ? "s/" : "p/") + u.process.id}>
+                      <button onClick={() => go("requirements" in u.process ? { page: "standard", id: u.process.id, tab: "doc" } : { page: "process", id: u.process.id, tab: "flow" })}>
                         <strong>{u.process.title}</strong><em>{u.how}</em><ArrowUpRight size={14} />
                       </button>
                     </li>
@@ -255,13 +273,10 @@ export function CatalogPage({ processes }: { processes: Process[] }) {
         <div className="save-bar" role="status">
           <span><b>Unsaved changes</b> to the lists</span>
           <button className="btn" onClick={() => setDraft(catalog)}><Undo2 size={16} />Discard</button>
-          {writable
-            ? <button className="btn primary" disabled={hasErrors(issues)} onClick={() => save(clean)}><Save size={16} />Save changes</button>
-            : <button className="btn primary" disabled={hasErrors(issues)} title="The lists are read-only here. Download the file and commit it to the repository."
-                onClick={() => download("catalog.json", JSON.stringify(clean, null, 2) + "\n")}><Download size={16} />Download catalog.json</button>}
+          <button className="btn primary" disabled={hasErrors(issues)} onClick={() => save(clean)}><Save size={16} />Save changes</button>
         </div>
       )}
-      {editor && !dirty && <p className="saved cat-saved"><Check size={14} />All changes saved to <code>catalog/catalog.json</code></p>}
+      {editor && !dirty && <p className="saved cat-saved"><Check size={14} />All changes saved</p>}
     </div>
   );
 }

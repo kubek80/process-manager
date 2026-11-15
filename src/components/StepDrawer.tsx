@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, Flag, Pencil, Plus, Trash2, X, Check } from "lucide
 import type { Feedback, NextLink, Process, Step } from "../types";
 import { slugify, uniqueId } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
-import { FeedbackForm, FeedbackItem } from "./Feedback";
+import { FeedbackForm, FeedbackItem, processTarget } from "./Feedback";
 import { ResourceEditor } from "./Resources";
 import { STEP_META, STEP_TYPES } from "../lib/stepMeta";
 import { Field, TypeIcon } from "./ui";
@@ -23,7 +23,7 @@ export function StepDrawer({ process, all, step, editing, setEditing, onClose, o
   const setNext = (next: NextLink[]) => onChange({ next });
   const instructions = step.instructions ?? [];
   const { catalog, save } = useCatalog();
-  const mine = feedback.filter((f) => f.stepId === step.id && !f.resolved);
+  const mine = feedback.filter((f) => f.itemId === step.id && !f.resolved);
   const pickTool = async (value: string) => {
     if (value !== "__new") return onChange({ tool: value || undefined });
     const name = window.prompt("Name of the new tool")?.trim();
@@ -65,12 +65,12 @@ export function StepDrawer({ process, all, step, editing, setEditing, onClose, o
             {mine.length > 0 && (
               <ul className="fb-list">
                 {mine.map((f) => (
-                  <FeedbackItem key={f.id} item={f} process={process} hideStep />
+                  <FeedbackItem key={f.id} item={f} target={processTarget(process)} hideItem />
                 ))}
               </ul>
             )}
             {reporting
-              ? <><h4>What is wrong with this step?</h4><FeedbackForm process={process} stepId={step.id} onDone={() => setReporting(false)} /></>
+              ? <><h4>What is wrong with this step?</h4><FeedbackForm target={processTarget(process)} itemId={step.id} onDone={() => setReporting(false)} /></>
               : <button className="btn small report-btn" onClick={() => setReporting(true)}><Flag size={14} />This step doesn’t work</button>}
           </section>
         </div>

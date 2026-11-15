@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0",
+  "id": "dependency-updates",
+  "title": "Dependency updates",
+  "summary": "How quickly third-party libraries are updated, so that known vulnerabilities do not stay in production.",
+  "owner": "security",
+  "scope": "Every repository that builds something deployed to a shared environment. Prototypes that are never deployed are out of scope.",
+  "tags": ["dependencies", "vulnerabilities"],
+  "updatedAt": "2026-11-15",
+  "status": "draft",
+  "review": { "intervalMonths": 12 },
+  "requirements": [
+    {
+      "id": "DEP-01",
+      "title": "Automated update pull requests",
+      "level": "must",
+      "statement": "Every repository has automated dependency updates switched on for all its package ecosystems.",
+      "rationale": "Updates that depend on someone remembering do not happen.",
+      "guidance": ["Add the update bot configuration from the repository template.", "Group minor and patch updates into one weekly pull request."],
+      "verification": { "method": "automated", "description": "Repository automation reports repositories without the configuration." },
+      "review": { "lookFor": ["A new package manifest (package.json, go.mod, requirements.txt) in a folder the update configuration does not cover"], "severity": "warning" }
+    },
+    {
+      "id": "DEP-02",
+      "title": "Fix critical vulnerabilities within 7 days",
+      "level": "must",
+      "statement": "A dependency with a critical vulnerability is updated or removed within 7 days of the alert in production services.",
+      "rationale": "Critical vulnerabilities in common libraries are exploited within days.",
+      "verification": { "method": "manual", "description": "Monthly report by Cyber Security." },
+      "tiers": ["tier-0", "tier-1"],
+      "environments": ["production"]
+    },
+    {
+      "id": "DEP-03",
+      "title": "Pin exact versions",
+      "level": "should",
+      "statement": "Dependencies are pinned to exact versions through a committed lock file.",
+      "examples": { "good": ["\"lodash\": \"4.17.21\""], "bad": ["\"lodash\": \"^4.0.0\"", "\"lodash\": \"latest\""] },
+      "verification": { "method": "review" },
+      "review": { "lookFor": ["A dependency added with a range (^, ~, >=) or \"latest\"", "A changed manifest without the matching lock file change"], "paths": ["**/package.json", "**/go.mod", "**/requirements*.txt"] }
+    }
+  ]
+}

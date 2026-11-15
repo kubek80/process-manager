@@ -1,9 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { AlignLeft, CircleAlert, CircleCheck, Download, FoldVertical, Search, TriangleAlert, UnfoldVertical } from "lucide-react";
-import type { Issue, Process } from "../types";
-import { hasErrors, processSchema, validateProcess } from "../lib/validate";
+import type { Issue } from "../types";
+import { hasErrors } from "../lib/validate";
 import { download } from "../lib/store";
-import { useCatalog } from "../lib/catalog";
 import { CopyButton } from "./ui";
 import { JsonEditor, type JsonEditorHandle } from "./JsonEditor";
 
@@ -12,20 +11,21 @@ const parse = (text: string): Parsed => {
   try { return { value: JSON.parse(text) }; } catch (e) { return { error: (e as Error).message }; }
 };
 
-export function JsonView({ process, knownIds, onChange }: { process: Process; knownIds: string[]; onChange: (p: Process) => void }) {
-  const { catalog } = useCatalog();
-  const ctx = useMemo(() => ({ processIds: knownIds, catalog }), [knownIds, catalog]);
-  const canonical = useMemo(() => JSON.stringify(process, null, 2), [process]);
+/** The raw JSON of a process or a standard, with the checker's findings marked on the line. */
+export function JsonView<T extends { id: string }>({ doc, noun, validate, schema, schemaFile, onChange }: {
+  doc: T; noun: string; validate: (value: unknown) => Issue[]; schema: object; schemaFile: string; onChange: (d: T) => void;
+}) {
+  const canonical = useMemo(() => JSON.stringify(doc, null, 2), [doc]);
   const [text, setText] = useState(canonical);
   const editor = useRef<JsonEditorHandle>(null);
 
   const check = useCallback((value: unknown): Issue[] => {
-    const issues = validateProcess(value, ctx);
+    const issues = validate(value);
     const id = (value as { id?: unknown } | null)?.id;
-    if (typeof id === "string" && id !== process.id)
-      issues.unshift({ level: "error", path: "id", message: `must stay "${process.id}" - it is the file name` });
+    if (typeof id === "string" && id !== doc.id)
+      issues.unshift({ level: "error", path: "id", message: `must stay "${doc.id}" - the ${noun} is known by this id` });
     return issues;
-  }, [ctx, process.id]);
+  }, [validate, doc.id, noun]);
 
   const parsed = useMemo(() => parse(text), [text]);
   const issues = useMemo(() => (parsed.error ? [] : check(parsed.value)), [parsed, check]);
@@ -35,14 +35,14 @@ export function JsonView({ process, knownIds, onChange }: { process: Process; kn
   const edit = (t: string) => {
     setText(t);
     const r = parse(t);
-    if (!r.error && !hasErrors(check(r.value))) onChange(r.value as Process);
+    if (!r.error && !hasErrors(check(r.value))) onChange(r.value as T);
   };
 
   return (
     <div className="json-view">
       <div className="json-editor">
         <div className="json-bar">
-          <span className="json-file"><code>processes/{process.id}.json</code><em>{lines} lines</em></span>
+          <span className="json-file"><code>{doc.id}.json</code><em>{lines} lines</em></span>
           <span className="spacer" />
           <button className="btn small ghost" onClick={() => editor.current?.search()} title="Find (Ctrl/Cmd+F)"><Search size={14} />Find</button>
           <button className="btn small ghost" onClick={() => editor.current?.foldAll()} title="Collapse everything"><FoldVertical size={14} />Fold</button>
@@ -75,10 +75,10 @@ export function JsonView({ process, knownIds, onChange }: { process: Process; kn
         )}
         <div className="btn-col">
           <CopyButton label="Copy JSON" text={() => text} />
-          <button className="btn" onClick={() => download(`${process.id}.json`, text + "\n")}><Download size={16} />Download JSON</button>
-          <CopyButton label="Copy JSON schema" text={() => JSON.stringify(processSchema, null, 2)} />
+          <button className="btn" onClick={() => download(`${doc.id}.json`, text + "\n")}><Download size={16} />Download JSON</button>
+          <CopyButton label="Copy JSON schema" text={() => JSON.stringify(schema, null, 2)} />
         </div>
-        <p className="muted small">Schema: <code>schema/process.schema.json</code><br />Command line check: <code>npm run validate</code></p>
+        <p className="muted small">Schema: <code>{schemaFile}</code><br />Every save is kept as a revision; see History.</p>
       </div>
     </div>
   );

@@ -1,14 +1,15 @@
-/** Writes the browser-LLM prompt to docs/llm-prompt.md so it can be shared without running the app. */
+/** Writes the prompts for chat assistants to docs/, so they can be shared without running the app. */
 import fs from "node:fs";
 import path from "node:path";
-import { createPrompt } from "../src/lib/prompt";
+import { createPrompt, createStandardPrompt } from "../src/lib/prompt";
 
-const dir = path.resolve("processes");
-const known = fs.readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => {
-  const p = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
-  return { id: p.id as string, title: p.title as string };
+const titles = (dir: string) => fs.readdirSync(path.resolve(dir)).filter((f) => f.endsWith(".json")).sort().map((f) => {
+  const d = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+  return { id: d.id as string, title: d.title as string };
 });
-fs.mkdirSync("docs", { recursive: true });
+const processes = titles("processes"), standards = titles("standards");
 const catalog = JSON.parse(fs.readFileSync("catalog/catalog.json", "utf8"));
-fs.writeFileSync("docs/llm-prompt.md", createPrompt("", known, catalog));
-console.log("Wrote docs/llm-prompt.md");
+fs.mkdirSync("docs", { recursive: true });
+fs.writeFileSync("docs/llm-prompt.md", createPrompt("", processes, catalog, standards));
+fs.writeFileSync("docs/llm-prompt-standards.md", createStandardPrompt("", catalog, processes));
+console.log("Wrote docs/llm-prompt.md and docs/llm-prompt-standards.md");

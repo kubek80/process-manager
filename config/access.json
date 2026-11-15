@@ -1,6 +1,0 @@
-{
-  "editors": ["alex@example.com"],
-  "teams": {
-    "cloud-platform-team": ["casey@example.com"]
-  }
-}

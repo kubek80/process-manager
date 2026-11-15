@@ -1,10 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { CircleAlert, CircleCheck, Download, Sparkles, TriangleAlert, Wrench } from "lucide-react";
-import type { Issue, Process } from "../types";
-import { createPrompt, fixPrompt, modifyPrompt } from "../lib/prompt";
-import { extractJson, hasErrors, validateProcess } from "../lib/validate";
+import type { Issue } from "../types";
+import { fixPrompt } from "../lib/prompt";
+import { extractJson, hasErrors } from "../lib/validate";
 import { download } from "../lib/store";
-import { useCatalog } from "../lib/catalog";
 import { CopyButton, Modal } from "./ui";
 
 export function IssueList({ issues }: { issues: Issue[] }) {
@@ -20,59 +19,67 @@ export function IssueList({ issues }: { issues: Issue[] }) {
   );
 }
 
+/** What the dialog needs to know about the kind of document it creates or changes. */
+export interface AiSpec<T extends { id: string; title: string }> {
+  noun: "process" | "standard";
+  current?: T;
+  existingIds: string[];
+  /** Builds the full prompt from what the person typed. */
+  prompt: (text: string) => string;
+  validate: (value: unknown) => Issue[];
+  describe: (value: T) => string;
+  describePlaceholder: string;
+  changeExample: string;
+}
+
 /** Works with any chat LLM: copy the prompt out, paste the answer back, the checker does the rest. */
-export function AiDialog({ current, all, onImport, onClose }: {
-  current?: Process; all: Process[]; onImport: (p: Process) => void; onClose: () => void;
+export function AiDialog<T extends { id: string; title: string }>({ spec, onImport, onClose }: {
+  spec: AiSpec<T>; onImport: (d: T) => void; onClose: () => void;
 }) {
+  const { current, noun } = spec;
   const [text, setText] = useState("");
   const [answer, setAnswer] = useState("");
-  const { catalog } = useCatalog();
-  const known = useMemo(() => all.map((p) => ({ id: p.id, title: p.title })), [all]);
-  const prompt = () => (current ? modifyPrompt(current, text, known, catalog) : createPrompt(text, known, catalog));
 
   const parsed = useMemo(() => (answer.trim() ? extractJson(answer) : null), [answer]);
-  const issues = useMemo(
-    () => (parsed?.value ? validateProcess(parsed.value, { processIds: [...all.map((p) => p.id), (parsed.value as Process).id], catalog }) : []),
-    [parsed, all, catalog],
-  );
+  const issues = useMemo(() => (parsed?.value ? spec.validate(parsed.value) : []), [parsed, spec]);
   const ok = !!parsed?.value && !hasErrors(issues);
-  const result = parsed?.value as Process | undefined;
-  const replaces = ok && !current && all.some((p) => p.id === result!.id);
+  const result = parsed?.value as T | undefined;
+  const replaces = ok && !current && spec.existingIds.includes(result!.id);
   const idChanged = ok && current && result!.id !== current.id;
+  const title: ReactNode = current ? `Change “${current.title}” with AI` : `Create a ${noun} from text with AI`;
 
   return (
     <Modal wide onClose={onClose}
-      title={<><Sparkles size={18} className="accent" /> {current ? `Change “${current.title}” with AI` : "Create a process from text with AI"}</>}
+      title={<><Sparkles size={18} className="accent" /> {title}</>}
       subtitle="Use any chat assistant you are allowed to use - Gemini, Copilot, ChatGPT or Claude. Nothing is sent anywhere by this app."
       footer={<>
-        <span className="muted small">{ok ? (current ? "The result replaces your draft. You still have to press Save." : "The process is saved as a new file.") : ""}</span>
+        <span className="muted small">{ok ? (current ? "The result replaces your draft. You still have to press Save." : `The ${noun} is saved as a draft.`) : ""}</span>
         <span className="spacer" />
         <button className="btn" onClick={onClose}>Cancel</button>
         <button className="btn primary" disabled={!ok} onClick={() => onImport(current ? { ...result!, id: current.id } : result!)}>
-          {current ? "Apply to draft" : replaces ? "Replace existing process" : "Create process"}
+          {current ? "Apply to draft" : replaces ? `Replace existing ${noun}` : `Create ${noun}`}
         </button>
       </>}>
       <ol className="ai-steps">
         <li>
           <span className="ai-n">1</span>
           <div>
-            <h4>{current ? "Describe the change" : "Paste the description of the process"}</h4>
-            <p className="muted small">{current
-              ? "Plain words are fine, e.g. “After the budget approval add a security review by the Security team. If they reject, the requester updates the design.”"
-              : "An email, a wiki page, meeting notes - anything that says who does what, in which order."}</p>
-            <textarea rows={7} value={text} onChange={(e) => setText(e.target.value)}
-              placeholder={current ? "What should be different?" : "To get a new GCP project you first need a cost centre. Then you fill in the ‘New GCP project’ form in ServiceNow…"} />
+            <h4>{current ? "Describe the change" : noun === "process" ? "Paste the description of the process" : "Paste the policy or guideline"}</h4>
+            <p className="muted small">{current ? `Plain words are fine, e.g. “${spec.changeExample}”` : noun === "process"
+              ? "An email, a wiki page, meeting notes - anything that says who does what, in which order."
+              : "A policy document, a wiki page, a list of rules - anything that says what must or should be true."}</p>
+            <textarea rows={7} value={text} onChange={(e) => setText(e.target.value)} placeholder={current ? "What should be different?" : spec.describePlaceholder} />
           </div>
         </li>
         <li>
           <span className="ai-n">2</span>
           <div>
             <h4>Copy the prompt and paste it into your AI chat</h4>
-            <p className="muted small">The prompt contains the rules, the JSON schema, your teams, tools and tiers, an example{current ? ", the current process" : ""} and your text. Send it as one message.</p>
+            <p className="muted small">The prompt contains the rules, the JSON schema, your teams, tools, tiers and environments, an example{current ? `, the current ${noun}` : ""} and your text. Send it as one message.</p>
             <div className="btn-row">
-              <CopyButton primary label="Copy prompt" text={prompt} />
-              <button className="btn" onClick={() => download("process-prompt.md", prompt())}><Download size={16} />Download as file</button>
-              <span className="muted small">{Math.round(prompt().length / 1000)}k characters</span>
+              <CopyButton primary label="Copy prompt" text={() => spec.prompt(text)} />
+              <button className="btn" onClick={() => download(`${noun}-prompt.md`, spec.prompt(text))}><Download size={16} />Download as file</button>
+              <span className="muted small">{Math.round(spec.prompt(text).length / 1000)}k characters</span>
             </div>
           </div>
         </li>
@@ -90,10 +97,10 @@ export function AiDialog({ current, all, onImport, onClose }: {
                 <div className={`check ${ok ? "good" : "bad"}`}>
                   {ok ? <CircleCheck size={16} /> : <CircleAlert size={16} />}
                   <span>{ok
-                    ? <>Valid: <b>{result!.title}</b> - {result!.steps.length} steps, {result!.actors.length} participants, {result!.prerequisites.length} prerequisites{issues.length ? `, ${issues.length} hint(s)` : ""}.</>
+                    ? <>Valid: <b>{result!.title}</b> - {spec.describe(result!)}{issues.length ? `, ${issues.length} hint(s)` : ""}.</>
                     : <>{issues.filter((i) => i.level === "error").length} problem(s) found. Send the fix request to the same chat and paste the new answer.</>}</span>
                 </div>
-                {idChanged && <div className="check warn"><TriangleAlert size={16} /><span>The AI changed the process id. The current id “{current!.id}” is kept.</span></div>}
+                {idChanged && <div className="check warn"><TriangleAlert size={16} /><span>The AI changed the id. The current id “{current!.id}” is kept.</span></div>}
                 {issues.length > 0 && <IssueList issues={issues} />}
               </>
             )}

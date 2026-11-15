@@ -1,9 +1,9 @@
-import type { Process, Status } from "../types";
+import type { Governed, Status } from "../types";
 
 export type ReviewState = "none" | "ok" | "soon" | "overdue";
 export interface ReviewInfo { state: ReviewState; dueAt?: string; days?: number; label: string }
 
-export const statusOf = (p: Process): Status => p.status ?? "active";
+export const statusOf = (p: Pick<Governed, "status">): Status => p.status ?? "active";
 
 const addMonths = (iso: string, months: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -12,7 +12,7 @@ const addMonths = (iso: string, months: number) => {
 };
 
 /** When must the owner next confirm that the process is still correct? */
-export function reviewInfo(p: Process, today = new Date().toISOString().slice(0, 10)): ReviewInfo {
+export function reviewInfo(p: Pick<Governed, "status" | "review">, today = new Date().toISOString().slice(0, 10)): ReviewInfo {
   if (!p.review || statusOf(p) !== "active") return { state: "none", label: "No review planned" };
   if (!p.review.lastReviewedAt) return { state: "overdue", label: "Never reviewed" };
   const dueAt = addMonths(p.review.lastReviewedAt, p.review.intervalMonths);

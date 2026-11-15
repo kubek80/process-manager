@@ -1,0 +1,296 @@
+import { useEffect, useMemo, useState } from "react";
+import { Activity, CalendarCheck, Flag, KeyRound, List, Plus, Search, Server, ShieldCheck, Sparkles, Trash2, Workflow } from "lucide-react";
+import type { Assignment, AuditEntry, FeedbackByTarget, Process, Role, Skill, Standard } from "../types";
+import { teamName, useCatalog } from "../lib/catalog";
+import { reviewInfo, statusOf } from "../lib/lifecycle";
+import { usePerms } from "../lib/session";
+import { go, grantAccess, href, loadAccess, loadAudit, loadSkills, loadSystem, revokeAccess, type Access, type AdminSection, type SystemInfo } from "../lib/store";
+import { CatalogPage } from "./CatalogPage";
+import { openCount } from "./Feedback";
+import { SKILL_KIND, SkillPanel } from "./SkillPanel";
+import { Field } from "./ui";
+
+export const ROLES: Record<Role, { label: string; can: string; scope: "none" | "optional" | "required"; scopeLabel?: string }> = {
+  admin: { label: "Admin", can: "Everything, including who has access", scope: "none" },
+  "catalog-manager": { label: "Lists manager", can: "Teams, tools, tiers, environments, languages", scope: "none" },
+  "process-editor": { label: "Process editor", can: "Create and change every process; close its feedback", scope: "none" },
+  "standards-editor": { label: "Standards editor", can: "Create and change standards; close their feedback", scope: "optional", scopeLabel: "For the unit" },
+  owner: { label: "Owner", can: "Close feedback on what a team or unit owns", scope: "required", scopeLabel: "For the team or unit" },
+};
+
+const SECTIONS: { id: AdminSection; label: string; icon: typeof List; admin?: boolean; hint: string }[] = [
+  { id: "access", label: "Access", icon: KeyRound, admin: true, hint: "Who may do what" },
+  { id: "lists", label: "Lists", icon: List, hint: "Teams, tools, tiers, environments, languages" },
+  { id: "skills", label: "Skills", icon: Sparkles, hint: "Generated skills and review agents" },
+  { id: "health", label: "Health", icon: CalendarCheck, hint: "Reviews due and open feedback" },
+  { id: "activity", label: "Activity", icon: Activity, admin: true, hint: "Who changed what" },
+  { id: "system", label: "System", icon: Server, admin: true, hint: "How this installation is set up" },
+];
+
+function AccessSection() {
+  const { catalog } = useCatalog();
+  const [access, setAccess] = useState<Access | null>(null);
+  const [error, setError] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<Role>("process-editor");
+  const [scope, setScope] = useState("");
+  useEffect(() => { loadAccess().then(setAccess, (e) => setError(e.message)); }, []);
+
+  const spec = ROLES[role];
+  const run = (p: Promise<Access>) => p.then((a) => { setAccess(a); setError(""); }, (e) => setError(e.message));
+  const grant = () => run(grantAccess({ email: email.trim(), role, scope: spec.scope === "none" ? "" : scope })).then(() => setEmail(""));
+  // one row per person, with all their roles
+  const people = useMemo(() => {
+    const by = new Map<string, Assignment[]>();
+    for (const a of access?.assignments ?? []) by.set(a.email, [...(by.get(a.email) ?? []), a]);
+    return [...by.entries()];
+  }, [access]);
+  const ready = /\S+@\S+\.\S+/.test(email) && (spec.scope !== "required" || scope !== "");
+
+  return (
+    <div className="admin-section">
+      <p className="lead small">People sign in with their company account. What they may do is decided here. Everyone who can sign in can read, tick steps and give feedback.</p>
+      {error && <div className="check bad">{error}</div>}
+
+      <section className="admin-card">
+        <h2>Give someone a role</h2>
+        <div className="grant">
+          <Field label="Email"><input type="email" value={email} placeholder="name@company.com" onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ready && grant()} /></Field>
+          <Field label="Role">
+            <select value={role} onChange={(e) => { setRole(e.target.value as Role); setScope(""); }}>
+              {(Object.keys(ROLES) as Role[]).map((r) => <option key={r} value={r}>{ROLES[r].label}</option>)}
+            </select>
+          </Field>
+          {spec.scope !== "none" && (
+            <Field label={spec.scopeLabel!}>
+              <select value={scope} onChange={(e) => setScope(e.target.value)}>
+                <option value="">{spec.scope === "optional" ? "All units" : "Choose…"}</option>
+                {catalog.teams.filter((t) => role === "owner" || (t.kind && t.kind !== "team")).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </Field>
+          )}
+          <button className="btn primary" disabled={!ready} onClick={grant}><Plus size={16} />Give role</button>
+        </div>
+        <p className="muted small">{spec.label}: {spec.can}.</p>
+      </section>
+
+      <section className="admin-card">
+        <h2>People with roles <span>{people.length + (access?.bootstrapAdmins.length ?? 0)}</span></h2>
+        <ul className="people">
+          {(access?.bootstrapAdmins ?? []).map((e) => (
+            <li key={`b-${e}`}>
+              <span className="avatar">{e.slice(0, 1).toUpperCase()}</span>
+              <span className="person"><strong>{e}</strong><em>Named in the server settings, so there is always a way in. Cannot be removed here.</em></span>
+              <span className="role-chip fixed">Admin</span>
+            </li>
+          ))}
+          {people.map(([person, list]) => (
+            <li key={person}>
+              <span className="avatar">{person.slice(0, 1).toUpperCase()}</span>
+              <span className="person"><strong>{person}</strong><em>since {list[0].grantedAt.slice(0, 10)}, by {list[0].grantedBy}</em></span>
+              <span className="role-chips">
+                {list.map((a) => (
+                  <span key={a.role + a.scope} className="role-chip">
+                    {ROLES[a.role]?.label ?? a.role}{a.scope && <em>{teamName(catalog, a.scope)}</em>}
+                    <button aria-label={`Remove ${ROLES[a.role]?.label ?? a.role} from ${person}`} onClick={() => run(revokeAccess({ email: a.email, role: a.role, scope: a.scope }))}><Trash2 size={12} /></button>
+                  </span>
+                ))}
+              </span>
+            </li>
+          ))}
+          {access && people.length === 0 && access.bootstrapAdmins.length === 0 && <li className="muted">Nobody has a role yet.</li>}
+        </ul>
+      </section>
+
+      <section className="admin-card">
+        <h2>What each role can do</h2>
+        <table className="guide-table"><tbody>
+          {(Object.keys(ROLES) as Role[]).map((r) => <tr key={r}><td><b>{ROLES[r].label}</b></td><td>{ROLES[r].can}{ROLES[r].scope === "optional" && ". Can be limited to one unit"}{ROLES[r].scope === "required" && ". Always for one team or unit"}</td></tr>)}
+        </tbody></table>
+      </section>
+    </div>
+  );
+}
+
+function SkillsSection() {
+  const [skills, setSkills] = useState<Skill[] | null>(null);
+  const [q, setQ] = useState("");
+  const [kind, setKind] = useState<"all" | Skill["kind"]>("all");
+  const [open, setOpen] = useState<string | null>(null);
+  const reload = () => loadSkills().then(setSkills, () => setSkills([]));
+  useEffect(() => { reload(); }, []);
+  const shown = (skills ?? []).filter((s) => (kind === "all" || s.kind === kind) && `${s.title} ${s.id}`.toLowerCase().includes(q.toLowerCase()));
+  const current = shown.find((s) => s.id === open) ?? shown[0];
+
+  return (
+    <div className="admin-section">
+      <p className="lead small">A skill tells an AI coding assistant how to do the work; a review agent tells it what to check in a pull request. Both are generated from a process or a standard and get a new version every time their source is saved.</p>
+      <div className="cat-split skills-split">
+        <section className="cat-list">
+          <div className="cat-list-bar">
+            <div className="search"><Search size={15} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search skills" /></div>
+          </div>
+          <div className="chips skill-kinds">
+            {(["all", "skill", "review-agent"] as const).map((k) => (
+              <button key={k} className={`chip ${kind === k ? "on" : ""}`} onClick={() => setKind(k)}>
+                {k === "all" ? "All" : SKILL_KIND[k].label + "s"}<span>{(skills ?? []).filter((s) => k === "all" || s.kind === k).length}</span>
+              </button>
+            ))}
+          </div>
+          <ul>
+            {shown.map((s) => {
+              const K = SKILL_KIND[s.kind];
+              return (
+                <li key={s.id}>
+                  <button className={`cat-item ${current?.id === s.id ? "on" : ""} ${s.active ? "" : "withdrawn"}`} onClick={() => setOpen(s.id)}>
+                    <span className={`skill-icon small ${s.kind}`}><K.icon size={15} /></span>
+                    <span className="cat-item-text"><strong>{s.title}</strong><em>{s.active ? `from the ${s.sourceKind} · ${s.updatedAt.slice(0, 10)}` : "withdrawn"}</em></span>
+                    <span className="cat-uses" title="Version">v{s.version}</span>
+                  </button>
+                </li>
+              );
+            })}
+            {skills && shown.length === 0 && <li className="cat-empty">No skill matches.</li>}
+          </ul>
+        </section>
+        <section className="cat-detail">
+          {current ? <>
+            <SkillPanel key={current.id} id={current.id} onChanged={reload} />
+            <a className="btn small ghost source-link" href={href(current.sourceKind === "process" ? { page: "process", id: current.sourceId, tab: "flow" } : { page: "standard", id: current.sourceId, tab: "doc" })}>
+              {current.sourceKind === "process" ? <Workflow size={14} /> : <ShieldCheck size={14} />}Open the {current.sourceKind} it comes from
+            </a>
+          </> : <p className="muted cat-empty">Nothing generated yet. Skills appear when a process or standard is active.</p>}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function HealthSection({ processes, standards, feedback }: { processes: Process[]; standards: Standard[]; feedback: FeedbackByTarget }) {
+  const { catalog } = useCatalog();
+  const rows = [
+    ...processes.map((p) => ({ kind: "process" as const, doc: p, open: openCount(feedback.process[p.id]) })),
+    ...standards.map((s) => ({ kind: "standard" as const, doc: s, open: openCount(feedback.standard[s.id]) })),
+  ].map((r) => ({ ...r, review: reviewInfo(r.doc), status: statusOf(r.doc) }));
+  const due = rows.filter((r) => r.review.state === "overdue" || r.review.state === "soon").sort((a, b) => (a.review.days ?? -9999) - (b.review.days ?? -9999));
+  const flagged = rows.filter((r) => r.open > 0).sort((a, b) => b.open - a.open);
+  const drafts = rows.filter((r) => r.status === "draft");
+  const unowned = rows.filter((r) => r.status === "active" && (!r.doc.owner || !r.doc.review));
+  const link = (r: (typeof rows)[number]) => () => go(r.kind === "process" ? { page: "process", id: r.doc.id, tab: "flow" } : { page: "standard", id: r.doc.id, tab: "doc" });
+  const Row = ({ r, right }: { r: (typeof rows)[number]; right: React.ReactNode }) => (
+    <li><button onClick={link(r)}>
+      {r.kind === "process" ? <Workflow size={15} /> : <ShieldCheck size={15} />}
+      <span className="person"><strong>{r.doc.title}</strong><em>{r.doc.owner ? teamName(catalog, r.doc.owner) : "No owner"}</em></span>{right}
+    </button></li>
+  );
+  return (
+    <div className="admin-section">
+      <div className="stat-row">
+        <div className={`stat ${due.some((r) => r.review.state === "overdue") ? "bad" : due.length ? "warn" : "good"}`}><strong>{due.length}</strong><span>reviews due</span></div>
+        <div className={`stat ${flagged.length ? "warn" : "good"}`}><strong>{flagged.reduce((n, r) => n + r.open, 0)}</strong><span>open feedback</span></div>
+        <div className="stat"><strong>{drafts.length}</strong><span>drafts not yet published</span></div>
+        <div className={`stat ${unowned.length ? "warn" : "good"}`}><strong>{unowned.length}</strong><span>active without owner or review</span></div>
+      </div>
+      <section className="admin-card">
+        <h2><CalendarCheck size={16} />Reviews due <span>{due.length}</span></h2>
+        {due.length === 0 && <p className="muted">Every review is up to date.</p>}
+        <ul className="health">{due.map((r) => <Row key={r.kind + r.doc.id} r={r} right={<span className={`tier-tag review-${r.review.state}`}>{r.review.label}</span>} />)}</ul>
+      </section>
+      <section className="admin-card">
+        <h2><Flag size={16} />Open feedback <span>{flagged.length}</span></h2>
+        {flagged.length === 0 && <p className="muted">Nothing is waiting.</p>}
+        <ul className="health">{flagged.map((r) => <Row key={r.kind + r.doc.id} r={r} right={<span className="tier-tag flagged">{r.open} open</span>} />)}</ul>
+      </section>
+      {(drafts.length > 0 || unowned.length > 0) && (
+        <section className="admin-card">
+          <h2>Needs attention <span>{drafts.length + unowned.length}</span></h2>
+          <ul className="health">
+            {drafts.map((r) => <Row key={"d" + r.kind + r.doc.id} r={r} right={<span className="tier-tag status-draft">Draft</span>} />)}
+            {unowned.map((r) => <Row key={"u" + r.kind + r.doc.id} r={r} right={<span className="tier-tag review-soon">{!r.doc.owner ? "No owner" : "No review rhythm"}</span>} />)}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+}
+
+const ACTION: Record<string, string> = {
+  "process.save": "saved the process", "process.delete": "deleted the process", "standard.save": "saved the standard", "standard.delete": "deleted the standard",
+  "lists.save": "changed the lists", "access.grant": "gave a role to", "access.revoke": "removed a role from", "skill.guidance": "changed the extra guidance of",
+  "content.import": "imported content from",
+};
+
+function ActivitySection() {
+  const [entries, setEntries] = useState<AuditEntry[] | null>(null);
+  useEffect(() => { loadAudit(200).then(setEntries, () => setEntries([])); }, []);
+  return (
+    <div className="admin-section">
+      <p className="lead small">Every change to content, lists, roles and skills, newest first.</p>
+      <section className="admin-card">
+        <ul className="activity">
+          {entries?.map((e) => (
+            <li key={e.id}>
+              <time>{e.at.slice(0, 16).replace("T", " ")}</time>
+              <span><b>{e.name}</b> {ACTION[e.action] ?? e.action} <code>{e.target}</code>{e.detail && <em> · {e.detail}</em>}</span>
+            </li>
+          ))}
+          {entries && entries.length === 0 && <li className="muted">Nothing has been changed yet.</li>}
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+function SystemSection() {
+  const [info, setInfo] = useState<SystemInfo | null>(null);
+  useEffect(() => { loadSystem().then(setInfo, () => {}); }, []);
+  if (!info) return <p className="muted">Loading…</p>;
+  const provider = { dev: "Local development (user picker)", entra: "Microsoft Entra ID", google: "Google" }[info.provider] ?? info.provider;
+  return (
+    <div className="admin-section">
+      <div className="stat-row">
+        <div className="stat"><strong>{info.processes}</strong><span>processes</span></div>
+        <div className="stat"><strong>{info.standards}</strong><span>standards</span></div>
+        <div className="stat"><strong>{info.skills}</strong><span>skills and review agents</span></div>
+        <div className="stat"><strong>{info.assignments}</strong><span>roles given</span></div>
+      </div>
+      <section className="admin-card">
+        <h2>How this installation is set up</h2>
+        <table className="guide-table"><tbody>
+          <tr><td>Sign-in</td><td>{provider}</td></tr>
+          <tr><td>Address</td><td><code>{info.baseUrl}</code></td></tr>
+          <tr><td>Notifications</td><td>{info.notify === "webhook" ? "Sent to a chat webhook" : "Written to the server log only"}</td></tr>
+          <tr><td>Content</td><td>Stored in the database. Every save is a revision. <code>server -export</code> writes a copy to files.</td></tr>
+        </tbody></table>
+        <p className="muted small">These are server settings and are changed where the server is deployed, not here. See <code>docs/backend.md</code>.</p>
+      </section>
+    </div>
+  );
+}
+
+export function AdminPage({ section, processes, standards, feedback }: {
+  section: AdminSection; processes: Process[]; standards: Standard[]; feedback: FeedbackByTarget;
+}) {
+  const perms = usePerms();
+  const allowed = SECTIONS.filter((s) => (s.admin ? perms.admin : s.id === "lists" ? perms.catalog : true));
+  const current = allowed.find((s) => s.id === section) ?? allowed[0];
+  return (
+    <div className="page admin">
+      <aside className="admin-nav">
+        <h1>Admin</h1>
+        {allowed.map((s) => (
+          <a key={s.id} className={current.id === s.id ? "on" : ""} href={href({ page: "admin", section: s.id })} title={s.hint}><s.icon size={16} />{s.label}</a>
+        ))}
+      </aside>
+      <main className="admin-main">
+        <header><h2>{current.label}</h2><p className="muted">{current.hint}</p></header>
+        {current.id === "access" && <AccessSection />}
+        {current.id === "lists" && <CatalogPage processes={processes} standards={standards} editable />}
+        {current.id === "skills" && <SkillsSection />}
+        {current.id === "health" && <HealthSection processes={processes} standards={standards} feedback={feedback} />}
+        {current.id === "activity" && <ActivitySection />}
+        {current.id === "system" && <SystemSection />}
+      </main>
+    </div>
+  );
+}

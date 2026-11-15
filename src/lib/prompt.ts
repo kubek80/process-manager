@@ -1,7 +1,9 @@
 import schema from "../../schema/process.schema.json";
 import example from "../../schema/example.process.json";
 import { STEP_META, STEP_TYPES } from "./stepMeta";
-import type { Catalog, Issue, Process } from "../types";
+import standardSchema from "../../schema/standard.schema.json";
+import standardExample from "../../schema/example.standard.json";
+import type { Catalog, Issue, Process, Standard } from "../types";
 
 export interface KnownProcess { id: string; title: string }
 
@@ -11,7 +13,7 @@ const today = () => new Date().toISOString().slice(0, 10);
  * The instruction block. It is model-agnostic on purpose: it works when pasted into
  * Gemini, ChatGPT, Copilot or Claude in a browser, with no tools or file access.
  */
-export function basePrompt(known: KnownProcess[] = [], catalog?: Catalog): string {
+export function basePrompt(known: KnownProcess[] = [], catalog?: Catalog, standards: KnownProcess[] = []): string {
   const list = (rows: { id: string; name: string }[] = []) => (rows.length ? rows.map((r) => `- "${r.id}" - ${r.name}`).join("\n") : "- (none yet)");
   const types = STEP_TYPES.map((t) => `- "${t}" (${STEP_META[t].label}): ${STEP_META[t].when}`).join("\n");
   const knownList = known.length
@@ -41,6 +43,8 @@ B. OWNER AND TIERS
 - "owner": the id of the team that owns the process, ONLY from the TEAMS list below. If unknown or not on the list, leave it out.
 - "tiers": the ids of the application tiers the process applies to, ONLY from the TIERS list below. If the text does not restrict the process to certain tiers, leave "tiers" out (that means: all tiers).
 
+- "environments": the ids of the environments the process applies to, ONLY from the ENVIRONMENTS list below. If the text does not restrict it, leave "environments" out (that means: all environments).
+- "standards": the ids of the standards this process helps to meet, ONLY from the EXISTING STANDARDS list below. Leave out if none.
 - "languages": the ids of the programming languages the process is specific to, ONLY from the LANGUAGES list below. If the process does not depend on the language, leave "languages" out.
 - "status": use "draft" for a new process, so that an editor reviews it before consumers see it. Add "review": { "intervalMonths": 6 } unless the text names another review rhythm. Never invent "lastReviewedAt".
 - "resources": links named in the text that help to do or automate the work. Use kind "skill" for instructions an AI assistant can run in self-service, "repository", "template", "documentation" or "other". Put a link on the step it belongs to (step "resources") when it helps with one step only.
@@ -73,7 +77,7 @@ E. FLOW ("next")
 - Every step has id, title, actor, type and next.
 - Every step id used in "next.to" exists; every "actor" exists in "actors".
 - Every decision has 2+ labelled paths. Every "subprocess" step has "subProcessId".
-- "owner", "teamId", "tool", "tiers" and "languages" only use ids from the lists below.
+- "owner", "teamId", "tool", "tiers", "environments", "languages" and "standards" only use ids from the lists below.
 - All ids are kebab-case. No field outside the schema.
 
 # EXISTING PROCESSES (usable in "subProcessId" and prerequisite "processId")
@@ -88,8 +92,14 @@ ${list(catalog?.tools)}
 # TIERS (usable in "tiers")
 ${list(catalog?.tiers)}
 
+# ENVIRONMENTS (usable in "environments")
+${list(catalog?.environments)}
+
 # LANGUAGES (usable in "languages")
 ${list(catalog?.languages)}
+
+# EXISTING STANDARDS (usable in "standards")
+${standards.length ? standards.map((k) => `- "${k.id}" - ${k.title}`).join("\n") : "- (none yet)"}
 
 # JSON SCHEMA
 \`\`\`json
@@ -104,8 +114,8 @@ ${JSON.stringify(example, null, 2)}
 `;
 }
 
-export function createPrompt(text: string, known: KnownProcess[], catalog?: Catalog): string {
-  return `${basePrompt(known, catalog)}
+export function createPrompt(text: string, known: KnownProcess[], catalog?: Catalog, standards: KnownProcess[] = []): string {
+  return `${basePrompt(known, catalog, standards)}
 # YOUR TASK
 Convert the following process description into the JSON format. Follow all rules above.
 
@@ -115,8 +125,8 @@ ${text.trim() || "(paste the process description here)"}
 `;
 }
 
-export function modifyPrompt(process: Process, request: string, known: KnownProcess[], catalog?: Catalog): string {
-  return `${basePrompt(known.filter((k) => k.id !== process.id), catalog)}
+export function modifyPrompt(process: Process, request: string, known: KnownProcess[], catalog?: Catalog, standards: KnownProcess[] = []): string {
+  return `${basePrompt(known.filter((k) => k.id !== process.id), catalog, standards)}
 # YOUR TASK
 Below is an existing process in the JSON format, followed by a change request. Apply the change and return the COMPLETE updated JSON (not a diff). Keep the "id", "status" and "review" of the process and keep the ids of steps that are not affected. Change nothing that the request does not ask for.
 
@@ -139,5 +149,105 @@ export function fixPrompt(issues: Issue[], parseError?: string): string {
 
 Problems found:
 ${list}
+`;
+}
+
+// ---------- standards
+
+/** The instruction block for turning a policy or guideline text into a standard. */
+export function standardBasePrompt(catalog?: Catalog, processes: KnownProcess[] = []): string {
+  const list = (rows: { id: string; name: string }[] = []) => (rows.length ? rows.map((r) => `- "${r.id}" - ${r.name}`).join("\n") : "- (none yet)");
+  const units = (catalog?.teams ?? []).filter((t) => t.kind && t.kind !== "team");
+  return `# ROLE
+You convert policies, guidelines and engineering rules into a strict JSON format used by the "Process Manager" tool. Each standard becomes a readable document for engineers, a skill for AI coding assistants, and a checklist for an AI pull request reviewer, so every requirement must be precise and testable.
+
+# OUTPUT RULES (very important)
+1. Answer with ONE JSON object inside ONE \`\`\`json code block. No text before or after it.
+2. The JSON must be valid against the JSON SCHEMA below. Do not add fields that are not in the schema. No comments, no trailing commas.
+3. Never invent rules, numbers or deadlines that are not in the text. If the text is vague, keep the requirement at "should" and say in "statement" exactly what the text says.
+4. Do not ask questions. Make the most reasonable assumption and continue.
+5. Write all texts in the same language as the source text.
+
+# HOW TO MODEL A STANDARD
+A. THE STANDARD
+- "title": short name of the topic, e.g. "Secure logging".
+- "summary": what it protects or achieves, in one or two sentences.
+- "owner": the id of the unit that issues it, ONLY from the UNITS list below.
+- "scope": what it covers and what is out of scope, if the text says so.
+- "tiers", "languages", "environments": only when the WHOLE standard is limited to some; otherwise leave them out. Use ids from the lists below.
+- "status": always "draft", so that the unit reviews it before it is published. Add "review": { "intervalMonths": 12 } unless the text names another rhythm.
+- "exceptionProcessId": the id of the process for asking for an exception, ONLY from the EXISTING PROCESSES list.
+
+B. REQUIREMENTS (the core)
+- One requirement = one rule that can be checked on its own. Split "encrypt data and rotate keys yearly" into two.
+- "id": upper case, a short prefix for the standard plus a running number, e.g. "LOG-01", "LOG-02". Unique. Keep existing ids when changing a standard.
+- "level": "must" for mandatory wording (must, shall, required, never, always), "should" for expected (should, recommended), "may" for optional.
+- "statement": the rule itself, testable, one or two sentences. No reasons here.
+- "rationale": why the rule exists, if the text says.
+- "guidance": how to comply, one concrete action per item.
+- "examples": short "good" and "bad" examples, only if the text gives them or they are obvious and uncontroversial.
+- "verification.method": "automated" if a tool or pipeline checks it, "review" if it is checked when code is reviewed, "manual" otherwise.
+- "review": add it whenever a violation can be SEEN in a code or configuration change. "lookFor" lists concrete signs of a violation, phrased so a reviewer can spot them in a diff. "paths" are file patterns where it matters. Leave "review" out for rules that cannot be seen in a pull request (for example, deadlines or organisational duties).
+- "tiers", "languages", "environments" on a requirement: only to NARROW it compared with the standard, e.g. a rule that applies in production only.
+- "processId": a process from the EXISTING PROCESSES list that helps to meet the requirement.
+
+# SELF-CHECK BEFORE ANSWERING
+- schemaVersion is "1.0"; "status" is "draft"; "updatedAt" is "${today()}".
+- Every requirement has id, title, level, statement and verification.
+- Requirement ids are unique and upper case with dashes.
+- "owner", "tiers", "languages", "environments", "processId" and "exceptionProcessId" only use ids from the lists below.
+- No field outside the schema.
+
+# UNITS (usable in "owner")
+${list(units)}
+
+# TIERS
+${list(catalog?.tiers)}
+
+# ENVIRONMENTS
+${list(catalog?.environments)}
+
+# LANGUAGES
+${list(catalog?.languages)}
+
+# EXISTING PROCESSES (usable in "processId" and "exceptionProcessId")
+${processes.length ? processes.map((k) => `- "${k.id}" - ${k.title}`).join("\n") : "- (none yet)"}
+
+# JSON SCHEMA
+\`\`\`json
+${JSON.stringify(standardSchema)}
+\`\`\`
+
+# EXAMPLE OF A CORRECT ANSWER
+(The ids in the example are illustrative. Use only the lists above.)
+\`\`\`json
+${JSON.stringify(standardExample, null, 2)}
+\`\`\`
+`;
+}
+
+export function createStandardPrompt(text: string, catalog?: Catalog, processes: KnownProcess[] = []): string {
+  return `${standardBasePrompt(catalog, processes)}
+# YOUR TASK
+Convert the following text into a standard in the JSON format. Follow all rules above.
+
+--- TEXT START ---
+${text.trim() || "(paste the policy or guideline here)"}
+--- TEXT END ---
+`;
+}
+
+export function modifyStandardPrompt(standard: Standard, request: string, catalog?: Catalog, processes: KnownProcess[] = []): string {
+  return `${standardBasePrompt(catalog, processes)}
+# YOUR TASK
+Below is an existing standard in the JSON format, followed by a change request. Apply the change and return the COMPLETE updated JSON (not a diff). Keep the "id", "status" and "review" of the standard and the ids of requirements that are not affected. Change nothing that the request does not ask for.
+
+--- CURRENT STANDARD JSON START ---
+${JSON.stringify(standard, null, 2)}
+--- CURRENT STANDARD JSON END ---
+
+--- CHANGE REQUEST START ---
+${request.trim() || "(describe the change here)"}
+--- CHANGE REQUEST END ---
 `;
 }

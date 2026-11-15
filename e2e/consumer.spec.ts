@@ -16,15 +16,23 @@ test("find a process by searching and by tier and language", async ({ page }) =>
   await page.getByPlaceholder(/Search/).fill("");
 
   // Akamai onboarding only applies to tiers 0 and 1
-  await page.locator(".tier-filter select").first().selectOption({ label: "Tier 3" });
+  const mine = page.locator(".profile-filter");
+  await mine.getByLabel("Tier").selectOption({ label: "Tier 3" });
   await expect(cards.filter({ hasText: "Onboard a site to Akamai" })).toHaveCount(0);
   await expect(cards.filter({ hasText: "Request a GCP project" })).toBeVisible();
-  await page.locator(".tier-filter select").first().selectOption({ label: "any tier" });
+  await mine.getByLabel("Tier").selectOption({ label: "any tier" });
+
+  // ...and only to staging and production
+  await mine.getByLabel("Environment").selectOption({ label: "Development" });
+  await expect(cards.filter({ hasText: "Onboard a site to Akamai" })).toHaveCount(0);
+  await mine.getByLabel("Environment").selectOption({ label: "Production" });
+  await expect(cards.filter({ hasText: "Onboard a site to Akamai" })).toContainText("Staging, Production");
+  await mine.getByLabel("Environment").selectOption({ label: "any environment" });
 
   // publishing a library is for Go and JavaScript only
-  await page.locator(".tier-filter.lang select").selectOption({ label: "Python" });
+  await mine.getByLabel("Language").selectOption({ label: "Python" });
   await expect(cards.filter({ hasText: "Publish an internal library" })).toHaveCount(0);
-  await page.locator(".tier-filter.lang select").selectOption({ label: "Go" });
+  await mine.getByLabel("Language").selectOption({ label: "Go" });
   await expect(cards.filter({ hasText: "Publish an internal library" })).toBeVisible();
 
   await page.locator(".filters .chip", { hasText: "Source control" }).click();
@@ -57,6 +65,7 @@ test("follow the checklist: prerequisites, exact actions, ticks that are remembe
   await expect(page.getByText("0 of 5 of your steps done")).toBeVisible();
   await expect(page.locator(".prereq")).toHaveCount(4);
   await expect(page.locator(".prereqs .resources li.skill")).toContainText("Skill: add a GCP project");
+  await expect(page.locator(".link-list.row").getByRole("link", { name: "Infrastructure as code" })).toBeVisible();
 
   const first = page.locator(".step").first();
   await expect(first).toContainText("Choose the environment: dev, test or prod.");
@@ -98,9 +107,12 @@ test("a prerequisite links to the process that provides it", async ({ page }) =>
 test("teams and tools are a read-only directory", async ({ page }) => {
   await open(page, "/catalog");
   await expect(page.getByRole("heading", { name: /Teams, tools/ })).toBeVisible();
+  await expect(page.getByRole("tab")).toHaveCount(5); // teams and units, tools, tiers, environments, languages
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   await expect(page.locator(".cat-detail")).toContainText("Slack #cloud-platform");
+  await expect(page.locator(".cat-detail .eyebrow")).toHaveText("Platform owner");
   await expect(page.locator(".cat-usage")).toContainText("Request a GCP project");
+  await expect(page.locator(".cat-usage")).toContainText("Infrastructure as code"); // the standard this unit issues
   await expect(page.locator(".cat-detail input")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /New team/ })).toHaveCount(0);
   await page.getByRole("tab", { name: /Tools/ }).click();
@@ -115,18 +127,20 @@ test("the guide explains the app with flow charts that fit the page", async ({ p
   await expect(page.locator(".guide-fig .block").first()).toBeVisible();
   // every flow chart fits its column: nothing to scroll sideways
   const overflow = await page.locator(".guide-fig .flow-scroll").evaluateAll((els) => els.map((e) => e.scrollWidth - e.clientWidth));
-  expect(overflow.length).toBeGreaterThanOrEqual(6);
+  expect(overflow.length).toBeGreaterThanOrEqual(7);
   expect(overflow.every((px) => px === 0)).toBe(true);
 
-  // the guide covers using the app and running it
+  // the guide covers using, editing, AI assistants, administration and running it
   const toc = page.locator(".guide-toc");
-  await expect(toc.locator(".eyebrow")).toHaveText(["Using it", "Where it is heading", "Running it"]);
-  for (const id of ["modes", "feedback", "lifecycle", "agents", "architecture", "local", "tests", "deploy", "files", "docs"])
+  await expect(toc.locator(".eyebrow")).toHaveText(["Using it", "Editing", "For AI assistants", "Administration", "Running it"]);
+  for (const id of ["what", "modes", "read", "follow", "blocks", "standards", "feedback", "edit", "editstandard", "ai", "lifecycle", "skills", "agents", "roadmap", "admin", "catalog", "architecture", "local", "tests", "deploy", "files", "docs"])
     await expect(page.locator(`#guide-${id} h2`)).toBeVisible();
-  await expect(page.locator("#guide-modes .guide-table.rights tbody tr")).toHaveCount(5);
+  await expect(page.locator("#guide-modes .guide-table.roles tbody tr")).toHaveCount(5);
   await expect(page.locator("#guide-architecture .arch-box")).toHaveCount(8);
   await expect(page.locator("#guide-local")).toContainText("npm run dev");
-  await expect(page.locator("#guide-deploy")).toContainText("PM_AUTH");
+  await expect(page.locator("#guide-local")).toContainText("Dana Admin");
+  await expect(page.locator("#guide-deploy")).toContainText("PM_ADMINS");
+  await expect(page.locator("#guide-skills")).toContainText(".claude/agents/");
 
   await toc.getByRole("button", { name: "How it is built" }).click();
   await expect(page.locator("#guide-architecture")).toBeInViewport();

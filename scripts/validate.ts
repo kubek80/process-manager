@@ -1,50 +1,53 @@
-/** Schema checker for the command line: `npm run validate [file ...]` (defaults to processes/*.json). */
+/**
+ * Checker for the command line: `npm run validate [folder]`.
+ * Checks catalog/catalog.json, processes/*.json and standards/*.json in the folder (default: the
+ * repository, i.e. the seed content; pass a folder written by `npm run export` to check live content).
+ */
 import fs from "node:fs";
 import path from "node:path";
-import { validateCatalog, validateProcess } from "../src/lib/validate";
-import type { Catalog } from "../src/types";
+import { validateCatalog, validateProcess, validateStandard } from "../src/lib/validate";
+import type { Catalog, Issue } from "../src/types";
 
-const dir = path.resolve("processes");
-const files = process.argv.slice(2).length
-  ? process.argv.slice(2)
-  : fs.readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => path.join(dir, f));
+const root = path.resolve(process.argv[2] ?? ".");
+const read = (dir: string) => (fs.existsSync(path.join(root, dir)) ? fs.readdirSync(path.join(root, dir)).filter((f) => f.endsWith(".json")).sort() : []);
+const processFiles = read("processes"), standardFiles = read("standards");
+const ids = (files: string[]) => files.map((f) => f.replace(/\.json$/, ""));
+let errors = 0, warnings = 0, files = 0;
 
-const known = fs.readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, ""));
-let errors = 0, warnings = 0;
-
-// the catalog first: tiers, teams and tools that processes pick from
-const catalogFile = path.resolve("catalog/catalog.json");
-let catalog: Catalog | undefined;
-try {
-  const raw = JSON.parse(fs.readFileSync(catalogFile, "utf8"));
-  const issues = validateCatalog(raw);
-  errors += issues.length;
-  console.log(`${issues.length ? "\x1b[31m✗" : "\x1b[32m✓"} catalog/catalog.json\x1b[0m`);
-  for (const i of issues) console.log(`    ${i.level.padEnd(7)} ${i.path}: ${i.message}`);
-  if (!issues.length) catalog = raw;
-} catch (e) {
-  console.log(`\x1b[31m✗ catalog/catalog.json\x1b[0m\n    error  ${(e as Error).message}`);
-  errors++;
-}
-
-for (const file of files) {
-  let data: unknown;
-  try {
-    data = JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch (e) {
-    console.log(`\x1b[31m✗ ${file}\x1b[0m\n    error  not valid JSON: ${(e as Error).message}`);
-    errors++;
-    continue;
-  }
-  const issues = validateProcess(data, { processIds: known, catalog });
-  const id = (data as { id?: string }).id;
-  if (id && path.basename(file) !== `${id}.json` && path.dirname(path.resolve(file)) === dir)
-    issues.push({ level: "error", path: "id", message: `file name must be ${id}.json` });
+function report(file: string, issues: Issue[]) {
+  files++;
   const e = issues.filter((i) => i.level === "error").length;
   errors += e;
   warnings += issues.length - e;
-  console.log(`${e ? "\x1b[31m✗" : issues.length ? "\x1b[33m!" : "\x1b[32m✓"} ${path.relative(".", file)}\x1b[0m`);
+  console.log(`${e ? "\x1b[31m✗" : issues.length ? "\x1b[33m!" : "\x1b[32m✓"} ${file}\x1b[0m`);
   for (const i of issues) console.log(`    ${i.level.padEnd(7)} ${i.path}: ${i.message}`);
 }
-console.log(`\n${files.length} file(s), ${errors} error(s), ${warnings} warning(s)`);
+function load(file: string): unknown {
+  try { return JSON.parse(fs.readFileSync(path.join(root, file), "utf8")); } catch (e) {
+    report(file, [{ level: "error", path: "(file)", message: `not valid JSON: ${(e as Error).message}` }]);
+    return undefined;
+  }
+}
+
+// the lists first: processes and standards pick from them
+let catalog: Catalog | undefined;
+const rawCatalog = load("catalog/catalog.json");
+if (rawCatalog !== undefined) {
+  const issues = validateCatalog(rawCatalog);
+  report("catalog/catalog.json", issues);
+  if (!issues.length) catalog = rawCatalog as Catalog;
+}
+const ctx = { processIds: ids(processFiles), standardIds: ids(standardFiles), catalog };
+
+for (const [dir, list, check] of [["processes", processFiles, validateProcess], ["standards", standardFiles, validateStandard]] as const) {
+  for (const f of list) {
+    const data = load(`${dir}/${f}`);
+    if (data === undefined) continue;
+    const issues = check(data, ctx);
+    const id = (data as { id?: string }).id;
+    if (id && f !== `${id}.json`) issues.push({ level: "error", path: "id", message: `file name must be ${id}.json` });
+    report(`${dir}/${f}`, issues);
+  }
+}
+console.log(`\n${files} file(s), ${errors} error(s), ${warnings} warning(s)`);
 process.exit(errors ? 1 : 0);
