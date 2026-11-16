@@ -857,3 +857,13 @@ button.saved { border: 0; background: none; padding: 0 4px; height: 34px; cursor
 .mine-table td:first-child a { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); }
 .mine-table td:first-child a:hover { color: var(--accent); }
 .mine-table td:first-child svg { color: var(--text-3); flex: none; }
+
+/* ---------- members of a team (Admin, Lists) ---------- */
+.cat-members { display: grid; gap: 8px; padding-top: 18px; border-top: 1px solid var(--line); }
+.cat-members h3 { display: flex; align-items: baseline; gap: 8px; font-size: 12px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.cat-members h3 span { font-weight: 600; color: var(--text-3); }
+.cat-members .people { list-style: none; margin: 0; padding: 0; }
+.member-add { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+.member-add > svg { color: var(--text-3); flex: none; }
+.member-add input { flex: 1 1 220px; min-width: 0; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13.5px; }
+.member-add select { width: auto; flex: none; height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13.5px; }

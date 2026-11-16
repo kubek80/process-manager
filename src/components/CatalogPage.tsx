@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpRight, Code2, Server, ExternalLink, Layers, Plus, Search, Trash2, Users, Wrench } from "lucide-react";
-import type { Catalog, Process, Standard } from "../types";
+import type { Catalog, Process, Standard, Team } from "../types";
+import { TeamMembers } from "./TeamMembers";
 import { slugify, uniqueId } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
 import { useDraft } from "../lib/draft";
@@ -255,6 +256,9 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
                   ))}
                 </ul>
               </div>
+
+              {/* who belongs to the team: only where the lists are managed, and only for a team */}
+              {editor && key === "teams" && <TeamMembers team={current as unknown as Team} saved={!isNew(current.id)} />}
 
               {editor && (
                 <div className="cat-danger">

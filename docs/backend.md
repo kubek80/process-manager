@@ -49,6 +49,7 @@ flowchart LR
 - `PM_ADMINS` names the bootstrap admins. They are always admin and cannot be removed in the panel.
 - Without bootstrap admins, the last admin in the database cannot be removed (409).
 - A role limited to a team must name a team that exists in the lists.
+- The members of a team or unit are the people with the `owner` role (and, for a unit, `standards-editor`) limited to it. There is no separate membership: the Members section of a team in Admin › Lists gives and takes these roles through `/api/admin/access`. Membership is not read from Entra or Google groups.
 - If the roles cannot be read, the request is treated as a consumer's.
 - The right to change a stored document is checked in the same transaction as the save, against its stored owner.
 

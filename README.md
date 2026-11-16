@@ -57,7 +57,7 @@ React + Vite frontend; Go server; Postgres. Everything people change lives in th
 | **Feedback** | On a step or a requirement, “I hit this too”, closed by the owner, flagged when the text changed since |
 | **My responsibilities** | For owners: reviews to do, feedback waiting, drafts, and everything their teams and units own, on one page with a count in the top bar |
 | **Skills** | Generated per process and per standard, versioned automatically, with optional hand-written guidance |
-| **Admin panel** | Roles, the lists (teams and units, tools, tiers, environments, languages), the skills registry, health, activity |
+| **Admin panel** | Roles, the lists (teams and units with their members, tools, tiers, environments, languages), the skills registry, health, activity |
 | **AI authoring** | A self-contained prompt for any chat assistant turns text into a process or a standard; the checker validates what comes back |
 
 ![A standard](docs/standard.png)
@@ -81,6 +81,8 @@ Everyone who signs in (Entra ID or Google) can read, tick and give feedback. Rol
 | Standards editor (one unit or all) | Create and change standards |
 | Lists manager | Teams, tools, tiers, environments, languages |
 | Admin | Everything, including roles |
+
+A team or unit can have any number of members: a member is somebody with the Owner role for it, added on the team itself in **Admin › Lists** or person by person in **Admin › Access**.
 
 The first admins are named in the server setting `PM_ADMINS`.
 

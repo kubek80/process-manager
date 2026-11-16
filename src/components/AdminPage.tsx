@@ -68,7 +68,7 @@ function AccessSection() {
 
   return (
     <div className="admin-section">
-      <p className="lead small">People sign in with their company account. What they may do is decided here. Everyone who can sign in can read, tick steps and give feedback.</p>
+      <p className="lead small">People sign in with their company account. What they may do is decided here. Everyone who can sign in can read, tick steps and give feedback. The members of one team or unit are easier to manage on the team itself, under <a href="#/admin/lists">Lists</a>.</p>
       {error && <LoadError what="The list of people with roles could not be loaded." error={error} onRetry={load} />}
 
       <section className="admin-card">

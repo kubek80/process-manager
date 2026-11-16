@@ -195,7 +195,7 @@ export function GuidePage() {
         </Section>
 
         <Section id="mine" title="Your responsibilities">
-          <p>If you are <b>Owner</b> for a team or unit, or edit the standards of a unit, the top bar has <b>My responsibilities</b>. The number next to it is what is waiting for you: reviews that are overdue and feedback nobody has dealt with.</p>
+          <p>You belong to a team when an admin has made you a <b>member</b> of it, which is the same as being <b>Owner</b> for it; a team can have as many members as it needs. If you are a member of a team or unit, or edit the standards of a unit, the top bar has <b>My responsibilities</b>. The number next to it is what is waiting for you: reviews that are overdue and feedback nobody has dealt with.</p>
           <dl className="guide-dl">
             <div><dt><CalendarCheck size={14} />Reviews to do</dt><dd>What is overdue or due within a month, the most overdue first. Read it; if it is still right, press <b>Still correct</b>. That records today and your name, as a version of its own. You do not have to be an editor for this: the review belongs to the team that owns the thing. If something has to change, change it (or ask an editor), then confirm.</dd></div>
             <div><dt><Flag size={14} />Feedback waiting for you</dt><dd>Every open item on what your teams own, the oldest first: what was said, about which step or requirement, by whom, and how many others hit the same. <b>Mark as fixed</b> closes it and tells the person who reported it.</dd></div>
@@ -300,8 +300,8 @@ export function GuidePage() {
         <Section id="admin" title="The Admin panel">
           <p><b>Admin</b> in the top bar is where everything is configured. Admins see all of it; people who manage the lists see Lists, Skills and Health.</p>
           <dl className="guide-dl">
-            <div><dt><KeyRound size={14} />Access</dt><dd>Who has which role. Give a role by email, optionally limited to one team or unit; remove it with one click. A change applies on the person’s next click, without signing in again.</dd></div>
-            <div><dt><List size={14} />Lists</dt><dd>Teams and units, tools, tiers, environments and languages.</dd></div>
+            <div><dt><KeyRound size={14} />Access</dt><dd>Who has which role, person by person. Give a role by email, optionally limited to one team or unit; remove it with one click. A change applies on the person’s next click, without signing in again.</dd></div>
+            <div><dt><List size={14} />Lists</dt><dd>Teams and units, tools, tiers, environments and languages. Each team and unit shows its <b>members</b>, and an admin adds and removes them there.</dd></div>
             <div><dt><Bot size={14} />Skills</dt><dd>Every generated skill and review agent, with its versions and extra guidance.</dd></div>
             <div><dt><CalendarCheck size={14} />Health</dt><dd>Reviews that are due, open feedback, drafts that were never published, and active documents without an owner or a review rhythm.</dd></div>
             <div><dt>Activity</dt><dd>Who changed what and when: content with the version and its note, lists, roles, skills, and feedback that was closed, reopened or deleted by someone other than its author. The newest entries come first; “Show older” goes back as far as the log does.</dd></div>
@@ -314,6 +314,7 @@ export function GuidePage() {
           <p>Processes and standards do not type these in; they pick them from shared lists, so a team is spelled the same everywhere and renaming it once renames it everywhere. Everyone can look them up under <b>Teams &amp; tools</b>; they are changed in <b>Admin › Lists</b>.</p>
           <dl className="guide-dl">
             <div><dt>Teams and units</dt><dd>A team owns processes and takes part in them, which gives it a lane. A <b>unit</b> is a team of the kind cyber security, platform owner or practice: only units issue standards.</dd></div>
+            <div><dt>Members</dt><dd>The people who belong to a team or unit. A member is Owner for it: what the team owns shows up under their “My responsibilities”, they confirm its reviews and close its feedback. A unit can also have members who edit its standards. In <b>Admin › Lists</b> an admin opens the team, types an email address under Members and presses Add member; removing works the same way and takes effect at once. It is the same thing as giving the role under Access, seen from the team’s side. A team without members has nobody who is asked to review what it owns.</dd></div>
             <div><dt>Tools</dt><dd>A step picks its tool from the list. Editors who manage the lists can add a missing tool straight from that picker.</dd></div>
             <div><dt><Layers size={14} />Tiers</dt><dd>How critical an application is. A process or standard applies to every tier or to chosen ones.</dd></div>
             <div><dt>Environments</dt><dd>Where things run, such as test or production. A requirement can apply to production only.</dd></div>
