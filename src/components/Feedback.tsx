@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, CircleCheck, Flag, History, RotateCcw, ThumbsUp, Trash2 } from "lucide-react";
 import type { Feedback, FeedbackKind, Process, Standard, TargetKind } from "../types";
 import { useFeedbackActions } from "../lib/session";
+import { confirmDialog } from "./ui";
 
 export const FEEDBACK_KINDS: Record<FeedbackKind, { label: string; hint: string }> = {
   broken: { label: "Doesn’t work", hint: "I followed it and it failed" },
@@ -53,9 +54,9 @@ export function FeedbackForm({ target, itemId, pickItem, onDone }: {
 
   return (
     <div className="fb-form">
-      <div className="chips">
+      <div className="chips" role="group" aria-label="Kind of feedback">
         {(Object.keys(FEEDBACK_KINDS) as FeedbackKind[]).map((k) => (
-          <button key={k} className={`chip ${kind === k ? "on" : ""}`} title={FEEDBACK_KINDS[k].hint} onClick={() => setKind(k)}>{FEEDBACK_KINDS[k].label}</button>
+          <button key={k} className={`chip ${kind === k ? "on" : ""}`} aria-pressed={kind === k} title={FEEDBACK_KINDS[k].hint} onClick={() => setKind(k)}>{FEEDBACK_KINDS[k].label}</button>
         ))}
       </div>
       {pickItem && (
@@ -64,12 +65,12 @@ export function FeedbackForm({ target, itemId, pickItem, onDone }: {
           {target.items.map((it) => <option key={it.id} value={it.id}>{it.label}</option>)}
         </select>
       )}
-      <textarea rows={3} value={text} maxLength={2000} onChange={(e) => setText(e.target.value)}
+      <textarea rows={3} value={text} maxLength={2000} onChange={(e) => setText(e.target.value)} aria-label="Your feedback"
         placeholder={target.kind === "process" ? "What happened? e.g. “The catalogue item is now called ‘Cloud project (GCP)’.”" : "What is wrong or unclear? e.g. “Does this also apply to one-off migration scripts?”"}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send(); }} />
       <div className="fb-send">
         <button className="btn primary" disabled={text.trim().length < 3 || busy} onClick={send}><Flag size={15} />Send feedback</button>
-        {sent && <p className="fb-thanks"><CircleCheck size={15} />Thanks - the owner has been told.</p>}
+        {sent && <p className="fb-thanks" role="status"><CircleCheck size={15} />Thanks - the owner has been told.</p>}
       </div>
     </div>
   );
@@ -80,6 +81,14 @@ export function FeedbackItem({ item, target, onSelect, hideItem }: {
 }) {
   const actions = useFeedbackActions();
   const part = item.itemId ? target.items.find((it) => it.id === item.itemId) : undefined;
+  const remove = async () => {
+    const yes = await confirmDialog({
+      title: "Delete this feedback?",
+      body: <>“{item.text.length > 140 ? `${item.text.slice(0, 140)}…` : item.text}” {item.mine ? "is" : `from ${item.author.name} is`} removed for everyone. This cannot be undone.</>,
+      confirmLabel: "Delete feedback", danger: true,
+    });
+    if (yes) actions.remove(item);
+  };
   return (
     <li className={`fb-item ${item.kind} ${item.resolved ? "resolved" : ""}`}>
       <div className="fb-meta">
@@ -107,7 +116,7 @@ export function FeedbackItem({ item, target, onSelect, hideItem }: {
             {item.resolved ? <RotateCcw size={14} /> : <Check size={14} />}{item.resolved ? "Reopen" : "Mark as fixed"}
           </button>
         )}
-        {(item.canManage || item.mine) && <button className="icon-btn danger" onClick={() => actions.remove(item)} aria-label="Delete feedback"><Trash2 size={15} /></button>}
+        {(item.canManage || item.mine) && <button className="icon-btn danger" onClick={remove} aria-label="Delete feedback"><Trash2 size={15} /></button>}
       </div>
     </li>
   );

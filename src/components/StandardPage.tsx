@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArrowDown, ArrowLeft, ArrowUp, ArrowUpRight, Bot, Braces, CalendarCheck, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, Eye,
   Flag, History, ListChecks, Pencil, Plus, Save, Settings2, ShieldCheck, Sparkles, Trash2, TriangleAlert, Undo2, Workflow, X,
@@ -12,14 +12,17 @@ import { createStandardPrompt, modifyStandardPrompt } from "../lib/prompt";
 import { canEditStandard, useMe, usePerms } from "../lib/session";
 import { go, href, type StandardTab } from "../lib/store";
 import { isDrawableStandard, standardSchema, validateStandard } from "../lib/validate";
-import { AiDialog, IssueList, type AiSpec } from "./AiDialog";
+import type { AiSpec } from "./AiDialog";
 import { FeedbackForm, FeedbackItem, FeedbackTab, openCount, standardTarget } from "./Feedback";
 import { DimsEditor, DimTags, LifecycleEditor, ProfileFilter, ReviewTag, unitsOf } from "./Governance";
 import { HistoryDialog } from "./HistoryDialog";
-import { JsonView } from "./JsonView";
 import { ResourceEditor, Resources } from "./Resources";
 import { SourceSkills } from "./SkillPanel";
-import { Field, Modal } from "./ui";
+import { confirmDialog, Field, IssueList, Loading, Modal, scrollBehavior, useLayer } from "./ui";
+
+// the editor for the JSON tab and the AI dialog are loaded when they are first opened
+const JsonView = lazy(() => import("./JsonView").then((m) => ({ default: m.JsonView }))) as typeof import("./JsonView").JsonView;
+const AiDialog = lazy(() => import("./AiDialog").then((m) => ({ default: m.AiDialog }))) as typeof import("./AiDialog").AiDialog;
 
 export const LEVEL: Record<Level, { label: string; hint: string }> = {
   must: { label: "Must", hint: "Mandatory. Deviating needs an exception." },
@@ -64,7 +67,8 @@ function RequirementCard({ r, standard, processes, applies, flags, selected, edi
         <span className={`level ${r.level}`} title={LEVEL[r.level].hint}>{LEVEL[r.level].label}</span>
         <h3 className="req-title">{r.title}</h3>
         <span className="spacer" />
-        <button className={`report ${flags ? "has" : ""}`} onClick={onReport} title={flags ? `${flags} open feedback` : "Something wrong or unclear? Tell us"}><Flag size={14} />{flags || ""}</button>
+        <button className={`report ${flags ? "has" : ""}`} onClick={onReport} title={flags ? `${flags} open feedback` : "Something wrong or unclear? Tell us"}
+          aria-label={`${flags ? `${flags} open feedback` : "Report a problem"} on ${r.id}`}><Flag size={14} />{flags || ""}</button>
         {editable && <button className="icon-btn" onClick={onEdit} aria-label={`Edit ${r.id}`}><Pencil size={15} /></button>}
       </header>
       <p className="req-statement">{r.statement}</p>
@@ -106,21 +110,56 @@ function RequirementCard({ r, standard, processes, applies, flags, selected, edi
   );
 }
 
-function Rows({ label, hint, items, onChange, placeholder, code }: { label: string; hint?: string; items: string[]; onChange: (v: string[]) => void; placeholder: string; code?: boolean }) {
+function Rows({ label, hint, items, onChange, placeholder, code, line, max }: {
+  label: string; hint?: string; items: string[]; onChange: (v: string[]) => void; placeholder: string; code?: boolean;
+  /** one short line per item instead of a text box */ line?: boolean; max?: number;
+}) {
   return (
     <div className="field">
       <span className="field-label">{label}{hint && <em>{hint}</em>}</span>
       <div className="rows">
         {items.map((v, i) => (
           <div className="row" key={i}>
-            <textarea rows={code ? 3 : 2} className={code ? "mono" : ""} value={v} placeholder={placeholder} autoFocus={v === ""}
-              onChange={(e) => onChange(items.map((x, j) => (j === i ? e.target.value : x)))} />
-            <button className="icon-btn" onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label="Remove"><X size={15} /></button>
+            {line
+              ? <input className="mono" value={v} placeholder={placeholder} autoFocus={v === ""} aria-label={`${label} ${i + 1}`} maxLength={100}
+                  onChange={(e) => onChange(items.map((x, j) => (j === i ? e.target.value : x)))} />
+              : <textarea rows={code ? 3 : 2} className={code ? "mono" : ""} value={v} placeholder={placeholder} autoFocus={v === ""} aria-label={`${label} ${i + 1}`}
+                  onChange={(e) => onChange(items.map((x, j) => (j === i ? e.target.value : x)))} />}
+            <button className="icon-btn" onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label={`Remove ${label} ${i + 1}`}><X size={15} /></button>
           </div>
         ))}
-        <button className="btn small ghost" onClick={() => onChange([...items, ""])}><Plus size={14} />Add</button>
+        {(max === undefined || items.length < max) && <button className="btn small ghost" onClick={() => onChange([...items, ""])}><Plus size={14} />Add</button>}
       </div>
     </div>
+  );
+}
+
+const REQUIREMENT_ID = /^[A-Z][A-Z0-9]*(-[A-Z0-9]+)+$/;
+
+/**
+ * The id of a requirement is typed freely and only taken over when the field is left or Enter is
+ * pressed: on the way from SEC-LOG-07 to SEC-LOG-10 the text passes through ids that already exist.
+ */
+function IdField({ id, taken, onRename }: { id: string; taken: string[]; onRename: (id: string) => void }) {
+  const [value, setValue] = useState(id);
+  const [error, setError] = useState("");
+  const errorId = useId();
+  useEffect(() => { setValue(id); setError(""); }, [id]);
+  const commit = () => {
+    const next = value.trim().toUpperCase();
+    if (next === id) { setValue(id); return setError(""); }
+    if (!REQUIREMENT_ID.test(next) || next.length > 30) return setError(`“${next}” cannot be used. An id is capital letters and digits in groups joined by dashes, like SEC-LOG-07. The requirement keeps ${id}.`);
+    if (taken.includes(next)) return setError(`${next} is already the id of another requirement. This one keeps ${id}.`);
+    setError(""); onRename(next);
+  };
+  return (
+    <label className="field">
+      <span className="field-label">Id<em>cited by people and tools</em></span>
+      <input value={value} maxLength={30} aria-invalid={!!error} aria-describedby={error ? errorId : undefined}
+        onChange={(e) => { setValue(e.target.value.toUpperCase()); setError(""); }} onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }} />
+      {error && <span className="field-error" role="alert" id={errorId}>{error}</span>}
+    </label>
   );
 }
 
@@ -134,13 +173,17 @@ function RequirementDrawer({ r, standard, processes, feedback, editing, editable
   const index = standard.requirements.findIndex((x) => x.id === r.id);
   const review = r.review ?? { lookFor: [] };
   const setReview = (patch: Partial<NonNullable<Requirement["review"]>>) => onChange({ review: { ...review, ...patch } });
+  const panel = useRef<HTMLElement>(null);
+  const titleId = useId();
+  // a side panel, not a modal dialog: focus moves in and comes back, Escape closes, Tab is free
+  useLayer(panel, onClose, { watch: r.id });
   return (
-    <aside className={`drawer req-drawer ${r.level}`}>
+    <aside ref={panel} className={`drawer req-drawer ${r.level}`} role="dialog" aria-labelledby={titleId} tabIndex={-1}>
       <header className="drawer-head">
         <span className={`level big ${r.level}`}>{LEVEL[r.level].label}</span>
         <div className="drawer-title">
           <span className="step-kicker"><span className="who">{r.id}</span><span>Requirement {index + 1} of {standard.requirements.length}</span></span>
-          <h3>{r.title}</h3>
+          <h3 id={titleId}>{r.title}</h3>
         </div>
         <button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
       </header>
@@ -148,9 +191,9 @@ function RequirementDrawer({ r, standard, processes, feedback, editing, editable
         <div className="drawer-tools">
           <span className="muted small">Changes go into the draft</span>
           <span className="spacer" />
-          <button className="icon-btn" title="Move up" disabled={index === 0} onClick={() => onMove(-1)}><ArrowUp size={16} /></button>
-          <button className="icon-btn" title="Move down" disabled={index === standard.requirements.length - 1} onClick={() => onMove(1)}><ArrowDown size={16} /></button>
-          <button className="icon-btn danger" title="Delete requirement" disabled={standard.requirements.length === 1} onClick={onDelete}><Trash2 size={16} /></button>
+          <button className="icon-btn" title="Move up" aria-label="Move up" disabled={index === 0} onClick={() => onMove(-1)}><ArrowUp size={16} /></button>
+          <button className="icon-btn" title="Move down" aria-label="Move down" disabled={index === standard.requirements.length - 1} onClick={() => onMove(1)}><ArrowDown size={16} /></button>
+          <button className="icon-btn danger" title="Delete requirement" aria-label="Delete requirement" disabled={standard.requirements.length === 1} onClick={onDelete}><Trash2 size={16} /></button>
         </div>
       )}
 
@@ -167,11 +210,11 @@ function RequirementDrawer({ r, standard, processes, feedback, editing, editable
       ) : (
         <div className="drawer-body form">
           <div className="grid2">
-            <Field label="Id" hint="cited by people and tools"><input value={r.id} maxLength={30} onChange={(e) => onRename(e.target.value.toUpperCase())} /></Field>
+            <IdField id={r.id} taken={standard.requirements.filter((x) => x !== r).map((x) => x.id)} onRename={onRename} />
             <div className="field">
               <span className="field-label">Level</span>
-              <div className="chips">
-                {(Object.keys(LEVEL) as Level[]).map((l) => <button key={l} className={`chip ${r.level === l ? "on" : ""}`} title={LEVEL[l].hint} onClick={() => onChange({ level: l })}>{LEVEL[l].label}</button>)}
+              <div className="chips" role="group" aria-label="Level">
+                {(Object.keys(LEVEL) as Level[]).map((l) => <button key={l} className={`chip ${r.level === l ? "on" : ""}`} aria-pressed={r.level === l} title={LEVEL[l].hint} onClick={() => onChange({ level: l })}>{LEVEL[l].label}</button>)}
               </div>
             </div>
           </div>
@@ -184,9 +227,9 @@ function RequirementDrawer({ r, standard, processes, feedback, editing, editable
 
           <div className="field">
             <span className="field-label">How it is checked</span>
-            <div className="chips">
+            <div className="chips" role="group" aria-label="How it is checked">
               {(Object.keys(METHOD) as VerificationMethod[]).map((m) => (
-                <button key={m} className={`chip ${r.verification.method === m ? "on" : ""}`} onClick={() => onChange({ verification: { ...r.verification, method: m } })}>{METHOD[m].replace("Checked ", "")}</button>
+                <button key={m} className={`chip ${r.verification.method === m ? "on" : ""}`} aria-pressed={r.verification.method === m} onClick={() => onChange({ verification: { ...r.verification, method: m } })}>{METHOD[m].replace("Checked ", "")}</button>
               ))}
             </div>
           </div>
@@ -195,17 +238,13 @@ function RequirementDrawer({ r, standard, processes, feedback, editing, editable
           <h4>For reviewers <span className="muted">feeds the review agent</span></h4>
           <Rows label="Signs of a violation in a pull request" hint="leave empty if it cannot be seen in a change" items={review.lookFor} onChange={(lookFor) => setReview({ lookFor })}
             placeholder="A variable named like password or token passed to a log call" />
-          <div className="grid2">
-            <Field label="Files" hint="patterns, comma separated">
-              <input value={(review.paths ?? []).join(", ")} placeholder="**/*.go, terraform/**" onChange={(e) => setReview({ paths: e.target.value.split(",").map((p) => p.trimStart()) })} />
-            </Field>
-            <Field label="Report as">
-              <select value={review.severity ?? ""} onChange={(e) => setReview({ severity: (e.target.value || undefined) as Severity | undefined })}>
-                <option value="">Default for the level ({defaultSeverity(r.level)})</option>
-                <option value="blocker">Blocker</option><option value="warning">Warning</option><option value="info">Info</option>
-              </select>
-            </Field>
-          </div>
+          <Rows line max={10} label="Files" hint="one pattern per row; leave empty for all files" items={review.paths ?? []} onChange={(paths) => setReview({ paths })} placeholder="**/*.{ts,tsx}" />
+          <Field label="Report as">
+            <select value={review.severity ?? ""} onChange={(e) => setReview({ severity: (e.target.value || undefined) as Severity | undefined })}>
+              <option value="">Default for the level ({defaultSeverity(r.level)})</option>
+              <option value="blocker">Blocker</option><option value="warning">Warning</option><option value="info">Info</option>
+            </select>
+          </Field>
 
           <h4>Applies only to <span className="muted">narrower than the standard</span></h4>
           <DimsEditor narrow value={r} onChange={onChange} />
@@ -253,7 +292,7 @@ function StandardSettings({ standard, all, processes, onChange, onClose, onDelet
         <DimsEditor value={standard} onChange={set} />
 
         <h4>Life-cycle <span className="muted">who sees it and how often the unit reviews it</span></h4>
-        <LifecycleEditor doc={standard} others={all} noun="standard" onChange={set} />
+        <LifecycleEditor doc={standard} others={all} onChange={set} />
 
         <h4>Exceptions and background</h4>
         <Field label="How to ask for an exception">
@@ -314,7 +353,7 @@ export function StandardPage({ standard, all, processes, tab, feedback, onSave, 
   const select = (id: string) => {
     setSelected(id); setReporting(false);
     if (view !== "doc") go({ page: "standard", id: standard.id, tab: "doc" });
-    setTimeout(() => document.getElementById(`req-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+    setTimeout(() => document.getElementById(`req-${id}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "center" }), 50);
   };
   const save = async () => {
     setSaving(true);
@@ -326,7 +365,9 @@ export function StandardPage({ standard, all, processes, tab, feedback, onSave, 
     if (!dirty && !errors) await onSave({ ...tidyStandard(next), updatedAt: standard.updatedAt });
   };
   const add = () => { const r = addRequirement(draft, selected ?? undefined); setDraft(r.standard); setSelected(r.id); setEditing(true); };
-  const back = () => { if (!dirty || confirm("Leave without saving your changes?")) go({ page: "standards" }); };
+  const back = async () => {
+    if (!dirty || await confirmDialog({ title: "Leave without saving?", body: "Your changes to this standard have not been saved. If you leave now they are lost.", confirmLabel: "Leave without saving", cancelLabel: "Stay", danger: true })) go({ page: "standards" });
+  };
 
   const shown = renderable ? draft.requirements.filter((r) => !level || r.level === level) : [];
   const count = (l: Level) => (renderable ? draft.requirements.filter((r) => r.level === l && appliesTo(r, profile)).length : 0);
@@ -374,7 +415,7 @@ export function StandardPage({ standard, all, processes, tab, feedback, onSave, 
         <span className="spacer" />
         {editor && <button className={`status ${errors ? "bad" : issues.length ? "warn" : "good"}`} onClick={() => setShowIssues(!showIssues)} disabled={!issues.length}>
           {errors ? <CircleAlert size={15} /> : issues.length ? <TriangleAlert size={15} /> : <CircleCheck size={15} />}
-          {errors ? `${errors} problem${errors > 1 ? "s" : ""}` : issues.length ? `${issues.length} hint${issues.length > 1 ? "s" : ""}` : "Schema valid"}
+          {errors ? `${errors} problem${errors > 1 ? "s" : ""}` : issues.length ? `${issues.length} hint${issues.length > 1 ? "s" : ""}` : "No problems"}
         </button>}
         {dirty && <>
           <button className="btn" onClick={() => { setDraft(standard); setEditing(false); }}><Undo2 size={16} />Discard</button>
@@ -414,10 +455,10 @@ export function StandardPage({ standard, all, processes, tab, feedback, onSave, 
           {!!draft.resources?.length && <section className="prereqs"><h2>Background</h2><Resources list={draft.resources} /></section>}
 
           <div className="req-bar">
-            <div className="chips">
-              <button className={`chip ${level === null ? "on" : ""}`} onClick={() => setLevel(null)}>All<span>{draft.requirements.filter((r) => appliesTo(r, profile)).length}</span></button>
+            <div className="chips" role="group" aria-label="Show requirements of level">
+              <button className={`chip ${level === null ? "on" : ""}`} aria-pressed={level === null} onClick={() => setLevel(null)}>All<span>{draft.requirements.filter((r) => appliesTo(r, profile)).length}</span></button>
               {(Object.keys(LEVEL) as Level[]).map((l) => count(l) > 0 && (
-                <button key={l} className={`chip ${level === l ? "on" : ""}`} title={LEVEL[l].hint} onClick={() => setLevel(level === l ? null : l)}>{LEVEL[l].label}<span>{count(l)}</span></button>
+                <button key={l} className={`chip ${level === l ? "on" : ""}`} aria-pressed={level === l} title={LEVEL[l].hint} onClick={() => setLevel(level === l ? null : l)}>{LEVEL[l].label}<span>{count(l)}</span></button>
               ))}
             </div>
             <ProfileFilter value={profile} onChange={setProfile} />
@@ -434,7 +475,7 @@ export function StandardPage({ standard, all, processes, tab, feedback, onSave, 
       )}
       {view === "feedback" && renderable && <FeedbackTab target={target} feedback={feedback} onSelect={select} />}
       {view === "skills" && renderable && <SourceSkills kind="standard" id={standard.id} revision={standard} />}
-      {view === "json" && <JsonView doc={clean} noun="standard" validate={(v) => validateStandard(v, ctx)} schema={standardSchema} schemaFile="schema/standard.schema.json" onChange={setDraft} />}
+      {view === "json" && <Suspense fallback={<Loading />}><JsonView doc={clean} noun="standard" validate={(v) => validateStandard(v, ctx)} schema={standardSchema} schemaFile="schema/standard.schema.json" onChange={setDraft} /></Suspense>}
 
       {current && view === "doc" && (
         <RequirementDrawer r={current} standard={draft} processes={processes} feedback={feedback} editing={editing} editable={editor}
@@ -442,15 +483,24 @@ export function StandardPage({ standard, all, processes, tab, feedback, onSave, 
           onChange={(patch) => setDraft(updateRequirement(draft, current.id, patch))}
           onRename={(id) => { if (!draft.requirements.some((x) => x.id === id && x !== current)) { setDraft(updateRequirement(draft, current.id, { id })); setSelected(id); } }}
           onClose={() => { setSelected(null); setEditing(false); }}
-          onDelete={() => { if (confirm(`Delete the requirement ${current.id}?`)) { setDraft(deleteRequirement(draft, current.id)); setSelected(null); } }}
+          onDelete={async () => {
+            if (!await confirmDialog({ title: `Delete ${current.id}?`, body: <>The requirement “{current.title}” is removed from the draft. Nothing is final until you save.</>, confirmLabel: "Delete requirement", danger: true })) return;
+            setDraft((d) => deleteRequirement(d, current.id)); setSelected(null);
+          }}
           onMove={(dir) => setDraft(moveRequirement(draft, current.id, dir))} />
       )}
 
       {dialog === "settings" && (
         <StandardSettings standard={draft} all={all} processes={processes} onChange={setDraft} onClose={() => setDialog(null)}
-          onDelete={() => { if (confirm(`Delete the standard “${standard.title}”? Its skills are withdrawn and its feedback is removed.`)) onDelete(); }} />
+          onDelete={async () => {
+            if (await confirmDialog({ title: "Delete this standard?", body: <>“{standard.title}” is removed for everyone. Its skills are withdrawn and its feedback is removed.</>, confirmLabel: "Delete standard", danger: true })) onDelete();
+          }} />
       )}
-      {dialog === "ai" && <AiDialog spec={standardAiSpec(clean, all, processes, catalog)} onClose={() => setDialog(null)} onImport={(s) => { setDraft(s); setSelected(null); setDialog(null); }} />}
+      {dialog === "ai" && (
+        <Suspense fallback={null}>
+          <AiDialog spec={standardAiSpec(clean, all, processes, catalog)} onClose={() => setDialog(null)} onImport={(s) => { setDraft(s); setSelected(null); setDialog(null); }} />
+        </Suspense>
+      )}
       {dialog === "history" && <HistoryDialog<Standard> kind="standard" id={standard.id} title={standard.title} onClose={() => setDialog(null)}
         onRestore={(doc) => { setDraft(doc); setDialog(null); }} />}
     </div>

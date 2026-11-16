@@ -128,11 +128,12 @@ export function ListView({ process, all, done, toggle, reset, selectedId, onSele
                     <span className="step-title">{s.title}</span>
                   </button>
                   <button className={`report ${openCount(feedback, s.id) ? "has" : ""}`} onClick={() => onReport(s.id)}
-                    title={openCount(feedback, s.id) ? `${openCount(feedback, s.id)} open feedback` : "This step doesn’t work? Tell us"}>
+                    title={openCount(feedback, s.id) ? `${openCount(feedback, s.id)} open feedback` : "This step doesn’t work? Tell us"}
+                    aria-label={`${openCount(feedback, s.id) ? `${openCount(feedback, s.id)} open feedback` : "Report a problem"} on step ${i + 1}: ${s.title}`}>
                     <Flag size={14} />{openCount(feedback, s.id) || ""}
                   </button>
                   {isMine
-                    ? <button className={`tick ${done.has(s.id) ? "on" : ""}`} onClick={() => toggle(s.id)} aria-label="Mark as done"><Check size={16} strokeWidth={3} /></button>
+                    ? <button className={`tick ${done.has(s.id) ? "on" : ""}`} onClick={() => toggle(s.id)} aria-pressed={done.has(s.id)} aria-label={`Mark as done: ${s.title}`}><Check size={16} strokeWidth={3} /></button>
                     : <span className="waiting">{s.type === "automation" ? "Automatic" : "Not you"}</span>}
                 </div>
                 <StepBody step={isMine ? s : { ...s, instructions: undefined }} process={process} all={all} onSelect={onSelect} />
@@ -140,9 +141,9 @@ export function ListView({ process, all, done, toggle, reset, selectedId, onSele
               {editable && !onlyMine && (
                 <div className={`step-insert ${adding === s.id ? "open" : ""}`}>
                   {adding === s.id
-                    ? <QuickAdd inline process={process} at={insertAt(i)} onClose={() => setAdding(null)}
+                    ? <QuickAdd inline process={process} at={insertAt(i)} onClose={() => setAdding(null)} returnFocus={() => document.getElementById(`insert-after-${s.id}`)}
                         onAdd={(spec) => { onInsert?.(insertAt(i), spec); setAdding(null); }} />
-                    : <button onClick={() => setAdding(s.id)} title="Insert a step here"><Plus size={13} strokeWidth={3} />Insert a step here</button>}
+                    : <button id={`insert-after-${s.id}`} onClick={() => setAdding(s.id)} title={`Insert a step after “${s.title}”`}><Plus size={13} strokeWidth={3} />Insert a step here</button>}
                 </div>
               )}
             </li>

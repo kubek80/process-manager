@@ -35,10 +35,10 @@ export function DimsEditor({ value, onChange, narrow }: { value: Dims; onChange:
         return (
           <div className="field" key={d.key}>
             <span className="field-label">{d.label}<em>{picked.length ? d.some : narrow ? "same as the standard" : d.none}</em></span>
-            <div className="chips">
-              <button className={`chip ${picked.length === 0 ? "on" : ""}`} onClick={() => onChange({ [d.key]: undefined })}>{narrow ? "As the standard" : d.all}</button>
+            <div className="chips" role="group" aria-label={d.label}>
+              <button className={`chip ${picked.length === 0 ? "on" : ""}`} aria-pressed={picked.length === 0} onClick={() => onChange({ [d.key]: undefined })}>{narrow ? "As the standard" : d.all}</button>
               {all.map((x) => (
-                <button key={x.id} className={`chip ${picked.includes(x.id) ? "on" : ""}`} title={x.description}
+                <button key={x.id} className={`chip ${picked.includes(x.id) ? "on" : ""}`} aria-pressed={picked.includes(x.id)} title={x.description}
                   onClick={() => onChange({ [d.key]: all.map((y) => y.id).filter((id) => (id === x.id ? !picked.includes(id) : picked.includes(id))) })}>{x.name}</button>
               ))}
             </div>
@@ -70,8 +70,8 @@ export function ProfileFilter({ value, onChange }: { value: Profile; onChange: (
 }
 
 /** Status and review rhythm, the same for processes and standards. */
-export function LifecycleEditor<T extends Governed>({ doc, others, noun, onChange }: {
-  doc: T; others: { id: string; title: string }[]; noun: string; onChange: (patch: Partial<Governed>) => void;
+export function LifecycleEditor<T extends Governed>({ doc, others, onChange }: {
+  doc: T; others: { id: string; title: string }[]; onChange: (patch: Partial<Governed>) => void;
 }) {
   const status = statusOf(doc);
   const choices = [3, 6, 12, 24];
@@ -79,9 +79,9 @@ export function LifecycleEditor<T extends Governed>({ doc, others, noun, onChang
     <div className="grid3">
       <div className="field">
         <span className="field-label">Status</span>
-        <div className="chips">
+        <div className="chips" role="group" aria-label="Status">
           {(["draft", "active", "deprecated"] as Status[]).map((s) => (
-            <button key={s} className={`chip ${status === s ? "on" : ""}`} onClick={() => onChange({ status: s })}
+            <button key={s} className={`chip ${status === s ? "on" : ""}`} aria-pressed={status === s} onClick={() => onChange({ status: s })}
               title={s === "draft" ? "Only editors see it" : s === "active" ? "In use, visible to everyone" : "Kept for reference, marked as retired"}>{STATUS_LABEL[s]}</button>
           ))}
         </div>
@@ -101,7 +101,6 @@ export function LifecycleEditor<T extends Governed>({ doc, others, noun, onChang
           </select>
         </Field>
       )}
-      <span hidden>{noun}</span>
     </div>
   );
 }

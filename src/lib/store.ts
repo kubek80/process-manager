@@ -136,6 +136,23 @@ export const href = (r: Route): string => {
 };
 export const go = (r: Route) => { location.hash = href(r); };
 
+/** What the browser tab says for a page: the thing being read first, the product last. */
+export function pageTitle(r: Route, names: { process?: string; standard?: string; loading?: boolean } = {}): string {
+  const APP = "Process Manager";
+  const of = (name: string | undefined, missing: string) => name ?? (names.loading ? "" : missing);
+  let here: string;
+  switch (r.page) {
+    case "library": here = "Processes"; break;
+    case "standards": here = "Standards"; break;
+    case "catalog": here = "Teams & tools"; break;
+    case "guide": here = "Guide"; break;
+    case "admin": here = `${r.section.slice(0, 1).toUpperCase()}${r.section.slice(1)} · Admin`; break;
+    case "process": here = of(names.process, "Process not found"); break;
+    case "standard": here = of(names.standard, "Standard not found"); break;
+  }
+  return here ? `${here} · ${APP}` : APP;
+}
+
 export async function copyText(text: string): Promise<boolean> {
   try { await navigator.clipboard.writeText(text); return true; } catch {
     const ta = document.createElement("textarea");

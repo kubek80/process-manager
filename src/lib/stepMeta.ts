@@ -1,7 +1,11 @@
 import type { StepType } from "../types";
 
 /** Single source of truth for the building blocks: used by the UI, the legend and the LLM prompt. */
-export const STEP_META: Record<StepType, { label: string; color: string; when: string }> = {
+/**
+ * `when` is shown to people and sent to chat assistants. `rule` adds what the format needs (prompt only);
+ * `hint` says the same in plain words (app only).
+ */
+export const STEP_META: Record<StepType, { label: string; color: string; when: string; rule?: string; hint?: string }> = {
   form: { label: "Fill in a form", color: "#4f46e5", when: "Someone submits a request or ticket in a system (ServiceNow request, access form, portal order)." },
   code: { label: "Change code", color: "#0d9488", when: "Someone edits code or configuration and opens a pull request (Terraform, YAML, pipeline, API proxy)." },
   approval: { label: "Approve", color: "#d97706", when: "A named person or group formally approves or rejects (manager, budget owner, CAB)." },
@@ -12,11 +16,14 @@ export const STEP_META: Record<StepType, { label: string; color: string; when: s
   automation: { label: "Automated", color: "#059669", when: "A system or pipeline does the work without a human (provisioning, CI/CD run)." },
   document: { label: "Write a document", color: "#b45309", when: "Someone writes or updates a document (design, risk assessment, runbook)." },
   verify: { label: "Check the result", color: "#16a34a", when: "Someone tests or confirms that the result works (log in, smoke test)." },
-  decision: { label: "Decision", color: "#e11d48", when: "The flow splits depending on an answer. Needs two or more labelled `next` entries." },
-  subprocess: { label: "Sub-process", color: "#2563eb", when: "The step is a whole other process described elsewhere. Needs `subProcessId`." },
+  decision: { label: "Decision", color: "#e11d48", when: "The flow splits depending on an answer.", rule: "Needs two or more labelled `next` entries.", hint: "Give it two or more named paths." },
+  subprocess: { label: "Sub-process", color: "#2563eb", when: "The step is a whole other process described elsewhere.", rule: "Needs `subProcessId`.", hint: "Choose that process under “Explained by sub-process”." },
   task: { label: "Task", color: "#475569", when: "Any other manual work that fits none of the above." },
 };
 
 export const STEP_TYPES = Object.keys(STEP_META) as StepType[];
+
+/** When to use a kind of step, in plain words: for tooltips. */
+export const stepHelp = (t: StepType) => [STEP_META[t].when, STEP_META[t].hint].filter(Boolean).join(" ");
 
 export const LANE_COLORS = ["#4f46e5", "#0d9488", "#d97706", "#db2777", "#0284c7", "#7c3aed", "#059669", "#b45309"];

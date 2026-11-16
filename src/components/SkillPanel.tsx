@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Bot, Check, Download, FileText, Pencil, Sparkles } from "lucide-react";
 import type { Skill, SkillDetail, TargetKind } from "../types";
 import { loadSkill, loadSkills, loadSkillVersion, putSkillExtra } from "../lib/store";
-import { CopyButton } from "./ui";
+import { CopyButton, LoadError, Loading, notify } from "./ui";
 
 export const SKILL_KIND = { skill: { label: "Skill", icon: Sparkles }, "review-agent": { label: "Review agent", icon: Bot } } as const;
 
@@ -14,25 +14,30 @@ export function SkillPanel({ id, onChanged }: { id: string; onChanged?: () => vo
   const [editing, setEditing] = useState(false);
   const [extra, setExtra] = useState("");
   const [error, setError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    setDetail(null); setVersion(0); setEditing(false); setError("");
+  const load = useCallback(() => {
+    setDetail(null); setVersion(0); setEditing(false); setError(""); setSaveError("");
     loadSkill(id).then((d) => { setDetail(d); setContent(d.content); setExtra(d.skill.extra); }, (e) => setError(e.message));
   }, [id]);
+  useEffect(load, [load]);
 
-  if (error) return <div className="check bad">{error}</div>;
-  if (!detail) return <p className="muted">Loading…</p>;
+  if (error) return <LoadError what="This skill could not be loaded." error={error} onRetry={load} />;
+  if (!detail) return <Loading />;
   const { skill, versions, canEdit } = detail;
   const K = SKILL_KIND[skill.kind];
   const show = async (v: number) => {
-    setVersion(v);
-    setContent(v === 0 ? detail.content : await loadSkillVersion(id, v).catch((e) => `Could not load: ${e.message}`));
+    if (v === 0) { setVersion(0); setContent(detail.content); return; }
+    // on failure the version that was shown stays: an error is never shown as if it were the skill
+    try { const text = await loadSkillVersion(id, v); setVersion(v); setContent(text); } catch (e) { notify.error(`Version ${v} could not be loaded.`, e); }
   };
   const saveExtra = async () => {
+    setSaving(true); setSaveError("");
     try {
       const d = await putSkillExtra(id, extra);
       setDetail(d); setContent(d.content); setVersion(0); setEditing(false); onChanged?.();
-    } catch (e) { setError((e as Error).message); }
+    } catch (e) { setSaveError((e as Error).message); /* what was typed stays in the field */ } finally { setSaving(false); }
   };
 
   return (
@@ -64,10 +69,11 @@ export function SkillPanel({ id, onChanged }: { id: string; onChanged?: () => vo
         <h4><FileText size={15} />Extra guidance <span className="muted">added to every new version, kept when the source changes</span></h4>
         {editing ? (
           <>
-            <textarea rows={5} value={extra} maxLength={8000} onChange={(e) => setExtra(e.target.value)} placeholder="e.g. Generated files under gen/ are exempt." />
+            <textarea rows={5} value={extra} maxLength={8000} onChange={(e) => setExtra(e.target.value)} placeholder="e.g. Generated files under gen/ are exempt." aria-label="Extra guidance" />
+            {saveError && <LoadError what="The guidance was not saved." error={`${saveError} What you typed is still here.`} />}
             <div className="btn-row">
-              <button className="btn primary" onClick={saveExtra}><Check size={15} />Save and regenerate</button>
-              <button className="btn ghost" onClick={() => { setEditing(false); setExtra(skill.extra); }}>Cancel</button>
+              <button className="btn primary" disabled={saving} onClick={saveExtra}><Check size={15} />Save and regenerate</button>
+              <button className="btn ghost" onClick={() => { setEditing(false); setExtra(skill.extra); setSaveError(""); }}>Cancel</button>
             </div>
           </>
         ) : (
@@ -84,14 +90,17 @@ export function SkillPanel({ id, onChanged }: { id: string; onChanged?: () => vo
 /** The Skills tab of a process or a standard: what is generated from it. */
 export function SourceSkills({ kind, id, revision }: { kind: TargetKind; id: string; revision: unknown }) {
   const [list, setList] = useState<Skill[] | null>(null);
+  const [error, setError] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   // `revision` changes when the source is saved: reload, the skills have a new version then
   // the skill first, then the review agent
   const pick = (all: Skill[]) => all.filter((s) => s.sourceKind === kind && s.sourceId === id).sort((a, b) => b.kind.localeCompare(a.kind));
-  useEffect(() => { loadSkills().then((all) => setList(pick(all)), () => setList([])); }, [kind, id, revision]); // eslint-disable-line react-hooks/exhaustive-deps
+  const load = () => { setError(""); loadSkills().then((all) => setList(pick(all)), (e) => setError(e.message)); };
+  useEffect(load, [kind, id, revision]); // eslint-disable-line react-hooks/exhaustive-deps
   const current = list?.find((s) => s.id === open) ?? list?.[0];
 
-  if (!list) return <p className="muted">Loading…</p>;
+  if (error) return <LoadError what="The skills could not be loaded." error={error} onRetry={load} />;
+  if (!list) return <Loading />;
   if (list.length === 0) return (
     <div className="skills-empty">
       <Sparkles size={22} />
@@ -111,7 +120,7 @@ export function SourceSkills({ kind, id, revision }: { kind: TargetKind; id: str
           );
         })}
       </div>
-      {current && <SkillPanel key={current.id} id={current.id} onChanged={() => loadSkills().then((all) => setList(pick(all)))} />}
+      {current && <SkillPanel key={current.id} id={current.id} onChanged={load} />}
     </div>
   );
 }

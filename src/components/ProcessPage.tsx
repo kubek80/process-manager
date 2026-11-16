@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowUpRight, Braces, CalendarCheck, Check, Flag, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Save, Settings2, Sparkles, TriangleAlert, Undo2, Users, Workflow, Bot, History, ShieldCheck } from "lucide-react";
 import type { Feedback, Process, Step } from "../types";
-import { addStepAfter, deleteStep, insertStep, moveStep, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
+import { addStepAfter, deleteStep, insertStep, moveStep, prerequisiteKeys, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
 import { isDrawableProcess, validateProcess } from "../lib/validate";
 import { go, useProgress, type Tab } from "../lib/store";
 import { teamName, useCatalog } from "../lib/catalog";
@@ -15,14 +15,18 @@ import { FlowView } from "./FlowView";
 import { ListView } from "./ListView";
 import { StepDrawer } from "./StepDrawer";
 import { ProcessSettings } from "./ProcessSettings";
-import { AiDialog, IssueList, type AiSpec } from "./AiDialog";
+import type { AiSpec } from "./AiDialog";
+import { confirmDialog, IssueList, Loading, scrollBehavior } from "./ui";
 import { DimTags, ReviewTag } from "./Governance";
 import { HistoryDialog } from "./HistoryDialog";
 import { SourceSkills } from "./SkillPanel";
 import { createPrompt, modifyPrompt } from "../lib/prompt";
 import { processSchema } from "../lib/validate";
 import type { Catalog, Standard } from "../types";
-import { JsonView } from "./JsonView";
+
+// the editor for the JSON tab and the AI dialog are loaded when they are first opened
+const JsonView = lazy(() => import("./JsonView").then((m) => ({ default: m.JsonView }))) as typeof import("./JsonView").JsonView;
+const AiDialog = lazy(() => import("./AiDialog").then((m) => ({ default: m.AiDialog }))) as typeof import("./AiDialog").AiDialog;
 
 export function ProcessPage({ process, all, standards, tab, onSave, onDelete, feedback }: {
   process: Process; all: Process[]; standards: Standard[]; tab: Tab; feedback: Feedback[]; onSave: (p: Process) => Promise<void>; onDelete: () => void;
@@ -49,7 +53,7 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
   const issues = useMemo(() => validateProcess(clean, ctx), [clean, ctx]);
   const errors = issues.filter((i) => i.level === "error").length;
   const dirty = JSON.stringify(clean) !== JSON.stringify(process);
-  // A file that is broken on disk can only be repaired in the JSON tab.
+  // A process that was stored broken can only be repaired in the JSON tab.
   const renderable = useMemo(() => isDrawableProcess(draft), [draft]);
   const view: Tab = !renderable ? "json" : tab === "json" && !editor ? "flow" : tab;
   const step = renderable ? draft.steps.find((s) => s.id === selected) : undefined;
@@ -63,7 +67,7 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
   const select = (id: string) => {
     setSelected(id); setReporting(false);
     if (view === "feedback") go({ page: "process", id: process.id, tab: "flow" });
-    if (view === "list") document.getElementById(`step-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (view === "list") document.getElementById(`step-${id}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
   };
   const addAfter = (id: string | null) => {
     const r = addStepAfter(draft, id);
@@ -83,7 +87,17 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
     // a pure "still correct" confirmation is saved straight away
     if (!dirty && !errors) await onSave({ ...tidy(next), updatedAt: process.updatedAt });
   };
-  const back = () => { if (!dirty || confirm("Leave without saving your changes?")) go({ page: "library" }); };
+  const back = async () => {
+    if (!dirty || await confirmDialog({ title: "Leave without saving?", body: "Your changes to this process have not been saved. If you leave now they are lost.", confirmLabel: "Leave without saving", cancelLabel: "Stay", danger: true })) go({ page: "library" });
+  };
+  // ticks are remembered by the prerequisite's title; ticks from before that were remembered by position
+  const preKeys = renderable ? prerequisiteKeys(draft.prerequisites) : [];
+  const hasPre = (i: number) => done.has(preKeys[i]) || done.has(`pre:${i}`);
+  const tickPre = (i: number) => {
+    if (!done.has(`pre:${i}`)) return toggle(preKeys[i]);
+    toggle(`pre:${i}`);
+    if (done.has(preKeys[i])) toggle(preKeys[i]);
+  };
 
   const mine = renderable ? draft.steps.filter((s) => s.actor === "me").length : 0;
 
@@ -132,7 +146,7 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
         <span className="spacer" />
         {editor && <button className={`status ${errors ? "bad" : issues.length ? "warn" : "good"}`} onClick={() => setShowIssues(!showIssues)} disabled={!issues.length}>
           {errors ? <CircleAlert size={15} /> : issues.length ? <TriangleAlert size={15} /> : <CircleCheck size={15} />}
-          {errors ? `${errors} problem${errors > 1 ? "s" : ""}` : issues.length ? `${issues.length} hint${issues.length > 1 ? "s" : ""}` : "Schema valid"}
+          {errors ? `${errors} problem${errors > 1 ? "s" : ""}` : issues.length ? `${issues.length} hint${issues.length > 1 ? "s" : ""}` : "No problems"}
         </button>}
         {dirty && <>
           <button className="btn" onClick={() => { setDraft(process); setEditing(false); }}><Undo2 size={16} />Discard</button>
@@ -174,14 +188,14 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
 
       {(view === "flow" || view === "list") && renderable && draft.prerequisites.length > 0 && (
         <section className="prereqs">
-          <h2>Before you start <span>{draft.prerequisites.filter((_, i) => done.has(`pre:${i}`)).length}/{draft.prerequisites.length} ready</span></h2>
+          <h2>Before you start <span>{draft.prerequisites.filter((_, i) => hasPre(i)).length}/{draft.prerequisites.length} ready</span></h2>
           <div className="prereq-grid">
             {draft.prerequisites.map((q, i) => {
               const src = q.processId ? all.find((p) => p.id === q.processId) : undefined;
-              const on = done.has(`pre:${i}`);
+              const on = hasPre(i);
               return (
-                <div key={i} className={`prereq ${on ? "on" : ""}`}>
-                  <button className={`tick ${on ? "on" : ""}`} onClick={() => toggle(`pre:${i}`)} aria-label="I have this"><Check size={14} strokeWidth={3} /></button>
+                <div key={preKeys[i]} className={`prereq ${on ? "on" : ""}`}>
+                  <button className={`tick ${on ? "on" : ""}`} onClick={() => tickPre(i)} aria-pressed={on} aria-label={`I have this: ${q.title}`}><Check size={14} strokeWidth={3} /></button>
                   <div>
                     <strong>{q.title}</strong>
                     {q.description && <p>{q.description}</p>}
@@ -207,7 +221,7 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
         feedback={feedback} onReport={(id) => { setSelected(id); setEditing(false); setReporting(true); }} />}
       {view === "feedback" && renderable && <FeedbackTab target={processTarget(draft)} feedback={feedback} onSelect={select} />}
       {view === "skills" && renderable && <SourceSkills kind="process" id={process.id} revision={process} />}
-      {view === "json" && <JsonView doc={clean} noun="process" validate={(v) => validateProcess(v, ctx)} schema={processSchema} schemaFile="schema/process.schema.json" onChange={setDraft} />}
+      {view === "json" && <Suspense fallback={<Loading />}><JsonView doc={clean} noun="process" validate={(v) => validateProcess(v, ctx)} schema={processSchema} schemaFile="schema/process.schema.json" onChange={setDraft} /></Suspense>}
 
       {step && (view === "flow" || view === "list") && (
         <StepDrawer editable={editor} process={draft} all={all} step={step} editing={editing} setEditing={setEditing}
@@ -219,18 +233,25 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
             const r = renameStepId(draft, step.id, slugify(step.title));
             setDraft(r.process); setSelected(r.id);
           }}
-          onDelete={() => { if (confirm(`Delete the step “${step.title}”?`)) { setDraft(deleteStep(draft, step.id)); setSelected(null); } }}
+          onDelete={async () => {
+            if (!await confirmDialog({ title: "Delete this step?", body: <>“{step.title}” is removed from the draft and the steps around it are connected to each other. Nothing is final until you save.</>, confirmLabel: "Delete step", danger: true })) return;
+            setDraft((d) => deleteStep(d, step.id)); setSelected(null);
+          }}
           onMove={(dir) => setDraft(moveStep(draft, step.id, dir))}
           onAddAfter={() => addAfter(step.id)} />
       )}
 
       {dialog === "settings" && (
         <ProcessSettings process={draft} all={all} standards={standards} onChange={setDraft} onClose={() => setDialog(null)}
-          onDelete={() => { if (confirm(`Delete the process “${process.title}”? The file processes/${process.id}.json is removed.`)) onDelete(); }} />
+          onDelete={async () => {
+            if (await confirmDialog({ title: "Delete this process?", body: <>“{process.title}” is removed for everyone. Its skill is withdrawn and its feedback is removed.</>, confirmLabel: "Delete process", danger: true })) onDelete();
+          }} />
       )}
       {dialog === "ai" && (
-        <AiDialog spec={processAiSpec(clean, all, standards, catalog)} onClose={() => setDialog(null)}
-          onImport={(p) => { setDraft(p); setSelected(null); setDialog(null); }} />
+        <Suspense fallback={null}>
+          <AiDialog spec={processAiSpec(clean, all, standards, catalog)} onClose={() => setDialog(null)}
+            onImport={(p) => { setDraft(p); setSelected(null); setDialog(null); }} />
+        </Suspense>
       )}
       {dialog === "history" && <HistoryDialog<Process> kind="process" id={process.id} title={process.title} onClose={() => setDialog(null)}
         onRestore={(doc) => { setDraft(doc); setDialog(null); }} />}

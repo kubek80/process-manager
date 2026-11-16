@@ -6,8 +6,7 @@ import { useCatalog } from "../lib/catalog";
 import { UNIT_KINDS } from "../lib/catalog";
 import { go } from "../lib/store";
 import { hasErrors, validateCatalog } from "../lib/validate";
-import { IssueList } from "./AiDialog";
-import { Field } from "./ui";
+import { Field, IssueList } from "./ui";
 
 type Key = "teams" | "tools" | "tiers" | "environments" | "languages";
 type Row = { id: string; name: string; kind?: string; contact?: string; url?: string; description?: string };
@@ -65,7 +64,7 @@ function usesOf(key: Key, id: string, processes: (Process | Standard)[]): Use[] 
       const n = "steps" in p ? p.steps?.filter((s) => s.tool === id).length ?? 0 : 0;
       if (n) how.push(`${n} step${n > 1 ? "s" : ""}`);
     } else {
-      const inReq = "requirements" in p && p.requirements.some((r) => r[key]?.includes(id));
+      const inReq = "requirements" in p && Array.isArray(p.requirements) && p.requirements.some((r) => r?.[key]?.includes(id));
       if (p[key]?.includes(id)) how.push(key === "languages" ? "specific to this language" : `applies to this ${key === "tiers" ? "tier" : "environment"}`);
       else if (inReq) how.push("one of its requirements");
     }
@@ -146,7 +145,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
       <div className="cat-split" style={{ "--c": kind.color } as React.CSSProperties}>
         <section className="cat-list">
           <div className="cat-list-bar">
-            <div className="search"><Search size={15} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${kind.title.toLowerCase()}`} /></div>
+            <div className="search"><Search size={15} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${kind.title.toLowerCase()}`} aria-label={`Search ${kind.title.toLowerCase()}`} /></div>
             {editor && <button className="btn primary" onClick={() => { setAdding(true); setNewName(""); }}><Plus size={16} />New {kind.noun}</button>}
           </div>
           <ul>
@@ -180,7 +179,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
                 <input autoFocus value={newName} maxLength={40} placeholder={key === "teams" ? "Cloud Platform team" : key === "tools" ? "ServiceNow" : key === "tiers" ? "Tier 4" : key === "environments" ? "Pre-production" : "Rust"}
                   onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
               </Field>
-              <p className="muted small">Id used in process files: <code>{slugify(newName) ? newId : "…"}</code>. It never changes, even if you rename.</p>
+              <p className="muted small">Id: <code>{slugify(newName) ? newId : "…"}</code>. It is made from the name and never changes, even if you rename.</p>
               <div className="btn-row">
                 <button className="btn primary" disabled={!slugify(newName)} onClick={add}><Plus size={16} />Add {kind.noun}</button>
                 <button className="btn ghost" onClick={() => setAdding(false)}>Cancel</button>
@@ -199,8 +198,8 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
                 </div>
                 {editor && ORDERED.includes(key) && (
                   <div className="cat-order">
-                    <button className="icon-btn" title="Move up" onClick={() => move(-1)} disabled={rows[0]?.id === current.id}><ArrowUp size={16} /></button>
-                    <button className="icon-btn" title="Move down" onClick={() => move(1)} disabled={rows[rows.length - 1]?.id === current.id}><ArrowDown size={16} /></button>
+                    <button className="icon-btn" title="Move up" aria-label="Move up" onClick={() => move(-1)} disabled={rows[0]?.id === current.id}><ArrowUp size={16} /></button>
+                    <button className="icon-btn" title="Move down" aria-label="Move down" onClick={() => move(1)} disabled={rows[rows.length - 1]?.id === current.id}><ArrowDown size={16} /></button>
                   </div>
                 )}
               </header>
@@ -211,9 +210,9 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
                   {key === "teams" && (
                     <div className="field">
                       <span className="field-label">Kind<em>{current.kind && current.kind !== "team" ? "a unit: can issue standards" : "a team: owns and takes part in processes"}</em></span>
-                      <div className="chips">
+                      <div className="chips" role="group" aria-label="Kind">
                         {Object.entries(UNIT_KINDS).map(([k, label]) => (
-                          <button key={k} className={`chip ${(current.kind ?? "team") === k ? "on" : ""}`} onClick={() => upd({ kind: k === "team" ? undefined : k })}>{label}</button>
+                          <button key={k} className={`chip ${(current.kind ?? "team") === k ? "on" : ""}`} aria-pressed={(current.kind ?? "team") === k} onClick={() => upd({ kind: k === "team" ? undefined : k })}>{label}</button>
                         ))}
                       </div>
                     </div>
@@ -273,7 +272,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
         <div className="save-bar" role="status">
           <span><b>Unsaved changes</b> to the lists</span>
           <button className="btn" onClick={() => setDraft(catalog)}><Undo2 size={16} />Discard</button>
-          <button className="btn primary" disabled={hasErrors(issues)} onClick={() => save(clean)}><Save size={16} />Save changes</button>
+          <button className="btn primary" disabled={hasErrors(issues)} onClick={() => { save(clean).catch(() => { /* a notice says why; the draft stays */ }); }}><Save size={16} />Save changes</button>
         </div>
       )}
       {editor && !dirty && <p className="saved cat-saved"><Check size={14} />All changes saved</p>}

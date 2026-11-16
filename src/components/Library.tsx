@@ -9,7 +9,7 @@ import { appliesTo, type Profile } from "../lib/edit";
 import { DimTags, ProfileFilter } from "./Governance";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { hasErrors, validateProcess } from "../lib/validate";
-import { go } from "../lib/store";
+import { href } from "../lib/store";
 import { TypeIcon } from "./ui";
 
 const CAT_COLORS = ["#4f46e5", "#0d9488", "#d97706", "#db2777", "#0284c7", "#7c3aed"];
@@ -55,11 +55,11 @@ export function Library({ processes: allProcesses, standardIds, onNew, onAi, fee
       </section>
 
       <div className="filters">
-        <div className="search"><Search size={16} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search: GCP, repository, Akamai…" /></div>
-        <div className="chips">
-          <button className={`chip ${cat === null ? "on" : ""}`} onClick={() => setCat(null)}>All<span>{processes.length}</span></button>
+        <div className="search"><Search size={16} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search: GCP, repository, Akamai…" aria-label="Search processes" /></div>
+        <div className="chips" role="group" aria-label="Category">
+          <button className={`chip ${cat === null ? "on" : ""}`} aria-pressed={cat === null} onClick={() => setCat(null)}>All<span>{processes.length}</span></button>
           {cats.map((c) => (
-            <button key={c} className={`chip ${cat === c ? "on" : ""}`} onClick={() => setCat(c)}>
+            <button key={c} className={`chip ${cat === c ? "on" : ""}`} aria-pressed={cat === c} onClick={() => setCat(c)}>
               {c}<span>{processes.filter((p) => (p.category ?? "General") === c).length}</span>
             </button>
           ))}
@@ -67,7 +67,7 @@ export function Library({ processes: allProcesses, standardIds, onNew, onAi, fee
         <ProfileFilter value={profile} onChange={setProfile} />
       </div>
       {editor && dueCount > 0 && (
-        <button className={`review-strip ${dueOnly ? "on" : ""}`} onClick={() => setDueOnly(!dueOnly)}>
+        <button className={`review-strip ${dueOnly ? "on" : ""}`} aria-pressed={dueOnly} onClick={() => setDueOnly(!dueOnly)}>
           <CalendarCheck size={16} /><span><b>{dueCount} process{dueCount > 1 ? "es need" : " needs"} a review</b> by {dueCount > 1 ? "their owners" : "its owner"}.</span>
           <em>{dueOnly ? "Show all" : "Show only these"}</em>
         </button>
@@ -80,7 +80,7 @@ export function Library({ processes: allProcesses, standardIds, onNew, onAi, fee
           const steps = Array.isArray(p.steps) ? p.steps : [];
           const used = usedBy(p.id);
           return (
-            <button key={p.id} className={`card ${statusOf(p) === "deprecated" ? "retired" : ""}`} style={{ "--c": color } as React.CSSProperties} onClick={() => go({ page: "process", id: p.id, tab: bad && editor ? "json" : "flow" })}>
+            <a key={p.id} className={`card ${statusOf(p) === "deprecated" ? "retired" : ""}`} style={{ "--c": color } as React.CSSProperties} href={href({ page: "process", id: p.id, tab: bad && editor ? "json" : "flow" })}>
               <div className="card-top">
                 <span className="card-cat">{p.category ?? "General"}</span>
                 {bad && editor && <span className="badge bad"><CircleAlert size={12} />Needs fixing</span>}
@@ -109,10 +109,12 @@ export function Library({ processes: allProcesses, standardIds, onNew, onAi, fee
                 {p.estimatedDuration && <span><Clock size={13} />{p.estimatedDuration}</span>}
                 <ArrowRight size={16} className="card-go" />
               </div>
-            </button>
+            </a>
           );
         })}
-        {shown.length === 0 && <p className="muted empty">No process matches. Try another word, or create one.</p>}
+        {shown.length === 0 && <p className="muted empty">{processes.length === 0
+          ? (editor ? "There are no processes yet. Create the first one with the buttons above." : "There are no processes yet.")
+          : editor ? "No process matches. Try another word or widen the filter, or create a new one with the buttons above." : "No process matches. Try another word or widen the filter."}</p>}
       </div>
     </div>
   );

@@ -39,6 +39,16 @@ describe("schema errors are explained in plain words", () => {
   it("bad id", () => expect(check((p) => (p.steps[0].id = "Ask It"))[0].message).toContain("kebab-case"));
   it("bad link", () => expect(check((p) => (p.steps[0].url = "servicenow"))[0].message).toContain("http://"));
   it("first actor must be me", () => expect(hasErrors(check((p) => (p.actors[0].id = "requester")))).toBe(true));
+  it("the first actor is a complete actor like every other", () => {
+    expect(check((p) => delete p.actors[0].name)[0]).toMatchObject({ level: "error", path: "actors[0]", message: expect.stringContaining('"name"') });
+    expect(check((p) => (p.actors[0].colour = "red"))[0]).toMatchObject({ level: "error", path: "actors[0]", message: expect.stringContaining('"colour"') });
+    expect(check((p) => (p.actors[0].name = ""))[0]).toMatchObject({ level: "error", path: "actors[0].name" });
+    expect(check((p) => (p.actors[0] = "me"))[0]).toMatchObject({ level: "error", path: "actors[0]" });
+    // the same holds for the second, which the schema already checked
+    expect(check((p) => delete p.actors[1].name)[0]).toMatchObject({ level: "error", path: "actors[1]" });
+    // and a complete first actor passes, with or without the optional fields
+    expect(check((p) => (p.actors[0] = { id: "me", name: "You", description: "The requester" }))).toEqual([]);
+  });
   it("too short", () => expect(check((p) => (p.title = "x"))[0].message).toContain("too short"));
   it("wrong type", () => expect(check((p) => (p.steps = "none"))[0].message).toContain("must be of type array"));
   it("wrong version", () => expect(check((p) => (p.schemaVersion = "2.0"))[0].message).toContain('exactly "1.0"'));

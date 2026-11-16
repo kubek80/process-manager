@@ -156,15 +156,18 @@
       "description": "Who takes part. Each actor is one swim lane. The FIRST actor must always have id \"me\" - the person reading and following the process.",
       "prefixItems": [
         {
-          "type": "object",
-          "required": [
-            "id"
-          ],
-          "properties": {
-            "id": {
-              "const": "me"
+          "allOf": [
+            {
+              "$ref": "#/$defs/actor"
+            },
+            {
+              "properties": {
+                "id": {
+                  "const": "me"
+                }
+              }
             }
-          }
+          ]
         }
       ],
       "items": {

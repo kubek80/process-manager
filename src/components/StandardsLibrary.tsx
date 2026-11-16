@@ -6,13 +6,15 @@ import { appliesTo, type Profile } from "../lib/edit";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { useEditor } from "../lib/mode";
 import { canEditAnyStandard, usePerms } from "../lib/session";
-import { go } from "../lib/store";
+import { href } from "../lib/store";
 import { hasErrors, validateStandard } from "../lib/validate";
 import { openCount } from "./Feedback";
 import { DimTags, ProfileFilter } from "./Governance";
 
 const UNIT_COLORS: Record<string, string> = { security: "#be123c", platform: "#0d9488", practice: "#7c3aed", team: "#475569" };
 const LEVELS = ["must", "should", "may"] as const;
+/** The requirements of a standard, also when it was stored without a proper list of them. */
+const reqs = (s: Standard) => (Array.isArray(s.requirements) ? s.requirements.filter((r) => r && typeof r === "object") : []);
 
 export function StandardsLibrary({ standards: all, processes, feedback, onNew, onAi }: {
   standards: Standard[]; processes: Process[]; feedback: Record<string, Feedback[]>; onNew: () => void; onAi: () => void;
@@ -31,7 +33,7 @@ export function StandardsLibrary({ standards: all, processes, feedback, onNew, o
   const shown = standards.filter((s) => {
     if (unit && s.owner !== unit) return false;
     if (!appliesTo(s, profile)) return false;
-    const hay = `${s.title} ${s.summary} ${(s.tags ?? []).join(" ")} ${teamName(catalog, s.owner)} ${s.requirements.map((r) => `${r.id} ${r.title}`).join(" ")}`.toLowerCase();
+    const hay = `${s.title} ${s.summary} ${(s.tags ?? []).join(" ")} ${teamName(catalog, s.owner)} ${reqs(s).map((r) => `${r.id} ${r.title}`).join(" ")}`.toLowerCase();
     return q.toLowerCase().split(/\s+/).every((w) => hay.includes(w));
   });
 
@@ -51,11 +53,11 @@ export function StandardsLibrary({ standards: all, processes, feedback, onNew, o
       </section>
 
       <div className="filters">
-        <div className="search"><Search size={16} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search: logging, Terraform, SEC-LOG-01…" /></div>
-        <div className="chips">
-          <button className={`chip ${unit === null ? "on" : ""}`} onClick={() => setUnit(null)}>All<span>{standards.length}</span></button>
+        <div className="search"><Search size={16} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search: logging, Terraform, SEC-LOG-01…" aria-label="Search standards" /></div>
+        <div className="chips" role="group" aria-label="Issued by">
+          <button className={`chip ${unit === null ? "on" : ""}`} aria-pressed={unit === null} onClick={() => setUnit(null)}>All<span>{standards.length}</span></button>
           {units.map((u) => (
-            <button key={u} className={`chip ${unit === u ? "on" : ""}`} onClick={() => setUnit(u)}>
+            <button key={u} className={`chip ${unit === u ? "on" : ""}`} aria-pressed={unit === u} onClick={() => setUnit(u)}>
               {teamName(catalog, u)}<span>{standards.filter((s) => s.owner === u).length}</span>
             </button>
           ))}
@@ -68,10 +70,10 @@ export function StandardsLibrary({ standards: all, processes, feedback, onNew, o
           const kind = catalog.teams.find((t) => t.id === s.owner)?.kind ?? "team";
           const bad = hasErrors(validateStandard(s, ctx));
           const review = reviewInfo(s).state;
-          const applicable = s.requirements.filter((r) => appliesTo(r, profile));
+          const applicable = reqs(s).filter((r) => appliesTo(r, profile));
           return (
-            <button key={s.id} className={`card ${statusOf(s) === "deprecated" ? "retired" : ""}`} style={{ "--c": UNIT_COLORS[kind] } as React.CSSProperties}
-              onClick={() => go({ page: "standard", id: s.id, tab: bad && editor ? "json" : "doc" })}>
+            <a key={s.id} className={`card ${statusOf(s) === "deprecated" ? "retired" : ""}`} style={{ "--c": UNIT_COLORS[kind] ?? UNIT_COLORS.team } as React.CSSProperties}
+              href={href({ page: "standard", id: s.id, tab: bad && editor ? "json" : "doc" })}>
               <div className="card-top">
                 <span className="card-cat"><ShieldCheck size={13} />{teamName(catalog, s.owner)}</span>
                 <span className="badge">{UNIT_KINDS[kind]}</span>
@@ -93,10 +95,10 @@ export function StandardsLibrary({ standards: all, processes, feedback, onNew, o
                 </span>
                 <ArrowRight size={16} className="card-go" />
               </div>
-            </button>
+            </a>
           );
         })}
-        {shown.length === 0 && <p className="muted empty">No standard matches. Try another word or widen the filter.</p>}
+        {shown.length === 0 && <p className="muted empty">{standards.length === 0 ? "There are no standards yet." : "No standard matches. Try another word or widen the filter."}</p>}
       </div>
     </div>
   );

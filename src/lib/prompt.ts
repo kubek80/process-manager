@@ -15,7 +15,7 @@ const today = () => new Date().toISOString().slice(0, 10);
  */
 export function basePrompt(known: KnownProcess[] = [], catalog?: Catalog, standards: KnownProcess[] = []): string {
   const list = (rows: { id: string; name: string }[] = []) => (rows.length ? rows.map((r) => `- "${r.id}" - ${r.name}`).join("\n") : "- (none yet)");
-  const types = STEP_TYPES.map((t) => `- "${t}" (${STEP_META[t].label}): ${STEP_META[t].when}`).join("\n");
+  const types = STEP_TYPES.map((t) => `- "${t}" (${STEP_META[t].label}): ${[STEP_META[t].when, STEP_META[t].rule].filter(Boolean).join(" ")}`).join("\n");
   const knownList = known.length
     ? known.map((k) => `- "${k.id}" - ${k.title}`).join("\n")
     : "- (none yet)";

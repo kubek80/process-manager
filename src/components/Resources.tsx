@@ -41,15 +41,15 @@ export function ResourceEditor({ list, onChange }: { list: Resource[]; onChange:
       {list.map((r, i) => (
         <div className="prereq-edit" key={i}>
           <div className="row">
-            <select className="res-kind" value={r.kind ?? "other"} onChange={(e) => upd(i, { kind: e.target.value as ResourceKind })}>
+            <select className="res-kind" value={r.kind ?? "other"} aria-label={`Kind of link ${i + 1}`} onChange={(e) => upd(i, { kind: e.target.value as ResourceKind })}>
               {(Object.keys(RESOURCE_KINDS) as ResourceKind[]).map((k) => <option key={k} value={k}>{RESOURCE_KINDS[k].label}</option>)}
             </select>
-            <input value={r.title} maxLength={80} placeholder="Name, e.g. Skill: add a GCP project" onChange={(e) => upd(i, { title: e.target.value })} />
-            <button className="icon-btn" onClick={() => onChange(list.filter((_, j) => j !== i))} aria-label="Remove"><X size={15} /></button>
+            <input value={r.title} maxLength={80} placeholder="Name, e.g. Skill: add a GCP project" aria-label={`Name of link ${i + 1}`} onChange={(e) => upd(i, { title: e.target.value })} />
+            <button className="icon-btn" onClick={() => onChange(list.filter((_, j) => j !== i))} aria-label={`Remove link ${i + 1}`}><X size={15} /></button>
           </div>
           <div className="row indent-r">
-            <input value={r.url} placeholder="https://…" onChange={(e) => upd(i, { url: e.target.value })} />
-            <input value={r.description ?? ""} maxLength={200} placeholder="What it does for the reader" onChange={(e) => upd(i, { description: e.target.value })} />
+            <input value={r.url} placeholder="https://…" aria-label={`Address of link ${i + 1}`} onChange={(e) => upd(i, { url: e.target.value })} />
+            <input value={r.description ?? ""} maxLength={200} placeholder="What it does for the reader" aria-label={`What link ${i + 1} does for the reader`} onChange={(e) => upd(i, { description: e.target.value })} />
           </div>
         </div>
       ))}

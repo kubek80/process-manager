@@ -194,3 +194,23 @@ describe("rights helpers", () => {
     expect(roleLabel(admin)).toBe("Admin");
   });
 });
+
+describe("the title of the browser tab", () => {
+  it("names the page first and the product last", async () => {
+    const { pageTitle } = await import("../store");
+    expect(pageTitle({ page: "library" })).toBe("Processes · Process Manager");
+    expect(pageTitle({ page: "standards" })).toBe("Standards · Process Manager");
+    expect(pageTitle({ page: "catalog" })).toBe("Teams & tools · Process Manager");
+    expect(pageTitle({ page: "guide" })).toBe("Guide · Process Manager");
+    expect(pageTitle({ page: "admin", section: "access" })).toBe("Access · Admin · Process Manager");
+    expect(pageTitle({ page: "process", id: "request-gcp-project", tab: "flow" }, { process: "Request a GCP project" })).toBe("Request a GCP project · Process Manager");
+    expect(pageTitle({ page: "standard", id: "secure-logging", tab: "doc" }, { standard: "Secure logging" })).toBe("Secure logging · Process Manager");
+  });
+  it("says so when the process or standard does not exist, but not while it is still loading", async () => {
+    const { pageTitle } = await import("../store");
+    expect(pageTitle({ page: "process", id: "nope", tab: "flow" })).toBe("Process not found · Process Manager");
+    expect(pageTitle({ page: "standard", id: "nope", tab: "doc" })).toBe("Standard not found · Process Manager");
+    expect(pageTitle({ page: "process", id: "nope", tab: "flow" }, { loading: true })).toBe("Process Manager");
+  });
+});
+

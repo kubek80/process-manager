@@ -4,20 +4,7 @@ import type { Issue } from "../types";
 import { fixPrompt } from "../lib/prompt";
 import { extractJson, hasErrors } from "../lib/validate";
 import { download } from "../lib/store";
-import { CopyButton, Modal } from "./ui";
-
-export function IssueList({ issues }: { issues: Issue[] }) {
-  return (
-    <ul className="issues">
-      {issues.map((i, k) => (
-        <li key={k} className={i.level}>
-          {i.level === "error" ? <CircleAlert size={15} /> : <TriangleAlert size={15} />}
-          <span><code>{i.path}</code> {i.message}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
+import { CopyButton, IssueList, Modal } from "./ui";
 
 /** What the dialog needs to know about the kind of document it creates or changes. */
 export interface AiSpec<T extends { id: string; title: string }> {
@@ -68,7 +55,8 @@ export function AiDialog<T extends { id: string; title: string }>({ spec, onImpo
             <p className="muted small">{current ? `Plain words are fine, e.g. “${spec.changeExample}”` : noun === "process"
               ? "An email, a wiki page, meeting notes - anything that says who does what, in which order."
               : "A policy document, a wiki page, a list of rules - anything that says what must or should be true."}</p>
-            <textarea rows={7} value={text} onChange={(e) => setText(e.target.value)} placeholder={current ? "What should be different?" : spec.describePlaceholder} />
+            <textarea rows={7} value={text} onChange={(e) => setText(e.target.value)} placeholder={current ? "What should be different?" : spec.describePlaceholder}
+              aria-label={current ? "Describe the change" : noun === "process" ? "Description of the process" : "The policy or guideline"} data-autofocus="" />
           </div>
         </li>
         <li>
@@ -88,7 +76,7 @@ export function AiDialog<T extends { id: string; title: string }>({ spec, onImpo
           <div>
             <h4>Paste the answer here</h4>
             <p className="muted small">Paste the whole answer - the JSON is picked out and checked automatically.</p>
-            <textarea rows={7} className="mono" value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder={'```json\n{ "schemaVersion": "1.0", … }\n```'} />
+            <textarea rows={7} className="mono" value={answer} aria-label="The answer of the AI chat" onChange={(e) => setAnswer(e.target.value)} placeholder={'```json\n{ "schemaVersion": "1.0", … }\n```'} />
             {parsed?.error && (
               <div className="check bad"><CircleAlert size={16} /><span>{parsed.error}</span></div>
             )}

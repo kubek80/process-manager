@@ -36,6 +36,8 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   useLayoutEffect(fit, [process.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const focus = hover ?? selectedId;
+  const titleOf = (id: string) => process.steps.find((s) => s.id === id)?.title ?? id;
+  const Main = bare ? "div" : "button";
   const usedTypes = [...new Set(process.steps.map((s) => s.type))];
   const POP_W = 340, POP_H = 330;
   const openAdd = (at: InsertAt, x: number, y: number) => setAdding({
@@ -90,11 +92,12 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
 
           {layout.edges.filter((e) => e.label).map((e) => (
             <span key={`l${e.from}>${e.to}`} className={`edge-label ${focus === e.from || focus === e.to ? "hot" : ""}`}
-              style={{ left: e.lx, top: e.ly }}>{e.label}</span>
+              style={{ left: e.lx, top: e.ly, maxWidth: e.lw }} title={e.label}>{e.label}</span>
           ))}
 
           {editable && layout.edges.map((e) => (
             <button key={`a${e.from}>${e.to}`} className="edge-add" style={{ left: e.px, top: e.py }} title="Insert a step here"
+              aria-label={`Insert a step between “${titleOf(e.from)}” and “${titleOf(e.to)}”`}
               onMouseDown={(ev) => ev.stopPropagation()} onClick={() => openAdd({ afterId: e.from, beforeId: e.to }, e.px, e.py)}><Plus size={12} strokeWidth={3} /></button>
           ))}
 
@@ -109,7 +112,8 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                 className={`block ${n.lane === 0 ? "mine" : ""} ${selectedId === s.id ? "selected" : ""} ${done.has(s.id) ? "done" : ""} ${s.type === "decision" ? "decision" : ""} ${drag === s.id ? "dragged" : ""}`}
                 style={{ left: n.x, top: n.y, width: L.W, height: L.H, "--c": meta.color } as React.CSSProperties}
                 onMouseEnter={() => setHover(s.id)} onMouseLeave={() => setHover(null)}>
-                <button className="block-main" onClick={() => onSelect(s.id)}>
+                {/* in the guide a chart is a picture: nothing to open, so nothing to tab through */}
+                <Main className="block-main" {...(bare ? {} : { onClick: () => onSelect(s.id) })}>
                   <TypeIcon type={s.type} size={bare ? 30 : 34} />
                   <span className="block-text">
                     <span className="block-type">{meta.label}</span>
@@ -120,10 +124,11 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                       {s.subProcessId && !s.tool && <span><Workflow size={11} />opens a sub-process</span>}
                     </span>
                   </span>
-                </button>
+                </Main>
                 <span className="block-num">{done.has(s.id) ? <Check size={12} strokeWidth={3} /> : n.index + 1}</span>
                 {flags > 0 && <span className="block-flag" title={`${flags} open feedback`}><Flag size={10} strokeWidth={3} />{flags}</span>}
                 {editable && <button className="block-add" title={s.type === "decision" ? "Add a branch" : "Add a step after this one"}
+                  aria-label={s.type === "decision" ? `Add a branch to “${s.title}”` : `Add a step after “${s.title}”`}
                   onMouseDown={(ev) => ev.stopPropagation()} onClick={() => openAdd({ afterId: s.id }, n.x + L.W, n.y + L.H / 2)}><Plus size={14} /></button>}
               </div>
             );

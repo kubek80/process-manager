@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   addRequirement, addStepAfter, appliesTo, blankProcess, blankStandard, deleteRequirement, deleteStep, insertStep, moveRequirement, moveStep, nextRequirementId,
-  renameStepId, slugify, tidy, tidyStandard, uniqueId, updateRequirement, updateStep,
+  prerequisiteKeys, renameStepId, slugify, tidy, tidyStandard, uniqueId, updateRequirement, updateStep,
 } from "../edit";
-import { hasErrors, validateProcess, validateStandard } from "../validate";
+import { hasErrors, isDrawableProcess, isDrawableStandard, validateProcess, validateStandard } from "../validate";
+import type { Process, Standard } from "../../types";
 import { base, baseStandard } from "./fixtures";
 
 const flow = (p: ReturnType<typeof base>) => p.steps.map((s) => `${s.id}>${s.next.map((n) => (n.label ? `${n.to}(${n.label})` : n.to)).join(",")}`).join(" ");
@@ -15,6 +16,21 @@ describe("slugify and uniqueId", () => {
     expect(slugify("Żółć & co_op")).toBe("zoc-co-op");
     expect(slugify("!!!")).toBe("");
     expect(slugify("a".repeat(100))).toHaveLength(60);
+  });
+  it("never ends with a dash, also when a long title is cut in the middle of a word break", () => {
+    const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+    // the 60th character is the space before "now": cutting there must not leave "…-"
+    const cut = slugify(`${"a".repeat(59)} now and then`);
+    expect(cut).toBe("a".repeat(59));
+    for (const title of [
+      "Ask the platform team to create the production namespace for - the new service",
+      `${"word ".repeat(11)}tail - end of a very long title`,
+      `${"x".repeat(58)} - y`, `${"x".repeat(59)}- y`, `${"x".repeat(60)} y`, "- - -", "a -", "-a-",
+    ]) {
+      const slug = slugify(title);
+      expect(slug.length).toBeLessThanOrEqual(60);
+      if (slug) expect(slug, title).toMatch(SLUG);
+    }
   });
   it("avoids taken ids", () => {
     expect(uniqueId("step", [])).toBe("step");
@@ -59,6 +75,21 @@ describe("tidy", () => {
     expect(tidy(p).replacedBy).toBe("other");
     expect(JSON.stringify(p)).toBe(copy);
   });
+  it("passes a document that is not complete through instead of failing on it", () => {
+    // what a broken stored document or an old revision can look like; the page then offers the JSON tab
+    const broken: unknown[] = [
+      { id: "x", title: "No lists at all" },
+      { id: "x", title: "Wrong kinds", prerequisites: "none", actors: null, steps: {}, tags: "a,b", resources: "link" },
+      { id: "x", title: "Odd entries", prerequisites: [null, "text"], actors: [7], steps: [null, "step", { id: "s" }, { id: "t", next: "end", instructions: "do it", resources: [null, {}] }] },
+    ];
+    for (const doc of broken) {
+      const out = tidy(doc as Process);
+      expect(out.title).toBe((doc as Process).title);
+      expect(isDrawableProcess(out)).toBe(false);
+      expect(hasErrors(validateProcess(out))).toBe(true); // and the checker still explains what is wrong
+    }
+    expect(tidy({ id: "x", steps: [{ id: "s", next: [{ to: "t", label: "" }] }] } as unknown as Process).steps[0].next).toEqual([{ to: "t" }]);
+  });
 });
 
 describe("changing the flow", () => {
@@ -102,6 +133,59 @@ describe("changing the flow", () => {
     expect(deleteStep(p, "nope")).toBe(p);
     const single = { ...base(), steps: [base().steps[4]] };
     expect(deleteStep(single, "done")).toBe(single);
+  });
+
+  it("deleting a decision leaves its path names with decisions only", () => {
+    // ask > approve > ok? (Yes: done, No: fix): without the decision, "approve" simply leads to both, unnamed
+    expect(flow(deleteStep(base(), "ok"))).toBe("ask>approve approve>done,fix fix>approve done>");
+    // a named way in does not put its name on every path it inherits
+    const named = base();
+    named.steps[1].next = [{ to: "ok", label: "Checked" }];
+    expect(flow(deleteStep(named, "ok"))).toContain("approve>done,fix ");
+    // ... but one way in and one way out keeps the name of the way in
+    expect(flow(deleteStep(named, "approve"))).toContain("ask>ok ");
+    const one = base();
+    one.steps[0].next = [{ to: "approve", label: "Send" }];
+    expect(flow(deleteStep(one, "approve"))).toContain("ask>ok(Send) ");
+  });
+  it("a decision that takes over the paths of a deleted decision keeps every name once", () => {
+    const p = base();
+    // first? (Yes: ok, No: done); ok? (Yes: done, No: fix)
+    p.steps[1] = { ...p.steps[1], type: "decision", next: [{ to: "ok", label: "Yes" }, { to: "done", label: "No" }] };
+    const next = deleteStep(p, "ok").steps.find((s) => s.id === "approve")!.next;
+    expect(next.map((n) => n.to)).toEqual(["done", "fix"]); // "done" was reachable twice: listed once
+    const labels = next.map((n) => n.label);
+    expect(labels.every(Boolean)).toBe(true);
+    expect(new Set(labels).size).toBe(labels.length);
+    const issues = validateProcess(deleteStep(p, "ok"));
+    expect(issues.filter((i) => i.message.includes("label"))).toEqual([]);
+  });
+  it("a new decision starts with two named paths where the flow has them", () => {
+    const decision = { title: "Is it urgent", type: "decision" as const, actor: "boss" };
+    // on an arrow: what followed is "Yes", "No" goes back to the step before
+    const onArrow = insertStep(base(), { afterId: "ask", beforeId: "approve" }, decision).process;
+    expect(flow(onArrow)).toContain("ask>is-it-urgent is-it-urgent>approve(Yes),ask(No) ");
+    expect(validateProcess(onArrow)).toEqual([]);
+    // after a step: the same
+    const after = insertStep(base(), { afterId: "ask" }, decision).process;
+    expect(flow(after)).toContain("is-it-urgent>approve(Yes),ask(No) ");
+    expect(validateProcess(after)).toEqual([]);
+    // a name that is already there is kept and not used twice
+    const kept = base();
+    kept.steps[0].next = [{ to: "approve", label: "No" }];
+    expect(flow(insertStep(kept, { afterId: "ask" }, decision).process)).toContain("is-it-urgent>approve(No),ask(Yes) ");
+    // at the very end there is nothing to point at yet: the checker says what is missing
+    const atEnd = insertStep(base(), { afterId: "done" }, decision).process;
+    expect(flow(atEnd)).toContain("done>is-it-urgent is-it-urgent>");
+    expect(hasErrors(validateProcess(atEnd))).toBe(true);
+    // other kinds of step are not touched
+    expect(flow(insertStep(base(), { afterId: "ask", beforeId: "approve" }, spec).process)).toContain("check-the-budget>approve ");
+  });
+  it("a second extra branch on a decision gets a name of its own", () => {
+    const once = insertStep(base(), { afterId: "ok" }, spec).process;
+    const twice = insertStep(once, { afterId: "ok" }, { ...spec, title: "Ask finance" }).process;
+    expect(twice.steps.find((s) => s.id === "ok")!.next.map((n) => n.label)).toEqual(["Yes", "No", "Other", "Other 2"]);
+    expect(flow(addStepAfter(once, "ok").process)).toContain("new-step(Other 2)");
   });
 
   it("moveStep reorders the list only", () => {
@@ -200,6 +284,36 @@ describe("standards", () => {
     const s = blankStandard(["new-standard"], "security");
     expect(s).toMatchObject({ id: "new-standard-2", status: "draft", owner: "security" });
     expect(hasErrors(validateStandard(s))).toBe(false);
+  });
+});
+
+describe("partial standards", () => {
+  it("tidyStandard passes a standard that is not complete through instead of failing on it", () => {
+    const broken: unknown[] = [
+      { id: "x", title: "No requirements" },
+      { id: "x", title: "Wrong kinds", requirements: "none", tags: "a", resources: 3 },
+      { id: "x", title: "Odd entries", requirements: [null, "REQ", { id: "A-1" }, { id: "A-2", guidance: "text", examples: "none", review: "yes", verification: null }, { id: "A-3", examples: { good: [1, " x "] }, review: { lookFor: [" a ", 2], paths: "src" } }] },
+    ];
+    for (const doc of broken) {
+      const out = tidyStandard(doc as Standard);
+      expect(out.title).toBe((doc as Standard).title);
+      expect(isDrawableStandard(out)).toBe(false);
+      expect(hasErrors(validateStandard(out))).toBe(true);
+    }
+  });
+});
+
+describe("prerequisite ticks", () => {
+  it("are remembered by title, so they follow a prerequisite when the list is reordered", () => {
+    const list = [{ title: "Approved cost centre" }, { title: "Manager approval" }];
+    const keys = prerequisiteKeys(list);
+    expect(keys).toEqual(["prereq:approved-cost-centre", "prereq:manager-approval"]);
+    expect(prerequisiteKeys([...list].reverse())).toEqual([...keys].reverse());
+  });
+  it("are different for every prerequisite, also with the same or an empty title", () => {
+    const keys = prerequisiteKeys([{ title: "Access" }, { title: "Access" }, { title: "" }, { title: "!!!" }]);
+    expect(keys).toEqual(["prereq:access", "prereq:access-2", "prereq:item", "prereq:item-2"]);
+    expect(prerequisiteKeys(undefined as unknown as { title: string }[])).toEqual([]);
   });
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, CalendarCheck, Flag, KeyRound, List, Plus, Search, Server, ShieldCheck, Sparkles, Trash2, Workflow } from "lucide-react";
 import type { Assignment, AuditEntry, FeedbackByTarget, Process, Role, Skill, Standard } from "../types";
 import { teamName, useCatalog } from "../lib/catalog";
@@ -8,7 +8,7 @@ import { go, grantAccess, href, loadAccess, loadAudit, loadSkills, loadSystem, r
 import { CatalogPage } from "./CatalogPage";
 import { openCount } from "./Feedback";
 import { SKILL_KIND, SkillPanel } from "./SkillPanel";
-import { Field } from "./ui";
+import { confirmDialog, Field, LoadError, Loading, notify } from "./ui";
 
 export const ROLES: Record<Role, { label: string; can: string; scope: "none" | "optional" | "required"; scopeLabel?: string }> = {
   admin: { label: "Admin", can: "Everything, including who has access", scope: "none" },
@@ -34,11 +34,30 @@ function AccessSection() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("process-editor");
   const [scope, setScope] = useState("");
-  useEffect(() => { loadAccess().then(setAccess, (e) => setError(e.message)); }, []);
+  const [refused, setRefused] = useState(""); // why the last "Give role" did not work
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(() => { setError(""); loadAccess().then(setAccess, (e) => setError(e.message)); }, []);
+  useEffect(load, [load]);
 
   const spec = ROLES[role];
-  const run = (p: Promise<Access>) => p.then((a) => { setAccess(a); setError(""); }, (e) => setError(e.message));
-  const grant = () => run(grantAccess({ email: email.trim(), role, scope: spec.scope === "none" ? "" : scope })).then(() => setEmail(""));
+  // the email is only cleared when the role was given: after a refusal it stays to be corrected
+  const grant = () => {
+    if (busy) return;
+    setBusy(true); setRefused("");
+    grantAccess({ email: email.trim(), role, scope: spec.scope === "none" ? "" : scope })
+      .then((a) => { setAccess(a); setEmail(""); notify.info(`${email.trim()} is now ${spec.label}.`); }, (e) => setRefused(e.message))
+      .finally(() => setBusy(false));
+  };
+  const revoke = async (a: Assignment) => {
+    const label = ROLES[a.role]?.label ?? a.role;
+    const yes = await confirmDialog({
+      title: "Remove this role?",
+      body: <>{a.email} will no longer be {label}{a.scope ? ` for ${teamName(catalog, a.scope)}` : ""}. You can give the role again at any time.</>,
+      confirmLabel: "Remove role", danger: true,
+    });
+    if (!yes) return;
+    revokeAccess({ email: a.email, role: a.role, scope: a.scope }).then(setAccess, (e) => notify.error("The role could not be removed.", e));
+  };
   // one row per person, with all their roles
   const people = useMemo(() => {
     const by = new Map<string, Assignment[]>();
@@ -50,12 +69,12 @@ function AccessSection() {
   return (
     <div className="admin-section">
       <p className="lead small">People sign in with their company account. What they may do is decided here. Everyone who can sign in can read, tick steps and give feedback.</p>
-      {error && <div className="check bad">{error}</div>}
+      {error && <LoadError what="The list of people with roles could not be loaded." error={error} onRetry={load} />}
 
       <section className="admin-card">
         <h2>Give someone a role</h2>
         <div className="grant">
-          <Field label="Email"><input type="email" value={email} placeholder="name@company.com" onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ready && grant()} /></Field>
+          <Field label="Email"><input type="email" value={email} placeholder="name@company.com" aria-invalid={!!refused} onChange={(e) => { setEmail(e.target.value); setRefused(""); }} onKeyDown={(e) => e.key === "Enter" && ready && grant()} /></Field>
           <Field label="Role">
             <select value={role} onChange={(e) => { setRole(e.target.value as Role); setScope(""); }}>
               {(Object.keys(ROLES) as Role[]).map((r) => <option key={r} value={r}>{ROLES[r].label}</option>)}
@@ -69,13 +88,15 @@ function AccessSection() {
               </select>
             </Field>
           )}
-          <button className="btn primary" disabled={!ready} onClick={grant}><Plus size={16} />Give role</button>
+          <button className="btn primary" disabled={!ready || busy} onClick={grant}><Plus size={16} />Give role</button>
         </div>
+        {refused && <LoadError what="The role was not given." error={refused} />}
         <p className="muted small">{spec.label}: {spec.can}.</p>
       </section>
 
       <section className="admin-card">
         <h2>People with roles <span>{people.length + (access?.bootstrapAdmins.length ?? 0)}</span></h2>
+        {!access && !error && <Loading />}
         <ul className="people">
           {(access?.bootstrapAdmins ?? []).map((e) => (
             <li key={`b-${e}`}>
@@ -92,7 +113,7 @@ function AccessSection() {
                 {list.map((a) => (
                   <span key={a.role + a.scope} className="role-chip">
                     {ROLES[a.role]?.label ?? a.role}{a.scope && <em>{teamName(catalog, a.scope)}</em>}
-                    <button aria-label={`Remove ${ROLES[a.role]?.label ?? a.role} from ${person}`} onClick={() => run(revokeAccess({ email: a.email, role: a.role, scope: a.scope }))}><Trash2 size={12} /></button>
+                    <button aria-label={`Remove ${ROLES[a.role]?.label ?? a.role} from ${person}`} onClick={() => revoke(a)}><Trash2 size={12} /></button>
                   </span>
                 ))}
               </span>
@@ -117,22 +138,25 @@ function SkillsSection() {
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<"all" | Skill["kind"]>("all");
   const [open, setOpen] = useState<string | null>(null);
-  const reload = () => loadSkills().then(setSkills, () => setSkills([]));
-  useEffect(() => { reload(); }, []);
+  const [error, setError] = useState("");
+  const reload = useCallback(() => { setError(""); loadSkills().then(setSkills, (e) => setError(e.message)); }, []);
+  useEffect(reload, [reload]);
   const shown = (skills ?? []).filter((s) => (kind === "all" || s.kind === kind) && `${s.title} ${s.id}`.toLowerCase().includes(q.toLowerCase()));
   const current = shown.find((s) => s.id === open) ?? shown[0];
 
   return (
     <div className="admin-section">
       <p className="lead small">A skill tells an AI coding assistant how to do the work; a review agent tells it what to check in a pull request. Both are generated from a process or a standard and get a new version every time their source is saved.</p>
-      <div className="cat-split skills-split">
+      {error && <LoadError what="The skills could not be loaded." error={error} onRetry={reload} />}
+      {!skills && !error && <Loading />}
+      {skills && <div className="cat-split skills-split">
         <section className="cat-list">
           <div className="cat-list-bar">
-            <div className="search"><Search size={15} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search skills" /></div>
+            <div className="search"><Search size={15} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search skills" aria-label="Search skills" /></div>
           </div>
-          <div className="chips skill-kinds">
+          <div className="chips skill-kinds" role="group" aria-label="Kind">
             {(["all", "skill", "review-agent"] as const).map((k) => (
-              <button key={k} className={`chip ${kind === k ? "on" : ""}`} onClick={() => setKind(k)}>
+              <button key={k} className={`chip ${kind === k ? "on" : ""}`} aria-pressed={kind === k} onClick={() => setKind(k)}>
                 {k === "all" ? "All" : SKILL_KIND[k].label + "s"}<span>{(skills ?? []).filter((s) => k === "all" || s.kind === k).length}</span>
               </button>
             ))}
@@ -150,7 +174,7 @@ function SkillsSection() {
                 </li>
               );
             })}
-            {skills && shown.length === 0 && <li className="cat-empty">No skill matches.</li>}
+            {shown.length === 0 && <li className="cat-empty">{skills.length ? "No skill matches." : "No skills yet."}</li>}
           </ul>
         </section>
         <section className="cat-detail">
@@ -159,9 +183,9 @@ function SkillsSection() {
             <a className="btn small ghost source-link" href={href(current.sourceKind === "process" ? { page: "process", id: current.sourceId, tab: "flow" } : { page: "standard", id: current.sourceId, tab: "doc" })}>
               {current.sourceKind === "process" ? <Workflow size={14} /> : <ShieldCheck size={14} />}Open the {current.sourceKind} it comes from
             </a>
-          </> : <p className="muted cat-empty">Nothing generated yet. Skills appear when a process or standard is active.</p>}
+          </> : <p className="muted cat-empty">{skills.length ? "No skill matches your search." : "Nothing generated yet. Skills appear when a process or standard is active."}</p>}
         </section>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -222,29 +246,36 @@ const ACTION: Record<string, string> = {
 
 function ActivitySection() {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
-  useEffect(() => { loadAudit(200).then(setEntries, () => setEntries([])); }, []);
+  const [error, setError] = useState("");
+  const load = useCallback(() => { setError(""); loadAudit(200).then(setEntries, (e) => setError(e.message)); }, []);
+  useEffect(load, [load]);
   return (
     <div className="admin-section">
       <p className="lead small">Every change to content, lists, roles and skills, newest first.</p>
-      <section className="admin-card">
+      {error && <LoadError what="The activity could not be loaded." error={error} onRetry={load} />}
+      {!entries && !error && <Loading />}
+      {entries && <section className="admin-card">
         <ul className="activity">
-          {entries?.map((e) => (
+          {entries.map((e) => (
             <li key={e.id}>
               <time>{e.at.slice(0, 16).replace("T", " ")}</time>
               <span><b>{e.name}</b> {ACTION[e.action] ?? e.action} <code>{e.target}</code>{e.detail && <em> · {e.detail}</em>}</span>
             </li>
           ))}
-          {entries && entries.length === 0 && <li className="muted">Nothing has been changed yet.</li>}
+          {entries.length === 0 && <li className="muted">Nothing has been changed yet.</li>}
         </ul>
-      </section>
+      </section>}
     </div>
   );
 }
 
 function SystemSection() {
   const [info, setInfo] = useState<SystemInfo | null>(null);
-  useEffect(() => { loadSystem().then(setInfo, () => {}); }, []);
-  if (!info) return <p className="muted">Loading…</p>;
+  const [error, setError] = useState("");
+  const load = useCallback(() => { setError(""); loadSystem().then(setInfo, (e) => setError(e.message)); }, []);
+  useEffect(load, [load]);
+  if (error) return <LoadError what="The set-up of this installation could not be loaded." error={error} onRetry={load} />;
+  if (!info) return <Loading />;
   const provider = { dev: "Local development (user picker)", entra: "Microsoft Entra ID", google: "Google" }[info.provider] ?? info.provider;
   return (
     <div className="admin-section">

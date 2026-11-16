@@ -22,7 +22,7 @@ export function ProcessSettings({ process, all, standards, onChange, onClose, on
   };
 
   return (
-    <Modal wide title="Process details" subtitle="Changes are applied to the draft. Press Save on the process page to write them to the file." onClose={onClose}
+    <Modal wide title="Process details" subtitle="Changes are applied to the draft. Press Save on the page to publish them." onClose={onClose}
       footer={<><button className="btn danger" onClick={onDelete}><Trash2 size={15} />Delete process</button><span className="spacer" /><button className="btn primary" onClick={onClose}>Done</button></>}>
       <div className="form">
         <h4>About</h4>
@@ -46,7 +46,7 @@ export function ProcessSettings({ process, all, standards, onChange, onClose, on
         </Field>
 
         <h4>Life-cycle <span className="muted">who sees it and how often the owner reviews it</span></h4>
-        <LifecycleEditor doc={process} others={all} noun="process" onChange={set} />
+        <LifecycleEditor doc={process} others={all} onChange={set} />
 
         <h4>Skills and links <span className="muted">ways to do it faster or in self-service</span></h4>
         <ResourceEditor list={process.resources ?? []} onChange={(resources) => set({ resources })} />
@@ -56,7 +56,7 @@ export function ProcessSettings({ process, all, standards, onChange, onClose, on
           <div className="chips">
             {standards.map((s) => {
               const on = process.standards?.includes(s.id) ?? false;
-              return <button key={s.id} className={`chip ${on ? "on" : ""}`} onClick={() => set({ standards: standards.map((x) => x.id).filter((id) => (id === s.id ? !on : process.standards?.includes(id))) })}>{s.title}</button>;
+              return <button key={s.id} className={`chip ${on ? "on" : ""}`} aria-pressed={on} onClick={() => set({ standards: standards.map((x) => x.id).filter((id) => (id === s.id ? !on : process.standards?.includes(id))) })}>{s.title}</button>;
             })}
             {standards.length === 0 && <span className="muted small">No standards yet.</span>}
           </div>
@@ -67,17 +67,17 @@ export function ProcessSettings({ process, all, standards, onChange, onClose, on
           {actors.map((a, i) => (
             <div className="row" key={a.id}>
               <span className="row-n">{i + 1}</span>
-              <input className="w-name" value={a.name} maxLength={40} placeholder="Team or role"
+              <input className="w-name" value={a.name} maxLength={40} placeholder="Team or role" aria-label={`Name of participant ${i + 1}`}
                 onChange={(e) => set({ actors: actors.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
-              <input value={a.description ?? ""} maxLength={200} placeholder={i === 0 ? "The person following this process" : "How to reach them"}
+              <input value={a.description ?? ""} maxLength={200} placeholder={i === 0 ? "The person following this process" : "How to reach them"} aria-label={`About participant ${i + 1}`}
                 onChange={(e) => set({ actors: actors.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)) })} />
-              <button className="icon-btn" disabled={i < 2} onClick={() => swap(i, i - 1)} aria-label="Move up"><ArrowUp size={15} /></button>
-              <button className="icon-btn" disabled={i === 0 || i === actors.length - 1} onClick={() => swap(i, i + 1)} aria-label="Move down"><ArrowDown size={15} /></button>
-              <button className="icon-btn" disabled={i === 0 || used(a.id)} title={used(a.id) ? "Has steps - reassign them first" : "Remove"}
+              <button className="icon-btn" disabled={i < 2} onClick={() => swap(i, i - 1)} aria-label={`Move participant ${i + 1} up`}><ArrowUp size={15} /></button>
+              <button className="icon-btn" disabled={i === 0 || i === actors.length - 1} onClick={() => swap(i, i + 1)} aria-label={`Move participant ${i + 1} down`}><ArrowDown size={15} /></button>
+              <button className="icon-btn" disabled={i === 0 || used(a.id)} title={used(a.id) ? "Has steps - reassign them first" : "Remove"} aria-label={`Remove participant ${i + 1}`}
                 onClick={() => set({ actors: actors.filter((_, j) => j !== i) })}><X size={15} /></button>
             </div>
           ))}
-          <select className="add-select" value="" onChange={(e) => {
+          <select className="add-select" value="" aria-label="Add a participant" onChange={(e) => {
             const v = e.target.value;
             if (!v) return;
             const taken = actors.map((a) => a.id);
@@ -102,12 +102,12 @@ export function ProcessSettings({ process, all, standards, onChange, onClose, on
               <div className="prereq-edit" key={i}>
                 <div className="row">
                   <span className="row-n">{i + 1}</span>
-                  <input value={q.title} maxLength={120} placeholder="Approved cost centre" onChange={(e) => upd({ title: e.target.value })} />
-                  <button className="icon-btn" onClick={() => set({ prerequisites: pre.filter((_, j) => j !== i) })} aria-label="Remove"><X size={15} /></button>
+                  <input value={q.title} maxLength={120} placeholder="Approved cost centre" aria-label={`Prerequisite ${i + 1}`} onChange={(e) => upd({ title: e.target.value })} />
+                  <button className="icon-btn" onClick={() => set({ prerequisites: pre.filter((_, j) => j !== i) })} aria-label={`Remove prerequisite ${i + 1}`}><X size={15} /></button>
                 </div>
                 <div className="row indent">
-                  <input value={q.description ?? ""} maxLength={400} placeholder="Why it is needed / how to check" onChange={(e) => upd({ description: e.target.value })} />
-                  <select value={q.processId ?? ""} onChange={(e) => upd({ processId: e.target.value || undefined })}>
+                  <input value={q.description ?? ""} maxLength={400} placeholder="Why it is needed / how to check" aria-label={`About prerequisite ${i + 1}`} onChange={(e) => upd({ description: e.target.value })} />
+                  <select value={q.processId ?? ""} aria-label={`Process that provides prerequisite ${i + 1}`} onChange={(e) => upd({ processId: e.target.value || undefined })}>
                     <option value="">No process for this</option>
                     {all.filter((p) => p.id !== process.id).map((p) => <option key={p.id} value={p.id}>Get it via: {p.title}</option>)}
                   </select>
