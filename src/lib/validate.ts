@@ -1,14 +1,10 @@
-import Ajv2020 from "ajv/dist/2020";
 import type { ErrorObject } from "ajv";
 import schema from "../../schema/process.schema.json";
-import catalogSchema from "../../schema/catalog.schema.json";
 import standardSchema from "../../schema/standard.schema.json";
 import type { Catalog, Issue, Process, Standard } from "../types";
-
-const ajv = new Ajv2020({ allErrors: true, strict: false });
-const validateSchema = ajv.compile(schema);
-const validateCatalogSchema = ajv.compile(catalogSchema);
-const validateStandardSchema = ajv.compile(standardSchema);
+// The checks for the three formats are generated from schema/*.schema.json by `npm run validators`.
+// They are not built in the browser: that needs eval, which the app's security policy forbids.
+import { validateCatalogDoc as validateCatalogSchema, validateProcessDoc as validateSchema, validateStandardDoc as validateStandardSchema } from "./validators.generated.js";
 
 export interface CheckContext { processIds?: Iterable<string>; standardIds?: Iterable<string>; catalog?: Catalog }
 

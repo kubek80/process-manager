@@ -7,7 +7,7 @@ import { FeedbackForm, FeedbackItem, processTarget } from "./Feedback";
 import { ResourceEditor } from "./Resources";
 import { usePerms } from "../lib/session";
 import { STEP_META, STEP_TYPES, stepHelp } from "../lib/stepMeta";
-import { Field, TypeIcon, useLayer } from "./ui";
+import { Field, TypeIcon, useLayer, notify } from "./ui";
 import { StepBody } from "./ListView";
 
 export function StepDrawer({ process, all, step, editing, setEditing, onClose, onSelect, onChange, onTitleBlur, onDelete, onMove, onAddAfter, feedback, reporting, setReporting, editable }: {
@@ -44,7 +44,10 @@ export function StepDrawer({ process, all, step, editing, setEditing, onClose, o
       await save({ ...catalog, tools: [...catalog.tools, { id, name }] });
       onChange({ tool: id });
       setNewTool(null);
-    } catch { /* a notice says why; the step keeps its tool and the name stays in the field */ } finally { setAddingTool(false); }
+    } catch (e) {
+      // the step keeps its tool and the name stays in the field
+      notify.error("The tool could not be added to the list.", e);
+    } finally { setAddingTool(false); }
   };
   const panel = useRef<HTMLElement>(null);
   const titleId = useId();

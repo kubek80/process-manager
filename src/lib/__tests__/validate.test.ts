@@ -214,3 +214,17 @@ describe("standards", () => {
   });
   it("skips list checks without a catalog", () => expect(validateStandard({ ...baseStandard(), owner: "ghost", tiers: ["tier-9"] })).toEqual([]));
 });
+
+describe("the generated checks", () => {
+  it("are up to date with the schemas (run `npm run validators` after changing a schema)", async () => {
+    const fs = await import("node:fs");
+    const { generate, target } = await import("../../../scripts/validators");
+    expect(fs.readFileSync(target, "utf8")).toBe(generate());
+  });
+  it("need nothing the browser's security policy forbids", async () => {
+    const fs = await import("node:fs");
+    const { target } = await import("../../../scripts/validators");
+    const code = fs.readFileSync(target, "utf8");
+    expect(code).not.toMatch(/\beval\(|new Function|\brequire\(/);
+  });
+});

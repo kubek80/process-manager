@@ -5,7 +5,8 @@ import { teamName, useCatalog } from "../lib/catalog";
 import { openCount } from "./Feedback";
 import { useEditor } from "../lib/mode";
 import { usePerms } from "../lib/session";
-import { appliesTo, type Profile } from "../lib/edit";
+import { appliesTo } from "../lib/edit";
+import { useProfile, useRemembered } from "../lib/profile";
 import { DimTags, ProfileFilter } from "./Governance";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { hasErrors, validateProcess } from "../lib/validate";
@@ -17,9 +18,10 @@ const CAT_COLORS = ["#4f46e5", "#0d9488", "#d97706", "#db2777", "#0284c7", "#7c3
 export function Library({ processes: allProcesses, standardIds, onNew, onAi, feedback }: {
   processes: Process[]; standardIds: string[]; feedback: Record<string, Feedback[]>; onNew: () => void; onAi: () => void;
 }) {
-  const [q, setQ] = useState("");
-  const [cat, setCat] = useState<string | null>(null);
-  const [profile, setProfile] = useState<Profile>({});
+  // what somebody searched and filtered for is still there when they come back from a process
+  const [q, setQ] = useRemembered("pm:processes:q", "");
+  const [cat, setCat] = useRemembered<string | null>("pm:processes:category", null);
+  const [profile, setProfile] = useProfile();
   const [dueOnly, setDueOnly] = useState(false);
   const { catalog } = useCatalog();
   const editor = useEditor() && usePerms().processes;

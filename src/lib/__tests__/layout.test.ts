@@ -143,6 +143,18 @@ describe("labels on the map", () => {
     const l = layoutProcess(p);
     expectApart(l, "fan-out");
     expect(new Set(l.edges.map((e) => `${e.lx},${e.ly}`)).size).toBe(4);
+    // the three that go down share one line: each label comes after the place where the shorter path turned off
+    // and before its own, so it is clear which turn-off it names
+    const node = Object.fromEntries(l.nodes.map((n) => [n.step.id, n]));
+    const label = (to: string) => l.edges.find((e) => e.to === to)!;
+    const mid = (id: string) => node[id].y + L.H / 2;
+    expect(label("b").ly).toBeGreaterThan(mid("ask"));
+    expect(label("b").ly).toBeLessThan(mid("b"));
+    expect(label("c").ly).toBeGreaterThan(mid("b"));
+    expect(label("c").ly).toBeLessThan(mid("c"));
+    expect(label("d").ly).toBeGreaterThan(mid("c"));
+    expect(label("d").ly).toBeLessThan(mid("d"));
+    expect(new Set(["b", "c", "d"].map((to) => label(to).lx)).size).toBe(1);
     // loops back from one decision as well
     const loops = flow([
       step("one", "me", [{ to: "two" }]), step("two", "me", [{ to: "check" }]),

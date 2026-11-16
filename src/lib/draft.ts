@@ -15,6 +15,8 @@ export interface DraftOptions<T> {
   version: number;
   /** Removes empty optional parts before comparing and saving. */
   tidy: (d: T) => T;
+  /** Added to the document just before it is sent, e.g. the date of the save. */
+  stamp?: (d: T) => T;
   /** Stores the document on top of version `base` and returns the new version. */
   save: (doc: T, base: number, note: string) => Promise<number>;
   /** Fetches what the server has now: used to take over somebody else's version. */
@@ -25,6 +27,8 @@ export interface DraftOptions<T> {
 
 export interface Draft<T> {
   draft: T;
+  /** What the server has at version `base`: what the edits are compared with. */
+  saved: T;
   /** The draft as it would be saved. */
   clean: T;
   dirty: boolean;
@@ -91,12 +95,13 @@ export function useDraft<T>(o: DraftOptions<T>): Draft<T> {
   latest.current = state;
 
   const send = useCallback(async (base: number, note: string): Promise<boolean> => {
-    const sent = opts.current.tidy(latest.current.draft);
+    const tidied = opts.current.tidy(latest.current.draft);
+    const sent = opts.current.stamp ? opts.current.stamp(tidied) : tidied;
     setSaving(true);
     setError(null);
     try {
       const newVersion = await opts.current.save(sent, base, note);
-      setState((s) => savedAs(s, sent, newVersion, opts.current.tidy));
+      setState((s) => savedAs(s, sent, newVersion, opts.current.tidy, tidied));
       setConflict(null);
       return true;
     } catch (e) {
@@ -142,7 +147,7 @@ export function useDraft<T>(o: DraftOptions<T>): Draft<T> {
   }, []);
 
   return {
-    draft: state.draft, clean, dirty, saving, base: state.base, behind: version > state.base,
+    draft: state.draft, saved: state.saved, clean, dirty, saving, base: state.base, behind: version > state.base,
     change,
     discard: useCallback(() => setState((s) => discard(s, Date.now())), []),
     undo: useCallback(() => setState(undo), []),

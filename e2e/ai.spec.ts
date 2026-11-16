@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { ALEX, open, readProcess, save, SAM, signIn } from "./helpers";
+import { ALEX, answer, open, readProcess, save, SAM, signIn } from "./helpers";
 
 const example = JSON.parse(fs.readFileSync(path.join(process.cwd(), "schema/example.process.json"), "utf8"));
 const draft = { ...example, status: "draft", review: { intervalMonths: 6 } };
@@ -94,9 +94,9 @@ test("change an existing process with AI, then delete it", async ({ page }) => {
   expect((await readProcess(page, "request-vpn-access"))!.steps.at(-1).title).toBe("Connect and test the VPN");
   expect(await readProcess(page, "get-vpn")).toBeUndefined();
 
-  page.on("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Details", exact: true }).click();
   await page.locator(".modal").getByRole("button", { name: "Delete process" }).click();
+  await answer(page, "Delete this process?", "Delete process");
   await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
   await expect(page.locator(".card", { hasText: "Request VPN access" })).toHaveCount(0);
   expect(await readProcess(page, "request-vpn-access")).toBeUndefined();
@@ -109,8 +109,8 @@ test("a blank process starts as a valid draft", async ({ page }) => {
   await expect(page.locator(".banner", { hasText: "Draft." })).toBeVisible();
   await expect(page.locator(".status.good, .status.warn")).toBeVisible();
   expect((await readProcess(page, "new-process"))!.status).toBe("draft");
-  page.on("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Details", exact: true }).click();
   await page.locator(".modal").getByRole("button", { name: "Delete process" }).click();
+  await answer(page, "Delete this process?", "Delete process");
   await expect(page.locator(".card").first()).toBeVisible();
 });

@@ -1,24 +1,26 @@
 import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArrowDown, ArrowLeft, ArrowUp, ArrowUpRight, Bot, Braces, CalendarCheck, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, Eye,
-  Flag, History, ListChecks, Pencil, Plus, Save, Settings2, ShieldCheck, Sparkles, Trash2, TriangleAlert, Undo2, Workflow, X,
+  Flag, History, ListChecks, Pencil, Plus, Settings2, ShieldCheck, Sparkles, Trash2, TriangleAlert, Workflow, X,
 } from "lucide-react";
-import type { Feedback, Level, Process, Requirement, Severity, Standard, VerificationMethod } from "../types";
+import type { DocMeta, Feedback, Level, Process, Requirement, Severity, Standard, VerificationMethod } from "../types";
 import { teamName, useCatalog } from "../lib/catalog";
-import { addRequirement, appliesTo, deleteRequirement, moveRequirement, tidyStandard, today, updateRequirement, type Profile } from "../lib/edit";
+import { addRequirement, appliesTo, deleteRequirement, moveRequirement, tidyStandard, today, updateRequirement } from "../lib/edit";
+import { useDraft } from "../lib/draft";
+import { useProfile } from "../lib/profile";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { useEditor } from "../lib/mode";
 import { createStandardPrompt, modifyStandardPrompt } from "../lib/prompt";
 import { canEditStandard, useMe, usePerms } from "../lib/session";
-import { go, href, type StandardTab } from "../lib/store";
+import { go, guardLeaving, href, type StandardTab } from "../lib/store";
 import { isDrawableStandard, standardSchema, validateStandard } from "../lib/validate";
 import type { AiSpec } from "./AiDialog";
 import { FeedbackForm, FeedbackItem, FeedbackTab, openCount, standardTarget } from "./Feedback";
 import { DimsEditor, DimTags, LifecycleEditor, ProfileFilter, ReviewTag, unitsOf } from "./Governance";
-import { HistoryDialog } from "./HistoryDialog";
+import { BehindBanner, ConflictDialog, HistoryDialog, SaveBar, VersionTag } from "./Editing";
 import { ResourceEditor, Resources } from "./Resources";
 import { SourceSkills } from "./SkillPanel";
-import { confirmDialog, Field, IssueList, Loading, Modal, scrollBehavior, useLayer } from "./ui";
+import { confirmDialog, Field, IssueList, Loading, Modal, notify, scrollBehavior, useLayer } from "./ui";
 
 // the editor for the JSON tab and the AI dialog are loaded when they are first opened
 const JsonView = lazy(() => import("./JsonView").then((m) => ({ default: m.JsonView }))) as typeof import("./JsonView").JsonView;
@@ -307,33 +309,41 @@ function StandardSettings({ standard, all, processes, onChange, onClose, onDelet
   );
 }
 
-export function StandardPage({ standard, all, processes, tab, feedback, onSave, onDelete }: {
-  standard: Standard; all: Standard[]; processes: Process[]; tab: StandardTab; feedback: Feedback[];
-  onSave: (s: Standard) => Promise<void>; onDelete: () => void;
+const stamp = (s: Standard): Standard => ({ ...s, updatedAt: today() });
+
+export function StandardPage({ standard, meta, all, processes, tab, item, feedback, onSave, onReload, onDelete }: {
+  standard: Standard; meta?: DocMeta; all: Standard[]; processes: Process[]; tab: StandardTab; feedback: Feedback[];
+  /** The requirement that is open, from the address: a link can point at one requirement. */
+  item?: string;
+  /** Saves on top of version `base`; resolves to the new version. */
+  onSave: (s: Standard, base: number, note?: string) => Promise<number>;
+  onReload: () => Promise<{ saved: Standard; version: number } | null>;
+  onDelete: () => void;
 }) {
   const { catalog } = useCatalog();
   const me = useMe();
   const perms = usePerms();
   const mayEdit = canEditStandard(perms, standard.owner);
   const editor = useEditor() && mayEdit;
-  const [draft, setDraft] = useState<Standard>(standard);
-  const [selected, setSelected] = useState<string | null>(null);
+  const d = useDraft<Standard>({ docKey: `standard/${standard.id}`, saved: standard, version: meta?.version ?? 0, tidy: tidyStandard, stamp, save: onSave, reload: onReload, what: "this standard" });
+  const { draft, clean, dirty } = d;
+  const setDraft = d.change;
+  const selected = item ?? null;
   const [editing, setEditing] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [dialog, setDialog] = useState<null | "settings" | "ai" | "history">(null);
   const [showIssues, setShowIssues] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [profile, setProfile] = useState<Profile>({});
+  const [jsonPending, setJsonPending] = useState(false);
+  const [profile, setProfile] = useProfile();
   const [level, setLevel] = useState<Level | null>(null);
 
-  useEffect(() => setDraft(standard), [standard]);
-  useEffect(() => { if (!editor) { setEditing(false); setDialog((d) => (d === "history" || d === "settings" || d === "ai" ? null : d)); } }, [editor]);
+  useEffect(() => { if (!editor) { setEditing(false); setDialog((x) => (x === "settings" || x === "ai" ? null : x)); } }, [editor]);
+  useEffect(() => { if (d.error) { notify.error("The standard could not be saved.", d.error); d.clearError(); } }, [d.error]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => (jsonPending ? guardLeaving(`standard/${standard.id}#json`, "the JSON of this standard (it still has problems, so it is not part of the draft)") : undefined), [jsonPending, standard.id]);
 
   const ctx = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds: all.map((s) => s.id), catalog }), [processes, all, catalog]);
-  const clean = useMemo(() => tidyStandard(draft), [draft]);
   const issues = useMemo(() => validateStandard(clean, ctx), [clean, ctx]);
   const errors = issues.filter((i) => i.level === "error").length;
-  const dirty = JSON.stringify(clean) !== JSON.stringify(standard);
   const renderable = useMemo(() => isDrawableStandard(draft), [draft]);
   const view: StandardTab = !renderable ? "json" : tab === "json" && !editor ? "doc" : tab;
   const current = renderable ? draft.requirements.find((r) => r.id === selected) : undefined;
@@ -344,30 +354,24 @@ export function StandardPage({ standard, all, processes, tab, feedback, onSave, 
   const exception = draft.exceptionProcessId ? processes.find((p) => p.id === draft.exceptionProcessId) : undefined;
   const helpers = processes.filter((p) => p.standards?.includes(draft.id) && statusOf(p) === "active");
 
+  // the open requirement is part of the address, so a link can point at it and Back closes it
+  const setSelected = (id: string | null) => go({ page: "standard", id: standard.id, tab: "doc", ...(id ? { item: id } : {}) });
+  const select = (id: string) => { setSelected(id); setReporting(false); };
+  // bring the open requirement into view, also when the page was opened by a link to it
   useEffect(() => {
-    const warn = (e: BeforeUnloadEvent) => { if (dirty) e.preventDefault(); };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
-
-  const select = (id: string) => {
-    setSelected(id); setReporting(false);
-    if (view !== "doc") go({ page: "standard", id: standard.id, tab: "doc" });
-    setTimeout(() => document.getElementById(`req-${id}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "center" }), 50);
-  };
-  const save = async () => {
-    setSaving(true);
-    try { await onSave({ ...clean, updatedAt: today() }); } finally { setSaving(false); }
-  };
+    if (!item || view !== "doc") return;
+    const t = setTimeout(() => document.getElementById(`req-${item}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "center" }), 50);
+    return () => clearTimeout(t);
+  }, [item, view]);
   const markReviewed = async () => {
     const next = { ...draft, review: { intervalMonths: draft.review?.intervalMonths ?? 12, lastReviewedAt: today(), ...(me.user ? { reviewedBy: me.user.name } : {}) } };
-    setDraft(next);
-    if (!dirty && !errors) await onSave({ ...tidyStandard(next), updatedAt: standard.updatedAt });
+    // with other changes pending it becomes part of them; a pure "still correct" is saved straight away
+    if (dirty || errors) return setDraft(next);
+    try { await onSave({ ...tidyStandard(next), updatedAt: standard.updatedAt }, d.base, "Reviewed: confirmed as still correct"); }
+    catch (e) { notify.error("The review could not be recorded.", e); }
   };
   const add = () => { const r = addRequirement(draft, selected ?? undefined); setDraft(r.standard); setSelected(r.id); setEditing(true); };
-  const back = async () => {
-    if (!dirty || await confirmDialog({ title: "Leave without saving?", body: "Your changes to this standard have not been saved. If you leave now they are lost.", confirmLabel: "Leave without saving", cancelLabel: "Stay", danger: true })) go({ page: "standards" });
-  };
+  const back = () => go({ page: "standards" }); // leaving with unsaved changes asks first, like every other way out
 
   const shown = renderable ? draft.requirements.filter((r) => !level || r.level === level) : [];
   const count = (l: Level) => (renderable ? draft.requirements.filter((r) => r.level === l && appliesTo(r, profile)).length : 0);
@@ -388,6 +392,7 @@ export function StandardPage({ standard, all, processes, tab, feedback, onSave, 
                 <span><ListChecks size={14} />{draft.requirements.length} requirements, {draft.requirements.filter((r) => r.level === "must").length} mandatory</span>
                 {draft.updatedAt && <span>Updated {draft.updatedAt}</span>}
                 <ReviewTag doc={draft} />
+                <VersionTag meta={meta} onOpen={() => setDialog("history")} />
               </div>
             )}
           </div>
@@ -417,12 +422,9 @@ export function StandardPage({ standard, all, processes, tab, feedback, onSave, 
           {errors ? <CircleAlert size={15} /> : issues.length ? <TriangleAlert size={15} /> : <CircleCheck size={15} />}
           {errors ? `${errors} problem${errors > 1 ? "s" : ""}` : issues.length ? `${issues.length} hint${issues.length > 1 ? "s" : ""}` : "No problems"}
         </button>}
-        {dirty && <>
-          <button className="btn" onClick={() => { setDraft(standard); setEditing(false); }}><Undo2 size={16} />Discard</button>
-          <button className="btn primary" disabled={!!errors || saving} onClick={save} title={errors ? "Fix the problems first" : ""}><Save size={16} />Save changes</button>
-        </>}
-        {!dirty && editor && <span className="saved"><Check size={14} />Saved</span>}
+        <SaveBar d={d} editor={editor} blocked={errors ? "Fix the problems first" : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined} />
       </div>
+      <BehindBanner d={d} meta={meta} noun="this standard" />
       {showIssues && issues.length > 0 && <div className="issues-panel"><IssueList issues={issues} /></div>}
 
       {status === "deprecated" && renderable && (
@@ -475,7 +477,7 @@ export function StandardPage({ standard, all, processes, tab, feedback, onSave, 
       )}
       {view === "feedback" && renderable && <FeedbackTab target={target} feedback={feedback} onSelect={select} />}
       {view === "skills" && renderable && <SourceSkills kind="standard" id={standard.id} revision={standard} />}
-      {view === "json" && <Suspense fallback={<Loading />}><JsonView doc={clean} noun="standard" validate={(v) => validateStandard(v, ctx)} schema={standardSchema} schemaFile="schema/standard.schema.json" onChange={setDraft} /></Suspense>}
+      {view === "json" && <Suspense fallback={<Loading />}><JsonView doc={clean} noun="standard" validate={(v) => validateStandard(v, ctx)} schema={standardSchema} schemaFile="schema/standard.schema.json" onChange={setDraft} onPending={setJsonPending} /></Suspense>}
 
       {current && view === "doc" && (
         <RequirementDrawer r={current} standard={draft} processes={processes} feedback={feedback} editing={editing} editable={editor}
@@ -485,7 +487,7 @@ export function StandardPage({ standard, all, processes, tab, feedback, onSave, 
           onClose={() => { setSelected(null); setEditing(false); }}
           onDelete={async () => {
             if (!await confirmDialog({ title: `Delete ${current.id}?`, body: <>The requirement “{current.title}” is removed from the draft. Nothing is final until you save.</>, confirmLabel: "Delete requirement", danger: true })) return;
-            setDraft((d) => deleteRequirement(d, current.id)); setSelected(null);
+            setDraft((s) => deleteRequirement(s, current.id)); setSelected(null);
           }}
           onMove={(dir) => setDraft(moveRequirement(draft, current.id, dir))} />
       )}
@@ -502,7 +504,8 @@ export function StandardPage({ standard, all, processes, tab, feedback, onSave, 
         </Suspense>
       )}
       {dialog === "history" && <HistoryDialog<Standard> kind="standard" id={standard.id} title={standard.title} onClose={() => setDialog(null)}
-        onRestore={(doc) => { setDraft(doc); setDialog(null); }} />}
+        onRestore={editor ? (doc) => { setDraft(doc); setDialog(null); } : undefined} />}
+      <ConflictDialog d={d} kind="standard" id={standard.id} noun="this standard" />
     </div>
   );
 }

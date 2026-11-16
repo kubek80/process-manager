@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { ArrowRight, CalendarCheck, Flag, Plus, Search, ShieldCheck, Sparkles } from "lucide-react";
 import type { Feedback, Process, Standard } from "../types";
 import { teamName, UNIT_KINDS, useCatalog } from "../lib/catalog";
-import { appliesTo, type Profile } from "../lib/edit";
+import { appliesTo } from "../lib/edit";
+import { useProfile, useRemembered } from "../lib/profile";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { useEditor } from "../lib/mode";
 import { canEditAnyStandard, usePerms } from "../lib/session";
@@ -22,9 +23,10 @@ export function StandardsLibrary({ standards: all, processes, feedback, onNew, o
   const { catalog } = useCatalog();
   const perms = usePerms();
   const editor = useEditor() && canEditAnyStandard(perms);
-  const [q, setQ] = useState("");
-  const [unit, setUnit] = useState<string | null>(null);
-  const [profile, setProfile] = useState<Profile>({});
+  // what somebody searched and filtered for is still there when they come back from a standard
+  const [q, setQ] = useRemembered("pm:standards:q", "");
+  const [unit, setUnit] = useRemembered<string | null>("pm:standards:unit", null);
+  const [profile, setProfile] = useProfile();
   // drafts are work in progress: only editors see them
   const standards = useMemo(() => all.filter((s) => editor || statusOf(s) !== "draft"), [all, editor]);
   const ctx = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds: all.map((s) => s.id), catalog }), [processes, all, catalog]);

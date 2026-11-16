@@ -63,6 +63,11 @@ export function watchErrors(page: Page) {
   return errors;
 }
 
+/** Answer a question the app asks in its own dialog ("Delete this step?") by pressing one of its buttons. */
+export const answer = async (page: Page, title: string | RegExp, button: string) => {
+  await page.getByRole("dialog", { name: title }).getByRole("button", { name: button, exact: true }).click();
+};
+
 export const save = async (page: Page) => {
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.locator(".saved")).toBeVisible();

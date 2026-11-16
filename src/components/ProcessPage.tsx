@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Braces, CalendarCheck, Check, Flag, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Save, Settings2, Sparkles, TriangleAlert, Undo2, Users, Workflow, Bot, History, ShieldCheck } from "lucide-react";
-import type { Feedback, Process, Step } from "../types";
+import { ArrowLeft, ArrowUpRight, Braces, CalendarCheck, Check, ChevronDown, ChevronRight, Flag, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Settings2, Sparkles, TriangleAlert, Users, Workflow, Bot, History, ShieldCheck } from "lucide-react";
+import type { DocMeta, Feedback, Process, Step } from "../types";
 import { addStepAfter, deleteStep, insertStep, moveStep, prerequisiteKeys, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
 import { isDrawableProcess, validateProcess } from "../lib/validate";
-import { go, useProgress, type Tab } from "../lib/store";
+import { go, guardLeaving, useProgress, type Tab } from "../lib/store";
+import { useDraft } from "../lib/draft";
 import { teamName, useCatalog } from "../lib/catalog";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { Resources } from "./Resources";
@@ -16,9 +17,9 @@ import { ListView } from "./ListView";
 import { StepDrawer } from "./StepDrawer";
 import { ProcessSettings } from "./ProcessSettings";
 import type { AiSpec } from "./AiDialog";
-import { confirmDialog, IssueList, Loading, scrollBehavior } from "./ui";
+import { confirmDialog, IssueList, Loading, notify, scrollBehavior } from "./ui";
 import { DimTags, ReviewTag } from "./Governance";
-import { HistoryDialog } from "./HistoryDialog";
+import { BehindBanner, ConflictDialog, HistoryDialog, SaveBar, VersionTag } from "./Editing";
 import { SourceSkills } from "./SkillPanel";
 import { createPrompt, modifyPrompt } from "../lib/prompt";
 import { processSchema } from "../lib/validate";
@@ -28,54 +29,57 @@ import type { Catalog, Standard } from "../types";
 const JsonView = lazy(() => import("./JsonView").then((m) => ({ default: m.JsonView }))) as typeof import("./JsonView").JsonView;
 const AiDialog = lazy(() => import("./AiDialog").then((m) => ({ default: m.AiDialog }))) as typeof import("./AiDialog").AiDialog;
 
-export function ProcessPage({ process, all, standards, tab, onSave, onDelete, feedback }: {
-  process: Process; all: Process[]; standards: Standard[]; tab: Tab; feedback: Feedback[]; onSave: (p: Process) => Promise<void>; onDelete: () => void;
+const stamp = (p: Process): Process => ({ ...p, updatedAt: today() });
+
+export function ProcessPage({ process, meta, all, standards, tab, item, onSave, onReload, onDelete, feedback }: {
+  process: Process; meta?: DocMeta; all: Process[]; standards: Standard[]; tab: Tab; feedback: Feedback[];
+  /** The step that is open, from the address: a link can point at one step. */
+  item?: string;
+  /** Saves on top of version `base`; resolves to the new version. */
+  onSave: (p: Process, base: number, note?: string) => Promise<number>;
+  onReload: () => Promise<{ saved: Process; version: number } | null>;
+  onDelete: () => void;
 }) {
-  const [draft, setDraft] = useState<Process>(process);
-  const [selected, setSelected] = useState<string | null>(null);
+  const d = useDraft<Process>({ docKey: `process/${process.id}`, saved: process, version: meta?.version ?? 0, tidy, stamp, save: onSave, reload: onReload, what: "this process" });
+  const { draft, clean, dirty } = d;
+  const setDraft = d.change;
+  const selected = item ?? null;
   const [editing, setEditing] = useState(false);
   const [dialog, setDialog] = useState<null | "settings" | "ai" | "history">(null);
   const [showIssues, setShowIssues] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [reporting, setReporting] = useState(false);
+  const [jsonPending, setJsonPending] = useState(false);
+  const [extras, setExtras] = useState(() => { try { return localStorage.getItem("pm:map-extras") === "open"; } catch { return false; } });
   const { catalog } = useCatalog();
   const perms = usePerms();
   const editor = useEditor() && perms.processes;
   const me = useMe();
   const { done, toggle, reset } = useProgress(process.id);
 
-  useEffect(() => setDraft(process), [process]);
-  useEffect(() => { if (!editor) { setEditing(false); setDialog(null); } }, [editor]);
+  useEffect(() => { if (!editor) { setEditing(false); setDialog((x) => (x === "history" ? x : null)); } }, [editor]);
+  useEffect(() => { if (d.error) { notify.error("The process could not be saved.", d.error); d.clearError(); } }, [d.error]); // eslint-disable-line react-hooks/exhaustive-deps
+  // text in the JSON tab that has problems is not in the draft: leaving the tab would drop it
+  useEffect(() => (jsonPending ? guardLeaving(`process/${process.id}#json`, "the JSON of this process (it still has problems, so it is not part of the draft)") : undefined), [jsonPending, process.id]);
 
   const knownIds = useMemo(() => all.map((p) => p.id), [all]);
-  const clean = useMemo(() => tidy(draft), [draft]);
   const ctx = useMemo(() => ({ processIds: knownIds, standardIds: standards.map((s) => s.id), catalog }), [knownIds, standards, catalog]);
   const issues = useMemo(() => validateProcess(clean, ctx), [clean, ctx]);
   const errors = issues.filter((i) => i.level === "error").length;
-  const dirty = JSON.stringify(clean) !== JSON.stringify(process);
   // A process that was stored broken can only be repaired in the JSON tab.
   const renderable = useMemo(() => isDrawableProcess(draft), [draft]);
   const view: Tab = !renderable ? "json" : tab === "json" && !editor ? "flow" : tab;
   const step = renderable ? draft.steps.find((s) => s.id === selected) : undefined;
 
+  // the open step is part of the address, so a link can point at it and Back closes it
+  const setSelected = (id: string | null) => go({ page: "process", id: process.id, tab: view === "feedback" || view === "json" || view === "skills" ? "flow" : view, ...(id ? { item: id } : {}) });
+  const select = (id: string) => { setSelected(id); setReporting(false); };
+  // in the checklist the open step is brought into view, also when the page was opened by a link to it
   useEffect(() => {
-    const warn = (e: BeforeUnloadEvent) => { if (dirty) e.preventDefault(); };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
-
-  const select = (id: string) => {
-    setSelected(id); setReporting(false);
-    if (view === "feedback") go({ page: "process", id: process.id, tab: "flow" });
-    if (view === "list") document.getElementById(`step-${id}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
-  };
+    if (item && view === "list") document.getElementById(`step-${item}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
+  }, [item, view]);
   const addAfter = (id: string | null) => {
     const r = addStepAfter(draft, id);
     setDraft(r.process); setSelected(r.id); setEditing(true);
-  };
-  const save = async () => {
-    setSaving(true);
-    try { await onSave({ ...clean, updatedAt: today() }); } finally { setSaving(false); }
   };
   const review = reviewInfo(draft);
   const status = statusOf(draft);
@@ -83,13 +87,12 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
   const markReviewed = async () => {
     const who = me.user?.name ?? "";
     const next = { ...draft, review: { intervalMonths: draft.review?.intervalMonths ?? 6, lastReviewedAt: today(), ...(who ? { reviewedBy: who } : {}) } };
-    setDraft(next);
-    // a pure "still correct" confirmation is saved straight away
-    if (!dirty && !errors) await onSave({ ...tidy(next), updatedAt: process.updatedAt });
+    // with other changes pending it becomes part of them; a pure "still correct" is saved straight away
+    if (dirty || errors) return setDraft(next);
+    try { await onSave({ ...tidy(next), updatedAt: process.updatedAt }, d.base, "Reviewed: confirmed as still correct"); }
+    catch (e) { notify.error("The review could not be recorded.", e); }
   };
-  const back = async () => {
-    if (!dirty || await confirmDialog({ title: "Leave without saving?", body: "Your changes to this process have not been saved. If you leave now they are lost.", confirmLabel: "Leave without saving", cancelLabel: "Stay", danger: true })) go({ page: "library" });
-  };
+  const back = () => go({ page: "library" }); // leaving with unsaved changes asks first, like every other way out
   // ticks are remembered by the prerequisite's title; ticks from before that were remembered by position
   const preKeys = renderable ? prerequisiteKeys(draft.prerequisites) : [];
   const hasPre = (i: number) => done.has(preKeys[i]) || done.has(`pre:${i}`);
@@ -100,6 +103,10 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
   };
 
   const mine = renderable ? draft.steps.filter((s) => s.actor === "me").length : 0;
+  // On the map the map comes first: what to prepare is one line that opens. The checklist, where
+  // the work is done, shows it in full.
+  const hasExtras = renderable && (draft.prerequisites.length > 0 || !!draft.resources?.length || !!draft.standards?.length);
+  const showExtras = renderable && (view === "list" || (view === "flow" && extras));
 
   return (
     <div className={`page process-page ${step ? "with-drawer" : ""}`}>
@@ -119,6 +126,7 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
                 {draft.estimatedDuration && <span><Clock size={14} />{draft.estimatedDuration}</span>}
                 {draft.updatedAt && <span>Updated {draft.updatedAt}</span>}
                 <ReviewTag doc={draft} />
+                <VersionTag meta={meta} onOpen={() => setDialog("history")} />
               </div>
             )}
           </div>
@@ -148,12 +156,9 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
           {errors ? <CircleAlert size={15} /> : issues.length ? <TriangleAlert size={15} /> : <CircleCheck size={15} />}
           {errors ? `${errors} problem${errors > 1 ? "s" : ""}` : issues.length ? `${issues.length} hint${issues.length > 1 ? "s" : ""}` : "No problems"}
         </button>}
-        {dirty && <>
-          <button className="btn" onClick={() => { setDraft(process); setEditing(false); }}><Undo2 size={16} />Discard</button>
-          <button className="btn primary" disabled={!!errors || saving} onClick={save} title={errors ? "Fix the problems first" : ""}><Save size={16} />Save changes</button>
-        </>}
-        {!dirty && editor && <span className="saved"><Check size={14} />Saved</span>}
+        <SaveBar d={d} editor={editor} blocked={errors ? "Fix the problems first" : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined} />
       </div>
+      <BehindBanner d={d} meta={meta} noun="this process" />
       {showIssues && issues.length > 0 && <div className="issues-panel"><IssueList issues={issues} /></div>}
 
       {status === "deprecated" && renderable && (
@@ -167,14 +172,25 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
         <div className="check bad banner"><CalendarCheck size={16} /><span><b>{review.label}.</b> Read it through, correct what changed, then press “Mark as reviewed”.</span></div>
       )}
 
-      {(view === "flow" || view === "list") && renderable && !!draft.resources?.length && (
+      {view === "flow" && renderable && hasExtras && (
+        <button className="extras-toggle" aria-expanded={extras} onClick={() => { const next = !extras; setExtras(next); try { localStorage.setItem("pm:map-extras", next ? "open" : "closed"); } catch { /* ignore */ } }}>
+          {extras ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+          <b>Before you start</b>
+          {draft.prerequisites.length > 0 && <span>{draft.prerequisites.filter((_, i) => hasPre(i)).length}/{draft.prerequisites.length} ready</span>}
+          {!!draft.resources?.length && <span>{draft.resources.length} useful link{draft.resources.length > 1 ? "s" : ""}</span>}
+          {!!draft.standards?.length && <span>{draft.standards.length} standard{draft.standards.length > 1 ? "s" : ""}</span>}
+          <em>{extras ? "Hide" : "Show"}</em>
+        </button>
+      )}
+
+      {showExtras && !!draft.resources?.length && (
         <section className="prereqs">
           <h2>Do it faster <span>self-service skills and useful links</span></h2>
           <Resources list={draft.resources} />
         </section>
       )}
 
-      {(view === "flow" || view === "list") && renderable && !!draft.standards?.length && (
+      {showExtras && !!draft.standards?.length && (
         <section className="prereqs">
           <h2>Standards this helps to meet</h2>
           <ul className="link-list row">
@@ -186,7 +202,7 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
         </section>
       )}
 
-      {(view === "flow" || view === "list") && renderable && draft.prerequisites.length > 0 && (
+      {showExtras && draft.prerequisites.length > 0 && (
         <section className="prereqs">
           <h2>Before you start <span>{draft.prerequisites.filter((_, i) => hasPre(i)).length}/{draft.prerequisites.length} ready</span></h2>
           <div className="prereq-grid">
@@ -221,7 +237,7 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
         feedback={feedback} onReport={(id) => { setSelected(id); setEditing(false); setReporting(true); }} />}
       {view === "feedback" && renderable && <FeedbackTab target={processTarget(draft)} feedback={feedback} onSelect={select} />}
       {view === "skills" && renderable && <SourceSkills kind="process" id={process.id} revision={process} />}
-      {view === "json" && <Suspense fallback={<Loading />}><JsonView doc={clean} noun="process" validate={(v) => validateProcess(v, ctx)} schema={processSchema} schemaFile="schema/process.schema.json" onChange={setDraft} /></Suspense>}
+      {view === "json" && <Suspense fallback={<Loading />}><JsonView doc={clean} noun="process" validate={(v) => validateProcess(v, ctx)} schema={processSchema} schemaFile="schema/process.schema.json" onChange={setDraft} onPending={setJsonPending} /></Suspense>}
 
       {step && (view === "flow" || view === "list") && (
         <StepDrawer editable={editor} process={draft} all={all} step={step} editing={editing} setEditing={setEditing}
@@ -235,7 +251,7 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
           }}
           onDelete={async () => {
             if (!await confirmDialog({ title: "Delete this step?", body: <>“{step.title}” is removed from the draft and the steps around it are connected to each other. Nothing is final until you save.</>, confirmLabel: "Delete step", danger: true })) return;
-            setDraft((d) => deleteStep(d, step.id)); setSelected(null);
+            setDraft((p) => deleteStep(p, step.id)); setSelected(null);
           }}
           onMove={(dir) => setDraft(moveStep(draft, step.id, dir))}
           onAddAfter={() => addAfter(step.id)} />
@@ -254,7 +270,8 @@ export function ProcessPage({ process, all, standards, tab, onSave, onDelete, fe
         </Suspense>
       )}
       {dialog === "history" && <HistoryDialog<Process> kind="process" id={process.id} title={process.title} onClose={() => setDialog(null)}
-        onRestore={(doc) => { setDraft(doc); setDialog(null); }} />}
+        onRestore={editor ? (doc) => { setDraft(doc); setDialog(null); } : undefined} />}
+      <ConflictDialog d={d} kind="process" id={process.id} noun="this process" />
     </div>
   );
 }

@@ -51,13 +51,17 @@ test("discard restores the lists; renaming keeps the id", async ({ page }) => {
 });
 
 test("a missing tool can be added straight from a step", async ({ page }) => {
-  page.on("dialog", (d) => d.accept("Confluence"));
   await open(page, "/p/raise-servicenow-request/flow");
   await page.locator(".block", { hasText: "Find the catalogue item" }).click();
   const drawer = page.locator(".drawer");
   await drawer.getByRole("button", { name: "Edit step" }).click();
-  await drawer.getByLabel("Tool").selectOption("__new");
-  await expect(drawer.getByLabel("Tool")).toHaveValue("confluence");
+  const tool = drawer.getByRole("combobox", { name: "Tool" });
+  await tool.selectOption("__new");
+  // the name is typed in a field in the panel; Enter (or "Add tool") saves it to the list of tools
+  await drawer.getByLabel("Name of the new tool").fill("Confluence");
+  await drawer.getByLabel("Name of the new tool").press("Enter");
+  await expect(tool).toHaveValue("confluence");
+  await expect(drawer.getByLabel("Name of the new tool")).toHaveCount(0);
   await save(page);
   expect((await readCatalog(page)).tools).toContainEqual({ id: "confluence", name: "Confluence" });
   expect((await readProcess(page, "raise-servicenow-request"))!.steps[0].tool).toBe("confluence");

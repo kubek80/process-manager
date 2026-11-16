@@ -20,7 +20,10 @@ test("insert a step on an arrow of the map, exactly between two blocks", async (
   await form.getByPlaceholder(/What happens/).fill("Agree the namespace name");
   await form.getByRole("button", { name: "Developer Experience team" }).click();
   await form.locator('.quick-types button[title^="Meeting"]').click();
-  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter"); // Enter on a button only presses that button: nothing is added yet
+  await expect(page.locator(".block")).toHaveCount(6);
+  await expect(form.locator('.quick-types button[title^="Meeting"]')).toHaveAttribute("aria-pressed", "true");
+  await form.getByPlaceholder(/What happens/).press("Enter"); // Enter in the name adds the step
 
   const block = page.locator(".block", { hasText: "Agree the namespace name" });
   await expect(block).toContainText("Meeting");

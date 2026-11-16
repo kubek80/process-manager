@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ALEX, CASEY, clearFeedback, open, report, SAM, signIn } from "./helpers";
+import { ALEX, answer, CASEY, clearFeedback, open, report, SAM, signIn } from "./helpers";
 
 const GCP = "request-gcp-project"; // owned by the Cloud Platform team (Casey)
 const REPO = "request-github-repository"; // owned by another team
@@ -59,6 +59,10 @@ test("a consumer cannot mark feedback as fixed, but can delete their own", async
   await expect(theirs.getByRole("button", { name: "Delete feedback" })).toHaveCount(0);
   await expect(mine.getByRole("button", { name: "I hit this too" })).toHaveCount(0);
   await mine.getByRole("button", { name: "Delete feedback" }).click();
+  await answer(page, "Delete this feedback?", "Cancel"); // it asks first, and "Cancel" keeps it
+  await expect(page.locator(".fb-item")).toHaveCount(2);
+  await mine.getByRole("button", { name: "Delete feedback" }).click();
+  await answer(page, "Delete this feedback?", "Delete feedback");
   await expect(page.locator(".fb-item")).toHaveCount(1);
 });
 

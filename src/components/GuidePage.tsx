@@ -4,7 +4,7 @@ import type { Process } from "../types";
 import { STEP_META, STEP_TYPES } from "../lib/stepMeta";
 import { aiFlow, automationFlow, feedbackFlow, followFlow, reviewFlow, signInFlow, standardFlow } from "../guide/flows";
 import { FlowView } from "./FlowView";
-import { TypeIcon } from "./ui";
+import { scrollBehavior, TypeIcon } from "./ui";
 
 const GROUPS: { title: string; items: [string, string][] }[] = [
   { title: "Using it", items: [
@@ -71,7 +71,7 @@ export function GuidePage() {
     window.addEventListener("scroll", on, { passive: true });
     return () => window.removeEventListener("scroll", on);
   }, []);
-  const jump = (id: string) => document.getElementById(`guide-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const jump = (id: string) => document.getElementById(`guide-${id}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
 
   return (
     <div className="page guide">

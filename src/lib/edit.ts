@@ -168,12 +168,13 @@ export function renameStepId(p: Process, oldId: string, wanted: string): { proce
   return { process: { ...p, steps }, id };
 }
 
-export function blankProcess(existingIds: string[]): Process {
+/** A new process. Its id is made from the name it is given and never changes afterwards. */
+export function blankProcess(existingIds: string[], title = ""): Process {
   return {
     $schema: "../schema/process.schema.json",
     schemaVersion: "1.0",
-    id: uniqueId("new-process", existingIds),
-    title: "New process",
+    id: uniqueId(slugify(title) || "new-process", existingIds),
+    title: title.trim() || "New process",
     summary: "Describe in one or two sentences what the reader gets at the end.",
     category: "General",
     updatedAt: today(),
@@ -260,12 +261,13 @@ export function moveRequirement(s: Standard, id: string, dir: -1 | 1): Standard 
   return { ...s, requirements };
 }
 
-export function blankStandard(existingIds: string[], owner: string): Standard {
+/** A new standard. Its id is made from the name it is given and never changes afterwards. */
+export function blankStandard(existingIds: string[], owner: string, title = ""): Standard {
   return {
     $schema: "../schema/standard.schema.json",
     schemaVersion: "1.0",
-    id: uniqueId("new-standard", existingIds),
-    title: "New standard",
+    id: uniqueId(slugify(title) || "new-standard", existingIds),
+    title: title.trim() || "New standard",
     summary: "Describe in one or two sentences what this standard protects or achieves.",
     owner,
     updatedAt: today(),

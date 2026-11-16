@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlignLeft, CircleAlert, CircleCheck, Download, FoldVertical, Search, TriangleAlert, UnfoldVertical } from "lucide-react";
 import type { Issue } from "../types";
 import { hasErrors } from "../lib/validate";
@@ -12,8 +12,10 @@ const parse = (text: string): Parsed => {
 };
 
 /** The raw JSON of a process or a standard, with the checker's findings marked on the line. */
-export function JsonView<T extends { id: string }>({ doc, noun, validate, schema, schemaFile, onChange }: {
+export function JsonView<T extends { id: string }>({ doc, noun, validate, schema, schemaFile, onChange, onPending }: {
   doc: T; noun: string; validate: (value: unknown) => Issue[]; schema: object; schemaFile: string; onChange: (d: T) => void;
+  /** Told whether the editor holds text that could not be applied to the draft (it has problems). */
+  onPending?: (pending: boolean) => void;
 }) {
   const canonical = useMemo(() => JSON.stringify(doc, null, 2), [doc]);
   const [text, setText] = useState(canonical);
@@ -31,6 +33,10 @@ export function JsonView<T extends { id: string }>({ doc, noun, validate, schema
   const issues = useMemo(() => (parsed.error ? [] : check(parsed.value)), [parsed, check]);
   const ok = !parsed.error && !hasErrors(issues);
   const lines = text.split("\n").length;
+  // text with problems is not part of the draft: the page must not save around it or drop it silently
+  const pending = !ok && text !== canonical;
+  useEffect(() => { onPending?.(pending); }, [pending]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => onPending?.(false), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const edit = (t: string) => {
     setText(t);
@@ -78,7 +84,7 @@ export function JsonView<T extends { id: string }>({ doc, noun, validate, schema
           <button className="btn" onClick={() => download(`${doc.id}.json`, text + "\n")}><Download size={16} />Download JSON</button>
           <CopyButton label="Copy JSON schema" text={() => JSON.stringify(schema, null, 2)} />
         </div>
-        <p className="muted small">Schema: <code>{schemaFile}</code><br />Every save is kept as a revision; see History.</p>
+        <p className="muted small">Schema: <code>{schemaFile}</code><br />Every save is kept as a version; see History.</p>
       </div>
     </div>
   );

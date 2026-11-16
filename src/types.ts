@@ -136,7 +136,9 @@ export interface Me {
 export type Role = "admin" | "catalog-manager" | "process-editor" | "standards-editor" | "owner";
 export interface Assignment { email: string; role: Role; scope: string; grantedBy: string; grantedAt: string }
 export interface AuditEntry { id: number; at: string; email: string; name: string; action: string; target: string; detail: string }
-export interface DocVersion { version: number; savedAt: string; savedBy: string; deleted: boolean }
+export interface DocVersion { version: number; savedAt: string; savedBy: string; note: string; deleted: boolean }
+/** What the server knows about a document besides its content. */
+export interface DocMeta { version: number; updatedAt: string; updatedBy: string }
 
 export interface Skill {
   id: string;

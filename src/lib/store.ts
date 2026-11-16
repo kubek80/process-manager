@@ -1,12 +1,22 @@
-import { useCallback, useEffect, useState } from "react";
-import type { Assignment, AuditEntry, Catalog, DocVersion, Feedback, FeedbackByTarget, Me, Process, Role, Skill, SkillDetail, Standard, TargetKind } from "../types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Assignment, AuditEntry, Catalog, DocMeta, DocVersion, Feedback, FeedbackByTarget, Me, Process, Role, Skill, SkillDetail, Standard, TargetKind } from "../types";
+import type { Conflict } from "./draftState";
 
 export class ApiError extends Error {
+  /** Set when a save was refused because somebody else saved (or deleted) first. */
+  conflict?: Conflict;
   constructor(public status: number, message: string) { super(message); }
 }
 
+/** Sent to the window when the server no longer knows the session (it expired, or was ended elsewhere). */
+export const SIGNED_OUT = "pm:signed-out";
+
 /** One place for every call to the server: JSON in and out, the CSRF header, readable errors. */
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  return (await request<T>(method, path, body)).data;
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<{ data: T; headers: Headers }> {
   let res: Response;
   try {
     res = await fetch(path, {
@@ -17,33 +27,53 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   } catch {
     throw new ApiError(0, "The server cannot be reached. Is it running?");
   }
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) return { data: undefined as T, headers: res.headers };
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    // the session ended: start again from the sign-in screen
-    if (res.status === 401 && path !== "/api/me") window.location.reload();
-    throw new ApiError(res.status, data?.error ?? `The server answered ${res.status}.`);
+    // The session ended. The page stays as it is - somebody may be in the middle of an edit -
+    // and the app asks to sign in again on top of it.
+    if (res.status === 401 && path !== "/api/me") {
+      window.dispatchEvent(new Event(SIGNED_OUT));
+      throw new ApiError(401, "You are signed out. Sign in again, then repeat what you were doing.");
+    }
+    const err = new ApiError(res.status, data?.error ?? `The server answered ${res.status}.`);
+    if (res.status === 409 && data?.conflict) err.conflict = data.conflict as Conflict;
+    throw err;
   }
-  return data as T;
+  return { data: data as T, headers: res.headers };
 }
 
 export const loadMe = () => call<Me>("GET", "/api/me");
 export const devLogin = (email: string) => call<void>("POST", "/auth/dev/login", { email });
 export const logout = () => call<void>("POST", "/auth/logout");
 
-// content: processes, standards and the lists live in the database; every save is a new revision
-export const loadProcesses = async () => (await call<{ processes: Process[] }>("GET", "/api/processes")).processes;
-export const putProcess = (p: Process) => call<void>("PUT", `/api/processes/${p.id}`, p);
-export const removeProcess = (id: string) => call<void>("DELETE", `/api/processes/${id}`);
-export const loadStandards = async () => (await call<{ standards: Standard[] }>("GET", "/api/standards")).standards;
-export const putStandard = (s: Standard) => call<void>("PUT", `/api/standards/${s.id}`, s);
-export const removeStandard = (id: string) => call<void>("DELETE", `/api/standards/${id}`);
+// Content: processes, standards and the lists live in the database. Every save is a new
+// version; a save says which version it was made from (`base`) and is refused when somebody
+// else saved in the meantime (ApiError.conflict).
+export type MetaById = Record<string, DocMeta>;
+const saveQuery = (base: number, note = "") => `?base=${base}${note.trim() ? `&note=${encodeURIComponent(note.trim())}` : ""}`;
 
-export async function loadCatalog(): Promise<Catalog> {
-  const c = await call<Partial<Catalog>>("GET", "/api/catalog");
-  return { ...c, tiers: c.tiers ?? [], environments: c.environments ?? [], languages: c.languages ?? [], teams: c.teams ?? [], tools: c.tools ?? [] };
+export async function loadProcesses(): Promise<{ docs: Process[]; meta: MetaById }> {
+  const r = await call<{ processes: Process[]; meta?: MetaById }>("GET", "/api/processes");
+  return { docs: r.processes, meta: r.meta ?? {} };
 }
-export const putCatalog = (c: Catalog) => call<void>("PUT", "/api/catalog", c);
+export const putProcess = (p: Process, base: number, note?: string) => call<DocMeta>("PUT", `/api/processes/${p.id}${saveQuery(base, note)}`, p);
+export const removeProcess = (id: string, base: number) => call<void>("DELETE", `/api/processes/${id}?base=${base}`);
+export async function loadStandards(): Promise<{ docs: Standard[]; meta: MetaById }> {
+  const r = await call<{ standards: Standard[]; meta?: MetaById }>("GET", "/api/standards");
+  return { docs: r.standards, meta: r.meta ?? {} };
+}
+export const putStandard = (s: Standard, base: number, note?: string) => call<DocMeta>("PUT", `/api/standards/${s.id}${saveQuery(base, note)}`, s);
+export const removeStandard = (id: string, base: number) => call<void>("DELETE", `/api/standards/${id}?base=${base}`);
+
+export async function loadCatalog(): Promise<{ catalog: Catalog; version: number }> {
+  const { data: c, headers } = await request<Partial<Catalog>>("GET", "/api/catalog");
+  return {
+    catalog: { ...c, tiers: c.tiers ?? [], environments: c.environments ?? [], languages: c.languages ?? [], teams: c.teams ?? [], tools: c.tools ?? [] },
+    version: Number(headers.get("X-Document-Version") ?? 0) || 0,
+  };
+}
+export const putCatalog = (c: Catalog, base: number, note?: string) => call<DocMeta>("PUT", `/api/catalog${saveQuery(base, note)}`, c);
 
 export const loadHistory = async (kind: TargetKind | "catalog", id: string) => (await call<{ versions: DocVersion[] }>("GET", `/api/history/${kind}/${id}`)).versions;
 export const loadVersion = <T>(kind: TargetKind | "catalog", id: string, version: number) => call<T>("GET", `/api/history/${kind}/${id}/${version}`);
@@ -68,7 +98,8 @@ export interface Access { assignments: Assignment[]; bootstrapAdmins: string[]; 
 export const loadAccess = () => call<Access>("GET", "/api/admin/access");
 export const grantAccess = (a: { email: string; role: Role; scope: string }) => call<Access>("POST", "/api/admin/access", a);
 export const revokeAccess = (a: { email: string; role: Role; scope: string }) => call<Access>("DELETE", "/api/admin/access", a);
-export const loadAudit = async (limit = 100) => (await call<{ entries: AuditEntry[] }>("GET", `/api/admin/audit?limit=${limit}`)).entries;
+/** A page of the activity log, newest first. `before` is the id of the last entry already shown. */
+export const loadAudit = (limit = 100, before = 0) => call<{ entries: AuditEntry[]; more: boolean }>("GET", `/api/admin/audit?limit=${limit}${before ? `&before=${before}` : ""}`);
 export interface SystemInfo { provider: string; baseUrl: string; notify: string; processes: number; standards: number; skills: number; assignments: number; openFeedback: number }
 export const loadSystem = () => call<SystemInfo>("GET", "/api/admin/system");
 
@@ -94,29 +125,67 @@ export function useProgress(processId: string) {
 export type Tab = "flow" | "list" | "feedback" | "skills" | "json";
 export type StandardTab = "doc" | "feedback" | "skills" | "json";
 export type AdminSection = "access" | "lists" | "skills" | "health" | "activity" | "system";
+/** `item` is the step or the requirement that is open, so that a link can point at one. */
 export type Route =
   | { page: "library" } | { page: "standards" } | { page: "catalog" } | { page: "guide" }
   | { page: "admin"; section: AdminSection }
-  | { page: "process"; id: string; tab: Tab }
-  | { page: "standard"; id: string; tab: StandardTab };
+  | { page: "process"; id: string; tab: Tab; item?: string }
+  | { page: "standard"; id: string; tab: StandardTab; item?: string };
 
-const parse = (): Route => {
-  const h = location.hash;
+const parse = (h: string = location.hash): Route => {
   if (h.startsWith("#/catalog")) return { page: "catalog" };
   if (h.startsWith("#/guide")) return { page: "guide" };
   if (h.startsWith("#/standards")) return { page: "standards" };
   const admin = h.match(/^#\/admin(?:\/(access|lists|skills|health|activity|system))?/);
   if (admin) return { page: "admin", section: (admin[1] as AdminSection) ?? "access" };
-  const s = h.match(/^#\/s\/([a-z0-9-]+)(?:\/(doc|feedback|skills|json))?/);
-  if (s) return { page: "standard", id: s[1], tab: (s[2] as StandardTab) ?? "doc" };
-  const m = h.match(/^#\/p\/([a-z0-9-]+)(?:\/(flow|list|feedback|skills|json))?/);
-  return m ? { page: "process", id: m[1], tab: (m[2] as Tab) ?? "flow" } : { page: "library" };
+  const s = h.match(/^#\/s\/([a-z0-9-]+)(?:\/(doc|feedback|skills|json)(?:\/([A-Z][A-Z0-9-]*))?)?/);
+  if (s) return { page: "standard", id: s[1], tab: (s[2] as StandardTab) ?? "doc", ...(s[3] ? { item: s[3] } : {}) };
+  const m = h.match(/^#\/p\/([a-z0-9-]+)(?:\/(flow|list|feedback|skills|json)(?:\/([a-z0-9-]+))?)?/);
+  return m ? { page: "process", id: m[1], tab: (m[2] as Tab) ?? "flow", ...(m[3] ? { item: m[3] } : {}) } : { page: "library" };
 };
+/** The route an address stands for; exported for tests. */
+export const parseRoute = (hash: string): Route => parse(hash);
 
-export function useRoute(): Route {
-  const [route, setRoute] = useState<Route>(parse);
+// ---------- unsaved work
+// A page that has unsaved edits says so here. Moving on inside the app (a link, Back, signing
+// out) then asks first, the same way the browser asks before closing the tab.
+
+const unsaved = new Map<string, string>(); // what is being edited -> what to call it
+/** Where the thing with this key is edited: leaving that place is what loses the edits. */
+const placeOf = (r: Route): string | null =>
+  r.page === "process" ? `process/${r.id}` : r.page === "standard" ? `standard/${r.id}` : r.page === "admin" && r.section === "lists" ? "catalog" : null;
+
+/** Marks something as having unsaved edits until the returned function is called. */
+export function guardLeaving(key: string, what: string): () => void {
+  unsaved.set(key, what);
+  return () => { unsaved.delete(key); };
+}
+/** What would be lost by going to `to` (or by leaving the app when `to` is missing), if anything. */
+export function unsavedWork(to?: Route): string | null {
+  const staying = to ? placeOf(to) : null;
+  for (const [key, what] of unsaved) if (key !== staying) return what;
+  return null;
+}
+
+/**
+ * The current route. `confirmLeave` is asked before a move that would lose unsaved edits; when
+ * it says no, the address is put back and the page stays.
+ */
+export function useRoute(confirmLeave?: (what: string) => Promise<boolean>): Route {
+  const [route, setRoute] = useState<Route>(() => parse());
+  const ask = useRef(confirmLeave);
+  ask.current = confirmLeave;
   useEffect(() => {
-    const on = () => setRoute(parse());
+    let shown = location.hash; // the address of what is on screen
+    let allowed: string | null = null; // an address the person agreed to move to
+    const on = async () => {
+      const target = location.hash;
+      const lost = target === allowed ? null : unsavedWork(parse(target));
+      allowed = null;
+      if (!lost || !ask.current) { shown = target; setRoute(parse(target)); return; }
+      history.replaceState(null, "", shown || "#/"); // stay where we are while asking
+      if (await ask.current(lost)) { allowed = target; location.hash = target; }
+    };
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
@@ -130,8 +199,8 @@ export const href = (r: Route): string => {
     case "catalog": return "#/catalog";
     case "guide": return "#/guide";
     case "admin": return `#/admin/${r.section}`;
-    case "standard": return `#/s/${r.id}/${r.tab}`;
-    case "process": return `#/p/${r.id}/${r.tab}`;
+    case "standard": return `#/s/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
+    case "process": return `#/p/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
   }
 };
 export const go = (r: Route) => { location.hash = href(r); };

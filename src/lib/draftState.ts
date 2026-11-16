@@ -58,8 +58,10 @@ export function discard<T>(s: DraftState<T>, now: number): DraftState<T> {
  * Our own save went through: the server now has `sent` as `version`. Whatever was typed while
  * the save was on its way stays in the draft and simply counts as unsaved.
  */
-export function savedAs<T>(s: DraftState<T>, sent: T, version: number, tidy: (d: T) => T): DraftState<T> {
-  const untouched = same(tidy(s.draft), sent);
+export function savedAs<T>(s: DraftState<T>, sent: T, version: number, tidy: (d: T) => T, tidied: T = sent): DraftState<T> {
+  // `tidied` is the draft as it was when the save started; `sent` may differ from it by what
+  // the save itself adds, such as the date
+  const untouched = same(tidy(s.draft), tidied);
   return { ...s, saved: sent, base: version, draft: untouched ? sent : s.draft };
 }
 

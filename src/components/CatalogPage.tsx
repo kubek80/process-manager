@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpRight, Check, Code2, Server, ExternalLink, Layers, Plus, Save, Search, Trash2, Undo2, Users, Wrench } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpRight, Code2, Server, ExternalLink, Layers, Plus, Search, Trash2, Users, Wrench } from "lucide-react";
 import type { Catalog, Process, Standard } from "../types";
 import { slugify, uniqueId } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
+import { useDraft } from "../lib/draft";
+import { BehindBanner, ConflictDialog, SaveBar } from "./Editing";
 import { UNIT_KINDS } from "../lib/catalog";
 import { go } from "../lib/store";
 import { hasErrors, validateCatalog } from "../lib/validate";
-import { Field, IssueList } from "./ui";
+import { Field, IssueList, notify } from "./ui";
 
 type Key = "teams" | "tools" | "tiers" | "environments" | "languages";
 type Row = { id: string; name: string; kind?: string; contact?: string; url?: string; description?: string };
@@ -74,21 +76,23 @@ function usesOf(key: Key, id: string, processes: (Process | Standard)[]): Use[] 
 }
 
 const strip = (r: Row): Row => Object.fromEntries(Object.entries(r).filter(([k, v]) => k === "id" || k === "name" || (v ?? "").trim() !== "")) as Row;
+/** The lists without empty optional fields: what is compared with the saved lists, and saved. */
+const tidyCatalog = (c: Catalog): Catalog =>
+  ({ ...c, teams: c.teams.map(strip), tools: c.tools.map(strip), tiers: c.tiers.map(strip), environments: c.environments.map(strip), languages: c.languages.map(strip) }) as Catalog;
 
 /** The lists. Read-only it is a directory for everyone; editable it is the Lists section of the Admin panel. */
 export function CatalogPage({ processes, standards, editable: editor }: { processes: Process[]; standards: Standard[]; editable: boolean }) {
-  const { catalog, save } = useCatalog();
+  const { catalog, version, save, reload } = useCatalog();
   const docs = useMemo<(Process | Standard)[]>(() => [...processes, ...standards], [processes, standards]);
-  const [draft, setDraft] = useState<Catalog>(catalog);
+  const d = useDraft<Catalog>({ docKey: "catalog", saved: catalog, version, tidy: tidyCatalog, save, reload, what: "the lists" });
+  const { draft, clean, dirty } = d;
+  const setDraft = d.change;
+  useEffect(() => { if (d.error) { notify.error("The lists could not be saved.", d.error); d.clearError(); } }, [d.error]); // eslint-disable-line react-hooks/exhaustive-deps
   const [key, setKey] = useState<Key>("teams");
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [q, setQ] = useState("");
-  useEffect(() => setDraft(catalog), [catalog]);
-
-  const clean = useMemo<Catalog>(() => ({ ...draft, teams: draft.teams.map(strip), tools: draft.tools.map(strip), tiers: draft.tiers.map(strip), environments: draft.environments.map(strip), languages: draft.languages.map(strip) }) as Catalog, [draft]);
-  const dirty = JSON.stringify(clean) !== JSON.stringify(catalog);
   const issues = validateCatalog(clean);
 
   const kind = KINDS[key];
@@ -268,14 +272,14 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
         </section>
       </div>
 
-      {editor && dirty && (
-        <div className="save-bar" role="status">
-          <span><b>Unsaved changes</b> to the lists</span>
-          <button className="btn" onClick={() => setDraft(catalog)}><Undo2 size={16} />Discard</button>
-          <button className="btn primary" disabled={hasErrors(issues)} onClick={() => { save(clean).catch(() => { /* a notice says why; the draft stays */ }); }}><Save size={16} />Save changes</button>
+      {editor && <BehindBanner d={d} noun="the lists" />}
+      {editor && (
+        <div className={`cat-save ${dirty ? "dirty" : ""}`} role="status">
+          {dirty && <span className="cat-save-text"><b>Unsaved changes</b> to the lists</span>}
+          <SaveBar d={d} editor blocked={hasErrors(issues) ? "Fix the problems first" : undefined} />
         </div>
       )}
-      {editor && !dirty && <p className="saved cat-saved"><Check size={14} />All changes saved</p>}
+      {editor && <ConflictDialog d={d} kind="catalog" id="catalog" noun="the lists" />}
     </div>
   );
 }

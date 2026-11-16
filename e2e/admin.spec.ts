@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ALEX, clearFeedback, DANA, open, readStandard, report, SAM, save, signIn } from "./helpers";
+import { ALEX, answer, clearFeedback, DANA, open, readStandard, report, SAM, save, signIn } from "./helpers";
 
 test("the Admin panel is for admins and for people who manage the lists", async ({ page }) => {
   await signIn(page, SAM);
@@ -68,6 +68,7 @@ test("an admin gives someone a role and it takes effect at once", async ({ page,
 
   // taking the role away works the same way
   await row.getByRole("button", { name: /Remove Standards editor/ }).click();
+  await answer(page, "Remove this role?", "Remove role");
   await expect(people.filter({ hasText: "sam@example.com" })).toHaveCount(0);
   await sam.reload();
   await expect(sam.locator(".mode-switch")).toHaveCount(0);

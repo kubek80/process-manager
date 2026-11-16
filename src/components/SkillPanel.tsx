@@ -59,6 +59,11 @@ export function SkillPanel({ id, onChanged }: { id: string; onChanged?: () => vo
             {versions.slice(1).map((v) => <option key={v.version} value={v.version}>{v.version} · {v.createdAt.slice(0, 10)}</option>)}
           </select>
         </label>
+        {/* which version of the process or standard this text was made from */}
+        {(() => {
+          const shown = versions.find((v) => v.version === (version || skill.version));
+          return shown ? <span className="muted small skill-source">made from version {shown.sourceVersion} of the {skill.sourceKind}</span> : null;
+        })()}
         <span className="spacer" />
         <CopyButton label="Copy" text={() => content} />
         <a className="btn" href={`/api/skills/${skill.id}/download`} download><Download size={16} />Download</a>

@@ -129,7 +129,9 @@ export function layoutProcess(p: Process, L: Dims = DEFAULT): Layout {
 
   // Where a label may go, nearest to its own source first. A label is named where the path leaves
   // its decision, so two decisions that lead to the same step never put their labels on one spot.
-  interface Plan { edge: number; text: string; max: number; spots: Pt[]; span: number }
+  interface Plan { edge: number; text: string; max: number; spots: Pt[]; span: number; trunk?: string; toY?: number }
+  // paths of one step that turn up or down in the same gap run together until each turns off to its target
+  const trunks = new Map<string, number[]>();
   const OFF = Math.min(15, L.PADY - LABEL_H / 2 - 1); // from the edge of a block to the middle of a label between two rows
   const rowTops = lanes.flatMap((lane, i) => Array.from({ length: laneRows[i] }, (_, r) => lane.y + L.PADY + r * (L.H + L.GAPY)));
   const maxInRow = L.GAPX + 20, maxBetweenRows = L.W / 2 + L.GAPX / 2 - 6;
@@ -175,17 +177,30 @@ export function layoutProcess(p: Process, L: Dims = DEFAULT): Layout {
     const [px, py] = midPoint(pts);
     if (n.label) {
       const second = pts[1];
-      let spots: Pt[], max = maxBetweenRows;
+      let spots: Pt[], max = maxBetweenRows, trunk: string | undefined;
       if (isBack) spots = [[s.x + L.W / 2, s.y + L.H + OFF]]; // under the block, where the loop sets off
       else if (second[1] === sy && second[0] - sr >= L.GAPX) { spots = [[sr + L.GAPX / 2, sy - 16]]; max = maxInRow; } // runs along the row: above the line, in the first gap
-      else spots = runSpots(second[0], s, pts[2][1]); // turns up or down in the gap: beside that turn, between the rows
-      plans.push({ edge: edges.length, text: n.label, max, spots, span: Math.abs(pts[Math.min(2, pts.length - 1)][1] - sy) });
+      else { spots = runSpots(second[0], s, pts[2][1]); trunk = trunkOf(s, pts); } // turns up or down in the gap: beside that line, between the rows
+      plans.push({ edge: edges.length, text: n.label, max, spots, span: Math.abs(pts[Math.min(2, pts.length - 1)][1] - sy), trunk, toY: pts[Math.min(2, pts.length - 1)][1] });
     }
+    if (!isBack && pts.length > 2 && pts[1][0] - sr < L.GAPX) trunks.set(trunkOf(s, pts), [...(trunks.get(trunkOf(s, pts)) ?? []), pts[2][1]]);
     edges.push({ from: s.step.id, to: t.step.id, label: n.label, d: roundedPath(pts), back: isBack, lx: px, ly: py, lw: maxBetweenRows, px, py });
   }));
+  const trunkOf = (s: NodeBox, pts: Pt[]) => `${s.index}:${pts[1][0]}:${pts[2][1] > pts[1][1] ? "down" : "up"}`;
   route(false);
   channelUse = 0;
   route(true);
+  // A label names the next turn-off after it. Where several paths share a line, a label therefore
+  // goes beyond the last place where a shorter path turns off - or it would seem to name that one.
+  for (const p of plans) {
+    if (!p.trunk || p.toY === undefined) continue;
+    const down = p.trunk.endsWith("down");
+    const nearer = (trunks.get(p.trunk) ?? []).filter((y) => (down ? y < p.toY! : y > p.toY!));
+    if (!nearer.length) continue;
+    const last = down ? Math.max(...nearer) : Math.min(...nearer);
+    const beyond = p.spots.filter(([, y]) => (down ? y > last : y < last));
+    if (beyond.length) p.spots = beyond;
+  }
 
   const width = colX(maxCol) + L.W + L.PADX;
   placeLabels(plans, edges, { left: L.HEADER + 4, right: width - 4, top: 2, bottom: y - 2 });

@@ -40,11 +40,13 @@ export function AiDialog<T extends { id: string; title: string }>({ spec, onImpo
       title={<><Sparkles size={18} className="accent" /> {title}</>}
       subtitle="Use any chat assistant you are allowed to use - Gemini, Copilot, ChatGPT or Claude. Nothing is sent anywhere by this app."
       footer={<>
-        <span className="muted small">{ok ? (current ? "The result replaces your draft. You still have to press Save." : `The ${noun} is saved as a draft.`) : ""}</span>
+        <span className="muted small">{ok ? (current ? "The result replaces your draft (Undo brings it back). You still have to press Save."
+          : replaces ? `A ${noun} “${result!.id}” exists already: this one is created next to it, as a draft that only editors see.`
+            : `The ${noun} is created as a draft that only editors see.`) : ""}</span>
         <span className="spacer" />
         <button className="btn" onClick={onClose}>Cancel</button>
         <button className="btn primary" disabled={!ok} onClick={() => onImport(current ? { ...result!, id: current.id } : result!)}>
-          {current ? "Apply to draft" : replaces ? `Replace existing ${noun}` : `Create ${noun}`}
+          {current ? "Apply to draft" : `Create ${noun}`}
         </button>
       </>}>
       <ol className="ai-steps">

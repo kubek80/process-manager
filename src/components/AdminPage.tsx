@@ -241,18 +241,27 @@ function HealthSection({ processes, standards, feedback }: { processes: Process[
 const ACTION: Record<string, string> = {
   "process.save": "saved the process", "process.delete": "deleted the process", "standard.save": "saved the standard", "standard.delete": "deleted the standard",
   "lists.save": "changed the lists", "access.grant": "gave a role to", "access.revoke": "removed a role from", "skill.guidance": "changed the extra guidance of",
-  "content.import": "imported content from",
+  "content.import": "imported", "feedback.fixed": "marked feedback as fixed on the", "feedback.reopen": "reopened feedback on the",
+  "feedback.delete": "deleted feedback on the",
 };
 
 function ActivitySection() {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
+  const [more, setMore] = useState(false);
   const [error, setError] = useState("");
-  const load = useCallback(() => { setError(""); loadAudit(200).then(setEntries, (e) => setError(e.message)); }, []);
-  useEffect(load, [load]);
+  // the newest hundred first; "Show older" walks back through everything that was ever recorded
+  const load = useCallback((before = 0) => {
+    setError("");
+    loadAudit(100, before).then((page) => {
+      setEntries((shown) => (before && shown ? [...shown, ...page.entries] : page.entries));
+      setMore(page.more);
+    }, (e) => setError(e.message));
+  }, []);
+  useEffect(() => load(), [load]);
   return (
     <div className="admin-section">
       <p className="lead small">Every change to content, lists, roles and skills, newest first.</p>
-      {error && <LoadError what="The activity could not be loaded." error={error} onRetry={load} />}
+      {error && <LoadError what="The activity could not be loaded." error={error} onRetry={() => load(entries?.length ? entries[entries.length - 1].id : 0)} />}
       {!entries && !error && <Loading />}
       {entries && <section className="admin-card">
         <ul className="activity">
@@ -264,6 +273,7 @@ function ActivitySection() {
           ))}
           {entries.length === 0 && <li className="muted">Nothing has been changed yet.</li>}
         </ul>
+        {more && <button className="btn small" onClick={() => load(entries[entries.length - 1].id)}>Show older</button>}
       </section>}
     </div>
   );
@@ -291,7 +301,7 @@ function SystemSection() {
           <tr><td>Sign-in</td><td>{provider}</td></tr>
           <tr><td>Address</td><td><code>{info.baseUrl}</code></td></tr>
           <tr><td>Notifications</td><td>{info.notify === "webhook" ? "Sent to a chat webhook" : "Written to the server log only"}</td></tr>
-          <tr><td>Content</td><td>Stored in the database. Every save is a revision. <code>server -export</code> writes a copy to files.</td></tr>
+          <tr><td>Content</td><td>Stored in the database. Every save is a version with a note, and can be restored. <code>server -export</code> writes a copy to files.</td></tr>
         </tbody></table>
         <p className="muted small">These are server settings and are changed where the server is deployed, not here. See <code>docs/backend.md</code>.</p>
       </section>

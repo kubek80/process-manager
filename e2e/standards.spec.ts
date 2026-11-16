@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { ALEX, clearFeedback, open, readSkill, readStandard, report, RILEY, SAM, save, signIn, watchErrors } from "./helpers";
+import { ALEX, answer, clearFeedback, open, readSkill, readStandard, report, RILEY, SAM, save, signIn, watchErrors } from "./helpers";
 
 const LOGGING = "secure-logging"; // issued by Cyber Security: Riley edits it
 const IAC = "infrastructure-as-code"; // issued by the Cloud Platform team
@@ -191,9 +191,9 @@ test("add and remove a requirement; the checker guards the format", async ({ pag
   expect(added.review).toBeUndefined(); // nothing for a reviewer to see: no review block
   await expect(page.locator("#req-SEC-LOG-06")).toContainText("Checked by a person");
 
-  page.on("dialog", (d) => d.accept());
   await page.locator('[aria-label="Edit SEC-LOG-06"]').click();
   await drawer.getByRole("button", { name: "Delete requirement" }).click();
+  await answer(page, "Delete SEC-LOG-06?", "Delete requirement");
   await save(page);
   expect((await readStandard(page, LOGGING))!.requirements).toHaveLength(5);
 });
@@ -251,9 +251,9 @@ test("create a standard from a policy text with AI; it is a draft without skills
   await expect(page.locator(".banner", { hasText: "This standard is retired." }).getByRole("link", { name: "Secure logging" })).toBeVisible();
   expect((await readSkill(page, "standard-dependency-updates")).skill.active).toBe(false);
 
-  page.on("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Details", exact: true }).click();
   await page.locator(".modal").getByRole("button", { name: "Delete standard" }).click();
+  await answer(page, "Delete this standard?", "Delete standard");
   await expect(page.getByRole("heading", { name: "What must I meet?" })).toBeVisible();
   expect(await readStandard(page, "dependency-updates")).toBeUndefined();
 });

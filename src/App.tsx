@@ -1,14 +1,14 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, Eye, LayoutGrid, LogOut, Moon, Pencil, Settings2, ShieldCheck, Sun, Users } from "lucide-react";
-import type { Catalog, Feedback, FeedbackByTarget, Me, Process, Standard } from "./types";
+import type { Catalog, DocMeta, Feedback, FeedbackByTarget, Me, Process, Standard } from "./types";
 import {
-  createFeedback, deleteFeedback, go, href, loadCatalog, loadFeedback, loadMe, loadProcesses, loadStandards, logout, pageTitle, putCatalog, putProcess, putStandard,
-  removeProcess, removeStandard, setAlsoHit, setResolved, useRoute,
+  ApiError, createFeedback, deleteFeedback, go, href, loadCatalog, loadFeedback, loadMe, loadProcesses, loadStandards, logout, pageTitle, putCatalog, putProcess, putStandard,
+  removeProcess, removeStandard, setAlsoHit, setResolved, SIGNED_OUT, unsavedWork, useRoute, type MetaById,
 } from "./lib/store";
 import { CatalogContext, EMPTY_CATALOG } from "./lib/catalog";
 import { canEditSomething, canOpenAdmin, canEditStandard, FeedbackContext, MeContext, roleLabel, usePerms, type FeedbackActions } from "./lib/session";
 import { ModeContext, type Mode } from "./lib/mode";
-import { blankProcess, blankStandard, tidy, tidyStandard, today } from "./lib/edit";
+import { blankProcess, blankStandard, slugify, tidy, tidyStandard, today, uniqueId } from "./lib/edit";
 import { CatalogPage } from "./components/CatalogPage";
 import { Library } from "./components/Library";
 import { Login } from "./components/Login";
@@ -16,7 +16,7 @@ import { ProcessPage, processAiSpec } from "./components/ProcessPage";
 import { StandardPage, standardAiSpec } from "./components/StandardPage";
 import { StandardsLibrary } from "./components/StandardsLibrary";
 import { unitsOf } from "./components/Governance";
-import { ErrorBoundary, LoadError, Loading, Notices, notify, useLayer } from "./components/ui";
+import { confirmDialog, ErrorBoundary, Field, LoadError, Loading, Modal, Notices, notify, useLayer } from "./components/ui";
 
 // loaded when first opened: most visits never need them
 const AdminPage = lazy(() => import("./components/AdminPage").then((m) => ({ default: m.AdminPage })));
@@ -75,7 +75,11 @@ function UserMenu({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
           <strong>{me.user!.name}</strong>
           <span className="muted">{me.user!.email}</span>
           <span className="user-role">{roleLabel(perms)}</span>
-          <button className="btn small" onClick={async () => { await logout().catch(() => {}); onSignedOut(); }}>
+          <button className="btn small" onClick={async () => {
+            if (!await mayLeave(unsavedWork())) return;
+            await logout().catch(() => {});
+            onSignedOut();
+          }}>
             <LogOut size={14} />{me.provider === "dev" ? "Switch user" : "Sign out"}
           </button>
         </AccountPop>
@@ -84,18 +88,94 @@ function UserMenu({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   );
 }
 
+/** Asks before unsaved edits are left behind. `what` is null when there are none. */
+const mayLeave = async (what: string | null) => !what || confirmDialog({
+  title: "Leave without saving?", body: `Your changes to ${what} have not been saved. If you leave now they are lost.`,
+  confirmLabel: "Leave without saving", cancelLabel: "Stay", danger: true,
+});
+
+/** How long the content on screen may be old before coming back to the tab fetches it again. */
+const REFRESH_AFTER_MS = 20_000;
+
 function AccountPop({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayer(ref, onClose, { focus: false });
   return <div ref={ref} id="account-pop" className="user-pop" role="group" aria-label="Your account">{children}</div>;
 }
 
+/** Why a save or delete was refused, in a sentence. */
+function whyNot(e: unknown, noun: string): string {
+  const c = (e as ApiError)?.conflict;
+  if (c && !c.exists) return `Somebody else deleted this ${noun} in the meantime.`;
+  if (c) return `${c.updatedBy ?? "Somebody else"} changed this ${noun} in the meantime. Look at the current version first.`;
+  return e instanceof Error ? e.message : String(e);
+}
+
+/** A new process or standard starts with its name: the name gives it its address, which never changes. */
+function NameDialog({ noun, onCreate, onClose }: { noun: "process" | "standard"; onCreate: (title: string) => Promise<void>; onClose: () => void }) {
+  const [title, setTitle] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ok = slugify(title).length >= 3;
+  const create = async () => {
+    if (!ok || busy) return;
+    setBusy(true);
+    try { await onCreate(title.trim()); } catch { setBusy(false); }
+  };
+  return (
+    <Modal title={`New ${noun}`} subtitle={`It starts as a draft that only editors see. You can change everything later, except its address.`} onClose={onClose}
+      footer={<><span className="spacer" /><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!ok || busy} onClick={create}>Create {noun}</button></>}>
+      <form onSubmit={(e) => { e.preventDefault(); create(); }}>
+        <Field label={`Name of the ${noun}`} hint={ok ? `Address: …/${slugify(title)}` : noun === "process" ? "For example: Request a database" : "For example: Secure logging"}>
+          <input autoFocus value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} />
+        </Field>
+      </form>
+    </Modal>
+  );
+}
+
+/**
+ * The session ended (it expired, or it was ended from another device) while the page was open.
+ * The page stays as it is, with any unsaved edits; signing in again in another tab brings the
+ * session back for this one too.
+ */
+function SignedOutDialog({ me, onBack, onOther }: { me: Me; onBack: () => void; onOther: () => void }) {
+  const [checking, setChecking] = useState(false);
+  const [hint, setHint] = useState("");
+  const check = async () => {
+    setChecking(true); setHint("");
+    try {
+      const now = await loadMe();
+      if (!now.authenticated) setHint("You are not signed in yet. Use the button on the left first.");
+      else if (now.user?.email !== me.user?.email) onOther(); // somebody else now: start afresh as them
+      else onBack();
+    } catch (e) { setHint(e instanceof Error ? e.message : String(e)); } finally { setChecking(false); }
+  };
+  return (
+    <Modal title="You are signed out" subtitle="Nothing on this page is lost. Sign in again, then carry on where you were." onClose={() => { /* stays until signed in */ }}
+      footer={<>
+        <a className="btn" href={me.provider === "dev" ? "/" : "/auth/login"} target="_blank" rel="noreferrer">Sign in again (opens a new tab)</a>
+        <span className="spacer" />
+        <button className="btn primary" disabled={checking} onClick={check}>I have signed in</button>
+      </>}>
+      <p>Your session has ended. This happens after some hours, or when you sign out on another device.</p>
+      <p className="muted">Sign in in the new tab, come back here and press “I have signed in”. If you were saving something, press Save again afterwards.</p>
+      {hint && <div className="check bad">{hint}</div>}
+    </Modal>
+  );
+}
+
 function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
-  const route = useRoute();
+  const route = useRoute(mayLeave);
   const perms = usePerms();
   const [dark, setDark] = useTheme();
   const [processes, setProcesses] = useState<Process[] | null>(null);
   const [standards, setStandards] = useState<Standard[]>([]);
+  // the version of every process and standard, and of the lists: a save says which one it started from
+  const [processMeta, setProcessMeta] = useState<MetaById>({});
+  const [standardMeta, setStandardMeta] = useState<MetaById>({});
+  const [catalogVersion, setCatalogVersion] = useState(0);
+  const [naming, setNaming] = useState<null | "process" | "standard">(null);
+  const [signedOut, setSignedOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ai, setAi] = useState<null | "process" | "standard">(null);
   const [catalog, setCatalog] = useState<Catalog>(EMPTY_CATALOG);
@@ -107,19 +187,53 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const mode: Mode = canEditSomething(perms) ? wanted : "consumer";
   const switchMode = (m: Mode) => { setWanted(m); try { localStorage.setItem("pm:mode", m); } catch { /* ignore */ } };
 
+  const loadedAt = useRef(0);
+  const fetchAll = useCallback(async () => {
+    const [p, s, c, f] = await Promise.all([loadProcesses(), loadStandards(), loadCatalog(), loadFeedback()]);
+    loadedAt.current = Date.now();
+    setCatalog(c.catalog); setCatalogVersion(c.version); setFeedback(f);
+    setStandards(s.docs); setStandardMeta(s.meta); setProcesses(p.docs); setProcessMeta(p.meta);
+    return { p, s, c };
+  }, []);
   const load = useCallback(() => {
     setError(null);
-    Promise.all([loadProcesses(), loadStandards(), loadCatalog(), loadFeedback()])
-      .then(([p, s, c, f]) => { setCatalog(c); setFeedback(f); setStandards(s); setProcesses(p); })
-      .catch((e) => setError(String(e.message ?? e)));
-  }, []);
+    fetchAll().catch((e) => setError(String(e.message ?? e)));
+  }, [fetchAll]);
   useEffect(load, [load]);
 
-  // the caller decides what a failed save means for it, so the error is passed on
-  const saveCatalog = useCallback(async (c: Catalog) => {
-    try { await putCatalog(c); setCatalog(c); } catch (e) { notify.error("The lists could not be saved.", e); throw e; }
+  // Other people save too. Coming back to the tab fetches what they changed, so nobody edits
+  // (or follows) something that is hours old. A page with unsaved edits keeps them and is told
+  // that there is a newer version.
+  useEffect(() => {
+    const again = () => {
+      if (document.visibilityState !== "visible" || Date.now() - loadedAt.current < REFRESH_AFTER_MS) return;
+      loadedAt.current = Date.now();
+      fetchAll().catch(() => { /* the next action will say what is wrong */ });
+    };
+    document.addEventListener("visibilitychange", again);
+    window.addEventListener("focus", again);
+    return () => { document.removeEventListener("visibilitychange", again); window.removeEventListener("focus", again); };
+  }, [fetchAll]);
+
+  // the session ended while the page was open: ask to sign in again, on top of whatever is being edited
+  useEffect(() => {
+    const on = () => setSignedOut(true);
+    window.addEventListener(SIGNED_OUT, on);
+    return () => window.removeEventListener(SIGNED_OUT, on);
   }, []);
-  const catalogApi = useMemo(() => ({ catalog, save: saveCatalog }), [catalog, saveCatalog]);
+
+  // the caller decides what a failed save means for it, so the error is passed on
+  const saveCatalog = useCallback(async (c: Catalog, base?: number, note?: string) => {
+    const meta = await putCatalog(c, base ?? catalogVersion, note);
+    setCatalog(c); setCatalogVersion(meta.version);
+    return meta.version;
+  }, [catalogVersion]);
+  const reloadCatalog = useCallback(async () => {
+    const c = await loadCatalog();
+    setCatalog(c.catalog); setCatalogVersion(c.version);
+    return { saved: c.catalog, version: c.version };
+  }, []);
+  const catalogApi = useMemo(() => ({ catalog, version: catalogVersion, save: saveCatalog, reload: reloadCatalog }), [catalog, catalogVersion, saveCatalog, reloadCatalog]);
 
   // feedback is saved the moment it is given - it is not part of a draft
   const actions = useMemo<FeedbackActions>(() => {
@@ -138,27 +252,59 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const refreshFeedback = () => { loadFeedback().then(setFeedback).catch(() => {}); };
   const byId = <T extends { id: string }>(list: T[], doc: T) => [...list.filter((x) => x.id !== doc.id), doc].sort((a, b) => a.id.localeCompare(b.id));
 
-  const saveProcess = async (p: Process) => {
-    try { await putProcess(p); setProcesses((list) => list && byId(list, p)); refreshFeedback(); } catch (e) { notify.error("The process could not be saved.", e); throw e; }
+  const setMeta = (set: typeof setProcessMeta, id: string, meta: DocMeta) => set((all) => ({ ...all, [id]: meta }));
+
+  // Saving: on top of the version the edits started from. The page that saves shows what went
+  // wrong, including "somebody else saved first"; the new version is returned to it.
+  const saveProcess = async (p: Process, base: number, note?: string) => {
+    const meta = await putProcess(p, base, note);
+    setProcesses((list) => list && byId(list, p)); setMeta(setProcessMeta, p.id, meta); refreshFeedback();
+    return meta.version;
   };
+  const saveStandard = async (s: Standard, base: number, note?: string) => {
+    const meta = await putStandard(s, base, note);
+    setStandards((list) => byId(list, s)); setMeta(setStandardMeta, s.id, meta); refreshFeedback();
+    return meta.version;
+  };
+  // what the server has now, for a page that wants to continue from somebody else's version
+  const reloadProcess = async (id: string) => {
+    const { p } = await fetchAll();
+    const doc = p.docs.find((x) => x.id === id);
+    return doc ? { saved: doc, version: p.meta[id]?.version ?? 0 } : null;
+  };
+  const reloadStandard = async (id: string) => {
+    const { s } = await fetchAll();
+    const doc = s.docs.find((x) => x.id === id);
+    return doc ? { saved: doc, version: s.meta[id]?.version ?? 0 } : null;
+  };
+
+  // Something new always starts as a draft with an id of its own: it is never published by
+  // accident and never lands on top of something that exists.
   const createProcess = async (p: Process) => {
-    await saveProcess(tidy({ ...p, $schema: "../schema/process.schema.json", updatedAt: today() }));
-    setAi(null);
-    go({ page: "process", id: p.id, tab: "flow" });
-  };
-  const deleteProcess = async (id: string) => {
-    try { await removeProcess(id); setProcesses((list) => list && list.filter((x) => x.id !== id)); go({ page: "library" }); } catch (e) { notify.error("The process could not be deleted.", e); }
-  };
-  const saveStandard = async (s: Standard) => {
-    try { await putStandard(s); setStandards((list) => byId(list, s)); refreshFeedback(); } catch (e) { notify.error("The standard could not be saved.", e); throw e; }
+    const id = uniqueId(p.id, all.map((x) => x.id));
+    const doc = tidy({ ...p, id, status: "draft", $schema: "../schema/process.schema.json", updatedAt: today() });
+    try { await saveProcess(doc, 0, "Created"); } catch (e) { notify.error("The process could not be created.", whyNot(e, "process")); throw e; }
+    setAi(null); setNaming(null);
+    go({ page: "process", id, tab: "flow" });
   };
   const createStandard = async (s: Standard) => {
-    await saveStandard(tidyStandard({ ...s, $schema: "../schema/standard.schema.json", updatedAt: today() }));
-    setAi(null);
-    go({ page: "standard", id: s.id, tab: "doc" });
+    const id = uniqueId(s.id, standards.map((x) => x.id));
+    const doc = tidyStandard({ ...s, id, status: "draft", $schema: "../schema/standard.schema.json", updatedAt: today() });
+    try { await saveStandard(doc, 0, "Created"); } catch (e) { notify.error("The standard could not be created.", whyNot(e, "standard")); throw e; }
+    setAi(null); setNaming(null);
+    go({ page: "standard", id, tab: "doc" });
+  };
+  const deleteProcess = async (id: string) => {
+    try {
+      await removeProcess(id, processMeta[id]?.version ?? 0);
+      setProcesses((list) => list && list.filter((x) => x.id !== id)); go({ page: "library" });
+    } catch (e) { notify.error("The process could not be deleted.", whyNot(e, "process")); if ((e as ApiError).conflict) load(); }
   };
   const deleteStandard = async (id: string) => {
-    try { await removeStandard(id); setStandards((list) => list.filter((x) => x.id !== id)); go({ page: "standards" }); } catch (e) { notify.error("The standard could not be deleted.", e); }
+    try {
+      await removeStandard(id, standardMeta[id]?.version ?? 0);
+      setStandards((list) => list.filter((x) => x.id !== id)); go({ page: "standards" });
+    } catch (e) { notify.error("The standard could not be deleted.", whyNot(e, "standard")); if ((e as ApiError).conflict) load(); }
   };
   // a new standard belongs to a unit the person may edit for
   const myUnit = unitsOf(catalog).find((u) => canEditStandard(perms, u.id))?.id ?? "";
@@ -169,7 +315,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         : "The list of teams and units has no unit yet. Ask someone who manages the lists to add one (Admin, Lists) with the kind Cyber security, Platform owner or Practice.");
       return;
     }
-    createStandard(blankStandard(standards.map((s) => s.id), myUnit)).catch(() => {});
+    setNaming("standard");
   };
 
   const all = processes ?? [];
@@ -214,7 +360,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       <Suspense fallback={<Loading page />}>
       {processes && route.page === "library" && (
         <Library processes={all} standardIds={standards.map((s) => s.id)} feedback={feedback.process} onAi={() => setAi("process")}
-          onNew={() => { createProcess(blankProcess(all.map((p) => p.id))).catch(() => {}); }} />
+          onNew={() => setNaming("process")} />
       )}
       {processes && route.page === "standards" && (
         <StandardsLibrary standards={standards} processes={all} feedback={feedback.standard} onAi={() => setAi("standard")} onNew={newStandard} />
@@ -225,11 +371,13 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         ? <AdminPage section={route.section} processes={all} standards={standards} feedback={feedback} />
         : <div className="page"><h1>Admin</h1><p className="muted">You do not have access to the Admin panel. An admin can give it to you.</p></div>)}
       {processes && route.page === "process" && (process
-        ? <ProcessPage key={process.id} process={process} all={all} standards={standards} tab={route.tab} onSave={saveProcess} onDelete={() => deleteProcess(process.id)}
+        ? <ProcessPage key={process.id} process={process} meta={processMeta[process.id]} all={all} standards={standards} tab={route.tab} item={route.item}
+          onSave={saveProcess} onReload={() => reloadProcess(process.id)} onDelete={() => deleteProcess(process.id)}
           feedback={feedback.process[process.id] ?? []} />
         : <div className="page"><h1>Process not found</h1><p className="muted">There is no process “{route.id}”.</p><a className="btn" href="#/">Back to all processes</a></div>)}
       {processes && route.page === "standard" && (standard
-        ? <StandardPage key={standard.id} standard={standard} all={standards} processes={all} tab={route.tab} onSave={saveStandard} onDelete={() => deleteStandard(standard.id)}
+        ? <StandardPage key={standard.id} standard={standard} meta={standardMeta[standard.id]} all={standards} processes={all} tab={route.tab} item={route.item}
+          onSave={saveStandard} onReload={() => reloadStandard(standard.id)} onDelete={() => deleteStandard(standard.id)}
           feedback={feedback.standard[standard.id] ?? []} />
         : <div className="page"><h1>Standard not found</h1><p className="muted">There is no standard “{route.id}”.</p><a className="btn" href="#/standards">Back to all standards</a></div>)}
       </Suspense>
@@ -238,6 +386,11 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         {ai === "process" && <AiDialog spec={processAiSpec(undefined, all, standards, catalog)} onClose={() => setAi(null)} onImport={(p) => { createProcess(p).catch(() => {}); }} />}
         {ai === "standard" && <AiDialog spec={standardAiSpec(undefined, standards, all, catalog)} onClose={() => setAi(null)} onImport={(s) => { createStandard(s).catch(() => {}); }} />}
       </Suspense>
+      {naming && <NameDialog noun={naming} onClose={() => setNaming(null)}
+        onCreate={(title) => (naming === "process"
+          ? createProcess(blankProcess(all.map((p) => p.id), title))
+          : createStandard(blankStandard(standards.map((s) => s.id), myUnit, title)))} />}
+      {signedOut && <SignedOutDialog me={me} onBack={() => setSignedOut(false)} onOther={onSignedOut} />}
     </FeedbackContext.Provider>
     </CatalogContext.Provider>
     </ModeContext.Provider>
