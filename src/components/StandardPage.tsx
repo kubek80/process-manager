@@ -8,6 +8,7 @@ import { teamName, useCatalog } from "../lib/catalog";
 import { addRequirement, appliesTo, deleteRequirement, moveRequirement, tidyStandard, today, updateRequirement } from "../lib/edit";
 import { useDraft } from "../lib/draft";
 import { useSelectedItem } from "../lib/selection";
+import { answersFor } from "../lib/responsibilities";
 import { useProfile } from "../lib/profile";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { useEditor } from "../lib/mode";
@@ -312,7 +313,7 @@ function StandardSettings({ standard, all, processes, onChange, onClose, onDelet
 
 const stamp = (s: Standard): Standard => ({ ...s, updatedAt: today() });
 
-export function StandardPage({ standard, meta, all, processes, tab, item, feedback, onSave, onReload, onDelete }: {
+export function StandardPage({ standard, meta, all, processes, tab, item, feedback, onSave, onReload, onDelete, onReviewed }: {
   standard: Standard; meta?: DocMeta; all: Standard[]; processes: Process[]; tab: StandardTab; feedback: Feedback[];
   /** The requirement that is open, from the address: a link can point at one requirement. */
   item?: string;
@@ -321,6 +322,8 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   onReload: () => Promise<{ saved: Standard; version: number } | null>;
   /** Deletes the version this page shows; refused when somebody else changed it since. */
   onDelete: (base: number) => void;
+  /** Records that the version this page shows is still correct. */
+  onReviewed: (base: number) => Promise<boolean>;
 }) {
   const { catalog } = useCatalog();
   const me = useMe();
@@ -370,10 +373,9 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   }, [item, view]);
   const markReviewed = async () => {
     const next = { ...draft, review: { intervalMonths: draft.review?.intervalMonths ?? 12, lastReviewedAt: today(), ...(me.user ? { reviewedBy: me.user.name } : {}) } };
-    // with other changes pending it becomes part of them; a pure "still correct" is saved straight away
-    if (dirty || errors) return setDraft(next);
-    try { await onSave({ ...tidyStandard(next), updatedAt: standard.updatedAt }, d.base, "Reviewed: confirmed as still correct"); }
-    catch (e) { notify.error("The review could not be recorded.", e); }
+    // with other changes pending it becomes part of them; a pure "still correct" is recorded straight away
+    if (editor && (dirty || errors)) return setDraft(next);
+    await onReviewed(d.base);
   };
   const add = () => { const r = addRequirement(draft, selected ?? undefined); setDraft(r.standard); setSelected(r.id); setEditing(true); };
   const back = () => go({ page: "standards" }); // leaving with unsaved changes asks first, like every other way out
@@ -402,9 +404,10 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
             )}
           </div>
           <div className="head-actions">
+            {/* the review belongs to the unit that issues the standard, and to whoever edits it */}
+            {(editor || answersFor(perms, draft.owner)) && review.state !== "none" && <button className={`btn ${review.state === "ok" ? "" : "review-due"}`} onClick={markReviewed} disabled={!renderable}
+              title="Confirm that this standard is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
             {editor && <>
-              {review.state !== "none" && <button className={`btn ${review.state === "ok" ? "" : "review-due"}`} onClick={markReviewed} disabled={!renderable}
-                title="Confirm that this standard is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
               <button className="btn accent-soft" onClick={() => setDialog("ai")} disabled={!renderable}><Sparkles size={16} />Change with AI</button>
               <button className="btn" onClick={() => setDialog("settings")} disabled={!renderable}><Settings2 size={16} />Details</button>
               <button className="btn" onClick={add} disabled={!renderable}><Plus size={16} />Add requirement</button>
@@ -438,7 +441,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
       {status === "draft" && renderable && (
         <div className="check warn banner"><TriangleAlert size={16} /><span><b>Draft.</b> Consumers do not see this standard, and no skill is generated, until its status is set to Active in Details.</span></div>
       )}
-      {editor && review.state === "overdue" && renderable && (
+      {(editor || answersFor(perms, draft.owner)) && review.state === "overdue" && renderable && (
         <div className="check bad banner"><CalendarCheck size={16} /><span><b>{review.label}.</b> Read it through, correct what changed, then press “Mark as reviewed”.</span></div>
       )}
 

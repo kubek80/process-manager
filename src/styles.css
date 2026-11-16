@@ -834,3 +834,26 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .extras-toggle em { margin-left: auto; font-style: normal; font-weight: 600; color: var(--accent); }
 .icon-btn.off { opacity: .35; cursor: default; }
 button.saved { border: 0; background: none; padding: 0 4px; height: 34px; cursor: default; font: inherit; font-size: 12.5px; }
+
+/* ---------- my responsibilities ---------- */
+.mine { display: grid; gap: 18px; }
+.mine-head { display: grid; gap: 10px; }
+.mine-head .lead { margin: 0; }
+.nav-count { margin-left: 2px; min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center; border-radius: 999px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 700; line-height: 1; }
+.mine-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.mine-list li { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 12px 0; }
+.mine-list li + li { border-top: 1px solid var(--line); }
+.mine-list li > svg { color: var(--text-3); flex: none; align-self: flex-start; margin-top: 3px; }
+.mine-list .person { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.4; }
+.mine-list .person a { color: var(--text); }
+.mine-list .person a:hover { color: var(--accent); }
+.mine-list .person em { font-style: normal; font-size: 12.5px; color: var(--text-3); }
+.mine-quote { font-size: 14px; color: var(--text); display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.mine-table-wrap { overflow-x: auto; }
+.mine-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.mine-table th { text-align: left; font-size: 12px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); padding: 0 14px 8px 0; border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+.mine-table td { padding: 10px 14px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.mine-table tr:last-child td { border-bottom: 0; }
+.mine-table td:first-child a { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); }
+.mine-table td:first-child a:hover { color: var(--accent); }
+.mine-table td:first-child svg { color: var(--text-3); flex: none; }

@@ -117,6 +117,8 @@ func New(d Deps) http.Handler {
 	mux.Handle("GET /api/standards", user(a.listDocs(docs.Standard, "standards")))
 	mux.Handle("PUT /api/standards/{id}", user(a.putDoc(docs.Standard)))
 	mux.Handle("DELETE /api/standards/{id}", user(a.deleteDoc(docs.Standard)))
+	mux.Handle("POST /api/processes/{id}/review", user(a.reviewDoc(docs.Process)))
+	mux.Handle("POST /api/standards/{id}/review", user(a.reviewDoc(docs.Standard)))
 	mux.Handle("GET /api/catalog", user(a.getCatalog))
 	mux.Handle("PUT /api/catalog", user(a.putDoc(docs.Catalog)))
 	mux.Handle("GET /api/history/{kind}/{id}", user(a.history))

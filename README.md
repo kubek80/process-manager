@@ -55,6 +55,7 @@ React + Vite frontend; Go server; Postgres. Everything people change lives in th
 | **Life-cycle** | Draft (hidden from readers), active, retired; periodic reviews by the owner |
 | **Versions** | Every save is a version with who, when and a note; what changed between versions in plain words; restore; undo while editing; a warning before unsaved changes are left; a decision when somebody else saved first |
 | **Feedback** | On a step or a requirement, “I hit this too”, closed by the owner, flagged when the text changed since |
+| **My responsibilities** | For owners: reviews to do, feedback waiting, drafts, and everything their teams and units own, on one page with a count in the top bar |
 | **Skills** | Generated per process and per standard, versioned automatically, with optional hand-written guidance |
 | **Admin panel** | Roles, the lists (teams and units, tools, tiers, environments, languages), the skills registry, health, activity |
 | **AI authoring** | A self-contained prompt for any chat assistant turns text into a process or a standard; the checker validates what comes back |
@@ -73,7 +74,7 @@ Everyone who signs in (Entra ID or Google) can read, tick and give feedback. Rol
 
 | Role | Adds |
 | --- | --- |
-| Owner (for one team or unit) | Close feedback on what it owns |
+| Owner (for one team or unit) | Confirm reviews and close feedback on what it owns; a page of their own, **My responsibilities**, shows what is waiting |
 | Process editor | Create and change processes |
 | Standards editor (one unit or all) | Create and change standards |
 | Lists manager | Teams, tools, tiers, environments, languages |

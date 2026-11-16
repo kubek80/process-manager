@@ -1,8 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, Eye, LayoutGrid, LogOut, Moon, Pencil, Settings2, ShieldCheck, Sun, Users } from "lucide-react";
-import type { Catalog, DocMeta, Feedback, FeedbackByTarget, Me, Process, Standard } from "./types";
+import { BookOpen, ClipboardCheck, Eye, LayoutGrid, LogOut, Moon, Pencil, Settings2, ShieldCheck, Sun, Users } from "lucide-react";
+import type { Catalog, DocMeta, Feedback, FeedbackByTarget, Me, Process, Standard, TargetKind } from "./types";
 import {
-  ApiError, createFeedback, deleteFeedback, go, href, loadCatalog, loadFeedback, loadMe, loadProcesses, loadStandards, logout, pageTitle, putCatalog, putProcess, putStandard,
+  ApiError, confirmReview, createFeedback, deleteFeedback, go, href, loadCatalog, loadFeedback, loadMe, loadProcesses, loadStandards, logout, pageTitle, putCatalog, putProcess, putStandard,
   removeProcess, removeStandard, setAlsoHit, setResolved, SIGNED_OUT, forgetUnsaved, hasUnsaved, unsavedWork, useRoute, type MetaById,
 } from "./lib/store";
 import { CatalogContext, EMPTY_CATALOG } from "./lib/catalog";
@@ -15,6 +15,8 @@ import { Login } from "./components/Login";
 import { ProcessPage, processAiSpec } from "./components/ProcessPage";
 import { StandardPage, standardAiSpec } from "./components/StandardPage";
 import { StandardsLibrary } from "./components/StandardsLibrary";
+import { MinePage } from "./components/MinePage";
+import { myTeams, responsibilities, urgent } from "./lib/responsibilities";
 import { unitsOf } from "./components/Governance";
 import { confirmDialog, ErrorBoundary, Field, LoadError, Loading, Modal, Notices, notify, useLayer } from "./components/ui";
 
@@ -288,6 +290,25 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     setStandards((list) => byId(list, s)); setMeta(setStandardMeta, s.id, meta); refreshFeedback();
     return meta.version;
   };
+  // "Still correct": the review is recorded by the server, with today's date and the person's
+  // name, on top of the version they are looking at.
+  const reviewed = async (kind: TargetKind, id: string, base: number): Promise<boolean> => {
+    try {
+      writes.current++;
+      const r = await confirmReview<Process | Standard>(kind, id, base);
+      writes.current++;
+      const meta = { version: r.version, updatedAt: r.updatedAt, updatedBy: r.updatedBy };
+      if (kind === "process") { setProcesses((list) => list && byId(list, r.document as Process)); setMeta(setProcessMeta, id, meta); }
+      else { setStandards((list) => byId(list, r.document as Standard)); setMeta(setStandardMeta, id, meta); }
+      notify.info("Recorded as reviewed today.");
+      return true;
+    } catch (e) {
+      notify.error("The review could not be recorded.", whyNot(e, kind));
+      if ((e as ApiError).conflict) load(); // show what changed, so that it can be read before confirming
+      return false;
+    }
+  };
+
   // what the server has now, for a page that wants to continue from somebody else's version
   const reloadProcess = async (id: string) => {
     const { p } = await fetchAll();
@@ -349,6 +370,9 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   };
 
   const all = processes ?? [];
+  // what needs the signed-in person as an owner: shown as a count next to "My responsibilities"
+  const mine = useMemo(() => myTeams(perms), [perms]);
+  const waiting = useMemo(() => (mine.length ? urgent(responsibilities(mine, all, standards, feedback).tasks) : 0), [mine, all, standards, feedback]);
   const process = route.page === "process" ? all.find((p) => p.id === route.id) : undefined;
   const standard = route.page === "standard" ? standards.find((s) => s.id === route.id) : undefined;
   const on = (...pages: string[]) => (pages.includes(route.page) ? "on" : "");
@@ -369,6 +393,12 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         <nav className="nav" aria-label="Main">
           <a className={`nav-link ${on("library", "process")}`} aria-current={current("library", "process")} href={href({ page: "library" })} aria-label="Processes" title="Processes"><LayoutGrid size={15} /><span>Processes</span></a>
           <a className={`nav-link ${on("standards", "standard")}`} aria-current={current("standards", "standard")} href={href({ page: "standards" })} aria-label="Standards" title="Standards"><ShieldCheck size={15} /><span>Standards</span></a>
+          {mine.length > 0 && (
+            <a className={`nav-link ${on("mine")}`} aria-current={current("mine")} href={href({ page: "mine" })}
+              aria-label={waiting ? `My responsibilities, ${waiting} waiting` : "My responsibilities"} title="What you answer for: reviews to do, feedback to handle">
+              <ClipboardCheck size={15} /><span>My responsibilities</span>{waiting > 0 && <b className="nav-count">{waiting}</b>}
+            </a>
+          )}
           <a className={`nav-link ${on("catalog")}`} aria-current={current("catalog")} href={href({ page: "catalog" })} aria-label="Teams & tools" title="Teams & tools"><Users size={15} /><span>Teams &amp; tools</span></a>
           <a className={`nav-link ${on("guide")}`} aria-current={current("guide")} href={href({ page: "guide" })} aria-label="Guide" title="Guide"><BookOpen size={15} /><span>Guide</span></a>
           {canOpenAdmin(perms) && <a className={`nav-link ${on("admin")}`} aria-current={current("admin")} href={href({ page: "admin", section: perms.admin ? "access" : "lists" })} aria-label="Admin" title="Admin"><Settings2 size={15} /><span>Admin</span></a>}
@@ -396,18 +426,22 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         <StandardsLibrary standards={standards} processes={all} feedback={feedback.standard} onAi={() => setAi("standard")} onNew={newStandard} />
       )}
       {processes && route.page === "catalog" && <CatalogPage processes={all} standards={standards} editable={false} />}
+      {processes && route.page === "mine" && (
+        <MinePage processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }}
+          onReviewed={(kind, id) => reviewed(kind, id, (kind === "process" ? processMeta : standardMeta)[id]?.version ?? 0)} />
+      )}
       {processes && route.page === "guide" && <GuidePage />}
       {processes && route.page === "admin" && (canOpenAdmin(perms)
         ? <AdminPage section={route.section} processes={all} standards={standards} feedback={feedback} />
         : <div className="page"><h1>Admin</h1><p className="muted">You do not have access to the Admin panel. An admin can give it to you.</p></div>)}
       {processes && route.page === "process" && (process
         ? <ProcessPage key={process.id} process={process} meta={processMeta[process.id]} all={all} standards={standards} tab={route.tab} item={route.item}
-          onSave={saveProcess} onReload={() => reloadProcess(process.id)} onDelete={(base) => deleteProcess(process.id, base)}
+          onSave={saveProcess} onReload={() => reloadProcess(process.id)} onDelete={(base) => deleteProcess(process.id, base)} onReviewed={(base) => reviewed("process", process.id, base)}
           feedback={feedback.process[process.id] ?? []} />
         : <div className="page"><h1>Process not found</h1><p className="muted">There is no process “{route.id}”.</p><a className="btn" href="#/">Back to all processes</a></div>)}
       {processes && route.page === "standard" && (standard
         ? <StandardPage key={standard.id} standard={standard} meta={standardMeta[standard.id]} all={standards} processes={all} tab={route.tab} item={route.item}
-          onSave={saveStandard} onReload={() => reloadStandard(standard.id)} onDelete={(base) => deleteStandard(standard.id, base)}
+          onSave={saveStandard} onReload={() => reloadStandard(standard.id)} onDelete={(base) => deleteStandard(standard.id, base)} onReviewed={(base) => reviewed("standard", standard.id, base)}
           feedback={feedback.standard[standard.id] ?? []} />
         : <div className="page"><h1>Standard not found</h1><p className="muted">There is no standard “{route.id}”.</p><a className="btn" href="#/standards">Back to all standards</a></div>)}
       </Suspense>

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { ALEX, answer, clearFeedback, open, readSkill, readStandard, report, RILEY, SAM, save, signIn, watchErrors } from "./helpers";
+import { ALEX, answer, clearFeedback, open, readSkill, readStandard, report, RILEY, SAM, save, serverToday, signIn, watchErrors } from "./helpers";
 
 const LOGGING = "secure-logging"; // issued by Cyber Security: Riley edits it
 const IAC = "infrastructure-as-code"; // issued by the Cloud Platform team
@@ -267,7 +267,7 @@ test("mark a standard as reviewed, look at its history, edit its JSON", async ({
   await expect(page.locator(".banner", { hasText: "Review overdue" })).toBeVisible();
   await page.getByRole("button", { name: "Mark as reviewed" }).click();
   await expect(page.locator(".banner", { hasText: "Review overdue" })).toHaveCount(0);
-  await expect.poll(async () => (await readStandard(page, LOGGING))!.review).toEqual({ intervalMonths: 12, lastReviewedAt: "2027-10-01", reviewedBy: "Riley Security" });
+  await expect.poll(async () => (await readStandard(page, LOGGING))!.review).toEqual({ intervalMonths: 12, lastReviewedAt: serverToday(), reviewedBy: "Riley Security" });
 
   await page.getByRole("button", { name: /^Version \d+$/ }).click();
   await expect(page.locator(".history li").first()).toContainText("riley@example.com");

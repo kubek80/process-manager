@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { DANA, SAM, open, signIn } from "./helpers";
+import { DANA, RILEY, SAM, open, signIn } from "./helpers";
 
 // What a phone, a tablet and a small laptop show. A page that scrolls sideways hides controls
 // off screen, so no page may be wider than the screen.
 const PAGES = ["/", "/standards", "/p/request-gcp-project/flow", "/p/request-gcp-project/list", "/p/request-gcp-project/flow/raise-request",
-  "/s/secure-logging/doc", "/s/secure-logging/doc/SEC-LOG-02", "/catalog", "/guide"];
+  "/s/secure-logging/doc", "/s/secure-logging/doc/SEC-LOG-02", "/catalog", "/guide", "/mine"];
 const ADMIN = ["/p/request-gcp-project/json", "/admin/access", "/admin/lists", "/admin/skills", "/admin/health", "/admin/activity", "/admin/system"];
 
 const sideways = (page: import("@playwright/test").Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -17,6 +17,13 @@ for (const [name, width] of [["a phone", 390], ["a tablet", 768], ["a small lapt
       await open(page, hash);
       await expect(page.locator("h1").first()).toBeVisible();
       expect(await sideways(page), `${hash} as a reader at ${width}px`).toBe(0);
+    }
+    // an owner: one more entry in the top bar, and a page with tables of its own
+    await signIn(page, RILEY, { editor: true });
+    for (const hash of ["/", "/mine", "/s/secure-logging/doc"]) {
+      await open(page, hash);
+      await expect(page.locator("h1").first()).toBeVisible();
+      expect(await sideways(page), `${hash} as an owner at ${width}px`).toBe(0);
     }
     await signIn(page, DANA, { editor: true });
     for (const hash of [...PAGES, ...ADMIN]) {

@@ -6,6 +6,7 @@ import { isDrawableProcess, validateProcess } from "../lib/validate";
 import { go, guardLeaving, useProgress, type Tab } from "../lib/store";
 import { useDraft } from "../lib/draft";
 import { useSelectedItem } from "../lib/selection";
+import { answersFor } from "../lib/responsibilities";
 import { teamName, useCatalog } from "../lib/catalog";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { Resources } from "./Resources";
@@ -32,7 +33,7 @@ const AiDialog = lazy(() => import("./AiDialog").then((m) => ({ default: m.AiDia
 
 const stamp = (p: Process): Process => ({ ...p, updatedAt: today() });
 
-export function ProcessPage({ process, meta, all, standards, tab, item, onSave, onReload, onDelete, feedback }: {
+export function ProcessPage({ process, meta, all, standards, tab, item, onSave, onReload, onDelete, onReviewed, feedback }: {
   process: Process; meta?: DocMeta; all: Process[]; standards: Standard[]; tab: Tab; feedback: Feedback[];
   /** The step that is open, from the address: a link can point at one step. */
   item?: string;
@@ -41,6 +42,8 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
   onReload: () => Promise<{ saved: Process; version: number } | null>;
   /** Deletes the version this page shows; refused when somebody else changed it since. */
   onDelete: (base: number) => void;
+  /** Records that the version this page shows is still correct. */
+  onReviewed: (base: number) => Promise<boolean>;
 }) {
   const [editing, setEditing] = useState(false);
   const [dialog, setDialog] = useState<null | "settings" | "ai" | "history">(null);
@@ -92,10 +95,9 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
   const markReviewed = async () => {
     const who = me.user?.name ?? "";
     const next = { ...draft, review: { intervalMonths: draft.review?.intervalMonths ?? 6, lastReviewedAt: today(), ...(who ? { reviewedBy: who } : {}) } };
-    // with other changes pending it becomes part of them; a pure "still correct" is saved straight away
-    if (dirty || errors) return setDraft(next);
-    try { await onSave({ ...tidy(next), updatedAt: process.updatedAt }, d.base, "Reviewed: confirmed as still correct"); }
-    catch (e) { notify.error("The review could not be recorded.", e); }
+    // with other changes pending it becomes part of them; a pure "still correct" is recorded straight away
+    if (editor && (dirty || errors)) return setDraft(next);
+    await onReviewed(d.base);
   };
   const back = () => go({ page: "library" }); // leaving with unsaved changes asks first, like every other way out
   // ticks are remembered by the prerequisite's title; ticks from before that were remembered by position
@@ -137,9 +139,10 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
             )}
           </div>
           <div className="head-actions">
+            {/* the review belongs to the team that owns the process, and to whoever edits it */}
+            {(editor || answersFor(perms, draft.owner)) && review.state !== "none" && <button className={`btn ${review.state === "ok" ? "" : "review-due"}`} onClick={markReviewed} disabled={!renderable}
+              title="Confirm that this process is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
             {editor && <>
-              {review.state !== "none" && <button className={`btn ${review.state === "ok" ? "" : "review-due"}`} onClick={markReviewed} disabled={!renderable}
-                title="Confirm that this process is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
               <button className="btn accent-soft" onClick={() => setDialog("ai")} disabled={!renderable}><Sparkles size={16} />Change with AI</button>
               <button className="btn" onClick={() => setDialog("settings")} disabled={!renderable}><Settings2 size={16} />Details</button>
               <button className="btn" onClick={() => addAfter(selected)} disabled={!renderable}><Plus size={16} />Add step</button>
@@ -173,7 +176,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
       {status === "draft" && renderable && (
         <div className="check warn banner"><TriangleAlert size={16} /><span><b>Draft.</b> Consumers do not see this process until its status is set to Active in Details.</span></div>
       )}
-      {editor && review.state === "overdue" && renderable && (
+      {(editor || answersFor(perms, draft.owner)) && review.state === "overdue" && renderable && (
         <div className="check bad banner"><CalendarCheck size={16} /><span><b>{review.label}.</b> Read it through, correct what changed, then press “Mark as reviewed”.</span></div>
       )}
 

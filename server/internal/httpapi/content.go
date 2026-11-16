@@ -338,6 +338,73 @@ func (a *api) putDoc(kind string) http.HandlerFunc {
 	}
 }
 
+// reviewRhythm is the rhythm a document gets when its first review is recorded and it had none.
+var reviewRhythm = map[string]int{docs.Process: 6, docs.Standard: 12}
+
+// reviewDoc records that somebody confirmed a process or standard as still correct: today's
+// date and their name. This is the one change the owning team or unit may make themselves -
+// they are the ones who are asked to review - besides everyone who may edit it. It is saved as
+// a version like every other change.
+func (a *api) reviewDoc(kind string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		s := who(r)
+		current, err := a.Docs.Get(r.Context(), kind, id)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		owner, status := headOf(current.Body)
+		switch {
+		case !canSee(s, kind, current.Body):
+			writeError(w, 404, "That does not exist.")
+			return
+		case !s.CanManageFeedback(kind, owner):
+			writeError(w, 403, "Only the team or unit that owns this, and the people who can edit it, can confirm its review.")
+			return
+		case status != "" && status != "active":
+			writeError(w, 400, "Only something that is in use is reviewed. Set its status to Active first.")
+			return
+		}
+		base, ok := baseOf(r)
+		if !ok {
+			writeError(w, 400, "base must be a version number.")
+			return
+		}
+		if base == nil {
+			base = &current.Version
+		}
+		body, err := docs.WithReview(current.Body, time.Now().UTC().Format("2006-01-02"), s.Name, reviewRhythm[kind])
+		if err == nil {
+			err = a.Schemas.Validate(kind, body)
+		}
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		const note = "Reviewed: confirmed as still correct"
+		doc, changed, err := a.Docs.Save(r.Context(), docs.Change{
+			Kind: kind, ID: id, Body: body, By: s.Email, Note: note, Base: base,
+			After: func(ctx context.Context, tx pgx.Tx, saved docs.Doc) error {
+				return audit.AddIn(ctx, tx, s.Email, s.Name, noun[kind]+".review", id, fmt.Sprintf("version %d", saved.Version))
+			},
+		})
+		var c *docs.Conflict
+		switch {
+		case errors.As(err, &c):
+			conflict(w, kind, c)
+			return
+		case err != nil:
+			a.fail(w, r, err)
+			return
+		}
+		if changed {
+			a.syncSkills(r.Context(), kind, id)
+		}
+		writeJSON(w, 200, map[string]any{"ok": true, "changed": changed, "version": doc.Version, "updatedAt": doc.UpdatedAt, "updatedBy": doc.UpdatedBy, "document": doc.Body})
+	}
+}
+
 func (a *api) deleteDoc(kind string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")

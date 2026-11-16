@@ -30,6 +30,7 @@ flowchart LR
 | Feedback | About a step of a process or a requirement of a standard. Anyone signed in can report and say "I hit this too". |
 | Stale feedback | Each item remembers a fingerprint of the step or requirement it was written about. When that changes or disappears, the item is flagged "may already be fixed". |
 | Notifications | New feedback is announced to the owning team or unit (name and contact from the lists); a fix is announced to the reporter. `PM_NOTIFY=log` writes them to the server log, `webhook` posts `{"text": …}` plus the event fields (`type`, `targetKind`, `processId`, `processTitle`, `stepTitle`, …) to a URL (a Slack incoming webhook accepts this as is). The webhook is called in the background, up to three times, and what people typed is escaped so that it cannot become chat markup. A brake keeps one person at about 30 stored items an hour; it is a courtesy limit against a script gone wrong, not a hard quota. |
+| Reviews | The team or unit that owns a process or standard is asked to confirm regularly that it is still correct. The owner role can record that without being an editor (`POST …/review`): it is the one change to content that role may make. |
 | Activity | Every change to content (with the version and its note), lists, roles and skill guidance is recorded with who and when. For processes, standards and the lists the entry is written in the same transaction as the change; for roles, skill guidance and feedback it is written right after it, and a failure to write it is logged. Closing, reopening or deleting somebody else's feedback is recorded too. |
 | Protection | Every change needs the header `X-Requested-With: process-manager` (stops cross-site form posts), bodies are limited to 1 MB, ids are validated, a request gets 30 seconds. Every answer carries a content security policy (only the app's own scripts, no `eval`, no framing), `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Strict-Transport-Security` when the address is https. |
 | Operation | Requests to `/api` and `/auth` are logged with status and duration (`PM_LOG_FORMAT=json` for one JSON object per line). `/healthz` says the process runs, `/readyz` that it also reaches the database. On SIGTERM the server stops accepting requests and finishes the ones in progress (up to 15 seconds) before it closes the database. |
@@ -39,7 +40,7 @@ flowchart LR
 | Role | May | Scope |
 | --- | --- | --- |
 | *(everyone signed in)* | Read published content and its versions, tick steps, report, "I hit this too", delete own feedback, read and download skills | |
-| `owner` | Mark fixed / reopen / delete feedback; see drafts | Required: one team or unit; applies to what it owns |
+| `owner` | Confirm reviews; mark fixed / reopen / delete feedback; see drafts | Required: one team or unit; applies to what it owns |
 | `process-editor` | Create, change and delete processes, including drafts; manage their feedback; edit the guidance of their skills | All processes |
 | `standards-editor` | The same for standards | Optional: one unit. Moving a standard to another unit needs the role for both. |
 | `catalog-manager` | Change the lists | |
@@ -65,6 +66,7 @@ All under the same origin as the app. JSON in and out; errors are `{"error": "�
 | `GET /api/catalog` | The lists; their version is in the header `X-Document-Version` | signed in |
 | `PUT /api/processes/{id}?base=&note=`, `DELETE /api/processes/{id}?base=` | Save or delete a process. Answers `{ok, changed, version, updatedAt, updatedBy}`, or `409` with `{"error", "conflict": {exists, version, updatedBy, updatedAt}}` | process editors |
 | `PUT /api/standards/{id}?base=&note=`, `DELETE /api/standards/{id}?base=` | The same for a standard | standards editors of its unit |
+| `POST /api/processes/{id}/review?base=`, `POST /api/standards/{id}/review?base=` | Record that it was reviewed and is still correct: today's date (the server's) and the caller's name, saved as a version with the note "Reviewed: confirmed as still correct". Nothing else in the document changes. Only for something that is in use; `409` when `base` is not the current version. Answers like a save, plus the `document`. | editors of it, and the owner role of its team or unit |
 | `PUT /api/catalog?base=&note=` | Save the lists | lists managers |
 | `GET /api/history/{process\|standard\|catalog}/{id}` | Versions: number, who, when, note, deleted | who can see the document; admins for deleted ones |
 | `GET /api/history/{kind}/{id}/{version}` | The content of one version | as above; a version that was a draft only for those who may see drafts |

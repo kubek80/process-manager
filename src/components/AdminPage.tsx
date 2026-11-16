@@ -15,7 +15,7 @@ export const ROLES: Record<Role, { label: string; can: string; scope: "none" | "
   "catalog-manager": { label: "Lists manager", can: "Teams, tools, tiers, environments, languages", scope: "none" },
   "process-editor": { label: "Process editor", can: "Create and change every process; close its feedback", scope: "none" },
   "standards-editor": { label: "Standards editor", can: "Create and change standards; close their feedback", scope: "optional", scopeLabel: "For the unit" },
-  owner: { label: "Owner", can: "Close feedback on what a team or unit owns", scope: "required", scopeLabel: "For the team or unit" },
+  owner: { label: "Owner", can: "Confirm reviews and close feedback on what a team or unit owns; see its drafts", scope: "required", scopeLabel: "For the team or unit" },
 };
 
 const SECTIONS: { id: AdminSection; label: string; icon: typeof List; admin?: boolean; hint: string }[] = [
@@ -241,7 +241,7 @@ function HealthSection({ processes, standards, feedback }: { processes: Process[
 const ACTION: Record<string, string> = {
   "process.save": "saved the process", "process.delete": "deleted the process", "standard.save": "saved the standard", "standard.delete": "deleted the standard",
   "lists.save": "changed the lists", "access.grant": "gave a role to", "access.revoke": "removed a role from", "skill.guidance": "changed the extra guidance of",
-  "content.import": "imported", "feedback.fixed": "marked feedback as fixed on the", "feedback.reopen": "reopened feedback on the",
+  "content.import": "imported", "process.review": "confirmed the review of the process", "standard.review": "confirmed the review of the standard", "feedback.fixed": "marked feedback as fixed on the", "feedback.reopen": "reopened feedback on the",
   "feedback.delete": "deleted feedback on the",
 };
 

@@ -15,6 +15,7 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
     ["blocks", "The building blocks"],
     ["standards", "Reading a standard"],
     ["feedback", "Feedback"],
+    ["mine", "Your responsibilities"],
   ] },
   { title: "Editing", items: [
     ["edit", "Editing a process"],
@@ -109,7 +110,7 @@ export function GuidePage() {
           <table className="guide-table roles">
             <thead><tr><th>Role</th><th>Adds</th><th>Limited to</th></tr></thead>
             <tbody>
-              <tr><td><b>Owner</b></td><td>Mark feedback as fixed, reopen or delete it</td><td>What one team or unit owns</td></tr>
+              <tr><td><b>Owner</b></td><td>Confirm reviews; mark feedback as fixed, reopen or delete it; see drafts</td><td>What one team or unit owns</td></tr>
               <tr><td><b>Process editor</b></td><td>Create and change processes; close their feedback</td><td>All processes</td></tr>
               <tr><td><b>Standards editor</b></td><td>Create and change standards; close their feedback</td><td>One unit, or all units</td></tr>
               <tr><td><b>Lists manager</b></td><td>Teams, tools, tiers, environments and languages</td><td>—</td></tr>
@@ -193,6 +194,17 @@ export function GuidePage() {
           </dl>
         </Section>
 
+        <Section id="mine" title="Your responsibilities">
+          <p>If you are <b>Owner</b> for a team or unit, or edit the standards of a unit, the top bar has <b>My responsibilities</b>. The number next to it is what is waiting for you: reviews that are overdue and feedback nobody has dealt with.</p>
+          <dl className="guide-dl">
+            <div><dt><CalendarCheck size={14} />Reviews to do</dt><dd>What is overdue or due within a month, the most overdue first. Read it; if it is still right, press <b>Still correct</b>. That records today and your name, as a version of its own. You do not have to be an editor for this: the review belongs to the team that owns the thing. If something has to change, change it (or ask an editor), then confirm.</dd></div>
+            <div><dt><Flag size={14} />Feedback waiting for you</dt><dd>Every open item on what your teams own, the oldest first: what was said, about which step or requirement, by whom, and how many others hit the same. <b>Mark as fixed</b> closes it and tells the person who reported it.</dd></div>
+            <div><dt>Unfinished</dt><dd>Drafts that were never published, and things in use that nobody is asked to review because they have no review rhythm.</dd></div>
+            <div><dt>Everything that is yours</dt><dd>Every process and standard of your teams and units with its status, its next review, its open feedback, and its version with who changed it last.</dd></div>
+          </dl>
+          <p>“Mark as reviewed” on a process or standard does the same from its own page. If somebody changed it after you opened it, the review is not recorded: you are shown the current version first, so nobody confirms what they have not read.</p>
+        </Section>
+
         <Section id="edit" title="Editing a process">
           <p>Switch to <b>Editor</b>. Changes go into a draft; nothing is published until you press <b>Save changes</b>, and saving is blocked while the checker reports a problem. A save takes effect for everyone at once. A new process starts with its name: the name gives it its address, which never changes afterwards, and it starts as a draft that only editors see.</p>
           <div className="guide-cards three">
@@ -243,8 +255,8 @@ export function GuidePage() {
             <div><dt>Retired</dt><dd>No longer the way to do it. It stays for reference, greyed out, and can point to what replaces it. Its skills are withdrawn.</dd></div>
           </dl>
           <Chart process={reviewFlow} caption="The review cycle of an active process or standard. “Mark as reviewed” records the date and who confirmed it." />
-          <p><CalendarCheck size={13} /> In Editor mode the library shows what needs a review, and <b>Admin › Health</b> lists everything that is due.</p>
-          <p>“Mark as reviewed” on something without other changes is saved at once, as a version of its own with the note “Reviewed: confirmed as still correct”.</p>
+          <p><CalendarCheck size={13} /> Owners find what is due under <b>My responsibilities</b>. In Editor mode the library shows what needs a review, and <b>Admin › Health</b> lists everything that is due, for all teams.</p>
+          <p>“Mark as reviewed” on something without other changes is saved at once, as a version of its own with the note “Reviewed: confirmed as still correct” and the date of the day. The team or unit that owns it can do this as well as its editors; see <b>Your responsibilities</b>.</p>
         </Section>
 
         <Section id="skills" title="Skills and review agents">

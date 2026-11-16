@@ -66,6 +66,13 @@ export async function loadStandards(): Promise<{ docs: Standard[]; meta: MetaByI
 export const putStandard = (s: Standard, base: number, note?: string) => call<DocMeta>("PUT", `/api/standards/${s.id}${saveQuery(base, note)}`, s);
 export const removeStandard = (id: string, base: number) => call<void>("DELETE", `/api/standards/${id}?base=${base}`);
 
+/**
+ * Records that a process or standard was reviewed and is still correct: today and the person's
+ * name, as a version of its own. For the team or unit that owns it and for whoever may edit it.
+ */
+export const confirmReview = <T extends Process | Standard>(kind: TargetKind, id: string, base: number) =>
+  call<DocMeta & { document: T }>("POST", `/api/${kind === "process" ? "processes" : "standards"}/${id}/review?base=${base}`);
+
 export async function loadCatalog(): Promise<{ catalog: Catalog; version: number }> {
   const { data: c, headers } = await request<Partial<Catalog>>("GET", "/api/catalog");
   return {
@@ -127,7 +134,7 @@ export type StandardTab = "doc" | "feedback" | "skills" | "json";
 export type AdminSection = "access" | "lists" | "skills" | "health" | "activity" | "system";
 /** `item` is the step or the requirement that is open, so that a link can point at one. */
 export type Route =
-  | { page: "library" } | { page: "standards" } | { page: "catalog" } | { page: "guide" }
+  | { page: "library" } | { page: "standards" } | { page: "catalog" } | { page: "guide" } | { page: "mine" }
   | { page: "admin"; section: AdminSection }
   | { page: "process"; id: string; tab: Tab; item?: string }
   | { page: "standard"; id: string; tab: StandardTab; item?: string };
@@ -135,6 +142,7 @@ export type Route =
 const parse = (h: string = location.hash): Route => {
   if (h.startsWith("#/catalog")) return { page: "catalog" };
   if (h.startsWith("#/guide")) return { page: "guide" };
+  if (h.startsWith("#/mine")) return { page: "mine" };
   if (h.startsWith("#/standards")) return { page: "standards" };
   const admin = h.match(/^#\/admin(?:\/(access|lists|skills|health|activity|system))?/);
   if (admin) return { page: "admin", section: (admin[1] as AdminSection) ?? "access" };
@@ -257,6 +265,7 @@ export const href = (r: Route): string => {
     case "standards": return "#/standards";
     case "catalog": return "#/catalog";
     case "guide": return "#/guide";
+    case "mine": return "#/mine";
     case "admin": return `#/admin/${r.section}`;
     case "standard": return `#/s/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
     case "process": return `#/p/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
@@ -279,6 +288,7 @@ export function pageTitle(r: Route, names: { process?: string; standard?: string
     case "standards": here = "Standards"; break;
     case "catalog": here = "Teams & tools"; break;
     case "guide": here = "Guide"; break;
+    case "mine": here = "My responsibilities"; break;
     case "admin": here = `${r.section.slice(0, 1).toUpperCase()}${r.section.slice(1)} · Admin`; break;
     case "process": here = of(names.process, "Process not found"); break;
     case "standard": here = of(names.standard, "Standard not found"); break;

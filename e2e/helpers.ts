@@ -9,6 +9,9 @@ export const DANA = "dana@example.com"; // admin
 
 const CSRF = { "X-Requested-With": "process-manager" };
 
+/** Today as the server sees it. A review is dated by the server, whatever the clock of the browser says. */
+export const serverToday = () => new Date().toISOString().slice(0, 10);
+
 /** Sign in through the API (fast). The sign-in screen itself is covered in auth.spec.ts. */
 export async function signIn(page: Page, email: string, opts: { editor?: boolean } = {}) {
   // switching user mid-test: leave the app first, so the next page load starts from the new session

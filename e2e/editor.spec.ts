@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ALEX, open, readProcess, save, signIn, watchErrors } from "./helpers";
+import { ALEX, open, readProcess, save, serverToday, signIn, watchErrors } from "./helpers";
 
 const LIB = "publish-internal-library";
 const AZURE = "request-azure-landing-zone";
@@ -150,8 +150,8 @@ test("reviews: the library shows what is due, and one click confirms a process",
   await expect(page.locator(".banner", { hasText: "Review overdue since 2026-09-02" })).toBeVisible();
   await page.getByRole("button", { name: "Mark as reviewed" }).click();
   await expect(page.locator(".banner", { hasText: "Review overdue" })).toHaveCount(0);
-  await expect(page.locator(".facts")).toContainText(`Reviewed ${NOW}`);
-  await expect.poll(async () => (await readProcess(page, "onboard-site-to-akamai"))!.review).toEqual({ intervalMonths: 6, lastReviewedAt: NOW, reviewedBy: "Alex Editor" });
+  await expect(page.locator(".facts")).toContainText(`Reviewed ${serverToday()}`); // dated by the server, not by this browser's clock
+  await expect.poll(async () => (await readProcess(page, "onboard-site-to-akamai"))!.review).toEqual({ intervalMonths: 6, lastReviewedAt: serverToday(), reviewedBy: "Alex Editor" });
 });
 
 test("the JSON editor marks problems on the line and applies valid edits", async ({ page }) => {
