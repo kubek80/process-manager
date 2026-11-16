@@ -15,6 +15,9 @@ import (
 // ErrNotFound is returned when a feedback item does not exist.
 var ErrNotFound = errors.New("feedback not found")
 
+// ErrNoTarget is returned when feedback is written about something that does not exist (any more).
+var ErrNoTarget = errors.New("the target of the feedback does not exist")
+
 // Kinds a reporter can choose from.
 var Kinds = []string{"broken", "outdated", "unclear", "idea"}
 
@@ -78,9 +81,15 @@ func nullable(s string) any {
 func (s *Store) Create(ctx context.Context, n New) (Item, error) {
 	var id string
 	err := s.Pool.QueryRow(ctx,
+		// only for something that exists at this very moment: a process deleted a moment ago
+		// must not be left with feedback nobody can reach
 		`insert into feedback (target_kind, target_id, step_id, kind, body, author_email, author_name, step_hash)
-		 values ($1, $2, $3, $4, $5, $6, $7, $8) returning id::text`,
+		 select $1, $2, $3, $4, $5, $6, $7, $8 where exists (select 1 from documents where kind = $1 and id = $2)
+		 returning id::text`,
 		n.TargetKind, n.TargetID, nullable(n.ItemID), n.Kind, n.Text, n.AuthorEmail, n.AuthorName, nullable(n.ItemHash)).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Item{}, ErrNoTarget
+	}
 	if err != nil {
 		return Item{}, err
 	}

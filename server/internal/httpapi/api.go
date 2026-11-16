@@ -80,7 +80,9 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, map[string]bool{"ok": true}) })
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
 		if d.Ready != nil {
-			if err := d.Ready(r.Context()); err != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+			defer cancel()
+			if err := d.Ready(ctx); err != nil {
 				a.Log.Error("not ready", "error", err)
 				writeError(w, 503, "The database cannot be reached.")
 				return
@@ -233,21 +235,33 @@ func (a *api) guard(next http.Handler) http.Handler {
 	})
 }
 
+// errUnavailable: whether the session still counts could not be found out.
+var errUnavailable = errors.New("the database cannot be reached")
+
 func (a *api) current(r *http.Request) (session, bool) {
+	s, err := a.signedIn(r)
+	return s, err == nil
+}
+
+// signedIn returns the session of the request. errNoSession: there is none (any more).
+// errUnavailable: the database did not say whether it was ended - which is neither "signed in"
+// nor "signed out", and must not be shown to the person as either.
+func (a *api) signedIn(r *http.Request) (session, error) {
 	u, issued, ok := a.Sessions.ReadIssued(r)
 	if !ok {
-		return session{}, false
+		return session{}, errNoSession
 	}
 	if a.SignOuts != nil {
 		ended, err := a.SignOuts.Ended(r.Context(), u.Email, issued)
 		if err != nil {
-			// when in doubt the session does not count: better to ask someone to sign in again
-			// than to accept a session that was ended
-			a.Log.Error("sign-outs could not be read: treating the session as ended", "error", err)
-			return session{}, false
+			// a request the browser gave up on is not a problem of the server
+			if !errors.Is(err, context.Canceled) {
+				a.Log.Error("sign-outs could not be read", "error", err)
+			}
+			return session{}, errUnavailable
 		}
 		if ended {
-			return session{}, false
+			return session{}, errNoSession
 		}
 	}
 	perms, err := a.Roles.Perms(r.Context(), u.Email)
@@ -256,13 +270,34 @@ func (a *api) current(r *http.Request) (session, bool) {
 		a.Log.Error("roles could not be read: treating the user as a consumer", "error", err)
 		perms = rbac.PermsFrom(nil, false)
 	}
-	return session{User: u, Perms: perms}, true
+	return session{User: u, Perms: perms}, nil
+}
+
+var errNoSession = errors.New("not signed in")
+
+// issue signs somebody in. The session is dated after their last sign-out, so that signing in
+// again right after signing out works.
+func (a *api) issue(w http.ResponseWriter, r *http.Request, u auth.User) error {
+	var earliest time.Time
+	if a.SignOuts != nil {
+		at, err := a.SignOuts.At(r.Context(), u.Email)
+		if err != nil {
+			return err
+		}
+		earliest = at
+	}
+	a.Sessions.IssueNotBefore(w, u, earliest)
+	return nil
 }
 
 func (a *api) requireUser(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s, ok := a.current(r)
-		if !ok {
+		s, err := a.signedIn(r)
+		if errors.Is(err, errUnavailable) {
+			writeError(w, 503, "The server cannot reach its database right now. Try again in a moment.")
+			return
+		}
+		if err != nil {
 			writeError(w, 401, "Please sign in.")
 			return
 		}
@@ -295,7 +330,12 @@ func (a *api) record(r *http.Request, action, target, detail string) {
 
 func (a *api) me(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{"provider": a.Cfg.Auth}
-	s, ok := a.current(r)
+	s, err := a.signedIn(r)
+	if errors.Is(err, errUnavailable) {
+		writeError(w, 503, "The server cannot reach its database right now. Try again in a moment.")
+		return
+	}
+	ok := err == nil
 	out["authenticated"] = ok
 	if ok {
 		out["user"] = s.User
@@ -320,18 +360,26 @@ func (a *api) devLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "Unknown development user.")
 		return
 	}
-	a.Sessions.Issue(w, u)
+	if err := a.issue(w, r, u); err != nil {
+		a.fail(w, r, err)
+		return
+	}
 	writeJSON(w, 200, u)
 }
 
 func (a *api) callback(w http.ResponseWriter, r *http.Request) {
 	u, err := a.OIDC.Callback(w, r)
 	if err != nil {
+		// the log gets the whole story, the address bar only what the person can act on
 		a.Log.Warn("sign-in failed", "error", err)
-		http.Redirect(w, r, a.Cfg.BaseURL+"/?signin_error="+url.QueryEscape(err.Error()), http.StatusFound)
+		http.Redirect(w, r, a.Cfg.BaseURL+"/?signin_error="+url.QueryEscape(auth.PublicMessage(err)), http.StatusFound)
 		return
 	}
-	a.Sessions.Issue(w, u)
+	if err := a.issue(w, r, u); err != nil {
+		a.Log.Error("sign-in failed", "error", err)
+		http.Redirect(w, r, a.Cfg.BaseURL+"/?signin_error="+url.QueryEscape("The sign-in could not be completed. Try again in a moment."), http.StatusFound)
+		return
+	}
 	a.Log.Info("signed in", "email", u.Email)
 	http.Redirect(w, r, a.Cfg.BaseURL+"/", http.StatusFound)
 }
@@ -339,13 +387,16 @@ func (a *api) callback(w http.ResponseWriter, r *http.Request) {
 // logout ends every session of the person, not just the cookie of this browser: a copy of
 // the cookie stops working too.
 func (a *api) logout(w http.ResponseWriter, r *http.Request) {
-	if u, ok := a.Sessions.Read(r); ok && a.SignOuts != nil {
-		if err := a.SignOuts.Mark(r.Context(), u.Email, a.Sessions.Now()); err != nil {
+	// Only a session that still counts can end the others: a copy that was ended already
+	// must not be able to throw the person out again and again.
+	s, err := a.signedIn(r)
+	a.Sessions.Clear(w) // this browser is signed out whatever happens next
+	if err == nil && a.SignOuts != nil {
+		if _, err := a.SignOuts.Mark(r.Context(), s.Email, a.Sessions.Now()); err != nil {
 			a.fail(w, r, err)
 			return
 		}
 	}
-	a.Sessions.Clear(w)
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 

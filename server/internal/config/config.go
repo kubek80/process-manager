@@ -127,8 +127,11 @@ func Load(getenv func(string) string) (Config, error) {
 		}
 		if get("PM_BASE_URL", "") == "" {
 			problems = append(problems, "PM_BASE_URL is required: the public address of the app, e.g. https://processes.example.com")
-		} else if u, err := url.Parse(c.BaseURL); err != nil || u.Host == "" || (u.Scheme != "https" && !(u.Scheme == "http" && loopback(u.Host))) {
+		} else if u, err := url.Parse(c.BaseURL); err != nil || u.Host == "" || u.User != nil || (u.Scheme != "https" && !(u.Scheme == "http" && loopback(u.Host))) {
 			problems = append(problems, "PM_BASE_URL must start with https:// (http:// is only accepted for localhost)")
+		} else {
+			// one spelling everywhere: cookies, redirects and the security headers all follow from it
+			c.BaseURL = u.Scheme + "://" + strings.ToLower(u.Host) + strings.TrimRight(u.EscapedPath(), "/")
 		}
 		if len(c.Admins) == 0 {
 			problems = append(problems, "PM_ADMINS is required: the email of at least one person who can open the Admin panel and give others access")

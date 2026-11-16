@@ -115,6 +115,10 @@ type Context struct {
 	Titles map[string]string
 	// Inactive marks the drafts and retired ones among them: they have no skill to point to.
 	Inactive map[string]bool
+	// Drafts marks the ones that are not published. Skills are read by everyone, so a skill
+	// must not give away the title of a draft: it names it by its id, which the document that
+	// refers to it shows anyway.
+	Drafts map[string]bool
 }
 
 // skill is the pointer to the skill of another document, or nothing when that document does
@@ -339,7 +343,7 @@ You act for the person who needs the result. In the steps below they are **You**
 }
 
 func (c Context) title(kind, id string) string {
-	if t := c.Titles[kind+"/"+id]; t != "" {
+	if t := c.Titles[kind+"/"+id]; t != "" && !c.Drafts[kind+"/"+id] {
 		return t
 	}
 	return id

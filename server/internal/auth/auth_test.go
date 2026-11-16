@@ -157,10 +157,10 @@ func TestOIDCRejects(t *testing.T) {
 		breakNonce     bool
 		tamper         func(*http.Request)
 	}{
-		{name: "other workspace domain", want: "only accounts of example.com", hd: "example.com", claims: map[string]any{"email": "x@evil.com", "hd": "evil.com"}},
+		{name: "other workspace domain", want: "Only accounts of example.com", hd: "example.com", claims: map[string]any{"email": "x@evil.com", "hd": "evil.com"}},
 		{name: "no email", want: "did not share a verified email", claims: map[string]any{"name": "Nobody"}},
 		{name: "unverified email", want: "did not share a verified email", claims: map[string]any{"email": "ceo@example.com", "email_verified": false}},
-		{name: "other email domain", want: "only accounts of example.com, example.org", domains: []string{"example.com", "example.org"}, claims: map[string]any{"email": "x@notexample.com"}},
+		{name: "other email domain", want: "Only accounts of example.com, example.org", domains: []string{"example.com", "example.org"}, claims: map[string]any{"email": "x@notexample.com"}},
 		{name: "wrong nonce", want: "nonce does not match", claims: map[string]any{"email": "a@b.c"}, breakNonce: true},
 		{name: "wrong state", want: "state does not match", claims: map[string]any{"email": "a@b.c"}, tamper: func(r *http.Request) {
 			q := r.URL.Query()

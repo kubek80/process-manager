@@ -21,6 +21,7 @@ var migrations embed.FS
 const (
 	lockMigrate = 7461001
 	LockPrepare = 7461002 // filling an empty database and regenerating the skills
+	LockSkills  = 7461003 // regenerating skills: one at a time
 )
 
 // WithLock runs fn while holding a database-wide lock, so that only one instance at a time

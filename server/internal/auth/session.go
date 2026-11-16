@@ -70,9 +70,18 @@ func (s *Sessions) cookie(name, value string, maxAge int) *http.Cookie {
 }
 
 // Issue signs the user in.
-func (s *Sessions) Issue(w http.ResponseWriter, u User) {
+func (s *Sessions) Issue(w http.ResponseWriter, u User) { s.IssueNotBefore(w, u, time.Time{}) }
+
+// IssueNotBefore signs the user in with a session that counts as issued at `earliest` or
+// later: after the moment of their last sign-out, so that a sign-in right after a sign-out is
+// not caught by it.
+func (s *Sessions) IssueNotBefore(w http.ResponseWriter, u User, earliest time.Time) {
 	now := s.Now()
-	payload, _ := json.Marshal(sessionPayload{User: u, Exp: now.Add(s.TTL).Unix(), Iat: now.UnixMilli()})
+	issued := now
+	if earliest.After(issued) {
+		issued = earliest
+	}
+	payload, _ := json.Marshal(sessionPayload{User: u, Exp: now.Add(s.TTL).Unix(), Iat: issued.UnixMilli()})
 	http.SetCookie(w, s.cookie(sessionCookie, s.Sign(payload), int(s.TTL.Seconds())))
 }
 

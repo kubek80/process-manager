@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kubek80/process-manager/server/internal/db"
 	"github.com/kubek80/process-manager/server/internal/docs"
 )
 
@@ -64,7 +65,7 @@ func NewContext(ctx context.Context, d *docs.Store) (Context, error) {
 
 // load reads the lists and every process and standard once.
 func load(ctx context.Context, d *docs.Store) (Context, []docs.Doc, error) {
-	c := Context{Titles: map[string]string{}, Inactive: map[string]bool{}}
+	c := Context{Titles: map[string]string{}, Inactive: map[string]bool{}, Drafts: map[string]bool{}}
 	var all []docs.Doc
 	var err error
 	if c.Lists, err = d.Lists(ctx); err != nil {
@@ -79,6 +80,7 @@ func load(ctx context.Context, d *docs.Store) (Context, []docs.Doc, error) {
 			if t, ok := docs.TargetOf(doc); ok {
 				c.Titles[kind+"/"+doc.ID] = t.Title
 				c.Inactive[kind+"/"+doc.ID] = t.Status != "" && t.Status != "active"
+				c.Drafts[kind+"/"+doc.ID] = t.Status == "draft"
 			}
 		}
 		all = append(all, list...)
@@ -171,29 +173,42 @@ func (s *Store) SyncSource(ctx context.Context, kind, id string, c Context) erro
 // its own, and those of every document that names it (its title and whether it has a skill
 // appear in their text).
 func (s *Store) SyncChanged(ctx context.Context, d *docs.Store, kind, id string) error {
-	c, all, err := load(ctx, d)
-	if err != nil {
-		return err
-	}
-	if err := s.SyncSource(ctx, kind, id, c); err != nil {
-		return err
-	}
-	for _, doc := range all {
-		if doc.Kind == kind && doc.ID == id {
-			continue
+	return s.oneAtATime(ctx, func() error {
+		c, all, err := load(ctx, d)
+		if err != nil {
+			return err
 		}
-		if docs.UsesOf(doc.Kind, doc.Body).Docs[kind+"/"+id] {
-			if err := s.SyncSource(ctx, doc.Kind, doc.ID, c); err != nil {
-				return err
+		if err := s.SyncSource(ctx, kind, id, c); err != nil {
+			return err
+		}
+		for _, doc := range all {
+			if doc.Kind == kind && doc.ID == id {
+				continue
+			}
+			if docs.UsesOf(doc.Kind, doc.Body).Docs[kind+"/"+id] {
+				if err := s.SyncSource(ctx, doc.Kind, doc.ID, c); err != nil {
+					return err
+				}
 			}
 		}
-	}
-	return nil
+		return nil
+	})
+}
+
+// oneAtATime runs a regeneration alone. Titles and names are read first and written into
+// several skills afterwards; two regenerations side by side could otherwise let the one that
+// read earlier overwrite what the other wrote from newer content.
+func (s *Store) oneAtATime(ctx context.Context, fn func() error) error {
+	return db.WithLock(ctx, s.Pool, db.LockSkills, fn)
 }
 
 // SyncAll regenerates everything: after an import, and when the lists change (names appear in
 // the generated text).
 func (s *Store) SyncAll(ctx context.Context, d *docs.Store) error {
+	return s.oneAtATime(ctx, func() error { return s.syncAll(ctx, d) })
+}
+
+func (s *Store) syncAll(ctx context.Context, d *docs.Store) error {
 	c, docsNow, err := load(ctx, d)
 	if err != nil {
 		return err

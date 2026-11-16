@@ -65,6 +65,35 @@ func NewOIDC(ctx context.Context, sessions *Sessions, opts OIDCOptions) (*OIDC, 
 	}, nil
 }
 
+// signInError is what went wrong during a sign-in. Its text goes to the log; only Public is
+// shown to the person (a provider's raw answer has no place in an address bar).
+type signInError struct {
+	Public string
+	cause  error
+}
+
+func (e *signInError) Error() string {
+	if e.cause == nil {
+		return e.Public
+	}
+	return e.Public + ": " + e.cause.Error()
+}
+func (e *signInError) Unwrap() error { return e.cause }
+
+func refused(public string) error { return &signInError{Public: public} }
+func failed(public, what string, cause error) error {
+	return &signInError{Public: public, cause: fmt.Errorf("%s: %w", what, cause)}
+}
+
+// PublicMessage is the part of a sign-in error that can be shown to the person.
+func PublicMessage(err error) string {
+	var e *signInError
+	if errors.As(err, &e) {
+		return e.Public
+	}
+	return "The sign-in did not work. Try again; if it keeps failing, tell whoever runs this portal."
+}
+
 type flowState struct {
 	State    string `json:"s"`
 	Nonce    string `json:"n"`
@@ -95,35 +124,35 @@ func (o *OIDC) Login(w http.ResponseWriter, r *http.Request) {
 func (o *OIDC) Callback(w http.ResponseWriter, r *http.Request) (User, error) {
 	c, err := r.Cookie(flowCookie)
 	if err != nil {
-		return User{}, errors.New("sign-in was not started in this browser")
+		return User{}, refused("The sign-in was not started in this browser. Start again.")
 	}
 	http.SetCookie(w, o.sessions.cookie(flowCookie, "", -1))
 	payload, ok := o.sessions.Verify(c.Value)
 	var f flowState
 	if !ok || json.Unmarshal(payload, &f) != nil {
-		return User{}, errors.New("sign-in state is invalid")
+		return User{}, refused("The sign-in state is invalid. Start again.")
 	}
 	if msg := r.URL.Query().Get("error"); msg != "" {
-		return User{}, fmt.Errorf("the sign-in provider refused: %s", msg)
+		return User{}, failed("The sign-in provider did not let you in.", "the sign-in provider refused", errors.New(msg))
 	}
 	if r.URL.Query().Get("state") != f.State || f.State == "" {
-		return User{}, errors.New("sign-in state does not match")
+		return User{}, refused("The sign-in state does not match. Start again.")
 	}
 	ctx := oidc.ClientContext(r.Context(), o.client)
 	token, err := o.oauth.Exchange(ctx, r.URL.Query().Get("code"), oauth2.VerifierOption(f.Verifier))
 	if err != nil {
-		return User{}, fmt.Errorf("exchange sign-in code: %w", err)
+		return User{}, failed("The sign-in could not be completed. Try again.", "exchange sign-in code", err)
 	}
 	raw, _ := token.Extra("id_token").(string)
 	if raw == "" {
-		return User{}, errors.New("the sign-in provider returned no identity token")
+		return User{}, failed("The sign-in could not be completed. Try again.", "the sign-in provider returned no identity token", errors.New("id_token missing"))
 	}
 	idToken, err := o.verifier.Verify(ctx, raw)
 	if err != nil {
-		return User{}, fmt.Errorf("verify identity token: %w", err)
+		return User{}, failed("The sign-in could not be completed. Try again.", "verify identity token", err)
 	}
 	if idToken.Nonce != f.Nonce {
-		return User{}, errors.New("identity token nonce does not match")
+		return User{}, failed("The sign-in could not be completed. Try again.", "identity token nonce does not match", errors.New("nonce"))
 	}
 	var claims struct {
 		Email             string `json:"email"`
@@ -137,7 +166,7 @@ func (o *OIDC) Callback(w http.ResponseWriter, r *http.Request) (User, error) {
 		return User{}, err
 	}
 	if o.opts.HostedDomain != "" && !strings.EqualFold(claims.HostedDomain, o.opts.HostedDomain) {
-		return User{}, fmt.Errorf("only accounts of %s may sign in", o.opts.HostedDomain)
+		return User{}, refused(fmt.Sprintf("Only accounts of %s may sign in.", o.opts.HostedDomain))
 	}
 	// an address the provider says it has not verified proves nothing about who this is
 	if v := claims.EmailVerified; v == false || v == "false" {
@@ -145,7 +174,8 @@ func (o *OIDC) Callback(w http.ResponseWriter, r *http.Request) (User, error) {
 	}
 	candidates := []string{claims.Email, claims.PreferredUsername, claims.UPN}
 	if o.opts.PreferSignInName {
-		candidates = []string{claims.PreferredUsername, claims.UPN, claims.Email}
+		// never the email claim: people can edit it in some tenants and it is not verified
+		candidates = []string{claims.PreferredUsername, claims.UPN}
 	}
 	email := ""
 	for _, c := range candidates {
@@ -154,7 +184,7 @@ func (o *OIDC) Callback(w http.ResponseWriter, r *http.Request) (User, error) {
 		}
 	}
 	if email == "" {
-		return User{}, errors.New("the sign-in provider did not share a verified email address")
+		return User{}, refused("The sign-in provider did not share a verified email address.")
 	}
 	email = strings.ToLower(email)
 	if len(o.opts.EmailDomains) > 0 {
@@ -163,7 +193,7 @@ func (o *OIDC) Callback(w http.ResponseWriter, r *http.Request) (User, error) {
 			allowed = allowed || strings.HasSuffix(email, "@"+strings.ToLower(d))
 		}
 		if !allowed {
-			return User{}, fmt.Errorf("only accounts of %s may sign in", strings.Join(o.opts.EmailDomains, ", "))
+			return User{}, refused(fmt.Sprintf("Only accounts of %s may sign in.", strings.Join(o.opts.EmailDomains, ", ")))
 		}
 	}
 	name := claims.Name

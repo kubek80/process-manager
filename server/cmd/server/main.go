@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -123,12 +124,24 @@ func run(log *slog.Logger, o options) error {
 		}
 		return set, err
 	}
+	// Imported files get the same checks as a save in the portal: the format, and that the
+	// parts fit together. The lists are imported first, so tiers and the like are known.
 	st.validate = func(kind string, body []byte) error {
 		set, err := loadSchemas()
 		if err != nil {
 			return err
 		}
-		return set.Validate(kind, body)
+		if err := set.Validate(kind, body); err != nil {
+			return err
+		}
+		lists, err := st.docs.Lists(ctx)
+		if err == nil && kind == docs.Catalog {
+			err = json.Unmarshal(body, &lists)
+		}
+		if err != nil {
+			return err
+		}
+		return docs.Check(kind, body, lists)
 	}
 
 	// one-off commands

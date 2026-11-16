@@ -25,6 +25,9 @@ var noun = map[string]string{docs.Process: "process", docs.Standard: "standard",
 // VersionHeader carries the version of the lists, which are served as one bare document.
 const VersionHeader = "X-Document-Version"
 
+// syncTimeout bounds one regeneration of skills after a save.
+const syncTimeout = 2 * time.Minute
+
 // errDenied is returned from inside a save when the stored document belongs to someone the
 // caller may not edit for.
 var errDenied = errors.New("not allowed")
@@ -144,6 +147,10 @@ func baseOf(r *http.Request) (*int, bool) {
 // syncSkills regenerates what depends on a changed document. A failure is logged: the save
 // itself has already happened and the next save or restart regenerates again.
 func (a *api) syncSkills(ctx context.Context, kind, id string) {
+	// The save has happened. Whether the person who made it is still connected, or how long
+	// their request has been running, must not decide whether the skills follow.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), syncTimeout)
+	defer cancel()
 	var err error
 	if kind == docs.Catalog {
 		err = a.Skills.SyncAll(ctx, a.Docs) // names of teams and tools appear in the text
@@ -157,7 +164,7 @@ func (a *api) syncSkills(ctx context.Context, kind, id string) {
 
 // stillUsed refuses to drop entries of the lists that processes, standards or roles still
 // name: they would be left pointing at nothing.
-func (a *api) stillUsed(ctx context.Context, body []byte) error {
+func (a *api) stillUsed(ctx context.Context, s session, body []byte) error {
 	old, err := a.Docs.Lists(ctx)
 	if err != nil {
 		return err
@@ -170,7 +177,11 @@ func (a *api) stillUsed(ctx context.Context, body []byte) error {
 	if len(removed) == 0 {
 		return nil
 	}
+	// Who uses an entry is said in a way that gives nothing away: drafts the caller cannot see
+	// are only counted, and who holds a role is for admins.
 	usedBy := map[string][]string{}
+	hidden := map[string]int{}
+	roles := map[string]map[string]bool{}
 	for _, kind := range []string{docs.Process, docs.Standard} {
 		list, err := a.Docs.List(ctx, kind)
 		if err != nil {
@@ -184,8 +195,12 @@ func (a *api) stillUsed(ctx context.Context, body []byte) error {
 			}
 			for _, entry := range removed {
 				key, id, _ := strings.Cut(entry, "/")
-				if u.Lists[key][id] {
+				switch {
+				case !u.Lists[key][id]:
+				case canSee(s, kind, d.Body):
 					usedBy[entry] = append(usedBy[entry], "“"+title+"”")
+				default:
+					hidden[entry]++
 				}
 			}
 		}
@@ -196,23 +211,41 @@ func (a *api) stillUsed(ctx context.Context, body []byte) error {
 	}
 	for _, as := range assignments {
 		if entry := "teams/" + as.Scope; as.Scope != "" && contains(removed, entry) {
-			usedBy[entry] = append(usedBy[entry], "a role of "+as.Email)
+			if roles[entry] == nil {
+				roles[entry] = map[string]bool{}
+			}
+			roles[entry][as.Email] = true
 		}
 	}
 	var problems []string
 	for _, entry := range removed {
 		users := usedBy[entry]
+		sort.Strings(users)
+		if len(users) > 3 {
+			users = append(users[:3], fmt.Sprintf("%d more", len(users)-3))
+		}
+		if n := hidden[entry]; n == 1 {
+			users = append(users, "a draft you cannot see")
+		} else if n > 1 {
+			users = append(users, fmt.Sprintf("%d drafts you cannot see", n))
+		}
+		if people := roles[entry]; len(people) > 0 {
+			if s.Admin {
+				names := make([]string, 0, len(people))
+				for email := range people {
+					names = append(names, email)
+				}
+				sort.Strings(names)
+				users = append(users, "the roles of "+strings.Join(names, ", "))
+			} else {
+				users = append(users, "roles that are limited to it (an admin can see whose)")
+			}
+		}
 		if len(users) == 0 {
 			continue
 		}
 		_, id, _ := strings.Cut(entry, "/")
-		sort.Strings(users)
-		more := ""
-		if len(users) > 3 {
-			more = fmt.Sprintf(" and %d more", len(users)-3)
-			users = users[:3]
-		}
-		problems = append(problems, fmt.Sprintf("“%s” is still used by %s%s", id, strings.Join(users, ", "), more))
+		problems = append(problems, fmt.Sprintf("“%s” is still used by %s", id, strings.Join(users, ", ")))
 	}
 	if len(problems) == 0 {
 		return nil
@@ -263,7 +296,7 @@ func (a *api) putDoc(kind string) http.HandlerFunc {
 			err = docs.Check(kind, body, lists)
 		}
 		if err == nil && kind == docs.Catalog {
-			err = a.stillUsed(r.Context(), body)
+			err = a.stillUsed(r.Context(), s, body)
 		}
 		if err != nil {
 			a.fail(w, r, err)
@@ -318,10 +351,13 @@ func (a *api) deleteDoc(kind string) http.HandlerFunc {
 		err := a.Docs.Remove(r.Context(), docs.Removal{
 			Kind: kind, ID: id, By: s.Email, Base: base,
 			Check: func(current *docs.Doc) error {
-				if !s.CanEdit(kind, ownerOf(current.Body)) {
-					return errDenied
+				switch {
+				case s.CanEdit(kind, ownerOf(current.Body)):
+					return nil
+				case !canSee(s, kind, current.Body):
+					return docs.ErrNotFound // a draft somebody cannot see does not exist for them
 				}
-				return nil
+				return errDenied
 			},
 			After: func(ctx context.Context, tx pgx.Tx) error {
 				if err := feedback.DeleteByTargetIn(ctx, tx, kind, id); err != nil {
@@ -381,11 +417,20 @@ func (a *api) history(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	if len(versions) == 0 {
+	// versions that were drafts stay with the people who work on the document: number, note
+	// and author included
+	s := who(r)
+	shown := versions[:0]
+	for _, v := range versions {
+		if v.Deleted || v.Status != "draft" || s.CanManageFeedback(kind, v.Owner) {
+			shown = append(shown, v)
+		}
+	}
+	if len(shown) == 0 {
 		writeError(w, 404, "That does not exist.")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"versions": versions})
+	writeJSON(w, 200, map[string]any{"versions": shown})
 }
 
 func (a *api) historyVersion(w http.ResponseWriter, r *http.Request) {

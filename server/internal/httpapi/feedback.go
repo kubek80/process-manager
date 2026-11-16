@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -155,6 +156,9 @@ func (a *api) createFeedback(w http.ResponseWriter, r *http.Request) {
 	case !feedback.ValidKind(in.Kind):
 		writeError(w, 400, "Choose what kind of feedback this is: "+strings.Join(feedback.Kinds, ", ")+".")
 		return
+	case !docs.Storable(in.Text):
+		writeError(w, 400, "The text contains characters that cannot be stored.")
+		return
 	case utf8.RuneCountInString(in.Text) < 3:
 		writeError(w, 400, "Say in a sentence what happened.")
 		return
@@ -174,6 +178,10 @@ func (a *api) createFeedback(w http.ResponseWriter, r *http.Request) {
 		TargetKind: in.TargetKind, TargetID: in.TargetID, ItemID: in.ItemID, Kind: in.Kind, Text: in.Text,
 		AuthorEmail: s.Email, AuthorName: s.Name, ItemHash: t.Items[in.ItemID],
 	})
+	if errors.Is(err, feedback.ErrNoTarget) { // deleted between the check above and the insert
+		writeError(w, 400, "That "+what+" does not exist.")
+		return
+	}
 	if err != nil {
 		a.fail(w, r, err)
 		return
@@ -207,6 +215,9 @@ func (a *api) alsoHit(on bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		s := who(r)
 		it, err := a.Feedback.Get(r.Context(), r.PathValue("id"))
+		if err == nil && a.viewer(r).hidden(it.TargetKind, it.TargetID) {
+			err = feedback.ErrNotFound // feedback on a draft somebody cannot see does not exist for them
+		}
 		if err == nil && strings.EqualFold(it.AuthorEmail, s.Email) {
 			writeError(w, 400, "You reported this yourself.")
 			return

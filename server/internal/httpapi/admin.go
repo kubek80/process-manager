@@ -43,6 +43,10 @@ func (a *api) grantAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
+	if !docs.Storable(in.Email) {
+		writeError(w, 400, "That is not an email address.")
+		return
+	}
 	// a role limited to a team must name a team that exists
 	if in.Scope != "" {
 		lists, err := a.Docs.Lists(r.Context())
@@ -80,8 +84,11 @@ func (a *api) revokeAccess(w http.ResponseWriter, r *http.Request) {
 func (a *api) listAudit(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	before, _ := strconv.ParseInt(r.URL.Query().Get("before"), 10, 64)
-	if limit <= 0 || limit > 500 {
+	if limit <= 0 {
 		limit = 100
+	}
+	if limit > 499 { // the log returns at most 500 at a time, and one is used to look ahead
+		limit = 499
 	}
 	// one more than asked for tells whether there is an older page
 	entries, err := a.Audit.Before(r.Context(), before, limit+1)
@@ -206,6 +213,10 @@ func (a *api) putSkillExtra(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(in.Extra) > 8000 {
 		writeError(w, 400, "Keep the extra guidance under 8000 characters.")
+		return
+	}
+	if !docs.Storable(in.Extra) {
+		writeError(w, 400, "The text contains characters that cannot be stored.")
 		return
 	}
 	sk, err := a.Skills.Get(r.Context(), r.PathValue("id"))

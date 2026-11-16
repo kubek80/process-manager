@@ -12,7 +12,28 @@ import (
 
 var ctx = context.Background()
 
-func newStore(t *testing.T) *feedback.Store { return &feedback.Store{Pool: dbtest.NewPool(t)} }
+// newStore gives a store on a database that holds the things the tests write feedback about.
+func newStore(t *testing.T) *feedback.Store {
+	pool := dbtest.NewPool(t)
+	for _, target := range [][2]string{{"process", "request-gcp-project"}, {"process", "request-repository"}, {"standard", "request-gcp-project"}} {
+		if _, err := pool.Exec(ctx, `insert into documents (kind, id, version, body, updated_by) values ($1, $2, 1, '{}', 'test')`, target[0], target[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return &feedback.Store{Pool: pool}
+}
+
+func TestFeedbackNeedsSomethingThatExists(t *testing.T) {
+	s := newStore(t)
+	gone := sample("x")
+	gone.TargetID = "deleted-a-moment-ago"
+	if _, err := s.Create(ctx, gone); !errors.Is(err, feedback.ErrNoTarget) {
+		t.Fatalf("got %v", err)
+	}
+	if n, _ := s.Count(ctx); n != 0 {
+		t.Fatalf("%d items stored", n)
+	}
+}
 
 func sample(step string) feedback.New {
 	return feedback.New{TargetKind: "process", TargetID: "request-gcp-project", ItemID: step, Kind: "broken", Text: "The form was renamed.",

@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -61,7 +62,15 @@ type Version struct {
 	SavedBy string    `json:"savedBy"`
 	Note    string    `json:"note"` // what changed, in the words of whoever saved it
 	Deleted bool      `json:"deleted"`
+	// Owner and Status of the document as it was in this version: who may see it follows from
+	// them (a version that was a draft stays with the people who work on the document).
+	Owner  string `json:"-"`
+	Status string `json:"-"`
 }
+
+// Storable reports whether text can be stored: the database refuses a NUL character and
+// anything that is not valid UTF-8.
+func Storable(text string) bool { return utf8.ValidString(text) && !strings.ContainsRune(text, 0) }
 
 // Conflict is returned when a change was made from a version that is no longer the current
 // one: somebody else saved (or deleted) in between. Current is the zero Doc when the document
@@ -205,9 +214,15 @@ func (s *Store) Save(ctx context.Context, c Change) (doc Doc, changed bool, err 
 	if kind != Catalog && head.ID != id {
 		return doc, false, fmt.Errorf("%w: the id in the document (%q) must match the address (%q)", ErrInvalid, head.ID, id)
 	}
+	if !utf8.Valid(c.Body) {
+		return doc, false, fmt.Errorf("%w: the document contains characters that are not valid text", ErrInvalid)
+	}
 	pretty, err := Pretty(c.Body)
 	if err != nil {
 		return doc, false, err
+	}
+	if !Storable(c.Note) {
+		return doc, false, fmt.Errorf("%w: the note contains characters that are not valid text", ErrInvalid)
 	}
 	note := strings.TrimSpace(c.Note)
 	if r := []rune(note); len(r) > MaxNote {
@@ -302,7 +317,8 @@ func (s *Store) Remove(ctx context.Context, r Removal) error {
 
 // History lists the versions of a document, newest first.
 func (s *Store) History(ctx context.Context, kind, id string) ([]Version, error) {
-	rows, err := s.Pool.Query(ctx, `select version, saved_at, saved_by, note, body is null from document_versions where kind = $1 and id = $2 order by version desc`, kind, id)
+	rows, err := s.Pool.Query(ctx, `select version, saved_at, saved_by, note, body is null, coalesce(body->>'owner', ''), coalesce(body->>'status', '')
+		from document_versions where kind = $1 and id = $2 order by version desc`, kind, id)
 	if err != nil {
 		return nil, err
 	}
@@ -310,7 +326,7 @@ func (s *Store) History(ctx context.Context, kind, id string) ([]Version, error)
 	out := []Version{}
 	for rows.Next() {
 		var v Version
-		if err := rows.Scan(&v.Version, &v.SavedAt, &v.SavedBy, &v.Note, &v.Deleted); err != nil {
+		if err := rows.Scan(&v.Version, &v.SavedAt, &v.SavedBy, &v.Note, &v.Deleted, &v.Owner, &v.Status); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
