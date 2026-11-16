@@ -269,8 +269,9 @@ test("mark a standard as reviewed, look at its history, edit its JSON", async ({
   await expect(page.locator(".banner", { hasText: "Review overdue" })).toHaveCount(0);
   await expect.poll(async () => (await readStandard(page, LOGGING))!.review).toEqual({ intervalMonths: 12, lastReviewedAt: "2027-10-01", reviewedBy: "Riley Security" });
 
-  await page.getByRole("button", { name: "History" }).click();
+  await page.getByRole("button", { name: /^Version \d+$/ }).click();
   await expect(page.locator(".history li").first()).toContainText("riley@example.com");
+  await expect(page.locator(".history li").first()).toContainText("Reviewed: confirmed as still correct");
   await expect(page.locator(".history li").last()).toContainText("import");
   await page.locator(".modal-foot").getByRole("button", { name: "Close" }).click();
 

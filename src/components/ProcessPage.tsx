@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Braces, CalendarCheck, Check, ChevronDown, ChevronRight, Flag, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Settings2, Sparkles, TriangleAlert, Users, Workflow, Bot, History, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Braces, CalendarCheck, Check, ChevronDown, ChevronRight, Flag, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Settings2, Sparkles, TriangleAlert, Users, Workflow, Bot, ShieldCheck } from "lucide-react";
 import type { DocMeta, Feedback, Process, Step } from "../types";
 import { addStepAfter, deleteStep, insertStep, moveStep, prerequisiteKeys, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
 import { isDrawableProcess, validateProcess } from "../lib/validate";
@@ -136,7 +136,6 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
                 title="Confirm that this process is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
               <button className="btn accent-soft" onClick={() => setDialog("ai")} disabled={!renderable}><Sparkles size={16} />Change with AI</button>
               <button className="btn" onClick={() => setDialog("settings")} disabled={!renderable}><Settings2 size={16} />Details</button>
-              <button className="btn" onClick={() => setDialog("history")}><History size={16} />History</button>
               <button className="btn" onClick={() => addAfter(selected)} disabled={!renderable}><Plus size={16} />Add step</button>
             </>}
             <button className="btn report-btn" onClick={() => go({ page: "process", id: process.id, tab: "feedback" })} disabled={!renderable}><Flag size={16} />Report a problem</button>

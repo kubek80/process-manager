@@ -188,7 +188,7 @@ test("every save is a version that can be restored", async ({ page }) => {
   await page.locator(".modal").getByRole("button", { name: "Done" }).click();
   await save(page);
 
-  await page.getByRole("button", { name: "History" }).click();
+  await page.getByRole("button", { name: /^Version \d+$/ }).click();
   const rows = page.locator(".history li");
   await expect(rows.first()).toContainText("current");
   await expect(rows.first()).toContainText("alex@example.com");

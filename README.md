@@ -61,6 +61,8 @@ React + Vite frontend; Go server; Postgres. Everything people change lives in th
 
 ![A standard](docs/standard.png)
 
+![Versions of a process](docs/versions.png)
+
 The in-app **Guide** (top bar) is the main documentation and describes all of this, with flow charts drawn by the app's own map.
 
 ![Guide](docs/guide.png)

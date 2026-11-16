@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArrowDown, ArrowLeft, ArrowUp, ArrowUpRight, Bot, Braces, CalendarCheck, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, Eye,
-  Flag, History, ListChecks, Pencil, Plus, Settings2, ShieldCheck, Sparkles, Trash2, TriangleAlert, Workflow, X,
+  Flag, ListChecks, Pencil, Plus, Settings2, ShieldCheck, Sparkles, Trash2, TriangleAlert, Workflow, X,
 } from "lucide-react";
 import type { DocMeta, Feedback, Level, Process, Requirement, Severity, Standard, VerificationMethod } from "../types";
 import { teamName, useCatalog } from "../lib/catalog";
@@ -402,7 +402,6 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
                 title="Confirm that this standard is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
               <button className="btn accent-soft" onClick={() => setDialog("ai")} disabled={!renderable}><Sparkles size={16} />Change with AI</button>
               <button className="btn" onClick={() => setDialog("settings")} disabled={!renderable}><Settings2 size={16} />Details</button>
-              <button className="btn" onClick={() => setDialog("history")}><History size={16} />History</button>
               <button className="btn" onClick={add} disabled={!renderable}><Plus size={16} />Add requirement</button>
             </>}
             <button className="btn report-btn" onClick={() => go({ page: "standard", id: standard.id, tab: "feedback" })} disabled={!renderable}><Flag size={16} />Report a problem</button>
