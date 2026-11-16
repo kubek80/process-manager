@@ -109,7 +109,8 @@ test("leaving with unsaved changes asks first, whichever way out is taken", asyn
   // moving around inside the process keeps the changes and does not ask
   await page.getByRole("tab", { name: "Checklist" }).click();
   await expect(mine).toBeVisible();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Leave without saving?" })).toHaveCount(0);
+  await expect(page.locator(".drawer")).toBeVisible(); // the open step stays open across the tabs
 
   for (const leave of [
     () => page.getByRole("link", { name: "Guide" }).click(),
@@ -174,11 +175,11 @@ test("a link can point at one step or one requirement", async ({ page }) => {
   await signIn(page, SAM);
   await open(page, "/p/request-gcp-project/flow/raise-request");
   await expect(page.locator(".drawer h3")).toHaveText("Raise the 'New GCP project' request");
-  // closing the step is part of the address too, so Back opens it again
+  // closing it takes it out of the address again; opening another one puts that one in
   await page.locator(".drawer").getByRole("button", { name: "Close" }).click();
   await expect(page).toHaveURL(/#\/p\/request-gcp-project\/flow$/);
-  await page.goBack();
-  await expect(page.locator(".drawer h3")).toHaveText("Raise the 'New GCP project' request");
+  await page.locator(".block-main").first().click();
+  await expect(page).toHaveURL(/#\/p\/request-gcp-project\/flow\/decide-project-details$/);
 
   await open(page, "/p/request-gcp-project/list/verify-access");
   await expect(page.locator("#step-verify-access")).toBeInViewport();
@@ -312,6 +313,7 @@ test("what others change shows up when coming back to the tab; unsaved changes a
 
   // a page without changes simply follows
   await open(page, "/p/refresh-demo/flow");
+  await expect(page.locator("h1")).toHaveText("Refresh demo");
   await otherPersonRenames(other, DANA, "refresh-demo", "Renamed while Alex was away");
   await comeBackLater(page);
   await expect(page.locator("h1")).toHaveText("Renamed while Alex was away");
@@ -361,6 +363,7 @@ test("deleting is refused when somebody else changed it since it was opened", as
   await signIn(page, ALEX, { editor: true });
   await copyOf(page, "stale-delete-demo", "Stale delete demo");
   await open(page, "/p/stale-delete-demo/flow");
+  await expect(page.locator("h1")).toHaveText("Stale delete demo"); // Alex has it open before Dana changes it
   const other = await playwright.request.newContext({ baseURL: "http://127.0.0.1:8090" });
   await otherPersonRenames(other, DANA, "stale-delete-demo", "Dana still needs this");
 
@@ -369,8 +372,6 @@ test("deleting is refused when somebody else changed it since it was opened", as
   await answer(page, "Delete this process?", "Delete process");
   await expect(page.locator(".toast", { hasText: "could not be deleted" })).toContainText("changed this process in the meantime");
   expect((await readProcess(page, "stale-delete-demo"))!.title).toBe("Dana still needs this");
-  // with unsaved changes of one's own, deleting does not ask about them afterwards
-  await page.locator(".modal").getByRole("button", { name: "Done" }).click().catch(() => {});
   await other.dispose();
 });
 
