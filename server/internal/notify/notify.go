@@ -9,12 +9,15 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 )
 
 // Event is one thing worth telling someone.
 type Event struct {
-	Type         string `json:"type"` // "feedback.created" or "feedback.resolved"
+	Type         string `json:"type"`       // "feedback.created" or "feedback.resolved"
+	TargetKind   string `json:"targetKind"` // "process" or "standard"; the fields below keep their names for both
 	ProcessID    string `json:"processId"`
 	ProcessTitle string `json:"processTitle"`
 	StepTitle    string `json:"stepTitle,omitempty"`
@@ -56,35 +59,69 @@ func (l Log) Notify(_ context.Context, e Event) {
 }
 
 // Webhook posts {"text": ...} plus the event fields to a URL. Slack incoming webhooks accept
-// this as is; other chat tools need a small relay.
+// this as is; other chat tools need a small relay. Sending happens in the background, so a
+// slow chat tool never slows down the person who gives feedback.
 type Webhook struct {
 	URL    string
 	Client *http.Client
 	Logger *slog.Logger
+	// Backoff is how long to wait before each further attempt after a failure.
+	Backoff []time.Duration
+
+	pending sync.WaitGroup
 }
 
-func NewWebhook(url string, logger *slog.Logger) Webhook {
-	return Webhook{URL: url, Client: &http.Client{Timeout: 5 * time.Second}, Logger: logger}
+func NewWebhook(url string, logger *slog.Logger) *Webhook {
+	return &Webhook{URL: url, Client: &http.Client{Timeout: 5 * time.Second}, Logger: logger, Backoff: []time.Duration{time.Second, 5 * time.Second}}
 }
 
-func (w Webhook) Notify(ctx context.Context, e Event) {
+// escape keeps text that people typed from being read as chat markup: in Slack "<!channel>"
+// would alert everyone.
+var escape = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+
+func (w *Webhook) Notify(ctx context.Context, e Event) {
 	body, _ := json.Marshal(struct {
 		Text string `json:"text"`
 		Event
-	}{e.Message(), e})
+	}{escape.Replace(e.Message()), e})
+	// the request that caused the event may be over before this is delivered
+	ctx = context.WithoutCancel(ctx)
+	w.pending.Add(1)
+	go func() {
+		defer w.pending.Done()
+		var last string
+		for attempt := 0; ; attempt++ {
+			retry, problem := w.post(ctx, body)
+			if problem == "" {
+				return
+			}
+			last = problem
+			if !retry || attempt >= len(w.Backoff) {
+				break
+			}
+			time.Sleep(w.Backoff[attempt])
+		}
+		w.Logger.Error(last, "type", e.Type, "to", e.To)
+	}()
+}
+
+// post sends once. problem is empty on success; retry says whether trying again can help.
+func (w *Webhook) post(ctx context.Context, body []byte) (retry bool, problem string) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.URL, bytes.NewReader(body))
 	if err != nil {
-		w.Logger.Error("notification not sent", "error", err)
-		return
+		return false, "notification not sent: " + err.Error()
 	}
 	req.Header.Set("Content-Type", "application/json")
 	res, err := w.Client.Do(req)
 	if err != nil {
-		w.Logger.Error("notification not sent", "error", err)
-		return
+		return true, "notification not sent: " + err.Error()
 	}
 	res.Body.Close()
 	if res.StatusCode >= 300 {
-		w.Logger.Error("notification refused", "status", res.StatusCode)
+		return res.StatusCode >= 500 || res.StatusCode == http.StatusTooManyRequests, fmt.Sprintf("notification refused: status %d", res.StatusCode)
 	}
+	return false, ""
 }
+
+// Wait returns when everything handed to Notify has been delivered or given up on.
+func (w *Webhook) Wait() { w.pending.Wait() }

@@ -46,8 +46,10 @@ jobs:
         run: |
           test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
           go vet ./...
-      - name: Go tests
-        run: npm run test:server
+      - name: Go tests (with the race detector)
+        run: npm run test:server -- -race ./...
+      - name: Known vulnerabilities in npm dependencies
+        run: npm audit --omit=dev --audit-level=high
       - name: Install the browser
         run: npx playwright install --with-deps chromium
       - name: End-to-end tests

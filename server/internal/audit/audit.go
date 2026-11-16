@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -21,18 +22,34 @@ type Entry struct {
 
 type Log struct{ Pool *pgxpool.Pool }
 
+// Execer is a pool or a transaction.
+type Execer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 // Add records a change.
 func (l *Log) Add(ctx context.Context, email, name, action, target, detail string) error {
-	_, err := l.Pool.Exec(ctx, `insert into audit_log (actor_email, actor_name, action, target, detail) values ($1, $2, $3, $4, $5)`, email, name, action, target, detail)
+	return AddIn(ctx, l.Pool, email, name, action, target, detail)
+}
+
+// AddIn records a change through q, so that the entry can be part of the transaction that
+// makes the change: either both happen or neither.
+func AddIn(ctx context.Context, q Execer, email, name, action, target, detail string) error {
+	_, err := q.Exec(ctx, `insert into audit_log (actor_email, actor_name, action, target, detail) values ($1, $2, $3, $4, $5)`, email, name, action, target, detail)
 	return err
 }
 
 // Recent returns the newest entries first.
-func (l *Log) Recent(ctx context.Context, limit int) ([]Entry, error) {
+func (l *Log) Recent(ctx context.Context, limit int) ([]Entry, error) { return l.Before(ctx, 0, limit) }
+
+// Before returns the entries older than the one with the given id, newest first; 0 starts at
+// the newest. Together with the id of the last entry of a page this walks the whole log.
+func (l *Log) Before(ctx context.Context, before int64, limit int) ([]Entry, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	rows, err := l.Pool.Query(ctx, `select id, at, actor_email, actor_name, action, target, detail from audit_log order by id desc limit $1`, limit)
+	rows, err := l.Pool.Query(ctx, `select id, at, actor_email, actor_name, action, target, detail from audit_log
+		where ($1 = 0 or id < $1) order by id desc limit $2`, before, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -31,6 +31,8 @@ var (
 	ErrInvalid = errors.New("invalid")
 	// ErrLastAdmin protects against locking everyone out.
 	ErrLastAdmin = errors.New("this is the last admin")
+	// ErrNotGiven is returned when a role is taken away that the person does not have.
+	ErrNotGiven = errors.New("that role was not given")
 
 	emailPattern = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 	scopePattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -217,7 +219,10 @@ func (s *Store) Revoke(ctx context.Context, email, role, scope string) error {
 			return ErrLastAdmin
 		}
 	}
-	_, err := s.Pool.Exec(ctx, `delete from role_assignments where email = $1 and role = $2 and scope = $3`, email, role, scope)
+	tag, err := s.Pool.Exec(ctx, `delete from role_assignments where email = $1 and role = $2 and scope = $3`, email, role, scope)
+	if err == nil && tag.RowsAffected() == 0 {
+		return ErrNotGiven
+	}
 	return err
 }
 

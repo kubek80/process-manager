@@ -22,7 +22,7 @@ func TestLoadDev(t *testing.T) {
 }
 
 func TestLoadProviders(t *testing.T) {
-	secret := strings.Repeat("s", 32)
+	secret := "kJ8v2Qx7Lm4Zp9Wn3Rt6Yb1Hc5Fd0GsAeUi"
 	base := map[string]string{"DATABASE_URL": "postgres://x", "PM_OIDC_CLIENT_ID": "id", "PM_OIDC_CLIENT_SECRET": "sec", "PM_SESSION_SECRET": secret, "PM_BASE_URL": "https://pm.example.com/", "PM_ADMINS": " Root@Example.com , second@example.com,"}
 	with := func(extra map[string]string) map[string]string {
 		m := map[string]string{}
@@ -51,20 +51,51 @@ func TestLoadProviders(t *testing.T) {
 		t.Fatalf("google: %v %+v", err, c)
 	}
 
-	c, err = Load(env(with(map[string]string{"PM_AUTH": "google", "PM_OIDC_ISSUER": "http://fake"})))
-	if err != nil || c.Issuer != "http://fake" {
-		t.Fatalf("issuer override: %v %q", err, c.Issuer)
+	c, err = Load(env(with(map[string]string{"PM_AUTH": "google", "PM_OIDC_ISSUER": "http://fake", "PM_ALLOWED_EMAIL_DOMAINS": " Example.com, @example.org ,"})))
+	if err != nil || c.Issuer != "http://fake" || len(c.EmailDomains) != 2 || c.EmailDomains[0] != "example.com" || c.EmailDomains[1] != "example.org" {
+		t.Fatalf("issuer override and email domains: %v %+v", err, c)
+	}
+
+	// local trial of a real provider
+	c, err = Load(env(with(map[string]string{"PM_AUTH": "entra", "PM_ENTRA_TENANT": "contoso", "PM_BASE_URL": "http://localhost:5173"})))
+	if err != nil || c.Secure() {
+		t.Fatalf("http on localhost: %v", err)
+	}
+}
+
+func TestDevSignInOnlyOnThisMachine(t *testing.T) {
+	base := map[string]string{"PM_AUTH": "dev", "DATABASE_URL": "postgres://x"}
+	for addr, ok := range map[string]bool{"127.0.0.1:8080": true, "localhost:9000": true, "[::1]:8080": true, "0.0.0.0:8080": false, ":8080": false, "10.1.2.3:80": false} {
+		base["PM_ADDR"] = addr
+		_, err := Load(env(base))
+		if ok != (err == nil) {
+			t.Errorf("%s: %v", addr, err)
+		}
+		if err != nil && !strings.Contains(err.Error(), "only runs on this machine") {
+			t.Errorf("%s: unhelpful message: %v", addr, err)
+		}
+	}
+	base["PM_DEV_AUTH_ON_NETWORK"] = "i-understand"
+	if _, err := Load(env(base)); err != nil {
+		t.Errorf("with the explicit switch: %v", err)
 	}
 }
 
 func TestLoadRejects(t *testing.T) {
+	const good = "kJ8v2Qx7Lm4Zp9Wn3Rt6Yb1Hc5Fd0GsAeUi"
 	cases := map[string]map[string]string{
 		"PM_AUTH is required":            {"DATABASE_URL": "x"},
 		"DATABASE_URL is required":       {"PM_AUTH": "dev"},
 		"not supported":                  {"PM_AUTH": "ldap", "DATABASE_URL": "x"},
-		"PM_ENTRA_TENANT is required":    {"PM_AUTH": "entra", "DATABASE_URL": "x", "PM_OIDC_CLIENT_ID": "a", "PM_OIDC_CLIENT_SECRET": "b", "PM_SESSION_SECRET": strings.Repeat("s", 32)},
-		"PM_ADMINS is required":          {"PM_AUTH": "google", "DATABASE_URL": "x", "PM_OIDC_CLIENT_ID": "a", "PM_OIDC_CLIENT_SECRET": "b", "PM_SESSION_SECRET": strings.Repeat("s", 32)},
-		"PM_OIDC_CLIENT_ID":              {"PM_AUTH": "google", "DATABASE_URL": "x", "PM_SESSION_SECRET": strings.Repeat("s", 32)},
+		"PM_ENTRA_TENANT is required":    {"PM_AUTH": "entra", "DATABASE_URL": "x", "PM_OIDC_CLIENT_ID": "a", "PM_OIDC_CLIENT_SECRET": "b", "PM_SESSION_SECRET": good},
+		"PM_ADMINS is required":          {"PM_AUTH": "google", "DATABASE_URL": "x", "PM_OIDC_CLIENT_ID": "a", "PM_OIDC_CLIENT_SECRET": "b", "PM_SESSION_SECRET": good},
+		"PM_OIDC_CLIENT_ID":              {"PM_AUTH": "google", "DATABASE_URL": "x", "PM_SESSION_SECRET": good},
+		"any Google account could sign":  {"PM_AUTH": "google", "DATABASE_URL": "x", "PM_OIDC_CLIENT_ID": "a", "PM_OIDC_CLIENT_SECRET": "b", "PM_SESSION_SECRET": good, "PM_ADMINS": "a@b.c", "PM_BASE_URL": "https://pm.example.com"},
+		"placeholder or too simple":      {"PM_AUTH": "entra", "PM_ENTRA_TENANT": "t", "DATABASE_URL": "x", "PM_OIDC_CLIENT_ID": "a", "PM_OIDC_CLIENT_SECRET": "b", "PM_SESSION_SECRET": "change-me-to-32-or-more-random-characters", "PM_ADMINS": "a@b.c", "PM_BASE_URL": "https://pm.example.com"},
+		"too simple":                     {"PM_AUTH": "entra", "PM_ENTRA_TENANT": "t", "DATABASE_URL": "x", "PM_OIDC_CLIENT_ID": "a", "PM_OIDC_CLIENT_SECRET": "b", "PM_SESSION_SECRET": strings.Repeat("s", 40), "PM_ADMINS": "a@b.c", "PM_BASE_URL": "https://pm.example.com"},
+		"PM_BASE_URL is required":        {"PM_AUTH": "entra", "PM_ENTRA_TENANT": "t", "DATABASE_URL": "x", "PM_OIDC_CLIENT_ID": "a", "PM_OIDC_CLIENT_SECRET": "b", "PM_SESSION_SECRET": good, "PM_ADMINS": "a@b.c"},
+		"must start with https://":       {"PM_AUTH": "entra", "PM_ENTRA_TENANT": "t", "DATABASE_URL": "x", "PM_OIDC_CLIENT_ID": "a", "PM_OIDC_CLIENT_SECRET": "b", "PM_SESSION_SECRET": good, "PM_ADMINS": "a@b.c", "PM_BASE_URL": "http://pm.example.com"},
+		`PM_LOG_FORMAT="xml" is not sup`: {"PM_AUTH": "dev", "DATABASE_URL": "x", "PM_LOG_FORMAT": "xml"},
 		"at least 32 characters":         {"PM_AUTH": "google", "DATABASE_URL": "x", "PM_OIDC_CLIENT_ID": "a", "PM_OIDC_CLIENT_SECRET": "b", "PM_SESSION_SECRET": "short"},
 		"PM_NOTIFY_WEBHOOK_URL":          {"PM_AUTH": "dev", "DATABASE_URL": "x", "PM_NOTIFY": "webhook"},
 		`PM_NOTIFY="pigeon" is not supp`: {"PM_AUTH": "dev", "DATABASE_URL": "x", "PM_NOTIFY": "pigeon"},

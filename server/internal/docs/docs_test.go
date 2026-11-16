@@ -192,14 +192,14 @@ func TestImportAndExport(t *testing.T) {
 	write("standards/secure-logging.json", logging)
 	write("catalog/catalog.json", lists)
 
-	n, problems, err := s.ImportDir(ctx, in, "import")
+	n, problems, err := s.ImportDir(ctx, in, "import", nil)
 	if err != nil || n != 3 || len(problems) != 2 {
 		t.Fatalf("import: %d %v %v", n, problems, err)
 	}
-	if again, _, _ := s.ImportDir(ctx, in, "import"); again != 0 {
+	if again, _, _ := s.ImportDir(ctx, in, "import", nil); again != 0 {
 		t.Fatalf("importing the same files again changed %d documents", again)
 	}
-	if n, _, err := s.ImportDir(ctx, t.TempDir(), "import"); err != nil || n != 0 {
+	if n, _, err := s.ImportDir(ctx, t.TempDir(), "import", nil); err != nil || n != 0 {
 		t.Fatalf("empty folder: %d %v", n, err)
 	}
 
@@ -219,7 +219,7 @@ func TestImportAndExport(t *testing.T) {
 	}
 	// what was exported imports cleanly into an empty database
 	fresh := newStore(t)
-	if n, problems, _ := fresh.ImportDir(ctx, out, "import"); n != 3 || len(problems) != 0 {
+	if n, problems, _ := fresh.ImportDir(ctx, out, "import", nil); n != 3 || len(problems) != 0 {
 		t.Fatalf("round trip: %d %v", n, problems)
 	}
 }

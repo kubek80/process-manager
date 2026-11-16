@@ -38,11 +38,16 @@ type options struct {
 func main() {
 	var o options
 	flag.BoolVar(&o.seed, "seed", false, "add sample feedback when the database has none (local development)")
-	flag.BoolVar(&o.reset, "reset", false, "delete all feedback, then exit (combine with -seed to refill)")
+	flag.BoolVar(&o.reset, "reset", false, "delete all feedback, then exit (combine with -seed to refill; local development only)")
 	flag.StringVar(&o.importDir, "import", "", "load processes/, standards/ and catalog/ from this folder into the database, then exit")
 	flag.StringVar(&o.exportDir, "export", "", "write processes, standards, lists and generated skills to this folder, then exit")
 	flag.Parse()
-	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	// PM_LOG_FORMAT=json gives one JSON object per line, which log collectors prefer
+	var handler slog.Handler = slog.NewTextHandler(os.Stderr, nil)
+	if os.Getenv("PM_LOG_FORMAT") == "json" {
+		handler = slog.NewJSONHandler(os.Stderr, nil)
+	}
+	log := slog.New(handler)
 	if err := run(log, o); err != nil {
 		log.Error("stopped", "error", err)
 		os.Exit(1)
@@ -66,7 +71,12 @@ func connect(ctx context.Context, url string, log *slog.Logger) (*pgxpool.Pool, 
 			return nil, fmt.Errorf("database not reachable: %w", err)
 		}
 		log.Info("waiting for the database")
-		time.Sleep(time.Second)
+		select {
+		case <-ctx.Done(): // asked to stop while still waiting
+			pool.Close()
+			return nil, ctx.Err()
+		case <-time.After(time.Second):
+		}
 	}
 }
 
@@ -76,6 +86,7 @@ type stores struct {
 	skills   *skills.Store
 	feedback *feedback.Store
 	audit    *audit.Log
+	validate func(kind string, body []byte) error // the format check for imported files
 }
 
 func run(log *slog.Logger, o options) error {
@@ -99,6 +110,27 @@ func run(log *slog.Logger, o options) error {
 		skills: &skills.Store{Pool: pool}, feedback: &feedback.Store{Pool: pool}, audit: &audit.Log{Pool: pool},
 	}
 
+	// the schemas are read when they are first needed: one-off commands that import nothing
+	// work without them
+	var schemas *schema.Set
+	loadSchemas := func() (*schema.Set, error) {
+		if schemas != nil {
+			return schemas, nil
+		}
+		set, err := schema.Load(cfg.SchemaDir)
+		if err == nil {
+			schemas = set
+		}
+		return set, err
+	}
+	st.validate = func(kind string, body []byte) error {
+		set, err := loadSchemas()
+		if err != nil {
+			return err
+		}
+		return set.Validate(kind, body)
+	}
+
 	// one-off commands
 	if o.importDir != "" {
 		if err := importFiles(ctx, st, o.importDir, log); err != nil {
@@ -110,13 +142,17 @@ func run(log *slog.Logger, o options) error {
 		return exportFiles(ctx, st, o.exportDir, log)
 	}
 	if o.reset {
+		if cfg.Auth != config.AuthDev {
+			return errors.New("-reset deletes all feedback and is only for local development (PM_AUTH=dev)")
+		}
 		if err := st.feedback.Reset(ctx); err != nil {
 			return err
 		}
 		log.Info("all feedback deleted")
 	}
 
-	if err := prepare(ctx, cfg, st, log); err != nil {
+	// one instance at a time: several starting together on an empty database would all try to fill it
+	if err := db.WithLock(ctx, pool, db.LockPrepare, func() error { return prepare(ctx, cfg, st, log) }); err != nil {
 		return err
 	}
 	if o.seed {
@@ -128,36 +164,72 @@ func run(log *slog.Logger, o options) error {
 		return nil
 	}
 
-	schemas, err := schema.Load(cfg.SchemaDir)
-	if err != nil {
+	if _, err := loadSchemas(); err != nil {
 		return err
 	}
 	sessions := auth.NewSessions(cfg.SessionSecret, cfg.Secure())
-	deps := httpapi.Deps{Cfg: cfg, Sessions: sessions, Docs: st.docs, Schemas: schemas, Roles: st.roles, Audit: st.audit,
+	deps := httpapi.Deps{Cfg: cfg, Sessions: sessions, SignOuts: &auth.SignOuts{Pool: pool}, Ready: pool.Ping, Docs: st.docs, Schemas: schemas, Roles: st.roles, Audit: st.audit,
 		Skills: st.skills, Feedback: st.feedback, Log: log, Notifier: notify.Log{Logger: log}}
+	var hook *notify.Webhook
 	if cfg.Notify == "webhook" {
-		deps.Notifier = notify.NewWebhook(cfg.WebhookURL, log)
+		hook = notify.NewWebhook(cfg.WebhookURL, log)
+		deps.Notifier = hook
 	}
 	if cfg.Auth == config.AuthDev {
 		log.Warn("PM_AUTH=dev: anyone who can reach this server can sign in as any built-in user. Never use this outside local development.")
 	} else {
-		deps.OIDC, err = auth.NewOIDC(ctx, sessions, cfg.Issuer, cfg.ClientID, cfg.ClientSecret, cfg.BaseURL+"/auth/callback", cfg.HostedDomain)
+		deps.OIDC, err = auth.NewOIDC(ctx, sessions, auth.OIDCOptions{
+			Issuer: cfg.Issuer, ClientID: cfg.ClientID, ClientSecret: cfg.ClientSecret, RedirectURL: cfg.BaseURL + "/auth/callback",
+			HostedDomain: cfg.HostedDomain, EmailDomains: cfg.EmailDomains, PreferSignInName: cfg.Auth == config.AuthEntra,
+		})
 		if err != nil {
 			return err
 		}
 	}
 
-	srv := &http.Server{Addr: cfg.Addr, Handler: httpapi.New(deps), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{
+		Addr: cfg.Addr, Handler: httpapi.New(deps),
+		// a client that sends or reads slowly cannot hold a connection open for ever
+		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 2 * time.Minute,
+	}
+	return serve(ctx, srv, log, func() {
+		if hook != nil {
+			hook.Wait()
+		}
+	}, "addr", cfg.Addr, "auth", cfg.Auth, "admins", len(cfg.Admins))
+}
+
+// shutdownGrace is how long requests that are being answered get to finish when the server is
+// asked to stop.
+const shutdownGrace = 15 * time.Second
+
+// serve runs the server until ctx ends, then stops accepting requests and returns only when
+// the ones in progress are answered (or the grace period is over) and drain has finished - so
+// that the database is not closed under a save that is still running.
+func serve(ctx context.Context, srv *http.Server, log *slog.Logger, drain func(), info ...any) error {
+	stopped := make(chan struct{})
 	go func() {
+		defer close(stopped)
 		<-ctx.Done()
-		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		grace, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 		defer cancel()
-		_ = srv.Shutdown(shutdown)
+		if err := srv.Shutdown(grace); err != nil {
+			log.Error("some requests were cut off while stopping", "error", err)
+		}
+		done := make(chan struct{})
+		go func() { drain(); close(done) }()
+		select {
+		case <-done:
+		case <-grace.Done():
+			log.Error("some notifications were not delivered before stopping")
+		}
 	}()
-	log.Info("listening", "addr", cfg.Addr, "auth", cfg.Auth, "admins", len(cfg.Admins))
+	log.Info("listening", info...)
 	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	<-stopped
+	log.Info("stopped")
 	return nil
 }
 
@@ -189,7 +261,7 @@ func prepare(ctx context.Context, cfg config.Config, st stores, log *slog.Logger
 }
 
 func importFiles(ctx context.Context, st stores, dir string, log *slog.Logger) error {
-	n, problems, err := st.docs.ImportDir(ctx, dir, "import")
+	n, problems, err := st.docs.ImportDir(ctx, dir, "import", st.validate)
 	if err != nil {
 		return err
 	}
@@ -198,7 +270,7 @@ func importFiles(ctx context.Context, st stores, dir string, log *slog.Logger) e
 	}
 	log.Info("content imported", "from", dir, "changed", n, "skipped", len(problems))
 	if n > 0 {
-		_ = st.audit.Add(ctx, "import", "Import", "content.import", dir, fmt.Sprintf("%d documents added or changed", n))
+		_ = st.audit.Add(ctx, "import", "Import", "content.import", "sample content", fmt.Sprintf("%d documents added or changed", n))
 	}
 	return nil
 }

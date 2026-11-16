@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,9 +17,50 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
+// Locks that make starting several instances at once safe. Each is held for the whole step.
+const (
+	lockMigrate = 7461001
+	LockPrepare = 7461002 // filling an empty database and regenerating the skills
+)
+
+// WithLock runs fn while holding a database-wide lock, so that only one instance at a time
+// does it; the others wait and then find the work done. Waiting does not hold a connection:
+// fn needs connections of the same pool, and a pool full of waiters would starve it.
+func WithLock(ctx context.Context, pool *pgxpool.Pool, key int64, fn func() error) error {
+	for {
+		conn, err := pool.Acquire(ctx)
+		if err != nil {
+			return err
+		}
+		var got bool
+		if err := conn.QueryRow(ctx, `select pg_try_advisory_lock($1)`, key).Scan(&got); err != nil {
+			conn.Release()
+			return err
+		}
+		if got {
+			// released on a context of its own: the lock must go even when ctx was cancelled meanwhile
+			defer func() {
+				_, _ = conn.Exec(context.WithoutCancel(ctx), `select pg_advisory_unlock($1)`, key)
+				conn.Release()
+			}()
+			return fn()
+		}
+		conn.Release()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
 // Migrate applies the SQL files that have not run yet. Safe to call on every start, and from
-// several instances at once.
+// several instances at once - also on a database that is still completely empty.
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
+	return WithLock(ctx, pool, lockMigrate, func() error { return migrate(ctx, pool) })
+}
+
+func migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	if _, err := pool.Exec(ctx, `create table if not exists schema_migrations (version int primary key, applied_at timestamptz not null default now())`); err != nil {
 		return err
 	}
@@ -38,9 +80,6 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 		}
 		sql, _ := migrations.ReadFile("migrations/" + name)
 		err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
-			if _, err := tx.Exec(ctx, `select pg_advisory_xact_lock(7461001)`); err != nil {
-				return err
-			}
 			var done bool
 			if err := tx.QueryRow(ctx, `select exists (select 1 from schema_migrations where version = $1)`, version).Scan(&done); err != nil || done {
 				return err

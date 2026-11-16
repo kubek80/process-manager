@@ -29,8 +29,11 @@ type Provider struct {
 
 	key   *rsa.PrivateKey
 	mu    sync.Mutex
-	codes map[string]string // code -> nonce
+	codes map[string]grant
 }
+
+// grant is what the provider remembers between the redirect and the token request.
+type grant struct{ nonce, challenge string }
 
 func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 
@@ -41,7 +44,7 @@ func New(t testing.TB, clientID string) *Provider {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := &Provider{ClientID: clientID, Claims: map[string]any{}, key: key, codes: map[string]string{}}
+	p := &Provider{ClientID: clientID, Claims: map[string]any{}, key: key, codes: map[string]grant{}}
 	mux := http.NewServeMux()
 	p.Server = httptest.NewServer(mux)
 	t.Cleanup(p.Server.Close)
@@ -68,7 +71,7 @@ func New(t testing.TB, clientID string) *Provider {
 		q := r.URL.Query()
 		code := b64([]byte(time.Now().Format(time.RFC3339Nano)))
 		p.mu.Lock()
-		p.codes[code] = q.Get("nonce")
+		p.codes[code] = grant{nonce: q.Get("nonce"), challenge: q.Get("code_challenge")}
 		p.mu.Unlock()
 		back, _ := url.Parse(q.Get("redirect_uri"))
 		v := back.Query()
@@ -80,13 +83,17 @@ func New(t testing.TB, clientID string) *Provider {
 	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
 		p.mu.Lock()
-		nonce, ok := p.codes[r.Form.Get("code")]
+		g, ok := p.codes[r.Form.Get("code")]
 		delete(p.codes, r.Form.Get("code"))
 		p.mu.Unlock()
-		if !ok {
+		// like a real provider with PKCE required: the code is only worth something together
+		// with the secret the sign-in was started with
+		proof := sha256.Sum256([]byte(r.Form.Get("code_verifier")))
+		if !ok || g.challenge == "" || g.challenge != b64(proof[:]) {
 			http.Error(w, `{"error":"invalid_grant"}`, http.StatusBadRequest)
 			return
 		}
+		nonce := g.nonce
 		if p.BreakNonce {
 			nonce = "wrong"
 		}

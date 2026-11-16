@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kubek80/process-manager/server/internal/audit"
 	"github.com/kubek80/process-manager/server/internal/auth"
@@ -34,10 +36,22 @@ const (
 
 const maxBody = 1 << 20 // 1 MB
 
+// requestTimeout bounds the work for one request, so a stuck query cannot hold a connection
+// of the pool forever.
+const requestTimeout = 30 * time.Second
+
+// contentSecurityPolicy: everything the app needs comes from the app itself. Inline styles are
+// allowed because the code editor and the map position things with them.
+const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; " +
+	"connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
 type Deps struct {
 	Cfg      config.Config
 	Sessions *auth.Sessions
-	OIDC     *auth.OIDC // nil when PM_AUTH=dev
+	SignOuts *auth.SignOuts // nil: signing out only clears the cookie (tests of single handlers)
+	OIDC     *auth.OIDC     // nil when PM_AUTH=dev
+	// Ready reports whether the server can do its work (the database answers). nil: always.
+	Ready    func(context.Context) error
 	Docs     *docs.Store
 	Schemas  *schema.Set
 	Roles    *rbac.Store
@@ -62,7 +76,18 @@ func New(d Deps) http.Handler {
 	a := &api{d}
 	mux := http.NewServeMux()
 
+	// healthz: the process is alive. readyz: it can also reach the database, so it may get traffic.
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, map[string]bool{"ok": true}) })
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		if d.Ready != nil {
+			if err := d.Ready(r.Context()); err != nil {
+				a.Log.Error("not ready", "error", err)
+				writeError(w, 503, "The database cannot be reached.")
+				return
+			}
+		}
+		writeJSON(w, 200, map[string]bool{"ok": true})
+	})
 	mux.HandleFunc("GET /api/me", a.me)
 	mux.HandleFunc("POST /auth/logout", a.logout)
 	if d.Cfg.Auth == config.AuthDev {
@@ -146,6 +171,8 @@ func (a *api) fail(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, 404, "That does not exist.")
 	case errors.Is(err, docs.ErrInvalid), errors.Is(err, rbac.ErrInvalid):
 		writeError(w, 400, strings.TrimPrefix(err.Error(), "invalid: "))
+	case errors.Is(err, rbac.ErrNotGiven):
+		writeError(w, 404, "That person does not have that role.")
 	case errors.Is(err, rbac.ErrLastAdmin):
 		writeError(w, 409, "This is the last admin. Make someone else an admin first.")
 	case errors.As(err, &tooBig):
@@ -156,9 +183,45 @@ func (a *api) fail(w http.ResponseWriter, r *http.Request, err error) {
 	}
 }
 
-// guard applies to every request: body limit and the CSRF header on changes.
+// statusWriter remembers the status of a response for the request log.
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusWriter) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+// guard applies to every request: security headers, a time limit, the request log, the body
+// limit and the CSRF header on changes.
 func (a *api) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "same-origin")
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
+		if a.Cfg.Secure() {
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		api := strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/auth/")
+		if api {
+			ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+			defer cancel()
+			r = r.WithContext(ctx)
+			sw := &statusWriter{ResponseWriter: w, status: 200}
+			w = sw
+			start := time.Now()
+			defer func() {
+				level := slog.LevelInfo
+				if sw.status >= 500 {
+					level = slog.LevelError
+				}
+				a.Log.Log(r.Context(), level, "request", "method", r.Method, "path", r.URL.Path, "status", sw.status, "ms", time.Since(start).Milliseconds())
+			}()
+		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
 			if r.Header.Get(CSRFHeader) != CSRFValue {
 				writeError(w, 403, "Missing request header "+CSRFHeader+".")
@@ -171,9 +234,21 @@ func (a *api) guard(next http.Handler) http.Handler {
 }
 
 func (a *api) current(r *http.Request) (session, bool) {
-	u, ok := a.Sessions.Read(r)
+	u, issued, ok := a.Sessions.ReadIssued(r)
 	if !ok {
 		return session{}, false
+	}
+	if a.SignOuts != nil {
+		ended, err := a.SignOuts.Ended(r.Context(), u.Email, issued)
+		if err != nil {
+			// when in doubt the session does not count: better to ask someone to sign in again
+			// than to accept a session that was ended
+			a.Log.Error("sign-outs could not be read: treating the session as ended", "error", err)
+			return session{}, false
+		}
+		if ended {
+			return session{}, false
+		}
 	}
 	perms, err := a.Roles.Perms(r.Context(), u.Email)
 	if err != nil {
@@ -203,7 +278,7 @@ func readJSON(r *http.Request, v any) error {
 		return err
 	}
 	if err := json.Unmarshal(body, v); err != nil {
-		return errors.Join(docs.ErrInvalid, errors.New("invalid: the request is not valid JSON"))
+		return fmt.Errorf("%w: the request is not valid JSON", docs.ErrInvalid)
 	}
 	return nil
 }
@@ -261,7 +336,15 @@ func (a *api) callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, a.Cfg.BaseURL+"/", http.StatusFound)
 }
 
-func (a *api) logout(w http.ResponseWriter, _ *http.Request) {
+// logout ends every session of the person, not just the cookie of this browser: a copy of
+// the cookie stops working too.
+func (a *api) logout(w http.ResponseWriter, r *http.Request) {
+	if u, ok := a.Sessions.Read(r); ok && a.SignOuts != nil {
+		if err := a.SignOuts.Mark(r.Context(), u.Email, a.Sessions.Now()); err != nil {
+			a.fail(w, r, err)
+			return
+		}
+	}
 	a.Sessions.Clear(w)
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
@@ -282,6 +365,12 @@ func (a *api) static() http.Handler {
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			}
 			files.ServeHTTP(w, r)
+			return
+		}
+		// A missing file is a missing file. Answering with the app page instead would hand a
+		// browser that still runs an older version HTML where it expects a script.
+		if strings.HasPrefix(r.URL.Path, "/assets/") || filepath.Ext(r.URL.Path) != "" {
+			http.NotFound(w, r)
 			return
 		}
 		// the app routes on the hash, so every other path is the app itself

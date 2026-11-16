@@ -83,12 +83,12 @@ func setup(t *testing.T, mutate func(*Deps)) *env {
 	e := &env{t: t, notes: &recorder{}, logged: &bytes.Buffer{}}
 	e.deps = Deps{
 		Cfg:      config.Config{Auth: config.AuthDev, BaseURL: "http://pm.test", Notify: "log"},
-		Sessions: auth.NewSessions([]byte("test-secret"), false),
-		Docs:     &docs.Store{Pool: pool}, Schemas: schemas, Roles: &rbac.Store{Pool: pool, Bootstrap: []string{dana}},
+		Sessions: auth.NewSessions([]byte("test-secret"), false), SignOuts: &auth.SignOuts{Pool: pool}, Ready: pool.Ping,
+		Docs: &docs.Store{Pool: pool}, Schemas: schemas, Roles: &rbac.Store{Pool: pool, Bootstrap: []string{dana}},
 		Audit: &audit.Log{Pool: pool}, Skills: &skills.Store{Pool: pool}, Feedback: &feedback.Store{Pool: pool},
 		Notifier: e.notes, Log: slog.New(slog.NewTextHandler(e.logged, nil)),
 	}
-	_, problems, err := e.deps.Docs.ImportDir(bg, repoRoot, "import")
+	_, problems, err := e.deps.Docs.ImportDir(bg, repoRoot, "import", nil)
 	if err != nil || len(problems) > 0 {
 		t.Fatalf("import: %v %v", problems, err)
 	}
@@ -308,7 +308,7 @@ func oidcEnv(t *testing.T, claims map[string]any) *env {
 	e.srv = httptest.NewServer(mux)
 	t.Cleanup(e.srv.Close)
 	e.deps.Cfg.BaseURL = e.srv.URL
-	o, err := auth.NewOIDC(bg, e.deps.Sessions, p.Server.URL, "client-1", "secret", e.srv.URL+"/auth/callback", "")
+	o, err := auth.NewOIDC(bg, e.deps.Sessions, auth.OIDCOptions{Issuer: p.Server.URL, ClientID: "client-1", ClientSecret: "secret", RedirectURL: e.srv.URL + "/auth/callback"})
 	must(t, err)
 	e.deps.OIDC = o
 	mux.Handle("/", New(e.deps))
@@ -406,7 +406,7 @@ func TestProcessEditorsSaveProcesses(t *testing.T) {
 	}
 	// the save is in the audit trail and the process skill has a new version
 	entries, _ := e.deps.Audit.Recent(bg, 5)
-	if entries[0].Action != "process.save" || entries[0].Target != repoP || entries[0].Email != alex || entries[0].Detail != "revision 2" {
+	if entries[0].Action != "process.save" || entries[0].Target != repoP || entries[0].Email != alex || entries[0].Detail != "version 2" {
 		t.Fatalf("audit: %+v", entries[0])
 	}
 	sk, _ := e.deps.Skills.Get(bg, "process-"+repoP)
@@ -535,7 +535,7 @@ func TestListsAreManagedByTheirManagersAndRegenerateSkills(t *testing.T) {
 	}
 }
 
-func TestHistoryIsForThoseWhoCanEdit(t *testing.T) {
+func TestHistoryIsForThoseWhoCanSeeTheDocument(t *testing.T) {
 	e := setup(t, nil)
 	e.as(alex).do("PUT", "/api/processes/"+repoP, e.body(docs.Process, repoP, "Request a repository", "Request a repo"))
 	status, body := e.as(alex).do("GET", "/api/history/process/"+repoP, nil)
@@ -547,15 +547,34 @@ func TestHistoryIsForThoseWhoCanEdit(t *testing.T) {
 	if status != 200 || old["title"] != "Request a repository" {
 		t.Fatalf("version 1: %d %v", status, old["title"])
 	}
+	// everyone who can read the process can see how it changed
 	for _, who := range []string{sam, riley} {
 		status, _ := e.as(who).do("GET", "/api/history/process/"+repoP, nil)
-		wantStatus(t, status, 403, who)
+		wantStatus(t, status, 200, who)
+		status, _ = e.as(who).do("GET", "/api/history/process/"+repoP+"/1", nil)
+		wantStatus(t, status, 200, who)
 	}
-	if status, _ := e.as(riley).do("GET", "/api/history/standard/"+logging, nil); status != 200 {
-		t.Fatalf("riley and her unit's standard: %d", status)
+	// a draft and its earlier versions stay with the people who work on it
+	draft := strings.Replace(e.body(docs.Process, repoP, "", ""), `"status": "active"`, `"status": "draft"`, 1)
+	if !strings.Contains(draft, `"status": "draft"`) {
+		draft = strings.Replace(draft, `"title":`, `"status": "draft", "title":`, 1)
 	}
-	if status, _ := e.as(riley).do("GET", "/api/history/standard/"+review, nil); status != 403 {
-		t.Fatalf("riley and another unit's standard: %d", status)
+	status, saved := e.as(alex).do("PUT", "/api/processes/"+repoP, draft)
+	wantStatus(t, status, 200, saved)
+	for _, path := range []string{"/api/history/process/" + repoP, "/api/history/process/" + repoP + "/3"} {
+		if status, _ := e.as(sam).do("GET", path, nil); status != 404 {
+			t.Errorf("a reader and a draft, %s: %d", path, status)
+		}
+		if status, _ := e.as(alex).do("GET", path, nil); status != 200 {
+			t.Errorf("an editor and a draft, %s: %d", path, status)
+		}
+	}
+	e.as(alex).do("PUT", "/api/processes/"+repoP, e.body(docs.Process, repoP, `"status": "draft"`, `"status": "active"`))
+	if status, _ := e.as(sam).do("GET", "/api/history/process/"+repoP+"/3", nil); status != 404 {
+		t.Errorf("the draft version of a process that is published now: %d", status)
+	}
+	if status, _ := e.as(sam).do("GET", "/api/history/process/"+repoP+"/4", nil); status != 200 {
+		t.Errorf("the published version: %d", status)
 	}
 	if status, _ := e.as(alex).do("GET", "/api/history/catalog/catalog", nil); status != 200 {
 		t.Fatalf("lists history: %d", status)
@@ -567,7 +586,7 @@ func TestHistoryIsForThoseWhoCanEdit(t *testing.T) {
 	}
 	// after a delete only an admin can look at what was there
 	e.as(alex).do("DELETE", "/api/processes/"+repoP, nil)
-	if status, _ := e.as(alex).do("GET", "/api/history/process/"+repoP, nil); status != 403 {
+	if status, _ := e.as(alex).do("GET", "/api/history/process/"+repoP, nil); status != 404 {
 		t.Fatalf("editor after delete: %d", status)
 	}
 	status, body = e.as(dana).do("GET", "/api/history/process/"+repoP, nil)
@@ -796,7 +815,7 @@ func TestStaleWhenTheStepOrRequirementChanged(t *testing.T) {
 		t.Fatal("resolved feedback must not be stale")
 	}
 	// a removed step
-	status, body = e.as(alex).do("PUT", "/api/processes/"+gcp, e.body(docs.Process, gcp, `"id": "verify-access"`, `"id": "check-access"`))
+	status, body = e.as(alex).do("PUT", "/api/processes/"+gcp, strings.ReplaceAll(e.body(docs.Process, gcp, "", ""), `"verify-access"`, `"check-access"`))
 	wantStatus(t, status, 200, body)
 	if s := stale(); !s[otherStep] || s[wholeProcess] {
 		t.Fatalf("after removing the step: %v", s)
@@ -952,7 +971,7 @@ func TestExtraGuidanceIsForThoseWhoEditTheSource(t *testing.T) {
 	// the guidance survives a change of the standard
 	sec.do("PUT", "/api/standards/"+logging, e.body(docs.Standard, logging, "never written to logs", "never ever written to logs"))
 	content, _ := e.deps.Skills.Content(bg, "review-"+logging, 0)
-	if !strings.Contains(content, "never ever written") || !strings.Contains(content, "Ignore files under testdata/.") || !strings.Contains(content, "Version 3") {
+	if !strings.Contains(content, "never ever written") || !strings.Contains(content, "Ignore files under testdata/.") || !strings.Contains(content, "This is version 3 of the generated text") {
 		t.Fatal("guidance lost on regeneration")
 	}
 	if status, _ := e.as(alex).do("PUT", "/api/skills/process-"+gcp+"/extra", guidance); status != 200 {

@@ -79,34 +79,43 @@ func (a *api) revokeAccess(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) listAudit(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	entries, err := a.Audit.Recent(r.Context(), limit)
+	before, _ := strconv.ParseInt(r.URL.Query().Get("before"), 10, 64)
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	// one more than asked for tells whether there is an older page
+	entries, err := a.Audit.Before(r.Context(), before, limit+1)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"entries": entries})
+	more := len(entries) > limit
+	if more {
+		entries = entries[:limit]
+	}
+	writeJSON(w, 200, map[string]any{"entries": entries, "more": more})
 }
 
 func (a *api) system(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	count := func(kind string) int {
-		list, _ := a.Docs.List(ctx, kind)
-		return len(list)
-	}
-	all, _ := a.Skills.List(ctx)
-	activeSkills := 0
-	for _, sk := range all {
-		if sk.Active {
-			activeSkills++
+	// a number that could not be read is an error, not a zero
+	var failed error
+	count := func(n int, err error) int {
+		if err != nil && failed == nil {
+			failed = err
 		}
+		return n
 	}
-	assignments, _ := a.Roles.Count(ctx)
-	open, _ := a.Feedback.OpenCount(ctx)
-	writeJSON(w, 200, map[string]any{
+	out := map[string]any{
 		"provider": a.Cfg.Auth, "baseUrl": a.Cfg.BaseURL, "notify": a.Cfg.Notify,
-		"processes": count(docs.Process), "standards": count(docs.Standard), "skills": activeSkills,
-		"assignments": assignments, "openFeedback": open,
-	})
+		"processes": count(a.Docs.CountKind(ctx, docs.Process)), "standards": count(a.Docs.CountKind(ctx, docs.Standard)),
+		"skills": count(a.Skills.ActiveCount(ctx)), "assignments": count(a.Roles.Count(ctx)), "openFeedback": count(a.Feedback.OpenCount(ctx)),
+	}
+	if failed != nil {
+		a.fail(w, r, failed)
+		return
+	}
+	writeJSON(w, 200, out)
 }
 
 // ---------- skills and review agents
@@ -213,8 +222,6 @@ func (a *api) putSkillExtra(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.record(r, "skill.guidance", sk.ID, "")
-	if d, err := a.Docs.Get(r.Context(), sk.SourceKind, sk.SourceID); err == nil {
-		a.syncSkills(r, sk.SourceKind, sk.SourceID, &d)
-	}
+	a.syncSkills(r.Context(), sk.SourceKind, sk.SourceID)
 	a.writeSkill(w, r, sk.ID)
 }

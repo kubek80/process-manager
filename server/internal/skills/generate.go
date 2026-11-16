@@ -111,8 +111,20 @@ type standard struct {
 // Context is what the generators need besides the document itself.
 type Context struct {
 	Lists docs.Lists
-	// Titles of the active processes and standards, by "process/<id>" and "standard/<id>".
+	// Titles of the processes and standards that exist, by "process/<id>" and "standard/<id>".
 	Titles map[string]string
+	// Inactive marks the drafts and retired ones among them: they have no skill to point to.
+	Inactive map[string]bool
+}
+
+// skill is the pointer to the skill of another document, or nothing when that document does
+// not exist, is a draft or is retired - a pointer to a skill that is not there misleads.
+func (c Context) skill(kind, id, skillID string) string {
+	key := kind + "/" + id
+	if c.Titles[key] == "" || c.Inactive[key] {
+		return ""
+	}
+	return " (skill `" + skillID + "`)"
 }
 
 // Generated is one skill or review agent, without its version footer.
@@ -240,7 +252,7 @@ You act for the person who needs the result. In the steps below they are **You**
 				b.WriteString(" - " + q.Description)
 			}
 			if q.ProcessID != "" {
-				fmt.Fprintf(&b, " If missing: follow the process “%s” (skill `%s`).", c.title(docs.Process, q.ProcessID), ProcessSkillID(q.ProcessID))
+				fmt.Fprintf(&b, " If missing: follow the process “%s”%s.", c.title(docs.Process, q.ProcessID), c.skill(docs.Process, q.ProcessID, ProcessSkillID(q.ProcessID)))
 			}
 			if q.URL != "" {
 				fmt.Fprintf(&b, " <%s>", q.URL)
@@ -281,7 +293,11 @@ You act for the person who needs the result. In the steps below they are **You**
 			}
 		}
 		if s.SubProcessID != "" {
-			fmt.Fprintf(&b, "   - This step is the process “%s”: follow the skill `%s`.\n", c.title(docs.Process, s.SubProcessID), ProcessSkillID(s.SubProcessID))
+			if c.skill(docs.Process, s.SubProcessID, "") != "" {
+				fmt.Fprintf(&b, "   - This step is the process “%s”: follow the skill `%s`.\n", c.title(docs.Process, s.SubProcessID), ProcessSkillID(s.SubProcessID))
+			} else {
+				fmt.Fprintf(&b, "   - This step is the process “%s”, which has no skill at the moment: ask the person how to do it.\n", c.title(docs.Process, s.SubProcessID))
+			}
 		}
 		if s.URL != "" {
 			label := s.URLLabel
@@ -315,7 +331,7 @@ You act for the person who needs the result. In the steps below they are **You**
 	if len(p.Standards) > 0 {
 		b.WriteString("\n## Standards this process helps to meet\n\n")
 		for _, sid := range p.Standards {
-			fmt.Fprintf(&b, "- %s (skill `%s`)\n", c.title(docs.Standard, sid), StandardSkillID(sid))
+			fmt.Fprintf(&b, "- %s%s\n", c.title(docs.Standard, sid), c.skill(docs.Standard, sid, StandardSkillID(sid)))
 		}
 	}
 	b.WriteString(extraSection(extra[id]))
@@ -378,7 +394,7 @@ func ForStandard(body []byte, c Context, extra map[string]string) ([]Generated, 
 	unit := c.unit(s.Owner)
 	exception := "Ask " + unit + "."
 	if s.ExceptionProcessID != "" {
-		exception = fmt.Sprintf("Follow the process “%s” (skill `%s`).", c.title(docs.Process, s.ExceptionProcessID), ProcessSkillID(s.ExceptionProcessID))
+		exception = fmt.Sprintf("Follow the process “%s”%s.", c.title(docs.Process, s.ExceptionProcessID), c.skill(docs.Process, s.ExceptionProcessID, ProcessSkillID(s.ExceptionProcessID)))
 	}
 	head := func(b *strings.Builder) {
 		fmt.Fprintf(b, "- Issued by: %s\n- Applies to: %s\n", unit, c.appliesTo(s.Tiers, s.Languages, s.Environments))
@@ -428,7 +444,7 @@ func ForStandard(body []byte, c Context, extra map[string]string) ([]Generated, 
 		}
 		fmt.Fprintf(&b, "Checked: %s\n\n", check)
 		if r.ProcessID != "" {
-			fmt.Fprintf(&b, "Helpful process: “%s” (skill `%s`).\n\n", c.title(docs.Process, r.ProcessID), ProcessSkillID(r.ProcessID))
+			fmt.Fprintf(&b, "Helpful process: “%s”%s.\n\n", c.title(docs.Process, r.ProcessID), c.skill(docs.Process, r.ProcessID, ProcessSkillID(r.ProcessID)))
 		}
 	}
 	fmt.Fprintf(&b, "## Exceptions\n\nA MUST can only be waived by the unit that issued the standard. %s\n", exception)

@@ -34,6 +34,7 @@ func NewSessions(secret []byte, secure bool) *Sessions {
 type sessionPayload struct {
 	User
 	Exp int64 `json:"exp"`
+	Iat int64 `json:"iat"` // issued at, in milliseconds
 }
 
 // Sign returns payload plus an HMAC, safe to put in a cookie.
@@ -70,7 +71,8 @@ func (s *Sessions) cookie(name, value string, maxAge int) *http.Cookie {
 
 // Issue signs the user in.
 func (s *Sessions) Issue(w http.ResponseWriter, u User) {
-	payload, _ := json.Marshal(sessionPayload{User: u, Exp: s.Now().Add(s.TTL).Unix()})
+	now := s.Now()
+	payload, _ := json.Marshal(sessionPayload{User: u, Exp: now.Add(s.TTL).Unix(), Iat: now.UnixMilli()})
 	http.SetCookie(w, s.cookie(sessionCookie, s.Sign(payload), int(s.TTL.Seconds())))
 }
 
@@ -81,17 +83,23 @@ func (s *Sessions) Clear(w http.ResponseWriter) {
 
 // Read returns the signed-in user, if the request carries a valid, unexpired session.
 func (s *Sessions) Read(r *http.Request) (User, bool) {
+	u, _, ok := s.ReadIssued(r)
+	return u, ok
+}
+
+// ReadIssued is Read plus the moment the session was issued, which is what SignOuts compares.
+func (s *Sessions) ReadIssued(r *http.Request) (User, time.Time, bool) {
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
-		return User{}, false
+		return User{}, time.Time{}, false
 	}
 	payload, ok := s.Verify(c.Value)
 	if !ok {
-		return User{}, false
+		return User{}, time.Time{}, false
 	}
 	var p sessionPayload
 	if json.Unmarshal(payload, &p) != nil || p.Email == "" || s.Now().Unix() >= p.Exp {
-		return User{}, false
+		return User{}, time.Time{}, false
 	}
-	return p.User, true
+	return p.User, time.UnixMilli(p.Iat), true
 }

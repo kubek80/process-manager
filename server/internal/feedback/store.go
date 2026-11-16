@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -163,10 +164,28 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	return err
 }
 
+// Execer is a pool or a transaction.
+type Execer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 // DeleteByTarget removes all feedback of a process or standard that no longer exists.
 func (s *Store) DeleteByTarget(ctx context.Context, kind, id string) error {
-	_, err := s.Pool.Exec(ctx, `delete from feedback where target_kind = $1 and target_id = $2`, kind, id)
+	return DeleteByTargetIn(ctx, s.Pool, kind, id)
+}
+
+// DeleteByTargetIn does the same through q, so that it can be part of the transaction that
+// deletes the process or standard.
+func DeleteByTargetIn(ctx context.Context, q Execer, kind, id string) error {
+	_, err := q.Exec(ctx, `delete from feedback where target_kind = $1 and target_id = $2`, kind, id)
 	return err
+}
+
+// CountSince returns how many items one person wrote since the given moment.
+func (s *Store) CountSince(ctx context.Context, email string, since time.Time) (int, error) {
+	var n int
+	err := s.Pool.QueryRow(ctx, `select count(*) from feedback where author_email = $1 and created_at >= $2`, email, since).Scan(&n)
+	return n, err
 }
 
 // OpenCount returns how many items are not marked as fixed.

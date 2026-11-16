@@ -30,6 +30,19 @@ func URL() string {
 // skipped locally and fails in CI, so a green CI run always includes the database tests.
 func NewPool(t testing.TB) *pgxpool.Pool {
 	t.Helper()
+	pool := NewEmptyPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := db.Migrate(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	return pool
+}
+
+// NewEmptyPool returns a pool on a fresh schema without any tables: a database on its very
+// first start.
+func NewEmptyPool(t testing.TB) *pgxpool.Pool {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	admin, err := pgx.Connect(ctx, URL())
@@ -57,8 +70,5 @@ func NewPool(t testing.TB) *pgxpool.Pool {
 		_, _ = admin.Exec(context.Background(), "drop schema "+schema+" cascade")
 		_ = admin.Close(context.Background())
 	})
-	if err := db.Migrate(ctx, pool); err != nil {
-		t.Fatal(err)
-	}
 	return pool
 }

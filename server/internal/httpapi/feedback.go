@@ -11,6 +11,9 @@ import (
 	"github.com/kubek80/process-manager/server/internal/notify"
 )
 
+// maxFeedbackPerHour is how much one person can report in an hour.
+const maxFeedbackPerHour = 30
+
 type author struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
@@ -65,6 +68,12 @@ func (v *viewer) target(kind, id string) *docs.Target {
 	return out
 }
 
+// hidden: feedback on a draft is for the people who can see the draft.
+func (v *viewer) hidden(kind, id string) bool {
+	t := v.target(kind, id)
+	return t != nil && t.Status == "draft" && !v.s.CanManageFeedback(kind, t.Owner)
+}
+
 // canManage: whoever may edit the process or standard, and the team or unit that owns it.
 func (v *viewer) canManage(kind, id string) bool {
 	owner := ""
@@ -102,7 +111,7 @@ func (a *api) listFeedback(w http.ResponseWriter, r *http.Request) {
 	v := a.viewer(r)
 	out := map[string]map[string][]itemView{docs.Process: {}, docs.Standard: {}}
 	for _, it := range items {
-		if out[it.TargetKind] == nil {
+		if out[it.TargetKind] == nil || v.hidden(it.TargetKind, it.TargetID) {
 			continue
 		}
 		out[it.TargetKind][it.TargetID] = append(out[it.TargetKind][it.TargetID], v.view(it))
@@ -137,7 +146,7 @@ func (a *api) createFeedback(w http.ResponseWriter, r *http.Request) {
 		what, part = "standard", "requirement"
 	}
 	switch {
-	case t == nil:
+	case t == nil, v.hidden(in.TargetKind, in.TargetID):
 		writeError(w, 400, "That "+what+" does not exist.")
 		return
 	case in.ItemID != "" && t.Items[in.ItemID] == "":
@@ -151,6 +160,14 @@ func (a *api) createFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	case utf8.RuneCountInString(in.Text) > 2000:
 		writeError(w, 400, "Keep the feedback under 2000 characters.")
+		return
+	}
+	// a brake on a script (or a very bad day): the owner team is notified about every item
+	if n, err := a.Feedback.CountSince(r.Context(), s.Email, time.Now().Add(-time.Hour)); err != nil {
+		a.fail(w, r, err)
+		return
+	} else if n >= maxFeedbackPerHour {
+		writeError(w, 429, "You have reported a lot in the last hour. Please try again later.")
 		return
 	}
 	item, err := a.Feedback.Create(r.Context(), feedback.New{
@@ -177,7 +194,7 @@ func (a *api) event(kind string, it feedback.Item, t *docs.Target, actor string)
 	if it.TargetKind == docs.Standard {
 		page = "/#/s/"
 	}
-	e := notify.Event{Type: kind, ProcessID: it.TargetID, Kind: it.Kind, Text: it.Text, Author: it.AuthorName, Actor: actor,
+	e := notify.Event{Type: kind, TargetKind: it.TargetKind, ProcessID: it.TargetID, Kind: it.Kind, Text: it.Text, Author: it.AuthorName, Actor: actor,
 		URL: a.Cfg.BaseURL + page + it.TargetID + "/feedback"}
 	if t != nil {
 		e.ProcessTitle = t.Title
@@ -234,6 +251,13 @@ func (a *api) resolveFeedback(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	if *in.Resolved != !wasOpen {
+		action := "feedback.reopen"
+		if *in.Resolved {
+			action = "feedback.fixed"
+		}
+		a.record(r, action, it.TargetKind+" "+it.TargetID, "reported by "+it.AuthorEmail)
+	}
 	if *in.Resolved && wasOpen && !strings.EqualFold(it.AuthorEmail, s.Email) {
 		e := a.event("feedback.resolved", it, v.target(it.TargetKind, it.TargetID), s.Name)
 		e.To = it.AuthorEmail
@@ -256,6 +280,10 @@ func (a *api) deleteFeedback(w http.ResponseWriter, r *http.Request) {
 	if err := a.Feedback.Delete(r.Context(), it.ID); err != nil {
 		a.fail(w, r, err)
 		return
+	}
+	// removing what somebody else wrote is worth a trace; removing your own is not
+	if !strings.EqualFold(it.AuthorEmail, s.Email) {
+		a.record(r, "feedback.delete", it.TargetKind+" "+it.TargetID, "reported by "+it.AuthorEmail)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

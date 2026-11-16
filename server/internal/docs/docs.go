@@ -59,7 +59,88 @@ type Version struct {
 	Version int       `json:"version"`
 	SavedAt time.Time `json:"savedAt"`
 	SavedBy string    `json:"savedBy"`
+	Note    string    `json:"note"` // what changed, in the words of whoever saved it
 	Deleted bool      `json:"deleted"`
+}
+
+// Conflict is returned when a change was made from a version that is no longer the current
+// one: somebody else saved (or deleted) in between. Current is the zero Doc when the document
+// does not exist.
+type Conflict struct {
+	Current Doc
+	Exists  bool
+}
+
+func (c *Conflict) Error() string {
+	if !c.Exists {
+		return "the document no longer exists"
+	}
+	return fmt.Sprintf("the document was changed in the meantime: it is now at version %d", c.Current.Version)
+}
+
+// MaxNote is the longest note kept with a version.
+const MaxNote = 300
+
+// Change is one save.
+type Change struct {
+	Kind, ID string
+	Body     []byte
+	By       string // email of whoever saves
+	Note     string // what changed; optional
+	// Base is the version the change was made from. nil skips the check (imports); 0 means
+	// "I am creating this": the save is refused when the document already exists.
+	Base *int
+	// Check runs under the lock with the stored document (nil when there is none), before
+	// anything is written: the place for rights that depend on the stored owner.
+	Check func(current *Doc) error
+	// After runs in the same transaction when a new version was written.
+	After func(ctx context.Context, tx pgx.Tx, saved Doc) error
+}
+
+// Removal is one delete.
+type Removal struct {
+	Kind, ID string
+	By       string
+	Base     *int
+	Check    func(current *Doc) error
+	After    func(ctx context.Context, tx pgx.Tx) error
+}
+
+// lock serialises every change to one document, including creating it: without it two first
+// saves of the same id race for version 1.
+func lock(ctx context.Context, tx pgx.Tx, kind, id string) error {
+	_, err := tx.Exec(ctx, `select pg_advisory_xact_lock(hashtextextended($1, 7461))`, kind+"/"+id)
+	return err
+}
+
+func current(ctx context.Context, tx pgx.Tx, kind, id string) (*Doc, error) {
+	d := Doc{}
+	err := tx.QueryRow(ctx, `select kind, id, version, body, updated_at, updated_by from documents where kind = $1 and id = $2`, kind, id).
+		Scan(&d.Kind, &d.ID, &d.Version, &d.Body, &d.UpdatedAt, &d.UpdatedBy)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+func checkBase(base *int, cur *Doc) error {
+	if base == nil {
+		return nil
+	}
+	have := 0
+	if cur != nil {
+		have = cur.Version
+	}
+	if *base == have {
+		return nil
+	}
+	if cur == nil {
+		return &Conflict{}
+	}
+	return &Conflict{Current: *cur, Exists: true}
 }
 
 type Store struct{ Pool *pgxpool.Pool }
@@ -102,74 +183,126 @@ func (s *Store) Get(ctx context.Context, kind, id string) (Doc, error) {
 	return d, err
 }
 
-// Put saves a document as a new version. The body must be a JSON object; except for the
-// catalog its "id" must equal id. Saving an unchanged body creates no version (changed=false).
-func (s *Store) Put(ctx context.Context, kind, id string, body []byte, by string) (doc Doc, changed bool, err error) {
+// Put saves a document as a new version without checking what it was based on. See Save.
+func (s *Store) Put(ctx context.Context, kind, id string, body []byte, by string) (Doc, bool, error) {
+	return s.Save(ctx, Change{Kind: kind, ID: id, Body: body, By: by})
+}
+
+// Save stores a document as a new version. The body must be a JSON object; except for the
+// catalog its "id" must equal the id. Saving an unchanged body creates no version
+// (changed=false). A *Conflict is returned when c.Base is not the current version.
+func (s *Store) Save(ctx context.Context, c Change) (doc Doc, changed bool, err error) {
+	kind, id := c.Kind, c.ID
 	if !ValidKind(kind) || !ValidID(id) || (kind == Catalog && id != CatalogID) {
 		return doc, false, fmt.Errorf("%w: id %q", ErrInvalid, id)
 	}
 	var head struct {
 		ID string `json:"id"`
 	}
-	if err := json.Unmarshal(body, &head); err != nil {
+	if err := json.Unmarshal(c.Body, &head); err != nil {
 		return doc, false, fmt.Errorf("%w: not a JSON object: %v", ErrInvalid, err)
 	}
 	if kind != Catalog && head.ID != id {
 		return doc, false, fmt.Errorf("%w: the id in the document (%q) must match the address (%q)", ErrInvalid, head.ID, id)
 	}
-	pretty, err := Pretty(body)
+	pretty, err := Pretty(c.Body)
 	if err != nil {
 		return doc, false, err
 	}
+	note := strings.TrimSpace(c.Note)
+	if r := []rune(note); len(r) > MaxNote {
+		note = string(r[:MaxNote])
+	}
 	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		var current []byte
-		err := tx.QueryRow(ctx, `select body from documents where kind = $1 and id = $2 for update`, kind, id).Scan(&current)
-		if err == nil && bytes.Equal(current, pretty) {
-			return nil
-		}
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		if err := lock(ctx, tx, kind, id); err != nil {
 			return err
+		}
+		cur, err := current(ctx, tx, kind, id)
+		if err != nil {
+			return err
+		}
+		if c.Check != nil {
+			if err := c.Check(cur); err != nil {
+				return err
+			}
+		}
+		if err := checkBase(c.Base, cur); err != nil {
+			return err
+		}
+		if cur != nil && bytes.Equal(cur.Body, pretty) {
+			doc = *cur
+			return nil
 		}
 		// continue the numbering even if the document was deleted in between
 		var next int
 		if err := tx.QueryRow(ctx, `select coalesce(max(version), 0) + 1 from document_versions where kind = $1 and id = $2`, kind, id).Scan(&next); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `insert into documents (kind, id, version, body, updated_by) values ($1, $2, $3, $4, $5)
-			on conflict (kind, id) do update set version = excluded.version, body = excluded.body, updated_by = excluded.updated_by, updated_at = now()`,
-			kind, id, next, pretty, by); err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `insert into document_versions (kind, id, version, body, saved_by) values ($1, $2, $3, $4, $5)`, kind, id, next, pretty, by)
-		changed = err == nil
-		return err
-	})
-	if err != nil {
-		return doc, false, err
-	}
-	doc, err = s.Get(ctx, kind, id)
-	return doc, changed, err
-}
-
-// Delete removes a document and records the deletion in its history.
-func (s *Store) Delete(ctx context.Context, kind, id, by string) error {
-	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `delete from documents where kind = $1 and id = $2`, kind, id)
+		err = tx.QueryRow(ctx, `insert into documents (kind, id, version, body, updated_by) values ($1, $2, $3, $4, $5)
+			on conflict (kind, id) do update set version = excluded.version, body = excluded.body, updated_by = excluded.updated_by, updated_at = now()
+			returning kind, id, version, body, updated_at, updated_by`, kind, id, next, pretty, c.By).
+			Scan(&doc.Kind, &doc.ID, &doc.Version, &doc.Body, &doc.UpdatedAt, &doc.UpdatedBy)
 		if err != nil {
 			return err
 		}
-		if tag.RowsAffected() == 0 {
+		if _, err := tx.Exec(ctx, `insert into document_versions (kind, id, version, body, saved_by, note) values ($1, $2, $3, $4, $5, $6)`, kind, id, next, pretty, c.By, note); err != nil {
+			return err
+		}
+		changed = true
+		if c.After != nil {
+			return c.After(ctx, tx, doc)
+		}
+		return nil
+	})
+	if err != nil {
+		return Doc{}, false, err
+	}
+	return doc, changed, nil
+}
+
+// Delete removes a document and records the deletion in its history. See Remove.
+func (s *Store) Delete(ctx context.Context, kind, id, by string) error {
+	return s.Remove(ctx, Removal{Kind: kind, ID: id, By: by})
+}
+
+// Remove deletes a document and records the deletion in its history.
+func (s *Store) Remove(ctx context.Context, r Removal) error {
+	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if err := lock(ctx, tx, r.Kind, r.ID); err != nil {
+			return err
+		}
+		cur, err := current(ctx, tx, r.Kind, r.ID)
+		if err != nil {
+			return err
+		}
+		if cur == nil {
 			return ErrNotFound
 		}
-		_, err = tx.Exec(ctx, `insert into document_versions (kind, id, version, body, saved_by)
-			select $1, $2, coalesce(max(version), 0) + 1, null, $3 from document_versions where kind = $1 and id = $2`, kind, id, by)
-		return err
+		if r.Check != nil {
+			if err := r.Check(cur); err != nil {
+				return err
+			}
+		}
+		if err := checkBase(r.Base, cur); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `delete from documents where kind = $1 and id = $2`, r.Kind, r.ID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `insert into document_versions (kind, id, version, body, saved_by)
+			select $1, $2, coalesce(max(version), 0) + 1, null, $3 from document_versions where kind = $1 and id = $2`, r.Kind, r.ID, r.By); err != nil {
+			return err
+		}
+		if r.After != nil {
+			return r.After(ctx, tx)
+		}
+		return nil
 	})
 }
 
 // History lists the versions of a document, newest first.
 func (s *Store) History(ctx context.Context, kind, id string) ([]Version, error) {
-	rows, err := s.Pool.Query(ctx, `select version, saved_at, saved_by, body is null from document_versions where kind = $1 and id = $2 order by version desc`, kind, id)
+	rows, err := s.Pool.Query(ctx, `select version, saved_at, saved_by, note, body is null from document_versions where kind = $1 and id = $2 order by version desc`, kind, id)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +310,7 @@ func (s *Store) History(ctx context.Context, kind, id string) ([]Version, error)
 	out := []Version{}
 	for rows.Next() {
 		var v Version
-		if err := rows.Scan(&v.Version, &v.SavedAt, &v.SavedBy, &v.Deleted); err != nil {
+		if err := rows.Scan(&v.Version, &v.SavedAt, &v.SavedBy, &v.Note, &v.Deleted); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
@@ -195,6 +328,13 @@ func (s *Store) VersionBody(ctx context.Context, kind, id string, version int) (
 	return body, err
 }
 
+// CountKind returns how many documents of one kind exist.
+func (s *Store) CountKind(ctx context.Context, kind string) (int, error) {
+	var n int
+	err := s.Pool.QueryRow(ctx, `select count(*) from documents where kind = $1`, kind).Scan(&n)
+	return n, err
+}
+
 // Count returns how many documents exist; zero means the database has never been filled.
 func (s *Store) Count(ctx context.Context) (int, error) {
 	var n int
@@ -206,14 +346,20 @@ func (s *Store) Count(ctx context.Context) (int, error) {
 var folders = map[string]string{Process: "processes", Standard: "standards"}
 
 // ImportDir loads processes/*.json, standards/*.json and catalog/catalog.json from dir.
-// It returns how many documents were added or changed. Files that are not valid are reported
-// and skipped; nothing is deleted.
-func (s *Store) ImportDir(ctx context.Context, dir, by string) (changed int, problems []string, err error) {
+// It returns how many documents were added or changed. Files that validate refuses (nil: no
+// check) are reported and skipped; nothing is deleted.
+func (s *Store) ImportDir(ctx context.Context, dir, by string, validate func(kind string, body []byte) error) (changed int, problems []string, err error) {
 	put := func(kind, id, file string) {
 		data, readErr := os.ReadFile(file)
 		if readErr != nil {
 			problems = append(problems, fmt.Sprintf("%s: %v", file, readErr))
 			return
+		}
+		if validate != nil {
+			if err := validate(kind, data); err != nil {
+				problems = append(problems, fmt.Sprintf("%s: %v", file, err))
+				return
+			}
 		}
 		_, did, putErr := s.Put(ctx, kind, id, data, by)
 		if putErr != nil {

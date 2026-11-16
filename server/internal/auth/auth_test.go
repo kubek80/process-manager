@@ -84,7 +84,7 @@ func TestDevUsers(t *testing.T) {
 }
 
 // signIn runs the whole browser flow against the fake provider and returns the outcome.
-func signIn(t *testing.T, p *oidctest.Provider, hostedDomain string, tamper func(*http.Request)) (User, error) {
+func signIn(t *testing.T, p *oidctest.Provider, opts OIDCOptions, tamper func(*http.Request)) (User, error) {
 	t.Helper()
 	sessions := NewSessions([]byte("secret"), false)
 	var o *OIDC
@@ -101,7 +101,8 @@ func signIn(t *testing.T, p *oidctest.Provider, hostedDomain string, tamper func
 		got, gotErr = o.Callback(w, r)
 	})
 	var err error
-	o, err = NewOIDC(context.Background(), sessions, p.Server.URL, p.ClientID, "client-secret", app.URL+"/auth/callback", hostedDomain)
+	opts.Issuer, opts.ClientID, opts.ClientSecret, opts.RedirectURL = p.Server.URL, p.ClientID, "client-secret", app.URL+"/auth/callback"
+	o, err = NewOIDC(context.Background(), sessions, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,9 +118,13 @@ func signIn(t *testing.T, p *oidctest.Provider, hostedDomain string, tamper func
 func TestOIDCSignInGoogleStyle(t *testing.T) {
 	p := oidctest.New(t, "client-1")
 	p.Claims = map[string]any{"email": "Kim@Example.com", "name": "Kim Lee", "hd": "example.com"}
-	u, err := signIn(t, p, "example.com", nil)
+	u, err := signIn(t, p, OIDCOptions{HostedDomain: "example.com", EmailDomains: []string{"example.org", "Example.com"}}, nil)
 	if err != nil || u.Email != "kim@example.com" || u.Name != "Kim Lee" {
 		t.Fatalf("got %+v, %v", u, err)
+	}
+	p.Claims["email_verified"] = true
+	if _, err := signIn(t, p, OIDCOptions{}, nil); err != nil {
+		t.Fatalf("a verified address: %v", err)
 	}
 }
 
@@ -127,26 +132,35 @@ func TestOIDCSignInEntraStyle(t *testing.T) {
 	// Entra ID often sends no "email" claim: the sign-in name is in preferred_username.
 	p := oidctest.New(t, "client-1")
 	p.Claims = map[string]any{"preferred_username": "kim@contoso.com", "name": "Kim Lee"}
-	u, err := signIn(t, p, "", nil)
+	u, err := signIn(t, p, OIDCOptions{}, nil)
 	if err != nil || u.Email != "kim@contoso.com" {
 		t.Fatalf("got %+v, %v", u, err)
 	}
 	p.Claims = map[string]any{"upn": "kim@contoso.com"}
-	u, err = signIn(t, p, "", nil)
+	u, err = signIn(t, p, OIDCOptions{}, nil)
 	if err != nil || u.Email != "kim@contoso.com" || u.Name != "kim@contoso.com" {
 		t.Fatalf("upn fallback: %+v, %v", u, err)
+	}
+	// the email claim can be edited by the person in some tenants; the sign-in name cannot
+	p.Claims = map[string]any{"email": "ceo@contoso.com", "preferred_username": "kim@contoso.com"}
+	u, err = signIn(t, p, OIDCOptions{PreferSignInName: true}, nil)
+	if err != nil || u.Email != "kim@contoso.com" {
+		t.Fatalf("the sign-in name must win: %+v, %v", u, err)
 	}
 }
 
 func TestOIDCRejects(t *testing.T) {
 	cases := []struct {
 		name, want, hd string
+		domains        []string
 		claims         map[string]any
 		breakNonce     bool
 		tamper         func(*http.Request)
 	}{
 		{name: "other workspace domain", want: "only accounts of example.com", hd: "example.com", claims: map[string]any{"email": "x@evil.com", "hd": "evil.com"}},
-		{name: "no email", want: "did not share an email", claims: map[string]any{"name": "Nobody"}},
+		{name: "no email", want: "did not share a verified email", claims: map[string]any{"name": "Nobody"}},
+		{name: "unverified email", want: "did not share a verified email", claims: map[string]any{"email": "ceo@example.com", "email_verified": false}},
+		{name: "other email domain", want: "only accounts of example.com, example.org", domains: []string{"example.com", "example.org"}, claims: map[string]any{"email": "x@notexample.com"}},
 		{name: "wrong nonce", want: "nonce does not match", claims: map[string]any{"email": "a@b.c"}, breakNonce: true},
 		{name: "wrong state", want: "state does not match", claims: map[string]any{"email": "a@b.c"}, tamper: func(r *http.Request) {
 			q := r.URL.Query()
@@ -172,7 +186,7 @@ func TestOIDCRejects(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			p := oidctest.New(t, "client-1")
 			p.Claims, p.BreakNonce = c.claims, c.breakNonce
-			_, err := signIn(t, p, c.hd, c.tamper)
+			_, err := signIn(t, p, OIDCOptions{HostedDomain: c.hd, EmailDomains: c.domains}, c.tamper)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("want error containing %q, got %v", c.want, err)
 			}
@@ -183,7 +197,7 @@ func TestOIDCRejects(t *testing.T) {
 func TestOIDCRejectsTokenForAnotherClient(t *testing.T) {
 	p := oidctest.New(t, "client-1")
 	p.Claims = map[string]any{"email": "a@b.c", "aud": "someone-else"}
-	if _, err := signIn(t, p, "", nil); err == nil || !strings.Contains(err.Error(), "verify identity token") {
+	if _, err := signIn(t, p, OIDCOptions{}, nil); err == nil || !strings.Contains(err.Error(), "verify identity token") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -191,7 +205,7 @@ func TestOIDCRejectsTokenForAnotherClient(t *testing.T) {
 func TestOIDCDiscoveryFailure(t *testing.T) {
 	dead := httptest.NewServer(http.NotFoundHandler())
 	defer dead.Close()
-	if _, err := NewOIDC(context.Background(), NewSessions([]byte("s"), false), dead.URL, "id", "sec", "http://x/cb", ""); err == nil {
+	if _, err := NewOIDC(context.Background(), NewSessions([]byte("s"), false), OIDCOptions{Issuer: dead.URL, ClientID: "id", ClientSecret: "sec", RedirectURL: "http://x/cb"}); err == nil {
 		t.Fatal("expected discovery to fail")
 	}
 }
