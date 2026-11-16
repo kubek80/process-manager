@@ -31,20 +31,26 @@ export function myTeams(perms: Perms): string[] {
   return [...new Set([...perms.owns, ...perms.standardUnits])].sort();
 }
 
-/** Whether somebody answers for what this team or unit owns. */
-export const answersFor = (perms: Perms, owner?: string) => !!owner && (perms.owns.includes(owner) || perms.standardUnits.includes(owner));
+/**
+ * Whether somebody answers for a process or a standard of this team or unit. Being Owner for it
+ * covers both. Editing a unit's standards covers its standards only - the same rule the server
+ * applies when a review is confirmed or feedback is closed.
+ */
+export const answersFor = (perms: Perms, kind: TargetKind, owner?: string) =>
+  !!owner && (perms.owns.includes(owner) || (kind === "standard" && perms.standardUnits.includes(owner)));
 
 const ORDER: TaskKind[] = ["review-overdue", "feedback", "review-soon", "draft", "no-rhythm"];
 
-export function responsibilities(teams: string[], processes: Process[], standards: Standard[], feedback: FeedbackByTarget, today?: string): { owned: Owned[]; tasks: Task[] } {
-  const mine = (owner?: string) => !!owner && teams.includes(owner);
+/** `only` narrows it to one of the person's teams or units; null: all of them. */
+export function responsibilities(perms: Perms, only: string | null, processes: Process[], standards: Standard[], feedback: FeedbackByTarget, today?: string): { owned: Owned[]; tasks: Task[] } {
+  const mine = (kind: TargetKind, owner?: string) => answersFor(perms, kind, owner) && (only === null || owner === only);
   const item = (kind: TargetKind, doc: Process | Standard): Owned => ({
     kind, doc, team: doc.owner!, status: statusOf(doc), review: reviewInfo(doc, today),
     open: (feedback[kind][doc.id] ?? []).filter((f) => !f.resolved).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
   });
   const owned = [
-    ...processes.filter((p) => mine(p.owner)).map((p) => item("process", p)),
-    ...standards.filter((s) => mine(s.owner)).map((s) => item("standard", s)),
+    ...processes.filter((p) => mine("process", p.owner)).map((p) => item("process", p)),
+    ...standards.filter((s) => mine("standard", s.owner)).map((s) => item("standard", s)),
   ].sort((a, b) => a.team.localeCompare(b.team) || a.doc.title.localeCompare(b.doc.title));
 
   const tasks: Task[] = [];

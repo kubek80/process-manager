@@ -9,7 +9,7 @@ const ADMIN = ["/p/request-gcp-project/json", "/admin/access", "/admin/lists", "
 
 const sideways = (page: import("@playwright/test").Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
-for (const [name, width] of [["a phone", 390], ["a tablet", 768], ["a small laptop", 1024]] as const) {
+for (const [name, width] of [["a small phone", 360], ["a phone", 390], ["a tablet", 768], ["a small laptop", 1024]] as const) {
   test(`no page scrolls sideways on ${name}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await signIn(page, SAM);

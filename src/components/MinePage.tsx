@@ -42,8 +42,8 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
   const teams = useMemo(() => myTeams(perms), [perms]);
   const [team, setTeam] = useState<string | null>(null); // null: all of mine
   const [busy, setBusy] = useState<string | null>(null);
-  const shown = team && teams.includes(team) ? [team] : teams;
-  const { owned, tasks } = useMemo(() => responsibilities(shown, processes, standards, feedback), [shown, processes, standards, feedback]);
+  const only = team && teams.includes(team) ? team : null;
+  const { owned, tasks } = useMemo(() => responsibilities(perms, only, processes, standards, feedback), [perms, only, processes, standards, feedback]);
 
   const of = (...kinds: Task["kind"][]) => tasks.filter((t) => kinds.includes(t.kind));
   const overdue = of("review-overdue"), soon = of("review-soon"), open = of("feedback"), other = of("draft", "no-rhythm");

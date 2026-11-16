@@ -405,7 +405,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
           </div>
           <div className="head-actions">
             {/* the review belongs to the unit that issues the standard, and to whoever edits it */}
-            {(editor || answersFor(perms, draft.owner)) && review.state !== "none" && <button className={`btn ${review.state === "ok" ? "" : "review-due"}`} onClick={markReviewed} disabled={!renderable}
+            {(editor || answersFor(perms, "standard", draft.owner)) && review.state !== "none" && <button className={`btn ${review.state === "ok" ? "" : "review-due"}`} onClick={markReviewed} disabled={!renderable}
               title="Confirm that this standard is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
             {editor && <>
               <button className="btn accent-soft" onClick={() => setDialog("ai")} disabled={!renderable}><Sparkles size={16} />Change with AI</button>
@@ -441,7 +441,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
       {status === "draft" && renderable && (
         <div className="check warn banner"><TriangleAlert size={16} /><span><b>Draft.</b> Consumers do not see this standard, and no skill is generated, until its status is set to Active in Details.</span></div>
       )}
-      {(editor || answersFor(perms, draft.owner)) && review.state === "overdue" && renderable && (
+      {(editor || answersFor(perms, "standard", draft.owner)) && review.state === "overdue" && renderable && (
         <div className="check bad banner"><CalendarCheck size={16} /><span><b>{review.label}.</b> Read it through, correct what changed, then press “Mark as reviewed”.</span></div>
       )}
 

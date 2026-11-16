@@ -15,9 +15,14 @@ describe("whose it is", () => {
     expect(myTeams(perms({ owns: ["cloud-platform-team"], standardUnits: ["security", "cloud-platform-team"] }))).toEqual(["cloud-platform-team", "security"]);
     expect(myTeams(perms({ processes: true, admin: true }))).toEqual([]); // editing everything is not owning anything
     const casey = perms({ owns: ["cloud-platform-team"] });
-    expect(answersFor(casey, "cloud-platform-team")).toBe(true);
-    expect(answersFor(casey, "security")).toBe(false);
-    expect(answersFor(casey, undefined)).toBe(false);
+    expect(answersFor(casey, "process", "cloud-platform-team")).toBe(true);
+    expect(answersFor(casey, "standard", "cloud-platform-team")).toBe(true);
+    expect(answersFor(casey, "process", "security")).toBe(false);
+    expect(answersFor(casey, "process", undefined)).toBe(false);
+    // editing a unit's standards makes its standards yours, not the processes it happens to own
+    const editor = perms({ standardUnits: ["security"] });
+    expect(answersFor(editor, "standard", "security")).toBe(true);
+    expect(answersFor(editor, "process", "security")).toBe(false);
   });
 });
 
@@ -33,7 +38,7 @@ describe("what needs doing", () => {
     process: { fine: [fb("new", "fine", "2026-11-10T10:00:00Z"), fb("old", "fine", "2026-10-01T10:00:00Z"), fb("done", "fine", "2026-09-01T10:00:00Z", true)], theirs: [fb("x", "theirs", "2026-11-01T10:00:00Z")] },
     standard: {},
   };
-  const r = responsibilities(["cloud-platform-team"], [fine, theirs, draft, soon, mine, noRhythm], [std], feedback, TODAY);
+  const r = responsibilities(perms({ owns: ["cloud-platform-team"] }), null, [fine, theirs, draft, soon, mine, noRhythm], [std], feedback, TODAY);
 
   it("covers only what the person's teams own", () => {
     expect(r.owned.map((o) => o.doc.id)).toEqual(["demo-standard", "draft", "fine", "mine", "no-rhythm", "soon"]);
@@ -48,6 +53,15 @@ describe("what needs doing", () => {
   });
 
   it("is empty for somebody who owns nothing", () => {
-    expect(responsibilities([], [mine], [std], feedback, TODAY)).toEqual({ owned: [], tasks: [] });
+    expect(responsibilities(perms({ processes: true }), null, [mine], [std], feedback, TODAY)).toEqual({ owned: [], tasks: [] });
+  });
+
+  it("can be narrowed to one team, and follows what each role covers", () => {
+    const both = perms({ owns: ["cloud-platform-team"], standardUnits: ["security"] });
+    const secStd = { ...baseStandard(), id: "sec-std", owner: "security" };
+    const all = responsibilities(both, null, [mine, theirs], [std, secStd], feedback, TODAY);
+    // "theirs" is a process of security: a standards editor of that unit does not answer for it
+    expect(all.owned.map((o) => o.doc.id).sort()).toEqual(["demo-standard", "mine", "sec-std"]);
+    expect(responsibilities(both, "security", [mine, theirs], [std, secStd], feedback, TODAY).owned.map((o) => o.doc.id)).toEqual(["sec-std"]);
   });
 });

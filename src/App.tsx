@@ -372,7 +372,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const all = processes ?? [];
   // what needs the signed-in person as an owner: shown as a count next to "My responsibilities"
   const mine = useMemo(() => myTeams(perms), [perms]);
-  const waiting = useMemo(() => (mine.length ? urgent(responsibilities(mine, all, standards, feedback).tasks) : 0), [mine, all, standards, feedback]);
+  const waiting = useMemo(() => (mine.length ? urgent(responsibilities(perms, null, all, standards, feedback).tasks) : 0), [mine, perms, all, standards, feedback]);
   const process = route.page === "process" ? all.find((p) => p.id === route.id) : undefined;
   const standard = route.page === "standard" ? standards.find((s) => s.id === route.id) : undefined;
   const on = (...pages: string[]) => (pages.includes(route.page) ? "on" : "");

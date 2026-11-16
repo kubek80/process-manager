@@ -492,10 +492,10 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .guide-body { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 56px; }
 .guide-code { overflow-x: auto; }
 @media (max-width: 760px) {
-  .guide-table td:first-child { white-space: normal; width: auto; overflow-wrap: anywhere; }
+  .guide .guide-table td:first-child { white-space: normal; width: auto; overflow-wrap: anywhere; }
   .guide-table td, .guide-table th, .guide-dl dd { overflow-wrap: anywhere; }
   .guide-table { table-layout: fixed; }
-  .guide-table code, .guide-section > p code { word-break: break-all; }
+  .guide-table code, .guide-section > p code { word-break: break-all; white-space: normal; }
 }
 .guide-hero h1 { font-size: 40px; }
 .guide-hero .lead { font-size: 17px; }
