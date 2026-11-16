@@ -94,8 +94,10 @@ export function useLayer(ref: RefObject<HTMLElement | null>, onClose: () => void
   }, [watch]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-export function Modal({ title, subtitle, onClose, children, wide, footer }: {
+export function Modal({ title, subtitle, onClose, children, wide, footer, closable = true }: {
   title: ReactNode; subtitle?: ReactNode; onClose: () => void; children: ReactNode; wide?: boolean; footer?: ReactNode;
+  /** false: a question that has to be answered with one of its buttons - no X to close it. */
+  closable?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -108,7 +110,7 @@ export function Modal({ title, subtitle, onClose, children, wide, footer }: {
             <h2 id={titleId}>{title}</h2>
             {subtitle && <p className="muted">{subtitle}</p>}
           </div>
-          <button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
+          {closable && <button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>}
         </header>
         <div className="modal-body">{children}</div>
         {footer && <footer className="modal-foot">{footer}</footer>}

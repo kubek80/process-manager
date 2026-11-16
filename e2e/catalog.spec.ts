@@ -45,7 +45,8 @@ test("discard restores the lists; renaming keeps the id", async ({ page }) => {
   await expect(page.locator(".cat-detail code").first()).toHaveText("tier-3");
   await page.locator(".save-bar").getByRole("button", { name: "Discard" }).click();
   await expect(page.locator(".cat-item", { hasText: "Tier 3 (sandbox)" })).toHaveCount(0);
-  await expect(page.locator(".save-bar")).toHaveCount(0);
+  await expect(page.locator(".saved")).toBeVisible(); // nothing left to save
+  await expect(page.getByRole("button", { name: "Undo" })).toBeFocused(); // Discard can be undone, and says so by putting the focus there
 });
 
 test("a missing tool can be added straight from a step", async ({ page }) => {

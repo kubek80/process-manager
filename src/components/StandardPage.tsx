@@ -7,6 +7,7 @@ import type { DocMeta, Feedback, Level, Process, Requirement, Severity, Standard
 import { teamName, useCatalog } from "../lib/catalog";
 import { addRequirement, appliesTo, deleteRequirement, moveRequirement, tidyStandard, today, updateRequirement } from "../lib/edit";
 import { useDraft } from "../lib/draft";
+import { useSelectedItem } from "../lib/selection";
 import { useProfile } from "../lib/profile";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { useEditor } from "../lib/mode";
@@ -318,17 +319,17 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   /** Saves on top of version `base`; resolves to the new version. */
   onSave: (s: Standard, base: number, note?: string) => Promise<number>;
   onReload: () => Promise<{ saved: Standard; version: number } | null>;
-  onDelete: () => void;
+  /** Deletes the version this page shows; refused when somebody else changed it since. */
+  onDelete: (base: number) => void;
 }) {
   const { catalog } = useCatalog();
   const me = useMe();
   const perms = usePerms();
   const mayEdit = canEditStandard(perms, standard.owner);
   const editor = useEditor() && mayEdit;
-  const d = useDraft<Standard>({ docKey: `standard/${standard.id}`, saved: standard, version: meta?.version ?? 0, tidy: tidyStandard, stamp, save: onSave, reload: onReload, what: "this standard" });
+  const d = useDraft<Standard>({ docKey: `standard/${standard.id}`, saved: standard, version: meta?.version ?? 0, tidy: tidyStandard, stamp, save: onSave, reload: onReload, what: "this standard", editable: editor });
   const { draft, clean, dirty } = d;
   const setDraft = d.change;
-  const selected = item ?? null;
   const [editing, setEditing] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [dialog, setDialog] = useState<null | "settings" | "ai" | "history">(null);
@@ -346,6 +347,10 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   const errors = issues.filter((i) => i.level === "error").length;
   const renderable = useMemo(() => isDrawableStandard(draft), [draft]);
   const view: StandardTab = !renderable ? "json" : tab === "json" && !editor ? "doc" : tab;
+  // the open requirement is part of the address, so a link can point at it and Back closes it
+  const [selected, setSelected] = useSelectedItem(item,
+    (id) => ({ page: "standard", id: standard.id, tab: "doc", ...(id ? { item: id } : {}) }),
+    (id) => !renderable || draft.requirements.some((r) => r.id === id));
   const current = renderable ? draft.requirements.find((r) => r.id === selected) : undefined;
   const target = useMemo(() => standardTarget(draft), [draft]);
   const status = statusOf(draft);
@@ -354,9 +359,9 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   const exception = draft.exceptionProcessId ? processes.find((p) => p.id === draft.exceptionProcessId) : undefined;
   const helpers = processes.filter((p) => p.standards?.includes(draft.id) && statusOf(p) === "active");
 
-  // the open requirement is part of the address, so a link can point at it and Back closes it
-  const setSelected = (id: string | null) => go({ page: "standard", id: standard.id, tab: "doc", ...(id ? { item: id } : {}) });
   const select = (id: string) => { setSelected(id); setReporting(false); };
+  useEffect(() => { if (!selected) setEditing(false); }, [selected]); // a requirement opened later starts as it is read
+  const blocked = errors ? "Fix the problems first." : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined;
   // bring the open requirement into view, also when the page was opened by a link to it
   useEffect(() => {
     if (!item || view !== "doc") return;
@@ -421,7 +426,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
           {errors ? <CircleAlert size={15} /> : issues.length ? <TriangleAlert size={15} /> : <CircleCheck size={15} />}
           {errors ? `${errors} problem${errors > 1 ? "s" : ""}` : issues.length ? `${issues.length} hint${issues.length > 1 ? "s" : ""}` : "No problems"}
         </button>}
-        <SaveBar d={d} editor={editor} blocked={errors ? "Fix the problems first" : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined} />
+        <SaveBar d={d} editor={editor} blocked={blocked} />
       </div>
       <BehindBanner d={d} meta={meta} noun="this standard" />
       {showIssues && issues.length > 0 && <div className="issues-panel"><IssueList issues={issues} /></div>}
@@ -494,7 +499,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
       {dialog === "settings" && (
         <StandardSettings standard={draft} all={all} processes={processes} onChange={setDraft} onClose={() => setDialog(null)}
           onDelete={async () => {
-            if (await confirmDialog({ title: "Delete this standard?", body: <>“{standard.title}” is removed for everyone. Its skills are withdrawn and its feedback is removed.</>, confirmLabel: "Delete standard", danger: true })) onDelete();
+            if (await confirmDialog({ title: "Delete this standard?", body: <>“{standard.title}” is removed for everyone. Its skills are withdrawn and its feedback is removed.</>, confirmLabel: "Delete standard", danger: true })) onDelete(d.base);
           }} />
       )}
       {dialog === "ai" && (
@@ -504,7 +509,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
       )}
       {dialog === "history" && <HistoryDialog<Standard> kind="standard" id={standard.id} title={standard.title} onClose={() => setDialog(null)}
         onRestore={editor ? (doc) => { setDraft(doc); setDialog(null); } : undefined} />}
-      <ConflictDialog d={d} kind="standard" id={standard.id} noun="this standard" />
+      <ConflictDialog d={d} kind="standard" id={standard.id} noun="this standard" blocked={blocked} />
     </div>
   );
 }

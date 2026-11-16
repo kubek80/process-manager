@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { guardLeaving, href, parseRoute, unsavedWork, type Route } from "../store";
+import { forgetUnsaved, guardLeaving, hasUnsaved, href, parseRoute, unsavedWork, type Route } from "../store";
 import { blankProcess, blankStandard } from "../edit";
 
 describe("addresses", () => {
@@ -67,5 +67,27 @@ describe("something new takes its address from its name", () => {
     expect(s.title).toBe("Secure logging");
     expect(s.owner).toBe("security");
     expect(s.status).toBe("draft");
+  });
+});
+
+describe("the guard knows where text in the JSON tab lives", () => {
+  it("staying in that tab loses nothing; other tabs of the same process do", () => {
+    const json = guardLeaving("process/demo#json", "the JSON of this process");
+    expect(unsavedWork({ page: "process", id: "demo", tab: "json" })).toBeNull();
+    expect(unsavedWork({ page: "process", id: "demo", tab: "list" })).toBe("the JSON of this process");
+    expect(hasUnsaved("process/demo#json")).toBe(true);
+    json();
+    expect(hasUnsaved("process/demo#json")).toBe(false);
+  });
+  it("forgets everything about something that was deleted", () => {
+    guardLeaving("process/gone", "this process");
+    guardLeaving("process/gone#json", "the JSON of this process");
+    guardLeaving("process/gone-too", "this process");
+    forgetUnsaved("process/gone");
+    expect(hasUnsaved("process/gone")).toBe(false);
+    expect(hasUnsaved("process/gone#json")).toBe(false);
+    expect(unsavedWork()).toBe("this process"); // the other one is still there
+    forgetUnsaved("process/gone-too");
+    expect(unsavedWork()).toBeNull();
   });
 });

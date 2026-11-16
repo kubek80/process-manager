@@ -84,7 +84,7 @@ const tidyCatalog = (c: Catalog): Catalog =>
 export function CatalogPage({ processes, standards, editable: editor }: { processes: Process[]; standards: Standard[]; editable: boolean }) {
   const { catalog, version, save, reload } = useCatalog();
   const docs = useMemo<(Process | Standard)[]>(() => [...processes, ...standards], [processes, standards]);
-  const d = useDraft<Catalog>({ docKey: "catalog", saved: catalog, version, tidy: tidyCatalog, save, reload, what: "the lists" });
+  const d = useDraft<Catalog>({ docKey: "catalog", saved: catalog, version, tidy: tidyCatalog, save, reload, what: "the lists", editable: editor });
   const { draft, clean, dirty } = d;
   const setDraft = d.change;
   useEffect(() => { if (d.error) { notify.error("The lists could not be saved.", d.error); d.clearError(); } }, [d.error]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -272,10 +272,10 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
         </section>
       </div>
 
-      {editor && <BehindBanner d={d} noun="the lists" />}
+      {editor && <BehindBanner d={d} meta={{ version, updatedAt: "", updatedBy: "" }} noun="the lists" />}
       {editor && (
-        <div className={`cat-save ${dirty ? "dirty" : ""}`} role="status">
-          {dirty && <span className="cat-save-text"><b>Unsaved changes</b> to the lists</span>}
+        <div className={`cat-save ${dirty ? "dirty" : ""}`}>
+          {dirty && <span className="cat-save-text" role="status"><b>Unsaved changes</b> to the lists</span>}
           <SaveBar d={d} editor blocked={hasErrors(issues) ? "Fix the problems first" : undefined} />
         </div>
       )}

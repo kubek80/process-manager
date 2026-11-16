@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BURST_MS, UNDO_LIMIT, discard, edit, isDirty, redo, savedAs, serverHas, start, undo } from "../draftState";
+import { BURST_MS, UNDO_LIMIT, discard, edit, fieldChanged, isDirty, redo, savedAs, serverHas, start, undo } from "../draftState";
 
 type Doc = { title: string; tags?: string[] };
 const tidy = (d: Doc): Doc => ({ title: d.title.trim(), ...(d.tags?.length ? { tags: d.tags } : {}) });
@@ -100,5 +100,55 @@ describe("somebody else saved", () => {
     // once we chose theirs, we follow again
     s = serverHas(discard(s, later(2)), theirs, 2, tidy);
     expect(s.draft).toEqual(theirs);
+  });
+});
+
+describe("what counts as one step to undo", () => {
+  type Flow = { title: string; steps: { id: string; actor: string }[] };
+  const same = (d: Flow) => d;
+  const flow: Flow = { title: "T", steps: [{ id: "a", actor: "me" }, { id: "b", actor: "me" }] };
+
+  it("keeps separate actions separate even when they follow each other quickly", () => {
+    let s = start(flow, 1);
+    s = edit(s, { ...flow, steps: [flow.steps[0]] }, 1000); // delete a step
+    s = edit(s, { ...s.draft, steps: [{ id: "a", actor: "boss" }] }, 1300); // move it to another lane
+    s = edit(s, { ...s.draft, title: "T2" }, 1600); // rename the process
+    expect(s.past).toHaveLength(3);
+    s = undo(s);
+    expect(s.draft.title).toBe("T");
+    expect(s.draft.steps[0].actor).toBe("boss");
+    s = undo(undo(s));
+    expect(isDirty(s, same)).toBe(false);
+  });
+
+  it("joins typing in one field, but not typing in two fields", () => {
+    let s = start(flow, 1);
+    s = edit(s, { ...flow, title: "Ti" }, 1000);
+    s = edit(s, { ...flow, title: "Tit" }, 1100);
+    s = edit(s, { ...s.draft, steps: [{ id: "a", actor: "m" }, flow.steps[1]] }, 1200);
+    expect(s.past).toHaveLength(2);
+  });
+
+  it("finds the one value that changed", () => {
+    expect(fieldChanged(flow, { ...flow, title: "X" })).toBe("title");
+    expect(fieldChanged(flow, { ...flow, steps: [{ id: "a", actor: "x" }, flow.steps[1]] })).toBe("steps.0.actor");
+    expect(fieldChanged(flow, { title: "X", steps: [{ id: "a", actor: "x" }, flow.steps[1]] })).toBeNull();
+    expect(fieldChanged(flow, { ...flow, steps: [flow.steps[0]] })).toBeNull();
+    expect(fieldChanged(flow, structuredClone(flow))).toBe("");
+  });
+});
+
+describe("answers that arrive late", () => {
+  it("ignores a refresh that is older than our own save", () => {
+    let s = edit(start(v1, 1), { title: "Two" }, later(1));
+    s = savedAs(s, { title: "Two" }, 2, tidy);
+    const after = serverHas(s, v1, 1, tidy); // a refresh that left before the save and arrives after it
+    expect(after).toBe(s);
+    expect(after.draft.title).toBe("Two");
+  });
+
+  it("does not call a stored document changed because tidying would alter it", () => {
+    const stored: Doc = { title: "Stored with a blank ", tags: [] };
+    expect(isDirty(start(stored, 3), tidy)).toBe(false);
   });
 });

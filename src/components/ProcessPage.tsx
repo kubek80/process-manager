@@ -5,6 +5,7 @@ import { addStepAfter, deleteStep, insertStep, moveStep, prerequisiteKeys, renam
 import { isDrawableProcess, validateProcess } from "../lib/validate";
 import { go, guardLeaving, useProgress, type Tab } from "../lib/store";
 import { useDraft } from "../lib/draft";
+import { useSelectedItem } from "../lib/selection";
 import { teamName, useCatalog } from "../lib/catalog";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { Resources } from "./Resources";
@@ -38,12 +39,9 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
   /** Saves on top of version `base`; resolves to the new version. */
   onSave: (p: Process, base: number, note?: string) => Promise<number>;
   onReload: () => Promise<{ saved: Process; version: number } | null>;
-  onDelete: () => void;
+  /** Deletes the version this page shows; refused when somebody else changed it since. */
+  onDelete: (base: number) => void;
 }) {
-  const d = useDraft<Process>({ docKey: `process/${process.id}`, saved: process, version: meta?.version ?? 0, tidy, stamp, save: onSave, reload: onReload, what: "this process" });
-  const { draft, clean, dirty } = d;
-  const setDraft = d.change;
-  const selected = item ?? null;
   const [editing, setEditing] = useState(false);
   const [dialog, setDialog] = useState<null | "settings" | "ai" | "history">(null);
   const [showIssues, setShowIssues] = useState(false);
@@ -53,6 +51,9 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
   const { catalog } = useCatalog();
   const perms = usePerms();
   const editor = useEditor() && perms.processes;
+  const d = useDraft<Process>({ docKey: `process/${process.id}`, saved: process, version: meta?.version ?? 0, tidy, stamp, save: onSave, reload: onReload, what: "this process", editable: editor });
+  const { draft, clean, dirty } = d;
+  const setDraft = d.change;
   const me = useMe();
   const { done, toggle, reset } = useProgress(process.id);
 
@@ -68,11 +69,15 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
   // A process that was stored broken can only be repaired in the JSON tab.
   const renderable = useMemo(() => isDrawableProcess(draft), [draft]);
   const view: Tab = !renderable ? "json" : tab === "json" && !editor ? "flow" : tab;
+  // the open step is part of the address, so a link can point at it and Back closes it
+  const stepsTab: Tab = view === "list" ? "list" : "flow"; // where a step is shown
+  const [selected, setSelected] = useSelectedItem(item,
+    (id) => ({ page: "process", id: process.id, tab: stepsTab, ...(id ? { item: id } : {}) }),
+    (id) => !renderable || draft.steps.some((s) => s.id === id));
   const step = renderable ? draft.steps.find((s) => s.id === selected) : undefined;
 
-  // the open step is part of the address, so a link can point at it and Back closes it
-  const setSelected = (id: string | null) => go({ page: "process", id: process.id, tab: view === "feedback" || view === "json" || view === "skills" ? "flow" : view, ...(id ? { item: id } : {}) });
   const select = (id: string) => { setSelected(id); setReporting(false); };
+  useEffect(() => { if (!selected) setEditing(false); }, [selected]); // a step opened later starts as it is read
   // in the checklist the open step is brought into view, also when the page was opened by a link to it
   useEffect(() => {
     if (item && view === "list") document.getElementById(`step-${item}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
@@ -103,6 +108,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
   };
 
   const mine = renderable ? draft.steps.filter((s) => s.actor === "me").length : 0;
+  const blocked = errors ? "Fix the problems first." : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined;
   // On the map the map comes first: what to prepare is one line that opens. The checklist, where
   // the work is done, shows it in full.
   const hasExtras = renderable && (draft.prerequisites.length > 0 || !!draft.resources?.length || !!draft.standards?.length);
@@ -147,7 +153,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
         <div className="tabs" role="tablist">
           {([["flow", "Map", Workflow], ["list", "Checklist", ListChecks], ["feedback", "Feedback", Flag], ["skills", "Skill", Bot], ["json", "JSON", Braces]] as const).filter(([id]) => editor || id !== "json").map(([id, label, Icon]) => (
             <button key={id} role="tab" aria-selected={view === id} className={view === id ? "on" : ""} disabled={!renderable && id !== "json"}
-              onClick={() => go({ page: "process", id: process.id, tab: id })}><Icon size={16} />{label}{id === "feedback" && openCount(feedback) > 0 && <span className="tab-count">{openCount(feedback)}</span>}</button>
+              onClick={() => go({ page: "process", id: process.id, tab: id, ...(selected && (id === "flow" || id === "list") ? { item: selected } : {}) })}><Icon size={16} />{label}{id === "feedback" && openCount(feedback) > 0 && <span className="tab-count">{openCount(feedback)}</span>}</button>
           ))}
         </div>
         <span className="spacer" />
@@ -155,7 +161,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
           {errors ? <CircleAlert size={15} /> : issues.length ? <TriangleAlert size={15} /> : <CircleCheck size={15} />}
           {errors ? `${errors} problem${errors > 1 ? "s" : ""}` : issues.length ? `${issues.length} hint${issues.length > 1 ? "s" : ""}` : "No problems"}
         </button>}
-        <SaveBar d={d} editor={editor} blocked={errors ? "Fix the problems first" : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined} />
+        <SaveBar d={d} editor={editor} blocked={blocked} />
       </div>
       <BehindBanner d={d} meta={meta} noun="this process" />
       {showIssues && issues.length > 0 && <div className="issues-panel"><IssueList issues={issues} /></div>}
@@ -259,7 +265,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
       {dialog === "settings" && (
         <ProcessSettings process={draft} all={all} standards={standards} onChange={setDraft} onClose={() => setDialog(null)}
           onDelete={async () => {
-            if (await confirmDialog({ title: "Delete this process?", body: <>“{process.title}” is removed for everyone. Its skill is withdrawn and its feedback is removed.</>, confirmLabel: "Delete process", danger: true })) onDelete();
+            if (await confirmDialog({ title: "Delete this process?", body: <>“{process.title}” is removed for everyone. Its skill is withdrawn and its feedback is removed.</>, confirmLabel: "Delete process", danger: true })) onDelete(d.base);
           }} />
       )}
       {dialog === "ai" && (
@@ -270,7 +276,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
       )}
       {dialog === "history" && <HistoryDialog<Process> kind="process" id={process.id} title={process.title} onClose={() => setDialog(null)}
         onRestore={editor ? (doc) => { setDraft(doc); setDialog(null); } : undefined} />}
-      <ConflictDialog d={d} kind="process" id={process.id} noun="this process" />
+      <ConflictDialog d={d} kind="process" id={process.id} noun="this process" blocked={blocked} />
     </div>
   );
 }

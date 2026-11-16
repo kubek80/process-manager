@@ -23,6 +23,8 @@ export interface DraftOptions<T> {
   reload: () => Promise<{ saved: T; version: number } | null>;
   /** What to call it when asking before leaving, e.g. "this process". */
   what: string;
+  /** false: this person only reads. Nothing is guarded for them unless they changed something. */
+  editable?: boolean;
 }
 
 export interface Draft<T> {
@@ -51,6 +53,8 @@ export interface Draft<T> {
   /** Drop my edits (they can be undone) and continue from their version. */
   takeTheirs: () => Promise<void>;
   dismissConflict: () => void;
+  /** Shows the "somebody else saved first" question without trying to save. */
+  raiseConflict: (c: Conflict) => void;
   /** The last error of a save that was not a conflict. */
   error: string | null;
   clearError: () => void;
@@ -79,13 +83,14 @@ export function useDraft<T>(o: DraftOptions<T>): Draft<T> {
     setError(null);
   }
 
-  // the server has something we did not write
-  useEffect(() => {
-    setState((s) => serverHas(s, saved, version, opts.current.tidy));
-  }, [saved, version]);
-
   const clean = useMemo(() => tidy(state.draft), [state.draft, tidy]);
   const dirty = useMemo(() => isDirty(state, tidy), [state, tidy]);
+
+  // The server has something we did not write. A page without edits follows it - also one
+  // that just became clean again (Discard, Undo) while a newer version was waiting.
+  useEffect(() => {
+    setState((s) => serverHas(s, saved, version, opts.current.tidy));
+  }, [saved, version, dirty]);
 
   const change = useCallback((next: T | ((d: T) => T)) => {
     setState((s) => edit(s, typeof next === "function" ? (next as (d: T) => T)(s.draft) : next, Date.now()));
@@ -117,21 +122,19 @@ export function useDraft<T>(o: DraftOptions<T>): Draft<T> {
   const save = useCallback((note = "") => send(latest.current.base, note), [send]);
   const keepMine = useCallback((note = "") => send(conflict?.exists ? (conflict.version ?? 0) : 0, note), [send, conflict]);
   const takeTheirs = useCallback(async () => {
-    const now = await opts.current.reload();
+    let now: { saved: T; version: number } | null;
+    try { now = await opts.current.reload(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); return; }
     setConflict(null);
     if (!now) return; // it is gone: the page that shows it will notice
+    const theirs = now;
     // their version becomes the base; my edits remain one Undo away
-    setState((s) => ({ ...edit({ ...s, editedAt: 0 }, now.saved, Date.now()), saved: now.saved, base: now.version }));
+    setState((s) => ({ ...edit({ ...s, editedAt: 0, editedField: null }, theirs.saved, Date.now()), saved: theirs.saved, base: theirs.version }));
   }, []);
 
-  // leaving the page with unsaved edits asks first: closing the tab, and moving on inside the app
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
-    window.addEventListener("beforeunload", warn);
-    const release = guardLeaving(docKey, opts.current.what);
-    return () => { window.removeEventListener("beforeunload", warn); release(); };
-  }, [dirty, docKey]);
+  // Leaving with unsaved edits asks first: closing the tab, and moving on inside the app.
+  // Somebody who only reads has nothing to lose, unless they did change something.
+  const guarded = dirty && (o.editable !== false || state.past.length > 0);
+  useEffect(() => (guarded ? guardLeaving(docKey, opts.current.what) : undefined), [guarded, docKey]);
 
   // Ctrl+Z / Ctrl+Shift+Z (Cmd on a Mac) - except while typing, where the field has its own undo
   useEffect(() => {
@@ -154,6 +157,7 @@ export function useDraft<T>(o: DraftOptions<T>): Draft<T> {
     redo: useCallback(() => setState(redo), []),
     canUndo: state.past.length > 0, canRedo: state.future.length > 0,
     save, conflict, keepMine, takeTheirs, dismissConflict: useCallback(() => setConflict(null), []),
+    raiseConflict: useCallback((c: Conflict) => setConflict(c), []),
     error, clearError: useCallback(() => setError(null), []),
   };
 }

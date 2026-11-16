@@ -249,3 +249,140 @@ test("the app runs under a strict security policy", async ({ page }) => {
   }
   expect(problems).toEqual([]);
 });
+
+/** What happens when the person comes back to the tab after a while: the portal fetches what others changed. */
+async function comeBackLater(page: Page) {
+  await page.clock.fastForward(60_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+}
+
+test("the Back button closes a step and never opens again what was closed", async ({ page }) => {
+  await signIn(page, SAM);
+  await open(page, "/");
+  await page.locator(".card", { hasText: "Request a GCP project" }).click();
+  for (const n of [0, 1]) {
+    await page.locator(".block-main").nth(n).click();
+    await expect(page.locator(".drawer")).toBeVisible();
+    await page.locator(".drawer").getByRole("button", { name: "Close" }).click();
+    await expect(page.locator(".drawer")).toHaveCount(0);
+  }
+  // moving from one open step to the next is not a step back in time either
+  await page.locator(".block-main").nth(0).click();
+  await page.locator(".block-main").nth(2).click();
+  await expect(page.locator(".drawer h3")).toHaveText("Approve the monthly budget");
+  await page.goBack(); // closes the open step
+  await expect(page.locator(".drawer")).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/p\/request-gcp-project\/flow$/);
+  await page.goBack(); // and the next one leaves the process
+  await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
+});
+
+test("Back with unsaved changes leaves the history as it was, whatever the answer", async ({ page }) => {
+  await signIn(page, ALEX, { editor: true });
+  await copyOf(page, "history-demo", "History demo");
+  await open(page, "/guide");
+  await page.getByRole("link", { name: "Standards" }).click();
+  await page.getByRole("link", { name: "Processes" }).click();
+  await page.locator(".card", { hasText: "History demo" }).click();
+  await page.getByRole("button", { name: "Details", exact: true }).click();
+  await page.locator(".modal").getByLabel("Summary").fill("Changed and not saved, to see what Back does.");
+  await page.locator(".modal").getByRole("button", { name: "Done" }).click();
+
+  await page.goBack();
+  await answer(page, "Leave without saving?", "Stay");
+  await expect(page).toHaveURL(/#\/p\/history-demo\/flow/);
+  await expect(page.locator(".lead")).toHaveText("Changed and not saved, to see what Back does.");
+  // the same Back again asks again, and leaving goes exactly one step back - not further, not nowhere
+  await page.goBack();
+  await answer(page, "Leave without saving?", "Leave without saving");
+  await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/standards/);
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/guide/);
+  await page.goForward();
+  await expect(page).toHaveURL(/#\/standards/);
+});
+
+test("what others change shows up when coming back to the tab; unsaved changes are kept and told about it", async ({ page, playwright }) => {
+  await page.clock.install();
+  await signIn(page, ALEX, { editor: true });
+  await copyOf(page, "refresh-demo", "Refresh demo");
+  const other = await playwright.request.newContext({ baseURL: "http://127.0.0.1:8090" });
+
+  // a page without changes simply follows
+  await open(page, "/p/refresh-demo/flow");
+  await otherPersonRenames(other, DANA, "refresh-demo", "Renamed while Alex was away");
+  await comeBackLater(page);
+  await expect(page.locator("h1")).toHaveText("Renamed while Alex was away");
+  await expect(page.getByRole("button", { name: "Version 2" })).toBeVisible();
+
+  // a page with changes keeps them and says that there is a newer version
+  await renameFirstStep(page, "Alex's unsaved wording");
+  await otherPersonRenames(other, DANA, "refresh-demo", "Renamed a second time");
+  await comeBackLater(page);
+  const banner = page.locator(".banner", { hasText: "saved a newer version of this process" });
+  await expect(banner).toContainText(DANA);
+  await expect(page.locator(".block").first()).toContainText("Alex's unsaved wording");
+  await expect(page.locator("h1")).toHaveText("Renamed while Alex was away"); // still the version the changes are based on
+  // "Compare and decide" shows what they changed without trying to save
+  await banner.getByRole("button", { name: "Compare and decide" }).click();
+  await expect(page.getByRole("dialog", { name: "Somebody else saved first" })).toContainText("Title changed");
+  await page.getByRole("dialog", { name: "Somebody else saved first" }).getByRole("button", { name: "Keep editing" }).click();
+  // going back to what was saved (Discard) is going to the newest version
+  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(page.locator("h1")).toHaveText("Renamed a second time");
+  await other.dispose();
+});
+
+test("something deleted by somebody else stays on screen while it has unsaved changes", async ({ page, playwright }) => {
+  await page.clock.install();
+  await signIn(page, ALEX, { editor: true });
+  await copyOf(page, "deleted-demo", "Deleted demo");
+  await open(page, "/p/deleted-demo/flow");
+  await renameFirstStep(page, "Hours of careful work");
+
+  const other = await playwright.request.newContext({ baseURL: "http://127.0.0.1:8090" });
+  await other.post("/auth/dev/login", { data: { email: DANA }, headers: CSRF });
+  expect((await other.delete("/api/processes/deleted-demo", { headers: CSRF })).ok()).toBeTruthy();
+  await comeBackLater(page);
+  await expect(page.locator(".block").first()).toContainText("Hours of careful work"); // not "Process not found"
+
+  await page.getByRole("button", { name: "Save changes" }).click();
+  const dialog = page.getByRole("dialog", { name: /was deleted/ });
+  await expect(dialog).toContainText("Your changes are still here");
+  await dialog.getByRole("button", { name: "Save mine and bring it back" }).click();
+  await expect(page.locator(".saved")).toBeVisible();
+  expect((await readProcess(page, "deleted-demo"))!.steps[0].title).toBe("Hours of careful work");
+  await other.dispose();
+});
+
+test("deleting is refused when somebody else changed it since it was opened", async ({ page, playwright }) => {
+  await signIn(page, ALEX, { editor: true });
+  await copyOf(page, "stale-delete-demo", "Stale delete demo");
+  await open(page, "/p/stale-delete-demo/flow");
+  const other = await playwright.request.newContext({ baseURL: "http://127.0.0.1:8090" });
+  await otherPersonRenames(other, DANA, "stale-delete-demo", "Dana still needs this");
+
+  await page.getByRole("button", { name: "Details", exact: true }).click();
+  await page.locator(".modal").getByRole("button", { name: "Delete process" }).click();
+  await answer(page, "Delete this process?", "Delete process");
+  await expect(page.locator(".toast", { hasText: "could not be deleted" })).toContainText("changed this process in the meantime");
+  expect((await readProcess(page, "stale-delete-demo"))!.title).toBe("Dana still needs this");
+  // with unsaved changes of one's own, deleting does not ask about them afterwards
+  await page.locator(".modal").getByRole("button", { name: "Done" }).click().catch(() => {});
+  await other.dispose();
+});
+
+test("deleting something with unsaved changes does not ask about them afterwards", async ({ page }) => {
+  await signIn(page, ALEX, { editor: true });
+  await copyOf(page, "delete-dirty-demo", "Delete dirty demo");
+  await open(page, "/p/delete-dirty-demo/flow");
+  await page.getByRole("button", { name: "Details", exact: true }).click();
+  await page.locator(".modal").getByLabel("Summary").fill("A change that goes down with the process.");
+  await page.locator(".modal").getByRole("button", { name: "Delete process" }).click();
+  await answer(page, "Delete this process?", "Delete process");
+  await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(await readProcess(page, "delete-dirty-demo")).toBeUndefined();
+});

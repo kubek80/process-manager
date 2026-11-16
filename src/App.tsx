@@ -3,7 +3,7 @@ import { BookOpen, Eye, LayoutGrid, LogOut, Moon, Pencil, Settings2, ShieldCheck
 import type { Catalog, DocMeta, Feedback, FeedbackByTarget, Me, Process, Standard } from "./types";
 import {
   ApiError, createFeedback, deleteFeedback, go, href, loadCatalog, loadFeedback, loadMe, loadProcesses, loadStandards, logout, pageTitle, putCatalog, putProcess, putStandard,
-  removeProcess, removeStandard, setAlsoHit, setResolved, SIGNED_OUT, unsavedWork, useRoute, type MetaById,
+  removeProcess, removeStandard, setAlsoHit, setResolved, SIGNED_OUT, forgetUnsaved, hasUnsaved, unsavedWork, useRoute, type MetaById,
 } from "./lib/store";
 import { CatalogContext, EMPTY_CATALOG } from "./lib/catalog";
 import { canEditSomething, canOpenAdmin, canEditStandard, FeedbackContext, MeContext, roleLabel, usePerms, type FeedbackActions } from "./lib/session";
@@ -111,6 +111,12 @@ function whyNot(e: unknown, noun: string): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+/** Why something new could not be created. */
+function whyNotCreated(e: unknown, noun: string): string {
+  if ((e as ApiError)?.conflict) return `A ${noun} with this address was created by somebody else a moment ago. Choose another name.`;
+  return e instanceof Error ? e.message : String(e);
+}
+
 /** A new process or standard starts with its name: the name gives it its address, which never changes. */
 function NameDialog({ noun, onCreate, onClose }: { noun: "process" | "standard"; onCreate: (title: string) => Promise<void>; onClose: () => void }) {
   const [title, setTitle] = useState("");
@@ -126,7 +132,7 @@ function NameDialog({ noun, onCreate, onClose }: { noun: "process" | "standard";
       footer={<><span className="spacer" /><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!ok || busy} onClick={create}>Create {noun}</button></>}>
       <form onSubmit={(e) => { e.preventDefault(); create(); }}>
         <Field label={`Name of the ${noun}`} hint={ok ? `Address: …/${slugify(title)}` : noun === "process" ? "For example: Request a database" : "For example: Secure logging"}>
-          <input autoFocus value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} />
+          <input autoFocus value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} />
         </Field>
       </form>
     </Modal>
@@ -151,7 +157,7 @@ function SignedOutDialog({ me, onBack, onOther }: { me: Me; onBack: () => void; 
     } catch (e) { setHint(e instanceof Error ? e.message : String(e)); } finally { setChecking(false); }
   };
   return (
-    <Modal title="You are signed out" subtitle="Nothing on this page is lost. Sign in again, then carry on where you were." onClose={() => { /* stays until signed in */ }}
+    <Modal title="You are signed out" subtitle="Nothing on this page is lost. Sign in again, then carry on where you were." closable={false} onClose={() => { /* stays until signed in */ }}
       footer={<>
         <a className="btn" href={me.provider === "dev" ? "/" : "/auth/login"} target="_blank" rel="noreferrer">Sign in again (opens a new tab)</a>
         <span className="spacer" />
@@ -188,11 +194,21 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const switchMode = (m: Mode) => { setWanted(m); try { localStorage.setItem("pm:mode", m); } catch { /* ignore */ } };
 
   const loadedAt = useRef(0);
+  const writes = useRef(0); // counts our own saves, creations and deletions
   const fetchAll = useCallback(async () => {
+    const started = writes.current;
     const [p, s, c, f] = await Promise.all([loadProcesses(), loadStandards(), loadCatalog(), loadFeedback()]);
+    // An answer that was on its way while we saved something describes the world before that
+    // save: showing it would put old content back on screen. The next refresh is right again.
+    if (writes.current !== started) return { p, s, c };
     loadedAt.current = Date.now();
     setCatalog(c.catalog); setCatalogVersion(c.version); setFeedback(f);
-    setStandards(s.docs); setStandardMeta(s.meta); setProcesses(p.docs); setProcessMeta(p.meta);
+    // Something that somebody else deleted while this person has unsaved edits in it stays on
+    // screen: their next save is refused and they decide whether to bring it back.
+    const keep = <T extends { id: string }>(kind: string, now: T[], before: T[]) =>
+      [...now, ...before.filter((x) => hasUnsaved(`${kind}/${x.id}`) && !now.some((y) => y.id === x.id))].sort((a, b) => a.id.localeCompare(b.id));
+    setStandards((before) => keep("standard", s.docs, before)); setStandardMeta(s.meta);
+    setProcesses((before) => keep("process", p.docs, before ?? [])); setProcessMeta(p.meta);
     return { p, s, c };
   }, []);
   const load = useCallback(() => {
@@ -224,7 +240,9 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
 
   // the caller decides what a failed save means for it, so the error is passed on
   const saveCatalog = useCallback(async (c: Catalog, base?: number, note?: string) => {
+    writes.current++;
     const meta = await putCatalog(c, base ?? catalogVersion, note);
+    writes.current++;
     setCatalog(c); setCatalogVersion(meta.version);
     return meta.version;
   }, [catalogVersion]);
@@ -257,12 +275,16 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   // Saving: on top of the version the edits started from. The page that saves shows what went
   // wrong, including "somebody else saved first"; the new version is returned to it.
   const saveProcess = async (p: Process, base: number, note?: string) => {
+    writes.current++; // before and after: a refresh that overlaps the save on either side is dropped
     const meta = await putProcess(p, base, note);
+    writes.current++;
     setProcesses((list) => list && byId(list, p)); setMeta(setProcessMeta, p.id, meta); refreshFeedback();
     return meta.version;
   };
   const saveStandard = async (s: Standard, base: number, note?: string) => {
+    writes.current++;
     const meta = await putStandard(s, base, note);
+    writes.current++;
     setStandards((list) => byId(list, s)); setMeta(setStandardMeta, s.id, meta); refreshFeedback();
     return meta.version;
   };
@@ -283,26 +305,34 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const createProcess = async (p: Process) => {
     const id = uniqueId(p.id, all.map((x) => x.id));
     const doc = tidy({ ...p, id, status: "draft", $schema: "../schema/process.schema.json", updatedAt: today() });
-    try { await saveProcess(doc, 0, "Created"); } catch (e) { notify.error("The process could not be created.", whyNot(e, "process")); throw e; }
+    try { await saveProcess(doc, 0, "Created"); } catch (e) { notify.error("The process could not be created.", whyNotCreated(e, "process")); if ((e as ApiError).conflict) load(); throw e; }
     setAi(null); setNaming(null);
     go({ page: "process", id, tab: "flow" });
   };
   const createStandard = async (s: Standard) => {
     const id = uniqueId(s.id, standards.map((x) => x.id));
     const doc = tidyStandard({ ...s, id, status: "draft", $schema: "../schema/standard.schema.json", updatedAt: today() });
-    try { await saveStandard(doc, 0, "Created"); } catch (e) { notify.error("The standard could not be created.", whyNot(e, "standard")); throw e; }
+    try { await saveStandard(doc, 0, "Created"); } catch (e) { notify.error("The standard could not be created.", whyNotCreated(e, "standard")); if ((e as ApiError).conflict) load(); throw e; }
     setAi(null); setNaming(null);
     go({ page: "standard", id, tab: "doc" });
   };
-  const deleteProcess = async (id: string) => {
+  // Deleting: the version the person is looking at. If somebody changed it since, it is not
+  // deleted - nobody removes a version they have not seen.
+  const deleteProcess = async (id: string, base: number) => {
     try {
-      await removeProcess(id, processMeta[id]?.version ?? 0);
+      writes.current++;
+      await removeProcess(id, base);
+      writes.current++;
+      forgetUnsaved(`process/${id}`); // its unsaved edits went with it: nothing to ask about
       setProcesses((list) => list && list.filter((x) => x.id !== id)); go({ page: "library" });
     } catch (e) { notify.error("The process could not be deleted.", whyNot(e, "process")); if ((e as ApiError).conflict) load(); }
   };
-  const deleteStandard = async (id: string) => {
+  const deleteStandard = async (id: string, base: number) => {
     try {
-      await removeStandard(id, standardMeta[id]?.version ?? 0);
+      writes.current++;
+      await removeStandard(id, base);
+      writes.current++;
+      forgetUnsaved(`standard/${id}`);
       setStandards((list) => list.filter((x) => x.id !== id)); go({ page: "standards" });
     } catch (e) { notify.error("The standard could not be deleted.", whyNot(e, "standard")); if ((e as ApiError).conflict) load(); }
   };
@@ -372,12 +402,12 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         : <div className="page"><h1>Admin</h1><p className="muted">You do not have access to the Admin panel. An admin can give it to you.</p></div>)}
       {processes && route.page === "process" && (process
         ? <ProcessPage key={process.id} process={process} meta={processMeta[process.id]} all={all} standards={standards} tab={route.tab} item={route.item}
-          onSave={saveProcess} onReload={() => reloadProcess(process.id)} onDelete={() => deleteProcess(process.id)}
+          onSave={saveProcess} onReload={() => reloadProcess(process.id)} onDelete={(base) => deleteProcess(process.id, base)}
           feedback={feedback.process[process.id] ?? []} />
         : <div className="page"><h1>Process not found</h1><p className="muted">There is no process “{route.id}”.</p><a className="btn" href="#/">Back to all processes</a></div>)}
       {processes && route.page === "standard" && (standard
         ? <StandardPage key={standard.id} standard={standard} meta={standardMeta[standard.id]} all={standards} processes={all} tab={route.tab} item={route.item}
-          onSave={saveStandard} onReload={() => reloadStandard(standard.id)} onDelete={() => deleteStandard(standard.id)}
+          onSave={saveStandard} onReload={() => reloadStandard(standard.id)} onDelete={(base) => deleteStandard(standard.id, base)}
           feedback={feedback.standard[standard.id] ?? []} />
         : <div className="page"><h1>Standard not found</h1><p className="muted">There is no standard “{route.id}”.</p><a className="btn" href="#/standards">Back to all standards</a></div>)}
       </Suspense>

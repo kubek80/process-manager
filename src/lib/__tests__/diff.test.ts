@@ -69,3 +69,38 @@ describe("what changed between two versions of a standard", () => {
     expect(compare("process", base(), base())).toEqual([]);
   });
 });
+
+describe("comparing versions does not mislead", () => {
+  it("treats a step that only got another id as the same step", () => {
+    const before = base();
+    before.steps.push({ id: "new-step", title: "New step", actor: "me", type: "task", next: [] });
+    before.steps[4].next = [{ to: "new-step" }];
+    const after = base();
+    after.steps.push({ id: "tell-the-team", title: "New step", actor: "me", type: "task", next: [] });
+    after.steps[4].next = [{ to: "tell-the-team" }];
+    expect(compareProcesses(before, after)).toEqual([]);
+    // with another id and another name there is nothing left to recognise it by: it is a new step
+    after.steps[5].title = "Tell the team";
+    expect(compareProcesses(before, after).map(describeChange)).toEqual([
+      "Step “Check the result” changed: what comes next", "Step “Tell the team” added", "Step “New step” removed",
+    ]);
+  });
+
+  it("copes with two prerequisites of the same name, and reports a new order", () => {
+    const twice = { ...base(), prerequisites: [{ title: "Access" }, { title: "Access", description: "To the second system." }, { title: "Budget" }] };
+    expect(compareProcesses(twice, structuredClone(twice))).toEqual([]);
+    const reordered = { ...twice, prerequisites: [twice.prerequisites[2], twice.prerequisites[0], twice.prerequisites[1]] };
+    expect(compareProcesses(twice, reordered).map(describeChange)).toEqual(["Order of what is needed before you start changed"]);
+    const one = { ...twice, prerequisites: [{ title: "Access" }, { title: "Budget" }] };
+    expect(compareProcesses(twice, one).map(describeChange)).toEqual(["Before you start “Access” removed"]);
+  });
+
+  it("does not call an empty list a change, and survives a version that is not a document", () => {
+    expect(compareProcesses(base(), { ...base(), tags: [], resources: [] })).toEqual([]);
+    expect(compareStandards(baseStandard(), { ...baseStandard(), tags: [] })).toEqual([]);
+    expect(compare("process", null, base())).toEqual([]);
+    expect(compare("standard", baseStandard(), "broken")).toEqual([]);
+    const holes = { ...base(), steps: [null, base().steps[0]] } as unknown as ReturnType<typeof base>;
+    expect(() => compareProcesses(holes, base())).not.toThrow();
+  });
+});

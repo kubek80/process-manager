@@ -17,7 +17,10 @@ export interface Change {
 
 type Doc = Record<string, unknown>;
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+// nothing, an empty list and an empty text are the same to a reader
+const blank = (v: unknown) => v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
+const same = (a: unknown, b: unknown) => (blank(a) && blank(b)) || JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+const isObject = (v: unknown): v is Doc => !!v && typeof v === "object" && !Array.isArray(v);
 
 /** Names for the fields of a document, a step and a requirement. */
 const FIELD: Record<string, string> = {
@@ -41,41 +44,65 @@ function changedFields(a: Doc, b: Doc, skip: string[]): string[] {
 function compareItems<T extends { id: string }>(what: string, before: T[], after: T[], label: (t: T) => string, changes: Change[]) {
   const old = new Map(before.map((x) => [x.id, x]));
   const now = new Map(after.map((x) => [x.id, x]));
+  // An item that only got another id (a new step is renamed from "new-step" when it is given
+  // its name) is the same item: pairing it up avoids reporting it as removed and added, and
+  // its neighbours as changed because they point at the new id.
+  const renamed = new Map<string, string>(); // new id -> old id
+  const gone = before.filter((x) => !now.has(x.id));
   for (const x of after) {
-    const prev = old.get(x.id);
+    if (old.has(x.id)) continue;
+    const twin = gone.find((g) => ![...renamed.values()].includes(g.id) && !changedFields(g as unknown as Doc, x as unknown as Doc, ["id", "next"]).length);
+    if (twin) renamed.set(x.id, twin.id);
+  }
+  const oldIdOf = (id: string) => renamed.get(id) ?? id;
+  const follow = (x: T): Doc => {
+    const next = (x as unknown as { next?: { to: string }[] }).next;
+    return Array.isArray(next) ? { ...(x as unknown as Doc), next: next.map((n) => ({ ...n, to: oldIdOf(n.to) })) } : (x as unknown as Doc);
+  };
+  for (const x of after) {
+    const prev = old.get(oldIdOf(x.id));
     if (!prev) changes.push({ kind: "added", what, label: label(x) });
     else {
-      const details = changedFields(prev as unknown as Doc, x as unknown as Doc, ["id"]);
+      const details = changedFields(prev as unknown as Doc, follow(x), ["id"]);
       if (details.length) changes.push({ kind: "changed", what, label: label(x), details });
     }
   }
-  for (const x of before) if (!now.has(x.id)) changes.push({ kind: "removed", what, label: label(x) });
+  for (const x of gone) if (![...renamed.values()].includes(x.id)) changes.push({ kind: "removed", what, label: label(x) });
+  for (const [, id] of renamed) now.set(id, old.get(id)!); // for the order below, a renamed item is still there
   // the same items in another order
-  const kept = (list: T[], other: Map<string, T>) => list.filter((x) => other.has(x.id)).map((x) => x.id).join("\n");
-  if (kept(before, now) !== kept(after, old)) changes.push({ kind: "changed", what: "Details", label: `order of the ${what.toLowerCase()}s` });
+  const kept = (list: T[], other: Map<string, T>, id: (x: T) => string) => list.map(id).filter((i) => other.has(i)).join("\n");
+  if (kept(before, now, (x) => x.id) !== kept(after, old, (x) => oldIdOf(x.id))) changes.push({ kind: "changed", what: "Details", label: `order of the ${what.toLowerCase()}s` });
 }
 
-const list = <T,>(v: T[] | undefined): T[] => (Array.isArray(v) ? v : []);
+// what a version holds, without the entries that are not objects (a broken version is still compared, not crashed on)
+const list = <T,>(v: T[] | undefined): T[] => (Array.isArray(v) ? v.filter((x) => isObject(x)) : []);
 
 export function compareProcesses(before: Process, after: Process): Change[] {
+  if (!isObject(before) || !isObject(after)) return [];
   const changes: Change[] = [];
   // updatedAt changes with every save and says nothing; steps and prerequisites are listed on their own
   for (const field of changedFields(before as unknown as Doc, after as unknown as Doc, ["steps", "prerequisites", "updatedAt", "$schema", "schemaVersion", "id"])) {
     changes.push({ kind: "changed", what: "Details", label: field });
   }
+  // prerequisites have no id: they are matched by title, and two with the same title in the order they come
   const oldPre = list(before.prerequisites), newPre = list(after.prerequisites);
-  const titles = (l: typeof oldPre) => new Set(l.map((q) => q.title));
-  for (const q of newPre) if (!titles(oldPre).has(q.title)) changes.push({ kind: "added", what: "Before you start", label: q.title });
-  for (const q of oldPre) if (!titles(newPre).has(q.title)) changes.push({ kind: "removed", what: "Before you start", label: q.title });
-  for (const q of newPre) {
-    const prev = oldPre.find((o) => o.title === q.title);
-    if (prev && !same(prev, q)) changes.push({ kind: "changed", what: "Before you start", label: q.title });
-  }
+  const left = [...oldPre];
+  const pairs: [number, number][] = []; // [position before, position after]
+  newPre.forEach((q, at) => {
+    const i = left.findIndex((o) => o.title === q.title);
+    if (i < 0) return void changes.push({ kind: "added", what: "Before you start", label: q.title });
+    const [prev] = left.splice(i, 1);
+    pairs.push([oldPre.indexOf(prev), at]);
+    if (!same(prev, q)) changes.push({ kind: "changed", what: "Before you start", label: q.title });
+  });
+  for (const q of left) changes.push({ kind: "removed", what: "Before you start", label: q.title });
+  if (pairs.some(([was], i) => i > 0 && was < pairs[i - 1][0])) changes.push({ kind: "changed", what: "Details", label: "order of what is needed before you start" });
   compareItems<Step>("Step", list(before.steps), list(after.steps), (s) => s.title, changes);
   return changes;
 }
 
 export function compareStandards(before: Standard, after: Standard): Change[] {
+  if (!isObject(before) || !isObject(after)) return [];
   const changes: Change[] = [];
   for (const field of changedFields(before as unknown as Doc, after as unknown as Doc, ["requirements", "updatedAt", "$schema", "schemaVersion", "id"])) {
     changes.push({ kind: "changed", what: "Details", label: field });

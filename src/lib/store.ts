@@ -147,23 +147,39 @@ const parse = (h: string = location.hash): Route => {
 export const parseRoute = (hash: string): Route => parse(hash);
 
 // ---------- unsaved work
-// A page that has unsaved edits says so here. Moving on inside the app (a link, Back, signing
-// out) then asks first, the same way the browser asks before closing the tab.
+// A page that has unsaved edits says so here. Leaving it then asks first: moving on inside the
+// app (a link, Back, signing out) and closing or reloading the tab.
 
 const unsaved = new Map<string, string>(); // what is being edited -> what to call it
-/** Where the thing with this key is edited: leaving that place is what loses the edits. */
-const placeOf = (r: Route): string | null =>
-  r.page === "process" ? `process/${r.id}` : r.page === "standard" ? `standard/${r.id}` : r.page === "admin" && r.section === "lists" ? "catalog" : null;
+/**
+ * The places a route keeps open: leaving all places where something is edited is what loses
+ * the edits. Text typed in the JSON tab lives only while that tab is open.
+ */
+const placesOf = (r: Route): string[] => {
+  const doc = r.page === "process" ? `process/${r.id}` : r.page === "standard" ? `standard/${r.id}` : r.page === "admin" && r.section === "lists" ? "catalog" : null;
+  if (!doc) return [];
+  return (r.page === "process" || r.page === "standard") && r.tab === "json" ? [doc, `${doc}#json`] : [doc];
+};
+
+const beforeUnload = (e: BeforeUnloadEvent) => { if (unsaved.size) e.preventDefault(); };
+let listening = false;
 
 /** Marks something as having unsaved edits until the returned function is called. */
 export function guardLeaving(key: string, what: string): () => void {
   unsaved.set(key, what);
-  return () => { unsaved.delete(key); };
+  if (!listening && typeof window !== "undefined") { window.addEventListener("beforeunload", beforeUnload); listening = true; }
+  return () => { if (unsaved.get(key) === what) unsaved.delete(key); };
 }
+/** Forgets the unsaved edits of something that is gone, e.g. after it was deleted. */
+export function forgetUnsaved(key: string) {
+  for (const k of [...unsaved.keys()]) if (k === key || k.startsWith(`${key}#`)) unsaved.delete(k);
+}
+/** Whether this thing has unsaved edits. */
+export const hasUnsaved = (key: string) => unsaved.has(key);
 /** What would be lost by going to `to` (or by leaving the app when `to` is missing), if anything. */
 export function unsavedWork(to?: Route): string | null {
-  const staying = to ? placeOf(to) : null;
-  for (const [key, what] of unsaved) if (key !== staying) return what;
+  const staying = to ? placesOf(to) : [];
+  for (const [key, what] of unsaved) if (!staying.includes(key)) return what;
   return null;
 }
 
@@ -173,30 +189,52 @@ let confirmLeave: ((what: string) => Promise<boolean>) | undefined;
 let agreed: string | null = null;
 
 /** Goes to `hash`, after asking when unsaved edits would be lost. */
-async function moveTo(hash: string) {
+async function moveTo(hash: string, replace = false) {
   const lost = unsavedWork(parse(hash));
   if (lost && confirmLeave && !(await confirmLeave(lost))) return;
   if (lost) agreed = hash;
-  location.hash = hash;
+  if (!replace) { location.hash = hash; return; }
+  // the same place in the browser's history, under another address
+  history.replaceState(history.state, "", hash);
+  window.dispatchEvent(new HashChangeEvent("hashchange"));
 }
+
+type Mark = { pm?: number } | null;
 
 /**
  * The current route. `ask` is asked before a move that would lose unsaved edits. Links and
- * buttons of the app are stopped before anything happens. The Back button and a typed address
- * have already moved when the app hears of them: then the address is put back while asking.
+ * buttons of the app are stopped before anything happens. The Back and Forward buttons and a
+ * typed address have already moved when the app hears of them: the browser is then sent back
+ * to where it was while asking, and on "leave" the same move is made again - so the history
+ * stays as it was either way.
  */
 export function useRoute(ask?: (what: string) => Promise<boolean>): Route {
   const [route, setRoute] = useState<Route>(() => parse());
   confirmLeave = ask;
   useEffect(() => {
-    let shown = location.hash; // the address of what is on screen
+    // every entry of the history gets a running number, so that a move can be told from its opposite
+    let position = (history.state as Mark)?.pm ?? 0;
+    if ((history.state as Mark)?.pm === undefined) history.replaceState({ pm: position }, "");
+    let undoing = 0; // moves of our own that put the browser back: not news
     const on = async () => {
+      if (undoing > 0) { undoing--; return; }
       const target = location.hash;
+      const mark = (history.state as Mark)?.pm;
+      const fresh = mark === undefined; // an entry the browser just added (a typed address, a link)
       const lost = target === agreed ? null : unsavedWork(parse(target));
       agreed = null;
-      if (!lost || !confirmLeave) { shown = target; setRoute(parse(target)); return; }
-      history.replaceState(null, "", shown || "#/"); // stay where we are while asking
-      if (await confirmLeave(lost)) { agreed = target; location.hash = target; }
+      if (!lost || !confirmLeave) {
+        if (fresh) { position += 1; history.replaceState({ pm: position }, ""); } else position = mark;
+        setRoute(parse(target));
+        return;
+      }
+      const back = fresh ? -1 : position - mark; // the move that undoes what the browser just did
+      undoing++;
+      history.go(back);
+      if (await confirmLeave(lost)) {
+        agreed = target;
+        if (fresh) location.hash = target; else history.go(-back);
+      }
     };
     // a link inside the app: ask before following it, so that "Stay" leaves no trace
     const click = (e: MouseEvent) => {
@@ -224,8 +262,12 @@ export const href = (r: Route): string => {
     case "process": return `#/p/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
   }
 };
-/** Goes to a page of the app. With unsaved edits that would be lost, it asks first. */
-export const go = (r: Route) => { void moveTo(href(r)); };
+/**
+ * Goes to a page of the app. With unsaved edits that would be lost, it asks first. With
+ * `replace` the address changes without a new entry in the browser's history: for what is not
+ * a step forward, such as a step that got another id.
+ */
+export const go = (r: Route, opts: { replace?: boolean } = {}) => { void moveTo(href(r), opts.replace); };
 
 /** What the browser tab says for a page: the thing being read first, the product last. */
 export function pageTitle(r: Route, names: { process?: string; standard?: string; loading?: boolean } = {}): string {
