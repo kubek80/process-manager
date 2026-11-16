@@ -488,10 +488,19 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .guide-toc button:hover { color: var(--text); }
 .guide-toc button.on { border-left-color: var(--accent); color: var(--text); font-weight: 650; }
 @media (max-width: 900px) { .guide { grid-template-columns: 1fr; gap: 0; } .guide-toc { display: none; } }
-.guide-body { min-width: 0; display: grid; gap: 56px; }
+/* one column that never grows wider than the page: wide things inside (charts, code) scroll on their own */
+.guide-body { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 56px; }
+.guide-code { overflow-x: auto; }
+@media (max-width: 760px) {
+  .guide-table td:first-child { white-space: normal; width: auto; overflow-wrap: anywhere; }
+  .guide-table td, .guide-table th, .guide-dl dd { overflow-wrap: anywhere; }
+  .guide-table { table-layout: fixed; }
+  .guide-table code, .guide-section > p code { word-break: break-all; }
+}
 .guide-hero h1 { font-size: 40px; }
 .guide-hero .lead { font-size: 17px; }
-.guide-section { display: grid; gap: 16px; scroll-margin-top: 80px; }
+.guide-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; scroll-margin-top: 80px; }
+.guide-fig { min-width: 0; }
 .guide-section > h2 { font-size: 24px; letter-spacing: -.02em; line-height: 1.2; }
 .guide-section > p { max-width: 68ch; font-size: 15px; color: var(--text-2); }
 .guide-section > p b { color: var(--text); font-weight: 600; }
@@ -749,6 +758,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .skills-split .cat-detail > * { max-width: none; }
 .guide-table.roles td:first-child { white-space: nowrap; }
 .guide-table.roles td:last-child { white-space: nowrap; color: var(--text-3); }
+@media (max-width: 760px) { .guide-table.roles td:first-child, .guide-table.roles td:last-child { white-space: normal; } }
 .guide-table th:last-child { padding-right: 0; }
 .arch-box.ext.planned { border-style: dashed; background: transparent; }
 
