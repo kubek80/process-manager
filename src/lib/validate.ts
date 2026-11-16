@@ -2,6 +2,7 @@ import type { ErrorObject } from "ajv";
 import schema from "../../schema/process.schema.json";
 import standardSchema from "../../schema/standard.schema.json";
 import type { Catalog, Issue, Process, Standard } from "../types";
+import { isDate } from "./lifecycle";
 // The checks for the three formats are generated from schema/*.schema.json by `npm run validators`.
 // They are not built in the browser: that needs eval, which the app's security policy forbids.
 import { validateCatalogDoc as validateCatalogSchema, validateProcessDoc as validateSchema, validateStandardDoc as validateStandardSchema } from "./validators.generated.js";
@@ -85,6 +86,7 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
     if (p.status !== "deprecated") warn("replacedBy", "replacedBy only makes sense when status is \"deprecated\"");
   }
   if ((p.status ?? "active") === "active" && !p.review) warn("review", "no review interval is set - the owner will never be asked to confirm this process is still correct");
+  if (p.review?.lastReviewedAt && !isDate(p.review.lastReviewedAt)) err("review.lastReviewedAt", `"${p.review.lastReviewedAt}" is not a date`);
   if ((p.status ?? "active") === "active" && !p.owner) warn("owner", "an active process should have an owner team");
 
   const knownStandards = ctx.standardIds ? new Set(ctx.standardIds) : null;
@@ -221,6 +223,7 @@ export function validateStandard(data: unknown, ctx: CheckContext = {}): Issue[]
     if (s.status !== "deprecated") warn("replacedBy", "replacedBy only makes sense when status is \"deprecated\"");
   }
   if (active && !s.review) warn("review", "no review interval is set - the unit will never be asked to confirm this standard is still correct");
+  if (s.review?.lastReviewedAt && !isDate(s.review.lastReviewedAt)) err("review.lastReviewedAt", `"${s.review.lastReviewedAt}" is not a date`);
   if (s.exceptionProcessId && processes && !processes.has(s.exceptionProcessId)) warn("exceptionProcessId", `no process with id "${s.exceptionProcessId}" exists yet`);
 
   const seen = new Set<string>();

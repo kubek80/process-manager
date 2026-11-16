@@ -146,6 +146,7 @@ export function HistoryDialog<T>({ kind, id, title, onRestore, onClose }: {
 
   const previousOf = (v: DocVersion) => versions?.find((x) => x.version < v.version && !x.deleted);
   const show = async (v: DocVersion) => {
+    setError("");
     if (open === v.version) return setOpen(null);
     setOpen(v.version);
     if (changes[v.version]) return;
@@ -164,6 +165,7 @@ export function HistoryDialog<T>({ kind, id, title, onRestore, onClose }: {
     }
   };
   const restore = async (v: number) => {
+    setError("");
     try { onRestore?.(await loadVersion<T>(kind, id, v), v); } catch (e) { setError((e as Error).message); }
   };
   const detail = (v: DocVersion): ReactNode => {

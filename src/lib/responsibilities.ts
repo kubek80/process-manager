@@ -61,10 +61,13 @@ export function responsibilities(perms: Perms, only: string | null, processes: P
     if (o.status === "draft") tasks.push({ kind: "draft", item: o });
     if (o.status === "active" && !o.doc.review) tasks.push({ kind: "no-rhythm", item: o });
   }
-  // most urgent first; within a kind, the review that is due longest and the feedback that waits longest
+  // Most urgent first. Within reviews: the one that is due longest, and something that was
+  // never reviewed before all of them. Within feedback: the one that waits longest, whatever
+  // it is about.
+  const due = (t: Task) => t.item.review.days ?? -Infinity;
   tasks.sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind)
-    || (a.item.review.days ?? 0) - (b.item.review.days ?? 0)
-    || (a.feedback?.createdAt ?? "").localeCompare(b.feedback?.createdAt ?? ""));
+    || (a.kind === "feedback" ? (a.feedback?.createdAt ?? "").localeCompare(b.feedback?.createdAt ?? "") : due(a) - due(b))
+    || a.item.doc.title.localeCompare(b.item.doc.title));
   return { owned, tasks };
 }
 

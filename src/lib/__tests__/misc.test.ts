@@ -214,3 +214,21 @@ describe("the title of the browser tab", () => {
   });
 });
 
+
+describe("review dates and names", () => {
+  it("tells a real day from something that only looks like one", async () => {
+    const { isDate, reviewInfo } = await import("../lifecycle");
+    expect(isDate("2026-11-16")).toBe(true);
+    expect(isDate("2024-02-29")).toBe(true);
+    for (const bad of ["2026-13-45", "2026-02-30", "2026-1-1", "yesterday", "", undefined, 20261116]) expect(isDate(bad)).toBe(false);
+    expect(reviewInfo({ status: "active", review: { intervalMonths: 6, lastReviewedAt: "2026-13-45" } }, "2026-11-16")).toEqual({ state: "overdue", label: "Review date cannot be read" });
+  });
+  it("keeps a reviewer's name within what the format allows", async () => {
+    const { reviewer } = await import("../lifecycle");
+    expect(reviewer("  Casey Owner ")).toBe("Casey Owner");
+    expect(reviewer(undefined)).toBe("");
+    const long = reviewer("Maximilian-Alexander ".repeat(5));
+    expect([...long]).toHaveLength(60);
+    expect(long.endsWith("…")).toBe(true);
+  });
+});

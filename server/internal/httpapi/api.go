@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kubek80/process-manager/server/internal/audit"
@@ -51,15 +52,18 @@ type Deps struct {
 	SignOuts *auth.SignOuts // nil: signing out only clears the cookie (tests of single handlers)
 	OIDC     *auth.OIDC     // nil when PM_AUTH=dev
 	// Ready reports whether the server can do its work (the database answers). nil: always.
-	Ready    func(context.Context) error
-	Docs     *docs.Store
-	Schemas  *schema.Set
-	Roles    *rbac.Store
-	Audit    *audit.Log
-	Skills   *skills.Store
-	Feedback *feedback.Store
-	Notifier notify.Notifier
-	Log      *slog.Logger
+	Ready func(context.Context) error
+	// Background counts work that goes on after a request was answered (regenerating skills),
+	// so that stopping the server can wait for it. nil: nobody waits.
+	Background *sync.WaitGroup
+	Docs       *docs.Store
+	Schemas    *schema.Set
+	Roles      *rbac.Store
+	Audit      *audit.Log
+	Skills     *skills.Store
+	Feedback   *feedback.Store
+	Notifier   notify.Notifier
+	Log        *slog.Logger
 }
 
 type api struct{ Deps }
@@ -363,7 +367,8 @@ func (a *api) devLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.issue(w, r, u); err != nil {
-		a.fail(w, r, err)
+		a.Log.Error("sign-in failed", "error", err)
+		writeError(w, 503, "The server cannot reach its database right now. Try again in a moment.")
 		return
 	}
 	writeJSON(w, 200, u)
@@ -393,6 +398,11 @@ func (a *api) logout(w http.ResponseWriter, r *http.Request) {
 	// must not be able to throw the person out again and again.
 	s, err := a.signedIn(r)
 	a.Sessions.Clear(w) // this browser is signed out whatever happens next
+	if errors.Is(err, errUnavailable) {
+		// the other sessions of the person could not be ended: say so instead of "ok"
+		writeError(w, 503, "You are signed out in this browser. Your other sessions could not be ended because the database cannot be reached right now: sign in and out again later.")
+		return
+	}
 	if err == nil && a.SignOuts != nil {
 		if _, err := a.SignOuts.Mark(r.Context(), s.Email, a.Sessions.Now()); err != nil {
 			a.fail(w, r, err)

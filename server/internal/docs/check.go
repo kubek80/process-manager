@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // The format of a document is checked against the JSON schema. This file checks what a schema
@@ -18,8 +19,26 @@ type dims struct {
 	Environments []string `json:"environments"`
 }
 
+// lifecycle is what a process and a standard record about their review.
+type lifecycle struct {
+	Review *struct {
+		LastReviewedAt string `json:"lastReviewedAt"`
+	} `json:"review"`
+}
+
+// check: the format only says what a date looks like; "2026-13-45" looks like one.
+func (l lifecycle) check(add func(string, ...any)) {
+	if l.Review == nil || l.Review.LastReviewedAt == "" {
+		return
+	}
+	if _, err := time.Parse("2006-01-02", l.Review.LastReviewedAt); err != nil {
+		add("review.lastReviewedAt: %q is not a date", l.Review.LastReviewedAt)
+	}
+}
+
 type processShape struct {
 	ID string `json:"id"`
+	lifecycle
 	dims
 	Owner         string   `json:"owner"`
 	ReplacedBy    string   `json:"replacedBy"`
@@ -46,6 +65,7 @@ type processShape struct {
 
 type standardShape struct {
 	ID string `json:"id"`
+	lifecycle
 	dims
 	Owner              string `json:"owner"`
 	ReplacedBy         string `json:"replacedBy"`
@@ -107,6 +127,7 @@ func Check(kind string, body []byte, l Lists) error {
 			return fmt.Errorf("%w: not a process: %v", ErrInvalid, err)
 		}
 		p.dims.check("", l, add)
+		p.lifecycle.check(add)
 		if p.ReplacedBy != "" && p.ReplacedBy == p.ID {
 			add("replacedBy: a process cannot replace itself")
 		}
@@ -169,6 +190,7 @@ func Check(kind string, body []byte, l Lists) error {
 			return fmt.Errorf("%w: not a standard: %v", ErrInvalid, err)
 		}
 		s.dims.check("", l, add)
+		s.lifecycle.check(add)
 		if s.ReplacedBy != "" && s.ReplacedBy == s.ID {
 			add("replacedBy: a standard cannot replace itself")
 		}

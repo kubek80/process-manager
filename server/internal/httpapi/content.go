@@ -25,8 +25,12 @@ var noun = map[string]string{docs.Process: "process", docs.Standard: "standard",
 // VersionHeader carries the version of the lists, which are served as one bare document.
 const VersionHeader = "X-Document-Version"
 
-// syncTimeout bounds one regeneration of skills after a save.
-const syncTimeout = 2 * time.Minute
+// syncTimeout bounds one regeneration of skills after a save. syncWait is how long the answer
+// to the save waits for it: well below the time the server has to write an answer.
+const (
+	syncTimeout = 2 * time.Minute
+	syncWait    = 20 * time.Second
+)
 
 // errDenied is returned from inside a save when the stored document belongs to someone the
 // caller may not edit for.
@@ -148,17 +152,34 @@ func baseOf(r *http.Request) (*int, bool) {
 // itself has already happened and the next save or restart regenerates again.
 func (a *api) syncSkills(ctx context.Context, kind, id string) {
 	// The save has happened. Whether the person who made it is still connected, or how long
-	// their request has been running, must not decide whether the skills follow.
+	// their request has been running, must not decide whether the skills follow: the work runs
+	// on its own. The answer waits for it a while - normally it is done in a moment - but not
+	// for ever: other regenerations may be ahead of it in the queue.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), syncTimeout)
-	defer cancel()
-	var err error
-	if kind == docs.Catalog {
-		err = a.Skills.SyncAll(ctx, a.Docs) // names of teams and tools appear in the text
-	} else {
-		err = a.Skills.SyncChanged(ctx, a.Docs, kind, id)
+	done := make(chan struct{})
+	if a.Background != nil {
+		a.Background.Add(1)
 	}
-	if err != nil {
-		a.Log.Error("skills not regenerated", "kind", kind, "id", id, "error", err)
+	go func() {
+		defer close(done)
+		defer cancel()
+		if a.Background != nil {
+			defer a.Background.Done()
+		}
+		var err error
+		if kind == docs.Catalog {
+			err = a.Skills.SyncAll(ctx, a.Docs) // names of teams and tools appear in the text
+		} else {
+			err = a.Skills.SyncChanged(ctx, a.Docs, kind, id)
+		}
+		if err != nil {
+			a.Log.Error("skills not regenerated", "kind", kind, "id", id, "error", err)
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(syncWait):
+		a.Log.Warn("skills are still being regenerated; the save is answered", "kind", kind, "id", id)
 	}
 }
 
@@ -341,6 +362,15 @@ func (a *api) putDoc(kind string) http.HandlerFunc {
 // reviewRhythm is the rhythm a document gets when its first review is recorded and it had none.
 var reviewRhythm = map[string]int{docs.Process: 6, docs.Standard: 12}
 
+// reviewerName is the name as it is stored with a review: the format allows 60 characters, and
+// a long name (or an email address standing in for one) must not stop anybody from reviewing.
+func reviewerName(name string) string {
+	if r := []rune(name); len(r) > 60 {
+		return string(r[:59]) + "…"
+	}
+	return name
+}
+
 // reviewDoc records that somebody confirmed a process or standard as still correct: today's
 // date and their name. This is the one change the owning team or unit may make themselves -
 // they are the ones who are asked to review - besides everyone who may edit it. It is saved as
@@ -371,10 +401,14 @@ func (a *api) reviewDoc(kind string) http.HandlerFunc {
 			writeError(w, 400, "base must be a version number.")
 			return
 		}
-		if base == nil {
-			base = &current.Version
+		// The review is of exactly the version that was read above: its rights were checked and
+		// the new content is built from it. A caller who names another version is told so; and
+		// the save below is refused if somebody else gets in first.
+		if base != nil && *base != current.Version {
+			conflict(w, kind, &docs.Conflict{Current: current, Exists: true})
+			return
 		}
-		body, err := docs.WithReview(current.Body, time.Now().UTC().Format("2006-01-02"), s.Name, reviewRhythm[kind])
+		body, err := docs.WithReview(current.Body, time.Now().UTC().Format("2006-01-02"), reviewerName(s.Name), reviewRhythm[kind])
 		if err == nil {
 			err = a.Schemas.Validate(kind, body)
 		}
@@ -384,7 +418,7 @@ func (a *api) reviewDoc(kind string) http.HandlerFunc {
 		}
 		const note = "Reviewed: confirmed as still correct"
 		doc, changed, err := a.Docs.Save(r.Context(), docs.Change{
-			Kind: kind, ID: id, Body: body, By: s.Email, Note: note, Base: base,
+			Kind: kind, ID: id, Body: body, By: s.Email, Note: note, Base: &current.Version,
 			After: func(ctx context.Context, tx pgx.Tx, saved docs.Doc) error {
 				return audit.AddIn(ctx, tx, s.Email, s.Name, noun[kind]+".review", id, fmt.Sprintf("version %d", saved.Version))
 			},

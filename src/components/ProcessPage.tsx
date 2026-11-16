@@ -8,7 +8,7 @@ import { useDraft } from "../lib/draft";
 import { useSelectedItem } from "../lib/selection";
 import { answersFor } from "../lib/responsibilities";
 import { teamName, useCatalog } from "../lib/catalog";
-import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
+import { reviewer, reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { Resources } from "./Resources";
 import { FeedbackTab, openCount, processTarget } from "./Feedback";
 import { useEditor } from "../lib/mode";
@@ -93,10 +93,12 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
   const status = statusOf(draft);
   const replacement = draft.replacedBy ? all.find((p) => p.id === draft.replacedBy) : undefined;
   const markReviewed = async () => {
-    const who = me.user?.name ?? "";
+    const who = reviewer(me.user?.name);
     const next = { ...draft, review: { intervalMonths: draft.review?.intervalMonths ?? 6, lastReviewedAt: today(), ...(who ? { reviewedBy: who } : {}) } };
-    // with other changes pending it becomes part of them; a pure "still correct" is recorded straight away
-    if (editor && (dirty || errors)) return setDraft(next);
+    // With other changes pending - in whichever mode they were made - the review becomes part
+    // of them: recording it on the server would make a newer version than the one being edited.
+    // A pure "still correct" is recorded straight away.
+    if (dirty || (editor && errors)) return setDraft(next);
     await onReviewed(d.base);
   };
   const back = () => go({ page: "library" }); // leaving with unsaved changes asks first, like every other way out

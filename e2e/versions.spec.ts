@@ -387,3 +387,19 @@ test("deleting something with unsaved changes does not ask about them afterwards
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(await readProcess(page, "delete-dirty-demo")).toBeUndefined();
 });
+
+test("closing a step stays on the tab where it was closed", async ({ page }) => {
+  await signIn(page, SAM);
+  await open(page, "/");
+  await page.locator(".card", { hasText: "Request a GCP project" }).click();
+  await page.locator(".block-main").nth(1).click(); // opened on the map
+  await page.getByRole("tab", { name: "Checklist" }).click(); // still open in the checklist
+  await expect(page.locator(".drawer h3")).toHaveText("Raise the 'New GCP project' request");
+  await page.locator(".drawer").getByRole("button", { name: "Close" }).click();
+  await expect(page.locator(".drawer")).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Checklist" })).toHaveAttribute("aria-selected", "true");
+  await expect(page).toHaveURL(/#\/p\/request-gcp-project\/list$/); // no step left in the address
+  await page.reload();
+  await expect(page.locator(".step").first()).toBeVisible();
+  await expect(page.locator(".drawer")).toHaveCount(0);
+});

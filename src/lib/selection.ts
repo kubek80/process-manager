@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { go, type Route } from "./store";
+import { go, href, type Route } from "./store";
 
 /**
  * The step or requirement that is open. It is part of the address, so that a link can point at
@@ -17,12 +17,14 @@ import { go, type Route } from "./store";
 export function useSelectedItem(item: string | undefined, address: (id: string | null) => Route, exists: (id: string) => boolean): [string | null, (id: string | null) => void] {
   const [chosen, setChosen] = useState<string | null | undefined>(undefined); // undefined: follow the address
   const selected = chosen !== undefined ? chosen : item ?? null;
-  const opened = useRef(false); // the open item was opened by a step forward of ours
+  // Where the person was when the open item was opened by a step forward of ours (an address),
+  // or null. Closing goes back there - if that is still the place to go back to.
+  const opened = useRef<string | null>(null);
 
   // the address has caught up, or was changed by Back, a link or a typed address
   useEffect(() => {
     setChosen(undefined);
-    if (!item) opened.current = false;
+    if (!item) opened.current = null;
   }, [item]);
 
   // an address that points at an item that is not there (a discarded new step, an old link)
@@ -32,9 +34,13 @@ export function useSelectedItem(item: string | undefined, address: (id: string |
   const select = useCallback((id: string | null) => {
     setChosen(id);
     if (id === null) {
-      if (opened.current) { opened.current = false; history.back(); } else go(address(null), { replace: true });
+      // Back is right only when it leads to this very page without the item. After a change of
+      // tab, or when the item was opened from somewhere else, the address is changed in place.
+      const from = opened.current;
+      opened.current = null;
+      if (from !== null && from === href(address(null))) history.back(); else go(address(null), { replace: true });
     } else if (selected === null) {
-      opened.current = true;
+      opened.current = location.hash;
       go(address(id));
     } else if (id !== selected) {
       go(address(id), { replace: true });

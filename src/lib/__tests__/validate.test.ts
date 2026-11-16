@@ -228,3 +228,13 @@ describe("the generated checks", () => {
     expect(code).not.toMatch(/\beval\(|new Function|\brequire\(/);
   });
 });
+
+describe("a review date has to be a date", () => {
+  it("is an error in a process and in a standard", () => {
+    const p = { ...base(), review: { intervalMonths: 6, lastReviewedAt: "2026-13-45" } };
+    expect(validateProcess(p).filter((i) => i.level === "error").map((i) => `${i.path}: ${i.message}`)).toEqual(['review.lastReviewedAt: "2026-13-45" is not a date']);
+    const s = { ...baseStandard(), review: { intervalMonths: 12, lastReviewedAt: "2026-02-30" } };
+    expect(validateStandard(s).filter((i) => i.level === "error").map((i) => i.path)).toEqual(["review.lastReviewedAt"]);
+    expect(hasErrors(validateProcess(base()))).toBe(false);
+  });
+});

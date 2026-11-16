@@ -260,11 +260,14 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     const change = (item: Feedback, fn: (list: Feedback[]) => Feedback[]) =>
       setFeedback((all) => ({ ...all, [item.targetKind]: { ...all[item.targetKind], [item.targetId]: fn(all[item.targetKind][item.targetId] ?? []) } }));
     const put = (item: Feedback) => change(item, (list) => (list.some((x) => x.id === item.id) ? list.map((x) => (x.id === item.id ? item : x)) : [...list, item]));
+    // Each action counts as a write, before and after: a refresh that was on its way meanwhile
+    // describes the feedback as it was, and would bring a fixed item back as open.
+    const wrote = <T,>(p: Promise<T>): Promise<T> => { writes.current++; return p.finally(() => { writes.current++; }); };
     return {
-      add: (spec) => createFeedback(spec).then((item) => { put(item); return true; }, (e) => { notify.error("Your feedback could not be sent.", e); return false; }),
-      alsoHit: (item, on) => { setAlsoHit(item.id, on).then(put, (e) => notify.error("That could not be recorded.", e)); },
-      resolve: (item, resolved) => { setResolved(item.id, resolved).then(put, (e) => notify.error("The feedback could not be changed.", e)); },
-      remove: (item) => { deleteFeedback(item.id).then(() => change(item, (list) => list.filter((x) => x.id !== item.id)), (e) => notify.error("The feedback could not be deleted.", e)); },
+      add: (spec) => wrote(createFeedback(spec)).then((item) => { put(item); return true; }, (e) => { notify.error("Your feedback could not be sent.", e); return false; }),
+      alsoHit: (item, on) => { wrote(setAlsoHit(item.id, on)).then(put, (e) => notify.error("That could not be recorded.", e)); },
+      resolve: (item, resolved) => { wrote(setResolved(item.id, resolved)).then(put, (e) => notify.error("The feedback could not be changed.", e)); },
+      remove: (item) => { wrote(deleteFeedback(item.id)).then(() => change(item, (list) => list.filter((x) => x.id !== item.id)), (e) => notify.error("The feedback could not be deleted.", e)); },
     };
   }, []);
 
@@ -372,7 +375,10 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const all = processes ?? [];
   // what needs the signed-in person as an owner: shown as a count next to "My responsibilities"
   const mine = useMemo(() => myTeams(perms), [perms]);
-  const waiting = useMemo(() => (mine.length ? urgent(responsibilities(perms, null, all, standards, feedback).tasks) : 0), [mine, perms, all, standards, feedback]);
+  const waiting = useMemo(() => {
+    // the top bar is on every page: whatever is wrong with one document, it must not take all of them down
+    try { return mine.length ? urgent(responsibilities(perms, null, all, standards, feedback).tasks) : 0; } catch { return 0; }
+  }, [mine, perms, all, standards, feedback]);
   const process = route.page === "process" ? all.find((p) => p.id === route.id) : undefined;
   const standard = route.page === "standard" ? standards.find((s) => s.id === route.id) : undefined;
   const on = (...pages: string[]) => (pages.includes(route.page) ? "on" : "");

@@ -224,6 +224,10 @@ export function useRoute(ask?: (what: string) => Promise<boolean>): Route {
     let position = (history.state as Mark)?.pm ?? 0;
     if ((history.state as Mark)?.pm === undefined) history.replaceState({ pm: position }, "");
     let undoing = 0; // moves of our own that put the browser back: not news
+    // where the browser itself says we are in its history, where it can tell (most browsers do)
+    const at = (): number | undefined => (window as { navigation?: { currentEntry?: { index: number } } }).navigation?.currentEntry?.index;
+    let index = at();
+    let shown = location.hash; // the address of what is on screen
     const on = async () => {
       if (undoing > 0) { undoing--; return; }
       const target = location.hash;
@@ -233,15 +237,27 @@ export function useRoute(ask?: (what: string) => Promise<boolean>): Route {
       agreed = null;
       if (!lost || !confirmLeave) {
         if (fresh) { position += 1; history.replaceState({ pm: position }, ""); } else position = mark;
+        index = at();
+        shown = target;
         setRoute(parse(target));
         return;
       }
-      const back = fresh ? -1 : position - mark; // the move that undoes what the browser just did
+      // The move that undoes what the browser just did: from its own count where it has one,
+      // else from our numbers. An entry without a number may be a new one or one from before
+      // the app was loaded; without the browser's count there is no telling which, and then
+      // the address is put back in place instead of guessing a direction.
+      const now = at();
+      const back = now !== undefined && index !== undefined ? index - now : fresh ? 0 : position - mark;
+      if (back === 0) {
+        history.replaceState(history.state, "", shown || "#/");
+        if (await confirmLeave(lost)) { agreed = target; location.hash = target; }
+        return;
+      }
       undoing++;
       history.go(back);
       if (await confirmLeave(lost)) {
         agreed = target;
-        if (fresh) location.hash = target; else history.go(-back);
+        history.go(-back);
       }
     };
     // a link inside the app: ask before following it, so that "Stay" leaves no trace

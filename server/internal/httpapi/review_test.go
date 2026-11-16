@@ -142,3 +142,54 @@ func TestWithReviewKeepsEverythingElse(t *testing.T) {
 		t.Fatal("a list is not a document")
 	}
 }
+
+func TestAReviewNeverPutsOlderContentBack(t *testing.T) {
+	e := setup(t, nil)
+	// naming a version that does not exist yet must not get a review accepted when it then comes to exist
+	for _, base := range []string{"2", "7", "0"} {
+		status, body := e.as(casey).do("POST", "/api/processes/"+gcp+"/review?base="+base, nil)
+		if status != 409 {
+			t.Errorf("base=%s: %d %v", base, status, body)
+		}
+	}
+	if d, _ := e.deps.Docs.Get(bg, docs.Process, gcp); d.Version != 1 {
+		t.Fatalf("a refused review was stored: v%d", d.Version)
+	}
+	status, body := e.as(casey).do("POST", "/api/processes/"+gcp+"/review?base=1", nil)
+	wantStatus(t, status, 200, body)
+}
+
+func TestALongNameDoesNotStopAReview(t *testing.T) {
+	long := strings.Repeat("Maximilian-Alexander ", 4) + "von Hohenzollern-Sigmaringen" // far beyond the 60 the format allows
+	got := reviewerName(long)
+	if n := len([]rune(got)); n != 60 || !strings.HasSuffix(got, "…") || !strings.HasPrefix(got, "Maximilian-Alexander Max") {
+		t.Fatalf("%d characters: %q", n, got)
+	}
+	if reviewerName("Casey Owner") != "Casey Owner" {
+		t.Fatal("a short name must stay as it is")
+	}
+	// and the stored document with such a name still matches the format
+	e := setup(t, nil)
+	d, _ := e.deps.Docs.Get(bg, docs.Process, gcp)
+	body, err := docs.WithReview(d.Body, "2026-11-16", got, 6)
+	must(t, err)
+	must(t, e.deps.Schemas.Validate(docs.Process, body))
+}
+
+func TestAReviewDateHasToBeADate(t *testing.T) {
+	e := setup(t, nil)
+	bad := strings.Replace(e.body(docs.Process, gcp, "", ""), `"lastReviewedAt": "2026-11-03"`, `"lastReviewedAt": "2026-13-45"`, 1)
+	if !strings.Contains(bad, "2026-13-45") {
+		t.Fatal("the sample process has another review date than this test expects")
+	}
+	status, body := e.as(alex).do("PUT", "/api/processes/"+gcp, bad)
+	if status != 400 || !strings.Contains(body["error"].(string), "is not a date") {
+		t.Fatalf("%d %v", status, body)
+	}
+	// a rhythm written as a decimal is still that rhythm after a review
+	out, err := docs.WithReview([]byte(`{"id": "x", "review": {"intervalMonths": 24.0}}`), "2026-11-16", "", 6)
+	must(t, err)
+	if !strings.Contains(string(out), `"intervalMonths": 24,`) {
+		t.Fatalf("got %s", out)
+	}
+}

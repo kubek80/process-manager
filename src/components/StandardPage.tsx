@@ -10,7 +10,7 @@ import { useDraft } from "../lib/draft";
 import { useSelectedItem } from "../lib/selection";
 import { answersFor } from "../lib/responsibilities";
 import { useProfile } from "../lib/profile";
-import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
+import { reviewer, reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { useEditor } from "../lib/mode";
 import { createStandardPrompt, modifyStandardPrompt } from "../lib/prompt";
 import { canEditStandard, useMe, usePerms } from "../lib/session";
@@ -372,9 +372,11 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
     return () => clearTimeout(t);
   }, [item, view]);
   const markReviewed = async () => {
-    const next = { ...draft, review: { intervalMonths: draft.review?.intervalMonths ?? 12, lastReviewedAt: today(), ...(me.user ? { reviewedBy: me.user.name } : {}) } };
-    // with other changes pending it becomes part of them; a pure "still correct" is recorded straight away
-    if (editor && (dirty || errors)) return setDraft(next);
+    const who = reviewer(me.user?.name);
+    const next = { ...draft, review: { intervalMonths: draft.review?.intervalMonths ?? 12, lastReviewedAt: today(), ...(who ? { reviewedBy: who } : {}) } };
+    // With other changes pending - in whichever mode they were made - the review becomes part
+    // of them. A pure "still correct" is recorded straight away.
+    if (dirty || (editor && errors)) return setDraft(next);
     await onReviewed(d.base);
   };
   const add = () => { const r = addRequirement(draft, selected ?? undefined); setDraft(r.standard); setSelected(r.id); setEditing(true); };

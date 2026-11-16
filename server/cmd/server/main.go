@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -181,7 +182,8 @@ func run(log *slog.Logger, o options) error {
 		return err
 	}
 	sessions := auth.NewSessions(cfg.SessionSecret, cfg.Secure())
-	deps := httpapi.Deps{Cfg: cfg, Sessions: sessions, SignOuts: &auth.SignOuts{Pool: pool}, Ready: pool.Ping, Docs: st.docs, Schemas: schemas, Roles: st.roles, Audit: st.audit,
+	var background sync.WaitGroup
+	deps := httpapi.Deps{Background: &background, Cfg: cfg, Sessions: sessions, SignOuts: &auth.SignOuts{Pool: pool}, Ready: pool.Ping, Docs: st.docs, Schemas: schemas, Roles: st.roles, Audit: st.audit,
 		Skills: st.skills, Feedback: st.feedback, Log: log, Notifier: notify.Log{Logger: log}}
 	var hook *notify.Webhook
 	if cfg.Notify == "webhook" {
@@ -206,6 +208,7 @@ func run(log *slog.Logger, o options) error {
 		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 2 * time.Minute,
 	}
 	return serve(ctx, srv, log, func() {
+		background.Wait() // skills that are still being regenerated after a save
 		if hook != nil {
 			hook.Wait()
 		}

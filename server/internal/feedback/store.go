@@ -80,16 +80,22 @@ func nullable(s string) any {
 // Create stores a new item.
 func (s *Store) Create(ctx context.Context, n New) (Item, error) {
 	var id string
-	err := s.Pool.QueryRow(ctx,
-		// only for something that exists at this very moment: a process deleted a moment ago
-		// must not be left with feedback nobody can reach
-		`insert into feedback (target_kind, target_id, step_id, kind, body, author_email, author_name, step_hash)
-		 select $1, $2, $3, $4, $5, $6, $7, $8 where exists (select 1 from documents where kind = $1 and id = $2)
-		 returning id::text`,
-		n.TargetKind, n.TargetID, nullable(n.ItemID), n.Kind, n.Text, n.AuthorEmail, n.AuthorName, nullable(n.ItemHash)).Scan(&id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Item{}, ErrNoTarget
-	}
+	// Only for something that exists, and stays until this is stored: the row of the target is
+	// held, so a delete that is under way is waited for (and then there is nothing to write
+	// about), and a delete that comes after takes this feedback along.
+	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		var one int
+		if err := tx.QueryRow(ctx, `select 1 from documents where kind = $1 and id = $2 for share`, n.TargetKind, n.TargetID).Scan(&one); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrNoTarget
+			}
+			return err
+		}
+		return tx.QueryRow(ctx,
+			`insert into feedback (target_kind, target_id, step_id, kind, body, author_email, author_name, step_hash)
+			 values ($1, $2, $3, $4, $5, $6, $7, $8) returning id::text`,
+			n.TargetKind, n.TargetID, nullable(n.ItemID), n.Kind, n.Text, n.AuthorEmail, n.AuthorName, nullable(n.ItemHash)).Scan(&id)
+	})
 	if err != nil {
 		return Item{}, err
 	}

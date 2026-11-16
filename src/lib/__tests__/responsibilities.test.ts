@@ -65,3 +65,28 @@ describe("what needs doing", () => {
     expect(responsibilities(both, "security", [mine, theirs], [std, secStd], feedback, TODAY).owned.map((o) => o.doc.id)).toEqual(["sec-std"]);
   });
 });
+
+describe("the order of what needs doing", () => {
+  const p = (id: string, lastReviewedAt?: string) => ({ ...base(), id, title: id, review: { intervalMonths: 6, ...(lastReviewedAt ? { lastReviewedAt } : {}) } });
+  const owner = perms({ owns: ["cloud-platform-team"] });
+
+  it("puts the feedback that waits longest first, whatever it is about", () => {
+    const overdue = p("overdue", "2025-01-01"), fine = p("fine", "2026-10-01");
+    const feedback: FeedbackByTarget = {
+      process: { overdue: [fb("second", "overdue", "2026-11-10T10:00:00Z")], fine: [fb("first", "fine", "2026-09-01T10:00:00Z"), fb("third", "fine", "2026-11-12T10:00:00Z")] },
+      standard: {},
+    };
+    const r = responsibilities(owner, null, [overdue, fine], [], feedback, TODAY);
+    expect(r.tasks.filter((t) => t.kind === "feedback").map((t) => t.feedback!.id)).toEqual(["first", "second", "third"]);
+  });
+
+  it("puts what was never reviewed before everything that is overdue, and the most overdue next", () => {
+    const r = responsibilities(owner, null, [p("a-bit", "2026-04-01"), p("never"), p("long", "2024-01-01")], [], { process: {}, standard: {} }, TODAY);
+    expect(r.tasks.map((t) => t.item.doc.id)).toEqual(["never", "long", "a-bit"]);
+  });
+
+  it("survives a review date that is not a date", () => {
+    const r = responsibilities(owner, null, [p("broken", "2026-13-45")], [], { process: {}, standard: {} }, TODAY);
+    expect(r.tasks.map((t) => `${t.kind}:${t.item.review.label}`)).toEqual(["review-overdue:Review date cannot be read"]);
+  });
+});

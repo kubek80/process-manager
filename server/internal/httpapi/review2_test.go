@@ -184,6 +184,14 @@ func TestAnOutageIsNotShownAsSignedOut(t *testing.T) {
 	if status, _ := c.do("GET", "/api/me", nil); status != 503 {
 		t.Fatalf("who-am-I during an outage: %d", status)
 	}
+	// signing out says that the other sessions could not be ended, and signing in says "later"
+	status, body = c.do("POST", "/auth/logout", nil)
+	if status != 503 || !strings.Contains(body["error"].(string), "could not be ended") {
+		t.Fatalf("sign-out during an outage: %d %v", status, body)
+	}
+	if status, _ := e.anonymous().do("POST", "/auth/dev/login", map[string]string{"email": sam}); status != 503 {
+		t.Fatalf("sign-in during an outage: %d", status)
+	}
 }
 
 func TestTheWholeActivityLogCanBeAskedForAtOnce(t *testing.T) {

@@ -40,10 +40,10 @@ func WithReview(body []byte, date, by string, defaultMonths int) ([]byte, error)
 		}
 		at = i
 		var old struct {
-			IntervalMonths int `json:"intervalMonths"`
+			IntervalMonths float64 `json:"intervalMonths"` // the format also accepts 24.0 or 2.4e1 for 24
 		}
-		if json.Unmarshal(p.value, &old) == nil && old.IntervalMonths > 0 {
-			months = old.IntervalMonths
+		if json.Unmarshal(p.value, &old) == nil && old.IntervalMonths >= 1 {
+			months = int(old.IntervalMonths)
 		}
 	}
 	// the three fields in the order the app writes them
