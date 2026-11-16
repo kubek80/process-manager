@@ -17,8 +17,7 @@ test("add a tool, fill in its details and save", async ({ page }) => {
   await expect(detail.getByRole("heading", { name: "Jira Service Desk" })).toBeVisible();
   await detail.getByLabel("Link").fill("https://jira.example.com");
   await expect(page.locator(".cat-item", { hasText: "Jira Service Desk" })).toContainText("new");
-  await page.locator(".save-bar").getByRole("button", { name: "Save changes" }).click();
-  await expect(page.locator(".cat-saved")).toBeVisible();
+  await save(page);
 
   expect((await readCatalog(page)).tools).toContainEqual({ id: "jira-service-desk", name: "Jira Service Desk", url: "https://jira.example.com" });
 });
@@ -34,8 +33,7 @@ test("an entry that is in use cannot be removed; an unused one can", async ({ pa
   await expect(page.locator(".cat-usage")).toContainText("nothing yet");
   await page.getByRole("button", { name: "Remove this team" }).click();
   await expect(page.locator(".cat-item", { hasText: "Network team" })).toHaveCount(0);
-  await page.locator(".save-bar").getByRole("button", { name: "Save changes" }).click();
-  await expect(page.locator(".cat-saved")).toBeVisible();
+  await save(page);
   expect((await readCatalog(page)).teams.map((t: { id: string }) => t.id)).not.toContain("network-team");
 });
 
@@ -79,8 +77,7 @@ test("a team becomes a unit that can issue standards; a new environment can be c
   await page.getByRole("button", { name: "New environment" }).click();
   await page.locator(".cat-new").getByLabel("Name").fill("Pre-production");
   await page.keyboard.press("Enter");
-  await page.locator(".save-bar").getByRole("button", { name: "Save changes" }).click();
-  await expect(page.locator(".cat-saved")).toBeVisible();
+  await save(page);
   const catalog = await readCatalog(page);
   expect(catalog.teams.find((t: { id: string }) => t.id === "dns-team").kind).toBe("platform");
   expect(catalog.environments.at(-1)).toEqual({ id: "pre-production", name: "Pre-production" });

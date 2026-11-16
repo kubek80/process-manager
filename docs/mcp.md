@@ -24,7 +24,7 @@ Agents already get the knowledge as **generated skills** (see `docs/backend.md` 
 - a skill per active standard ("write code that complies"),
 - a review agent per standard that has review hints ("check this pull request").
 
-They are downloaded from the portal or written to files with `npm run export -- <folder>`, and committed to the repository the agent works in. They are a snapshot: each names its version and the revision of its source.
+They are downloaded from the portal or written to files with `npm run export -- <folder>`, and committed to the repository the agent works in. They are a snapshot: each names its version and the version of its source.
 
 ## What the MCP server will expose
 
@@ -34,8 +34,8 @@ Read-only except for feedback. Content follows `schema/process.schema.json`, `sc
 | --- | --- | --- |
 | `search_processes` | `query?`, `tier?`, `environment?`, `language?` | Matching **active** processes: `id`, `title`, `summary`, `owner`, where they apply, review state. A process without `tiers` / `environments` / `languages` matches every one. |
 | `search_standards` | `query?`, `unit?`, `tier?`, `environment?`, `language?` | Matching **active** standards, with the requirements that apply to that profile. |
-| `get_process` | `id` | The complete process, with team and tool ids resolved to names, contacts and links. |
-| `get_standard` | `id`, profile? | The complete standard; with a profile, only the requirements that apply. |
+| `get_process` | `id` | The complete process with its version number, with team and tool ids resolved to names, contacts and links. |
+| `get_standard` | `id`, profile? | The complete standard with its version number; with a profile, only the requirements that apply. |
 | `get_my_steps` | `id`, `actor?` (default `me`) | Only that participant's steps in flow order, with `instructions`, `tool`, `url`, `outcome`, `resources`, and what it waits for before and after. |
 | `get_skill` | `id`, `version?` | The text of a generated skill or review agent, latest by default, with its version. |
 | `get_catalog` | – | Teams and units (with contact), tools (with link), tiers, environments, languages. |

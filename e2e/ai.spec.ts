@@ -105,10 +105,13 @@ test("change an existing process with AI, then delete it", async ({ page }) => {
 test("a blank process starts as a valid draft", async ({ page }) => {
   await open(page, "/");
   await page.getByRole("button", { name: "Blank process" }).click();
-  await expect(page.getByRole("heading", { name: "New process" })).toBeVisible();
+  // it is named first: the name gives it its address, which never changes
+  await page.getByRole("dialog", { name: "New process" }).getByLabel("Name of the process").fill("Order a laptop");
+  await page.getByRole("dialog", { name: "New process" }).getByRole("button", { name: "Create process" }).click();
+  await expect(page.getByRole("heading", { name: "Order a laptop" })).toBeVisible();
   await expect(page.locator(".banner", { hasText: "Draft." })).toBeVisible();
   await expect(page.locator(".status.good, .status.warn")).toBeVisible();
-  expect((await readProcess(page, "new-process"))!.status).toBe("draft");
+  expect((await readProcess(page, "order-a-laptop"))!.status).toBe("draft");
   await page.getByRole("button", { name: "Details", exact: true }).click();
   await page.locator(".modal").getByRole("button", { name: "Delete process" }).click();
   await answer(page, "Delete this process?", "Delete process");

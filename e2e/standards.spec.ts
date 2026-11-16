@@ -78,6 +78,7 @@ test("standards and processes point to each other", async ({ page }) => {
   await expect(page.locator(".standard-intro")).toContainText("Follow “Raise a ServiceNow request”"); // how to ask for an exception
   await page.locator("#req-IAC-01").getByRole("button", { name: /How: Request a GCP project/ }).click();
   await expect(page.getByRole("heading", { name: "Request a GCP project" })).toBeVisible();
+  await page.getByRole("button", { name: /Before you start/ }).click(); // on the map the links are one line that opens
   await page.locator(".link-list.row").getByRole("link", { name: "Infrastructure as code" }).click();
   await expect(page.getByRole("heading", { name: "Infrastructure as code", exact: true })).toBeVisible();
   await expect(page.locator(".standard-intro .link-list").getByRole("link", { name: "Request a GCP project" })).toBeVisible();
@@ -89,7 +90,7 @@ test("feedback on a requirement goes to the unit that issued the standard", asyn
   await open(page, `/s/${LOGGING}/doc`);
   const req = page.locator("#req-SEC-LOG-02");
   await req.hover();
-  await req.getByRole("button", { name: /Tell us/ }).click();
+  await req.getByRole("button", { name: /Report a problem/ }).click();
   const drawer = page.locator(".drawer");
   await drawer.getByRole("button", { name: "Unclear" }).click();
   await drawer.getByPlaceholder(/What is wrong or unclear/).fill("Is a hashed email still personal data?");
@@ -158,7 +159,8 @@ test("changing a requirement gives the skill and the review agent a new version 
   await expect(page.locator(".skill-content")).toContainText("Use structlog for Python.");
   await picker.getByRole("tab", { name: /Review agent/ }).click();
   await expect(page.locator(".skill-content")).toContainText("logging.info with an f-string");
-  await expect(page.locator(".skill-content")).toContainText(`Version ${before.skill.version + 1}`);
+  await expect(page.locator(".skill-content")).toContainText(`This is version ${before.skill.version + 1} of the generated text.`);
+  await expect(page.locator(".skill-source")).toContainText("of the standard"); // which version of the standard it was made from
   await page.locator(".skill-version select").selectOption(String(before.skill.version));
   await expect(page.locator(".skill-content")).not.toContainText("logging.info with an f-string");
 

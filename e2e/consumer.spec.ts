@@ -100,6 +100,11 @@ test("a sub-process can be expanded in place and opened", async ({ page }) => {
 
 test("a prerequisite links to the process that provides it", async ({ page }) => {
   await open(page, "/p/onboard-api-to-apigee/flow");
+  // on the map, what to prepare is one line that opens; the choice is remembered
+  const strip = page.getByRole("button", { name: /Before you start/ });
+  await expect(strip).toContainText("0/4 ready");
+  await expect(page.locator(".prereq")).toHaveCount(0);
+  await strip.click();
   await page.getByRole("button", { name: /Don’t have it\? Request a GCP project/ }).click();
   await expect(page.getByRole("heading", { name: "Request a GCP project" })).toBeVisible();
 });
@@ -133,7 +138,7 @@ test("the guide explains the app with flow charts that fit the page", async ({ p
   // the guide covers using, editing, AI assistants, administration and running it
   const toc = page.locator(".guide-toc");
   await expect(toc.locator(".eyebrow")).toHaveText(["Using it", "Editing", "For AI assistants", "Administration", "Running it"]);
-  for (const id of ["what", "modes", "read", "follow", "blocks", "standards", "feedback", "edit", "editstandard", "ai", "lifecycle", "skills", "agents", "roadmap", "admin", "catalog", "architecture", "local", "tests", "deploy", "files", "docs"])
+  for (const id of ["what", "modes", "read", "follow", "blocks", "standards", "feedback", "edit", "editstandard", "versions", "ai", "lifecycle", "skills", "agents", "roadmap", "admin", "catalog", "architecture", "local", "tests", "deploy", "files", "docs"])
     await expect(page.locator(`#guide-${id} h2`)).toBeVisible();
   await expect(page.locator("#guide-modes .guide-table.roles tbody tr")).toHaveCount(5);
   await expect(page.locator("#guide-architecture .arch-box")).toHaveCount(8);

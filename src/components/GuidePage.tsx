@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Bot, Braces, CalendarCheck, Check, Eye, Flag, History, KeyRound, List, ShieldCheck, GripVertical, Layers, ListChecks, MousePointerClick, Pencil, Plus, Sparkles, Workflow } from "lucide-react";
 import type { Process } from "../types";
 import { STEP_META, STEP_TYPES } from "../lib/stepMeta";
-import { aiFlow, automationFlow, feedbackFlow, followFlow, reviewFlow, signInFlow, standardFlow } from "../guide/flows";
+import { aiFlow, automationFlow, feedbackFlow, followFlow, reviewFlow, signInFlow, standardFlow, versionFlow } from "../guide/flows";
 import { FlowView } from "./FlowView";
 import { scrollBehavior, TypeIcon } from "./ui";
 
@@ -19,8 +19,9 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
   { title: "Editing", items: [
     ["edit", "Editing a process"],
     ["editstandard", "Editing a standard"],
+    ["versions", "Versions, undo and working together"],
     ["ai", "Creating one with AI"],
-    ["lifecycle", "Life-cycle, reviews, history"],
+    ["lifecycle", "Life-cycle and reviews"],
   ] },
   { title: "For AI assistants", items: [
     ["skills", "Skills and review agents"],
@@ -115,6 +116,7 @@ export function GuidePage() {
               <tr><td><b>Admin</b></td><td>Everything, including who has which role</td><td>—</td></tr>
             </tbody>
           </table>
+          <p><b>Signing out</b> ends your session everywhere, not only in this browser. A session also ends by itself after some hours. If that happens while a page is open, the page stays as it is, with anything you were editing, and asks you to sign in again in another tab.</p>
           <p>People who can edit get a switch in the top bar, <b>Consumer</b> and <b>Editor</b>, to turn the editing controls on and off. The server checks the same rights on every change, so a hidden button is never the only protection.</p>
           <div className="guide-cards two">
             <div className="mode-card">
@@ -125,6 +127,7 @@ export function GuidePage() {
                 <li><Check size={14} />Read the map, follow the checklist, read the requirements</li>
                 <li><Check size={14} />Tick prerequisites and steps (kept in your browser)</li>
                 <li><Check size={14} />Flag what does not work, or say “I hit this too”</li>
+                <li><Check size={14} />See every earlier version and what changed</li>
                 <li><Check size={14} />Read and download the generated skills</li>
               </ul>
             </div>
@@ -135,7 +138,8 @@ export function GuidePage() {
                 <li><Check size={14} />Create processes and standards, blank or from text with AI</li>
                 <li><Check size={14} />Change steps on the map and in the checklist; change requirements</li>
                 <li><Check size={14} />Details: owner, where it applies, life-cycle, links</li>
-                <li><Check size={14} />The raw JSON in a code editor, and the history of every save</li>
+                <li><Check size={14} />Undo, and bring back any earlier version</li>
+                <li><Check size={14} />The raw JSON in a code editor</li>
                 <li><Check size={14} />Extra guidance for the generated skills</li>
               </ul>
             </div>
@@ -143,12 +147,12 @@ export function GuidePage() {
         </Section>
 
         <Section id="read" title="Reading a process">
-          <p>Open a process from the library. The header tells you which <b>application tiers</b>, <b>environments</b> and <b>programming languages</b> it applies to, who owns it, how long it usually takes and when it was last reviewed. Use “My application” in the library to hide what does not apply to you. Below the header:</p>
+          <p>Open a process from the library. The header tells you which <b>application tiers</b>, <b>environments</b> and <b>programming languages</b> it applies to, who owns it, how long it usually takes and when it was last reviewed. Use “My application” in the library to hide what does not apply to you; your choice is remembered. The header also shows the <b>version</b>: press it to see who changed what and when. Below the header:</p>
           <dl className="guide-dl">
-            <div><dt>Before you start</dt><dd>The prerequisites. Tick what you already have. If a prerequisite is itself a process, a link takes you there.</dd></div>
+            <div><dt>Before you start</dt><dd>The prerequisites, useful links and the standards the process helps to meet. On the map this is one line that opens when you press it, so the map itself is on the first screen; the checklist shows it in full. Tick what you already have. If a prerequisite is itself a process, a link takes you there.</dd></div>
             <div><dt>Map</dt><dd>Time runs left to right, each lane is one participant. Dashed arrows loop back, for example after a rejection. Click a block to open its details on the right.</dd></div>
             <div><dt>Checklist</dt><dd>Steps in order. Yours show the exact actions, the link to open and what you get at the end. Steps of others are collapsed so you know what you are waiting for. “Only my steps” hides them.</dd></div>
-            <div><dt>Standards</dt><dd>If the process helps to meet a standard, the standard is linked above the map.</dd></div>
+            <div><dt>A link to one step</dt><dd>Opening a step changes the address in your browser. Copy it to send someone straight to that step.</dd></div>
             <div><dt>Sub-processes</dt><dd>A step can hand over to another process, such as “Raise a ServiceNow request”. Expand it in place or open it.</dd></div>
           </dl>
         </Section>
@@ -172,7 +176,8 @@ export function GuidePage() {
           <dl className="guide-dl">
             <div><dt>Must, should, may</dt><dd><b>Must</b> is mandatory; deviating needs an exception from the unit. <b>Should</b> is expected unless you have a good reason. <b>May</b> is optional good practice.</dd></div>
             <div><dt>Each requirement</dt><dd>An id people and tools cite (such as SEC-LOG-01), the rule in a sentence, why it exists, how to comply, good and bad examples, and how it is checked: automatically, in code review, or by a person.</dd></div>
-            <div><dt>My application</dt><dd>Choose your tier, environment and language. Requirements that do not apply to you are folded away, and the counts follow.</dd></div>
+            <div><dt>My application</dt><dd>Choose your tier, environment and language. Requirements that do not apply to you are folded away, and the counts follow. The choice is remembered for every list and every standard.</dd></div>
+            <div><dt>A link to one requirement</dt><dd>Opening a requirement changes the address in your browser. Copy it to point someone at exactly that rule.</dd></div>
             <div><dt>What reviewers look for</dt><dd>The concrete signs of a violation in a pull request. The review agent generated from the standard checks exactly these.</dd></div>
             <div><dt>Exceptions and help</dt><dd>The top of the page says how to ask for an exception and lists the processes that help you comply.</dd></div>
           </dl>
@@ -189,11 +194,11 @@ export function GuidePage() {
         </Section>
 
         <Section id="edit" title="Editing a process">
-          <p>Switch to <b>Editor</b>. Changes go into a draft; nothing is published until you press <b>Save changes</b>, and saving is blocked while the checker reports a problem. A save takes effect for everyone at once.</p>
+          <p>Switch to <b>Editor</b>. Changes go into a draft; nothing is published until you press <b>Save changes</b>, and saving is blocked while the checker reports a problem. A save takes effect for everyone at once. A new process starts with its name: the name gives it its address, which never changes afterwards, and it starts as a draft that only editors see.</p>
           <div className="guide-cards three">
-            <div><Plus size={20} /><h3>Insert on an arrow</h3><p>Hover the map and press the small + on an arrow. A form appears right there: what happens, who does it, what kind. The step lands exactly between the two blocks.</p></div>
+            <div><Plus size={20} /><h3>Insert on an arrow</h3><p>Press the small + on an arrow of the map (it appears when you point at the map; on a touch screen it is always there). A form appears right there: what happens, who does it, what kind. The step lands exactly between the two blocks. A new decision starts with a “Yes” and a “No” path.</p></div>
             <div><GripVertical size={20} /><h3>Drag between lanes</h3><p>Drag a block to another lane to change who does it. The + on a block adds a step after it; on a decision it adds a branch.</p></div>
-            <div><ListChecks size={20} /><h3>Insert in the checklist</h3><p>The checklist works the same way: hover between two steps and press “Insert a step here”. Use it when you think in order rather than in lanes.</p></div>
+            <div><ListChecks size={20} /><h3>Insert in the checklist</h3><p>The checklist works the same way: press “Insert a step here” between two steps. Use it when you think in order rather than in lanes.</p></div>
             <div><MousePointerClick size={20} /><h3>Click for the rest</h3><p>“Edit step” in the side panel holds the exact actions, tool, link, result, sub-process and what comes next. “Details” holds name, owner, where it applies, the standards it helps to meet, participants and prerequisites.</p></div>
           </div>
         </Section>
@@ -201,30 +206,44 @@ export function GuidePage() {
         <Section id="editstandard" title="Editing a standard">
           <p>You can edit the standards of the units your role covers. Press the pencil on a requirement, or <b>Add requirement</b>; the new one continues the numbering.</p>
           <dl className="guide-dl">
-            <div><dt>The rule</dt><dd>One testable sentence or two, the level, the reason, how to comply, and examples. Keep the id stable: people and tools cite it.</dd></div>
+            <div><dt>The rule</dt><dd>One testable sentence or two, the level, the reason, how to comply, and examples. Keep the id stable: people and tools cite it. A changed id is taken over when you leave the field, and refused with a message if another requirement has it.</dd></div>
             <div><dt>How it is checked</dt><dd>Automatically, in code review, or by a person, and by what.</dd></div>
-            <div><dt>For reviewers</dt><dd>The signs of a violation in a pull request, the files where it matters, and how a finding is reported: blocker, warning or info. Leave it empty for rules that cannot be seen in a change. This is what the review agent is built from.</dd></div>
+            <div><dt>For reviewers</dt><dd>The signs of a violation in a pull request, the files where it matters (one pattern per row), and how a finding is reported: blocker, warning or info. Leave it empty for rules that cannot be seen in a change. This is what the review agent is built from.</dd></div>
             <div><dt>Applies only to</dt><dd>A requirement can be narrower than its standard, for example “production only”.</dd></div>
             <div><dt>Details</dt><dd>The unit that issues it, scope, where it applies, the process for exceptions, and background links.</dd></div>
           </dl>
         </Section>
 
+        <Section id="versions" title="Versions, undo and working together">
+          <p>Every save is a <b>version</b>: numbered, with who saved it, when, and the note they left. Nothing is ever overwritten without a trace, and nothing you typed is dropped without asking.</p>
+          <dl className="guide-dl">
+            <div><dt><History size={14} />Versions</dt><dd>The header shows the version. Press it for the list: every version with its note. <b>What changed</b> compares a version with the one before it, in words: which steps or requirements were added, removed or changed. Everyone who can read a process or standard can see this; editors can also <b>Restore</b> a version into their draft and save it as the newest.</dd></div>
+            <div><dt>Say what changed</dt><dd>Next to <b>Save changes</b> there is room for a short note, such as “New approval step after the audit”. It is optional and worth the ten seconds: it is what others read in the list of versions.</dd></div>
+            <div><dt>Undo</dt><dd>Every change to a draft can be undone and redone, step by step, with the arrows next to Save or with Ctrl+Z and Ctrl+Shift+Z: a deleted step, a block dragged to the wrong lane, a result pasted from the AI dialog, even <b>Discard</b>.</dd></div>
+            <div><dt>Leaving</dt><dd>With unsaved changes, every way out asks first: another page, the Back button, signing out, closing the tab. Moving between the tabs and steps of what you are editing keeps the changes.</dd></div>
+            <div><dt>Somebody else saved first</dt><dd>If a colleague saved while you were editing, your save is not carried out. You are shown what they changed and choose: continue from their version (your own changes stay one Undo away), or save yours as the newest (theirs stays in the list of versions). The lists work the same way.</dd></div>
+            <div><dt>Up to date</dt><dd>When you come back to the tab, the portal fetches what others changed in the meantime. If you have unsaved changes they are kept, and a notice tells you that there is a newer version.</dd></div>
+          </dl>
+          <Chart process={versionFlow} caption="A save is only carried out on top of the newest version. Otherwise you compare and decide; either way both versions are kept." />
+        </Section>
+
         <Section id="ai" title="Creating one with AI">
           <p>You do not need a particular AI product. The app builds one self-contained prompt that works in any chat assistant you are allowed to use, such as Gemini or Copilot in the browser, and checks whatever comes back. Nothing is sent anywhere by the app itself. This works for processes and for standards.</p>
           <Chart process={aiFlow} caption="From free text to a checked process. If the answer has problems, the app writes the fix request for you to send to the same chat. Afterwards you review and adjust." />
-          <p>The prompt contains the modelling rules, the JSON schema, your current lists, what already exists (so it can be linked) and one worked example. “Change with AI” on a page works the same way and adds the current content to the prompt. Whatever is created this way starts as a draft.</p>
+          <p>The prompt contains the modelling rules, the JSON schema, your current lists, what already exists (so it can be linked) and one worked example. “Change with AI” on a page works the same way and adds the current content to the prompt; the result replaces your draft and can be undone.</p>
+          <p>Whatever is created this way starts as a draft that only editors see, whatever the answer of the assistant says, and never replaces something that exists: if the name is taken, the new one is created next to it.</p>
         </Section>
 
-        <Section id="lifecycle" title="Life-cycle, reviews and history">
+        <Section id="lifecycle" title="Life-cycle and reviews">
           <p>A description that nobody checks goes stale. Every process and every standard therefore has a status and a review rhythm, both set in Details.</p>
           <dl className="guide-dl">
-            <div><dt>Draft</dt><dd>Being written. Only editors see it, and no skill is generated. New processes and standards start here.</dd></div>
+            <div><dt>Draft</dt><dd>Being written. Only the people who can edit it and the team or unit that owns it get to see it: for everyone else it does not exist, not in the lists and not by its link. No skill is generated. New processes and standards start here.</dd></div>
             <div><dt>Active</dt><dd>In use and visible to everyone. The owner is asked to review it every 3, 6, 12 or 24 months.</dd></div>
             <div><dt>Retired</dt><dd>No longer the way to do it. It stays for reference, greyed out, and can point to what replaces it. Its skills are withdrawn.</dd></div>
           </dl>
           <Chart process={reviewFlow} caption="The review cycle of an active process or standard. “Mark as reviewed” records the date and who confirmed it." />
           <p><CalendarCheck size={13} /> In Editor mode the library shows what needs a review, and <b>Admin › Health</b> lists everything that is due.</p>
-          <p><History size={13} /> Every save is kept as a revision with who saved it and when. <b>History</b> on a process or standard lists them; loading an older one puts it into your draft, and saving makes it current again.</p>
+          <p>“Mark as reviewed” on something without other changes is saved at once, as a version of its own with the note “Reviewed: confirmed as still correct”.</p>
         </Section>
 
         <Section id="skills" title="Skills and review agents">
@@ -236,7 +255,7 @@ export function GuidePage() {
           </dl>
           <Chart process={standardFlow} caption="A rule written once reaches the code twice: as guidance while writing, and as a check when reviewing." />
           <dl className="guide-dl">
-            <div><dt>Always current</dt><dd>Saving a process or standard produces a new version of its skills. Each version is numbered and names the revision of its source, so a repository holding an old copy can tell.</dd></div>
+            <div><dt>Always current</dt><dd>Saving a process or standard produces a new version of its skills. Each version is numbered and names the version of the process or standard it was made from, so a repository holding an old copy can tell. Skills that mention another process or standard follow it too: when that one is renamed they get the new name, and when it is retired or deleted they stop pointing at its skill.</dd></div>
             <div><dt>Where to find them</dt><dd>The <b>Skill</b> or <b>Skills</b> tab of a process or standard, and <b>Admin › Skills</b> for all of them. Copy or download; the page shows where the file belongs in a repository.</dd></div>
             <div><dt>Extra guidance</dt><dd>Editors can add hand-written notes to a skill, for example an exemption. They are added to every new version and survive changes of the source.</dd></div>
             <div><dt>Links to other skills</dt><dd>A process or a step can also link to skills kept elsewhere, such as one that updates an infrastructure repository. Those are shown under “Do it faster”.</dd></div>
@@ -272,7 +291,7 @@ export function GuidePage() {
             <div><dt><List size={14} />Lists</dt><dd>Teams and units, tools, tiers, environments and languages.</dd></div>
             <div><dt><Bot size={14} />Skills</dt><dd>Every generated skill and review agent, with its versions and extra guidance.</dd></div>
             <div><dt><CalendarCheck size={14} />Health</dt><dd>Reviews that are due, open feedback, drafts that were never published, and active documents without an owner or a review rhythm.</dd></div>
-            <div><dt>Activity</dt><dd>Who changed what and when: content, lists, roles and skills.</dd></div>
+            <div><dt>Activity</dt><dd>Who changed what and when: content with the version and its note, lists, roles, skills, and feedback that was closed, reopened or deleted by someone other than its author. The newest entries come first; “Show older” goes back as far as the log does.</dd></div>
             <div><dt>System</dt><dd>How this installation signs people in and where it sends notifications. These are set where the server runs, not here.</dd></div>
           </dl>
           <p>The people named as admins in the server settings always have access and cannot be removed in the panel, so nobody can lock everyone out. Among the others, the last admin cannot be removed.</p>
@@ -287,11 +306,11 @@ export function GuidePage() {
             <div><dt>Environments</dt><dd>Where things run, such as test or production. A requirement can apply to production only.</dd></div>
             <div><dt>Languages</dt><dd>Most content does not depend on the programming language. Some does, such as publishing a Go module.</dd></div>
           </dl>
-          <p>An entry that is still used cannot be removed; its page lists the processes and standards that use it.</p>
+          <p>An entry that is still used cannot be removed; its page lists the processes and standards that use it. A team that a role is limited to cannot be removed either. The lists have versions like everything else, and two people changing them at once are told about each other.</p>
         </Section>
 
         <Section id="architecture" title="How it is built">
-          <p>Everything people change in the portal lives in a database: processes, standards, the lists, roles, feedback and the generated skills. A small server signs people in, decides what they may do, keeps every revision, and regenerates the skills when their source changes.</p>
+          <p>Everything people change in the portal lives in a database: processes, standards, the lists, roles, feedback and the generated skills. A small server signs people in, decides what they may do, keeps every version, and regenerates the skills when their source changes.</p>
           <figure className="guide-fig">
             <div className="arch">
               <div className="arch-col">
@@ -308,7 +327,7 @@ export function GuidePage() {
               </div>
               <div className="arch-arrow" aria-hidden="true">→</div>
               <div className="arch-col">
-                <div className="arch-box ext"><strong>Postgres</strong><span>content with every revision, roles, feedback, skills, activity</span></div>
+                <div className="arch-box ext"><strong>Postgres</strong><span>content with every version, roles, feedback, skills, activity</span></div>
                 <div className="arch-box ext"><strong>Entra ID or Google</strong><span>sign-in</span></div>
                 <div className="arch-box ext"><strong>Team channel</strong><span>notifications, optional</span></div>
                 <div className="arch-box ext planned"><strong>Files in git</strong><span>first fill, import, export and backup</span></div>
@@ -319,8 +338,9 @@ export function GuidePage() {
           <dl className="guide-dl">
             <div><dt>In the database</dt><dd>All content and its history, roles, feedback, generated skills and the activity log.</dd></div>
             <div><dt>In the repository</dt><dd>The code, the formats (<code>schema/</code>), and sample content that fills an empty database on its first start.</dd></div>
-            <div><dt>Import and export</dt><dd><code>npm run export -- &lt;folder&gt;</code> writes the content and the skills to files, as a backup or to commit. <code>npm run db:import</code> loads the files of the repository over what is stored.</dd></div>
-            <div><dt>Two checks</dt><dd>The app checks a document fully before it lets you save. The server checks the format again and the rights, so nothing invalid or unauthorised is stored.</dd></div>
+            <div><dt>Import and export</dt><dd><code>npm run export -- &lt;folder&gt;</code> writes the content and the skills to files, as a backup or to commit. <code>npm run db:import</code> loads the files of the repository over what is stored; files that do not match the format are reported and skipped. An export also removes the files of skills that were withdrawn.</dd></div>
+            <div><dt>Two checks</dt><dd>The app checks a document fully before it lets you save. The server checks again: the rights, the format, that the parts of the document fit together (every step leads to a step that exists, every tier is in the lists), and that the save was made from the newest version. Nothing invalid, unauthorised or outdated is stored.</dd></div>
+            <div><dt>Protection in the browser</dt><dd>The server tells the browser to run only the app’s own code and never to show the app inside another page. For that reason the format checks are not built in the browser but generated from the schemas beforehand (<code>npm run validators</code>).</dd></div>
           </dl>
         </Section>
 
@@ -335,6 +355,7 @@ export function GuidePage() {
             <div><dt>Riley Security</dt><dd>Edits the standards of Cyber Security.</dd></div>
             <div><dt>Dana Admin</dt><dd>Admin: everything, including who has which role.</dd></div>
           </dl>
+          <p>Choosing who to be only works on your own machine: the server refuses to start this way on an address that others can reach.</p>
           <p><code>npm run db:reset</code> empties the feedback and adds the samples again. To use a Postgres you already run instead of Docker, set <code>PM_PG</code>, for example <code>PM_PG=postgres://pm:pm@localhost:5432</code>.</p>
         </Section>
 
@@ -342,9 +363,9 @@ export function GuidePage() {
           <p>Every level is tested, and <code>npm run test:all</code> runs all of it. The same runs on every pull request.</p>
           <table className="guide-table">
             <tbody>
-              <tr><td><code>npm test</code></td><td>The logic of the app: both checkers, editing, map layout, review dates, the AI prompts, rights, and that every sample file in the repository is valid.</td></tr>
-              <tr><td><code>npm run test:server</code></td><td>The server against a real Postgres: sign-in (with a stand-in for Entra and Google that signs real tokens), roles, content with revisions, the skill generators, feedback, the Admin endpoints.</td></tr>
-              <tr><td><code>npm run test:e2e</code></td><td>A real browser against the real server and database: signing in, following a process, reading a standard, editing both, feedback, the Admin panel, skills, AI import.</td></tr>
+              <tr><td><code>npm test</code></td><td>The logic of the app: both checkers, editing, undo and the rules for saving, comparing versions, map layout, review dates, the AI prompts, rights, and that every sample file in the repository is valid.</td></tr>
+              <tr><td><code>npm run test:server</code></td><td>The server against a real Postgres: sign-in (with a stand-in for Entra and Google that signs real tokens), roles, content with versions and saves at the same time, the skill generators, feedback, the Admin endpoints, starting and stopping.</td></tr>
+              <tr><td><code>npm run test:e2e</code></td><td>A real browser against the real server and database: signing in, following a process, reading a standard, editing both, versions and two people editing at once, feedback, the Admin panel, skills, AI import.</td></tr>
               <tr><td><code>npm run validate</code></td><td>The sample files, or a folder written by <code>npm run export</code>, against the schemas and the rules.</td></tr>
             </tbody>
           </table>
@@ -358,13 +379,17 @@ export function GuidePage() {
               <tr><td><code>DATABASE_URL</code></td><td>Where the Postgres database is.</td></tr>
               <tr><td><code>PM_AUTH</code></td><td><code>entra</code> or <code>google</code>. There is no default, so a deployment cannot fall back to the local user picker by accident.</td></tr>
               <tr><td><code>PM_ADMINS</code></td><td>Emails of the first admins. They give everyone else their roles in the Admin panel.</td></tr>
-              <tr><td><code>PM_BASE_URL</code></td><td>The public address. Register <code>&lt;address&gt;/auth/callback</code> with Entra or Google.</td></tr>
+              <tr><td><code>PM_BASE_URL</code></td><td>The public address, starting with <code>https://</code>. Register <code>&lt;address&gt;/auth/callback</code> with Entra or Google.</td></tr>
               <tr><td><code>PM_OIDC_CLIENT_ID</code>, <code>PM_OIDC_CLIENT_SECRET</code></td><td>The app registration.</td></tr>
-              <tr><td><code>PM_ENTRA_TENANT</code> or <code>PM_GOOGLE_HOSTED_DOMAIN</code></td><td>Your tenant, or the Workspace domain to accept.</td></tr>
-              <tr><td><code>PM_SESSION_SECRET</code></td><td>At least 32 random characters.</td></tr>
+              <tr><td><code>PM_ENTRA_TENANT</code></td><td>Entra ID: your tenant.</td></tr>
+              <tr><td><code>PM_GOOGLE_HOSTED_DOMAIN</code></td><td>Google: your Workspace domain. Without a limit any Google account could sign in, so the server does not start with Google unless this or the next setting is given.</td></tr>
+              <tr><td><code>PM_ALLOWED_EMAIL_DOMAINS</code></td><td>Optional, for either provider: only addresses of these domains may sign in.</td></tr>
+              <tr><td><code>PM_SESSION_SECRET</code></td><td>At least 32 random characters, for example from <code>openssl rand -base64 48</code>. A placeholder is refused.</td></tr>
               <tr><td><code>PM_NOTIFY</code>, <code>PM_NOTIFY_WEBHOOK_URL</code></td><td>Optional: send notifications to a chat webhook instead of the server log.</td></tr>
+              <tr><td><code>PM_LOG_FORMAT</code></td><td>Optional: <code>json</code> for one JSON object per log line.</td></tr>
             </tbody>
           </table>
+          <p>The server answers <code>/healthz</code> when it runs and <code>/readyz</code> when it can also reach the database; use the second to decide whether it gets traffic. Several copies can start at the same time, also on an empty database. When it is asked to stop it finishes the requests it is answering first.</p>
           <p>On its first start with an empty database the server loads the sample content from the container; after that the database is the only source, and a new version of the container never overwrites it. The full list of settings, the API and the rights are in <code>docs/backend.md</code>; a template is in <code>.env.example</code>.</p>
         </Section>
 
@@ -373,6 +398,7 @@ export function GuidePage() {
           <table className="guide-table">
             <tbody>
               <tr><td><code>schema/*.schema.json</code></td><td>The formats of a process, a standard and the lists</td></tr>
+              <tr><td><code>src/lib/validators.generated.js</code></td><td>The checks the app runs, generated from the schemas. After changing a schema run <code>npm run validators</code>; a test fails when it was forgotten</td></tr>
               <tr><td><code>processes/</code>, <code>standards/</code>, <code>catalog/</code></td><td>Sample content that fills an empty database; also the layout of an export</td></tr>
               <tr><td><code>docs/llm-prompt.md</code>, <code>docs/llm-prompt-standards.md</code></td><td>The AI prompts as shareable files</td></tr>
               <tr><td><code>docs/backend.md</code></td><td>The server: API, settings, rights, database</td></tr>

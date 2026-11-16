@@ -23,7 +23,7 @@ For each change ask: would someone who uses, edits, runs or deploys the app now 
 | A flow that the Guide shows as a chart, or a new flow worth showing | `src/guide/flows.ts` (the charts are ordinary processes drawn by the app's own map) |
 | How to run, test or lay out the project; the short feature overview | `README.md` |
 | The server: API, settings, rights, database, notifications, deployment | `docs/backend.md`, `.env.example`, and the “Running it” sections of the Guide |
-| A format (`schema/*.json`) | Field `description`s in the schema, the modelling rules in `src/lib/prompt.ts`, the generators in `server/internal/skills`, the Guide, `docs/mcp.md`, and the skills `edit-process` / `edit-standard` / `manage-catalog` |
+| A format (`schema/*.json`) | Run `npm run validators` first (the app's checks are generated from the schemas). Then: field `description`s in the schema, the server's consistency check (`server/internal/docs/check.go`), the modelling rules in `src/lib/prompt.ts`, the generators in `server/internal/skills`, the Guide, `docs/mcp.md`, and the skills `edit-process` / `edit-standard` / `manage-catalog` |
 | A prompt, a schema, or the sample content | Regenerate `docs/llm-prompt.md` and `docs/llm-prompt-standards.md` with `npm run prompt`. Never edit those files by hand. |
 | Roles or what they allow | The roles table in the Guide (“Signing in and your rights”), `README.md`, `docs/backend.md`, and the texts in `src/components/AdminPage.tsx` |
 | What a generated skill or review agent says | The “Skills and review agents” section of the Guide |

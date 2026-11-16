@@ -180,7 +180,7 @@ test("the JSON editor marks problems on the line and applies valid edits", async
   await expect(page.locator(".facts")).toContainText("about a month");
 });
 
-test("every save is a revision that can be loaded back", async ({ page }) => {
+test("every save is a version that can be restored", async ({ page }) => {
   await open(page, `/p/${AZURE}/flow`);
   const before = (await readProcess(page, AZURE))!.summary;
   await page.getByRole("button", { name: "Details", exact: true }).click();
@@ -190,10 +190,10 @@ test("every save is a revision that can be loaded back", async ({ page }) => {
 
   await page.getByRole("button", { name: "History" }).click();
   const rows = page.locator(".history li");
-  await expect(rows.first()).toContainText("Current revision");
+  await expect(rows.first()).toContainText("current");
   await expect(rows.first()).toContainText("alex@example.com");
   await expect(rows.last()).toContainText("import"); // where it all started
-  await rows.nth(1).getByRole("button", { name: "Load into draft" }).click();
+  await rows.nth(1).getByRole("button", { name: "Restore" }).click();
   await expect(page.locator(".lead")).toHaveText(before);
   await save(page);
   expect((await readProcess(page, AZURE))!.summary).toBe(before);

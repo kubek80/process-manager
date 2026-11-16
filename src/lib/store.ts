@@ -167,27 +167,48 @@ export function unsavedWork(to?: Route): string | null {
   return null;
 }
 
+// Asked before a move that would lose unsaved edits. Set by the app (useRoute).
+let confirmLeave: ((what: string) => Promise<boolean>) | undefined;
+// An address the person agreed to move to although edits are lost.
+let agreed: string | null = null;
+
+/** Goes to `hash`, after asking when unsaved edits would be lost. */
+async function moveTo(hash: string) {
+  const lost = unsavedWork(parse(hash));
+  if (lost && confirmLeave && !(await confirmLeave(lost))) return;
+  if (lost) agreed = hash;
+  location.hash = hash;
+}
+
 /**
- * The current route. `confirmLeave` is asked before a move that would lose unsaved edits; when
- * it says no, the address is put back and the page stays.
+ * The current route. `ask` is asked before a move that would lose unsaved edits. Links and
+ * buttons of the app are stopped before anything happens. The Back button and a typed address
+ * have already moved when the app hears of them: then the address is put back while asking.
  */
-export function useRoute(confirmLeave?: (what: string) => Promise<boolean>): Route {
+export function useRoute(ask?: (what: string) => Promise<boolean>): Route {
   const [route, setRoute] = useState<Route>(() => parse());
-  const ask = useRef(confirmLeave);
-  ask.current = confirmLeave;
+  confirmLeave = ask;
   useEffect(() => {
     let shown = location.hash; // the address of what is on screen
-    let allowed: string | null = null; // an address the person agreed to move to
     const on = async () => {
       const target = location.hash;
-      const lost = target === allowed ? null : unsavedWork(parse(target));
-      allowed = null;
-      if (!lost || !ask.current) { shown = target; setRoute(parse(target)); return; }
+      const lost = target === agreed ? null : unsavedWork(parse(target));
+      agreed = null;
+      if (!lost || !confirmLeave) { shown = target; setRoute(parse(target)); return; }
       history.replaceState(null, "", shown || "#/"); // stay where we are while asking
-      if (await ask.current(lost)) { allowed = target; location.hash = target; }
+      if (await confirmLeave(lost)) { agreed = target; location.hash = target; }
+    };
+    // a link inside the app: ask before following it, so that "Stay" leaves no trace
+    const click = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as Element | null)?.closest?.("a[href^='#/']") as HTMLAnchorElement | null;
+      if (!a || a.target === "_blank" || !unsavedWork(parse(a.hash))) return;
+      e.preventDefault();
+      void moveTo(a.hash);
     };
     window.addEventListener("hashchange", on);
-    return () => window.removeEventListener("hashchange", on);
+    document.addEventListener("click", click, true);
+    return () => { window.removeEventListener("hashchange", on); document.removeEventListener("click", click, true); };
   }, []);
   return route;
 }
@@ -203,7 +224,8 @@ export const href = (r: Route): string => {
     case "process": return `#/p/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
   }
 };
-export const go = (r: Route) => { location.hash = href(r); };
+/** Goes to a page of the app. With unsaved edits that would be lost, it asks first. */
+export const go = (r: Route) => { void moveTo(href(r)); };
 
 /** What the browser tab says for a page: the thing being read first, the product last. */
 export function pageTitle(r: Route, names: { process?: string; standard?: string; loading?: boolean } = {}): string {

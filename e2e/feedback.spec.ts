@@ -11,7 +11,7 @@ test("a consumer flags a step from the checklist and everyone sees the flag", as
   await open(page, `/p/${GCP}/list`);
   const step = page.locator("#step-raise-request");
   await step.hover();
-  await step.getByRole("button", { name: /Tell us/ }).click();
+  await step.getByRole("button", { name: /Report a problem/ }).click();
   const drawer = page.locator(".drawer");
   await drawer.getByRole("button", { name: "Out of date" }).click();
   await drawer.getByPlaceholder(/What happened/).fill("The catalogue item is now called Cloud project.");

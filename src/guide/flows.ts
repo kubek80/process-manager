@@ -96,3 +96,17 @@ export const standardFlow = flow("guide-standard", "From a standard to a reviewe
     s("fix", "Fix, or ask for an exception", "dev", "code", ["check"]),
     s("merge", "Merge", "dev", "verify", []),
   ], "Unit");
+
+export const versionFlow = flow("guide-versions", "Two people edit the same process", "How a save becomes a version and what happens when somebody else saved first.",
+  [["colleague", "A colleague"], ["app", "Process Manager"]],
+  [
+    s("edit", "Edit the process", "me", "task", ["colleague-saves"], "a draft, with Undo"),
+    s("colleague-saves", "Saves a change first", "colleague", "task", ["save"]),
+    s("save", "Press Save changes", "me", "task", ["newest"], "with a note"),
+    s("newest", "Started from the newest version?", "app", "decision", [["stored", "Yes"], ["compare", "No"]]),
+    s("compare", "Show what they changed", "app", "automation", ["choose"]),
+    s("choose", "Whose version?", "me", "decision", [["continue", "Theirs"], ["stored", "Mine"]]),
+    s("continue", "Continue from theirs", "me", "task", ["save"], "yours: one Undo away"),
+    s("stored", "Keep it as a new version", "app", "automation", []),
+  ]);
+

@@ -43,7 +43,7 @@ To use a Postgres you already run instead of Docker, set `PM_PG`, for example `P
 
 ## How it is built
 
-React + Vite frontend; Go server; Postgres. Everything people change lives in the database: processes, standards, the lists, roles, feedback and the generated skills, with a revision for every save. The files in this repository are the code, the formats (`schema/`) and sample content for a first start. Details, API and settings: [`docs/backend.md`](docs/backend.md).
+React + Vite frontend; Go server; Postgres. Everything people change lives in the database: processes, standards, the lists, roles, feedback and the generated skills. Every save is a numbered version with a note; a save made from an outdated version is refused, so two people never overwrite each other. The files in this repository are the code, the formats (`schema/`) and sample content for a first start. Details, API and settings: [`docs/backend.md`](docs/backend.md).
 
 ## What is in it
 
@@ -52,7 +52,8 @@ React + Vite frontend; Go server; Postgres. Everything people change lives in th
 | **Processes** | Map and checklist, sub-processes, prerequisites, block types, editing on the map and in the checklist |
 | **Standards** | Requirements with level (must / should / may), reason, how to comply, examples, how it is checked, and what a reviewer looks for |
 | **Where it applies** | Application tiers, environments and programming languages, on a process, a standard or a single requirement; “My application” hides the rest |
-| **Life-cycle** | Draft, active, retired; periodic reviews by the owner; a history of every save |
+| **Life-cycle** | Draft (hidden from readers), active, retired; periodic reviews by the owner |
+| **Versions** | Every save is a version with who, when and a note; what changed between versions in plain words; restore; undo while editing; a warning before unsaved changes are left; a decision when somebody else saved first |
 | **Feedback** | On a step or a requirement, “I hit this too”, closed by the owner, flagged when the text changed since |
 | **Skills** | Generated per process and per standard, versioned automatically, with optional hand-written guidance |
 | **Admin panel** | Roles, the lists (teams and units, tools, tiers, environments, languages), the skills registry, health, activity |
@@ -88,9 +89,9 @@ npm run test:all
 
 | Command | What it covers |
 | --- | --- |
-| `npm test` | Frontend logic (Vitest): both checkers, editing helpers, layout, life-cycle, prompts, rights, and that every sample file is valid |
-| `npm run test:server` | Go server against a real Postgres: sign-in incl. a fake OpenID Connect provider, roles, content with revisions, skill generators, feedback, admin |
-| `npm run test:e2e` | Playwright against the real server and database: consumer and editor journeys for processes and standards, feedback, the Admin panel, skills, AI import |
+| `npm test` | Frontend logic (Vitest): both checkers, editing helpers, undo and the rules for saving, comparing versions, layout, life-cycle, prompts, rights, and that every sample file is valid |
+| `npm run test:server` | Go server against a real Postgres: sign-in incl. a fake OpenID Connect provider, roles, content with versions and concurrent saves, skill generators, feedback, admin, start-up and shutdown |
+| `npm run test:e2e` | Playwright against the real server and database: consumer and editor journeys for processes and standards, versions and two people editing at once, feedback, the Admin panel, skills, AI import |
 | `npm run typecheck`, `npm run validate` | Types; the sample files (or an exported folder) against the schemas and rules |
 
 The end-to-end tests use their own database, emptied at the start of every run. CI runs all of this (`.github/workflows/ci.yml`).
@@ -98,6 +99,7 @@ The end-to-end tests use their own database, emptied at the start of every run. 
 ## Formats and command line
 
 - `schema/process.schema.json`, `schema/standard.schema.json`, `schema/catalog.schema.json` define the formats (JSON Schema 2020-12). The app, the server and the command line all use them.
+- `npm run validators` regenerates `src/lib/validators.generated.js`, the checks the app runs, after a schema changed (the app does not build them in the browser, so that its security policy can forbid `eval`). A unit test fails when this was forgotten.
 - `npm run validate [folder]` checks files against the schemas and the rules a schema cannot express.
 - `npm run reviews [folder]` lists processes and standards whose review is overdue or due within 30 days, grouped by owner, and exits non-zero when something is overdue. Run it on an exported folder for live content.
 - `npm run prompt` regenerates `docs/llm-prompt.md` and `docs/llm-prompt-standards.md`, the prompts for chat assistants as shareable files.
@@ -118,7 +120,7 @@ server/               Go backend
 schema/               formats + the examples used in the prompts
 processes/ standards/ catalog/   sample content that fills an empty database
 e2e/                  end-to-end tests
-scripts/              dev, test, validate, prompt, reviews
+scripts/              dev, test, validate, validators, prompt, reviews
 docs/                 backend.md, mcp.md, generated prompts, screenshots
 ```
 
