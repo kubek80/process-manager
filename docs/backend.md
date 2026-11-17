@@ -1,6 +1,6 @@
 # Backend
 
-Everything people change in the portal is stored in a database: processes, standards, the lists, roles, feedback and the generated skills. The server signs people in, enforces their rights, keeps every version, and regenerates skills when their source changes.
+Everything people change in the portal is stored in a database: processes, standards, the lists, roles, feedback, requests and the generated skills, and how processes and standards are used (views, bookmarks, upvotes, skill downloads). The server signs people in, enforces their rights, keeps every version, and regenerates skills when their source changes.
 
 ```mermaid
 flowchart LR
@@ -9,7 +9,7 @@ flowchart LR
     app
     server
   end
-  server --> db[("Postgres<br/>content + versions, roles,<br/>feedback, skills, activity")]
+  server --> db[("Postgres<br/>content + versions, roles,<br/>feedback, skills, activity,<br/>views, votes, requests")]
   server <-. "sign-in" .-> idp["Entra ID or Google"]
   server -. "notifications" .-> chat["Team channel"]
   seed["Files in git<br/>processes/ standards/ catalog/"] -. "first fill, import, export" .-> server
@@ -30,8 +30,15 @@ flowchart LR
 | Feedback | About a step of a process or a requirement of a standard. Anyone signed in can report and say "I hit this too". |
 | Stale feedback | Each item remembers a fingerprint of the step or requirement it was written about. When that changes or disappears, the item is flagged "may already be fixed". |
 | Notifications | New feedback is announced to the owning team (name and contact from the lists); a fix is announced to the reporter. `PM_NOTIFY=log` writes them to the server log, `webhook` posts `{"text": …}` plus the event fields (`type`, `targetKind`, `processId`, `processTitle`, `stepTitle`, …) to a URL (a Slack incoming webhook accepts this as is). The webhook is called in the background, up to three times, and what people typed is escaped so that it cannot become chat markup. A brake keeps one person at about 30 stored items an hour; it is a courtesy limit against a script gone wrong, not a hard quota. |
+| Views | Opening a process or standard counts a view (`POST /api/views/…`), at most once per person, document and day (the server's date in UTC). The server stores who viewed what on which day only to count views and different people ("people"); nobody is ever shown who viewed something. Counting is one insert that ignores a repeat; if it fails, the failure is logged and the page is answered as usual. |
+| Bookmarks and upvotes | Anyone signed in can bookmark a process or standard (kept per person on the server, so it follows them to another device) and upvote it ("this is useful"): one vote per person, which can be taken back. |
+| Skill downloads | Every download of a skill or review agent from the portal counts one download for the process or standard it comes from; `-export` counts one per skill it writes. Only the download of the latest text is a download: reading an older version in the app is not. Who downloaded is not stored. A failure to count is logged and never stops the download. |
+| Counts and drafts | Counts, bookmarks and upvotes are only given for what the caller may see: a draft somebody cannot see answers `404` and is left out of every count and list. Admins see everything in the statistics, drafts included, marked by their status. |
+| Deleting a document | Its feedback, bookmarks and upvotes are deleted with it. Its views and downloads stay, so that the totals and the trend of a past period do not change, but they are marked as belonging to a deleted document (their id becomes `<id>@deleted-<n>`): they count for no document, and something new created under the same id starts from nothing. |
+| Requests | Anyone signed in can ask for a process or standard that does not exist yet: a title (5-120 characters), what is needed and why (10-1000), and optionally the platform and practice it would belong to (they must be in the lists). Everyone sees all requests and can vote for them, one vote per person (the requester too). A request is `open`, `planned`, `done` (linked to the process or standard of the same kind that answers it) or `declined` (with a reason); it can be set back to open. A brake keeps one person at 10 requests an hour. Creating, changing the state and deleting are written to the activity log in plain words, e.g. "“Naming of cloud resources”: Done, answered by the standard “Naming”". |
+| Statistics | For admins: per process and standard, the views, people, skill downloads, upvotes and handled feedback of a period, with the upvotes and open feedback as of now; totals; the same grouped by platform, practice and owning team; views, people and downloads per week; and the same rows as a CSV file. See [Statistics](#statistics). |
 | Reviews | The team that owns a process or standard is asked to confirm regularly that it is still correct. The owner role of that team can record that without being an editor (`POST …/review`): it is the one change to content that role may make. Whoever may edit it can record it too. |
-| Activity | Every change to content (with the version and its note), lists, roles and skill guidance is recorded with who and when. For processes, standards and the lists the entry is written in the same transaction as the change; for roles, skill guidance and feedback it is written right after it, and a failure to write it is logged. Closing, reopening or deleting somebody else's feedback is recorded too. |
+| Activity | Every change to content (with the version and its note), lists, roles and skill guidance is recorded with who and when, and so is every request made, changed in state or deleted. For processes, standards and the lists the entry is written in the same transaction as the change; for roles, skill guidance, feedback and requests it is written right after it, and a failure to write it is logged. Views, bookmarks, upvotes and votes are not recorded. Closing, reopening or deleting somebody else's feedback is recorded too. |
 | Protection | Every change needs the header `X-Requested-With: process-manager` (stops cross-site form posts), bodies are limited to 1 MB, ids are validated, a request gets 30 seconds. Every answer carries a content security policy (only the app's own scripts, no `eval`, no framing), `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Strict-Transport-Security` when the address is https. |
 | Operation | Requests to `/api` and `/auth` are logged with status and duration (`PM_LOG_FORMAT=json` for one JSON object per line). `/healthz` says the process runs, `/readyz` that it also reaches the database. On SIGTERM the server stops accepting requests and finishes the ones in progress (up to 15 seconds) before it closes the database. |
 
@@ -39,14 +46,14 @@ flowchart LR
 
 | Role | May | Scope |
 | --- | --- | --- |
-| *(everyone signed in)* | Read published content and its versions, see who belongs to which team, platform and practice, tick steps, report, "I hit this too", delete own feedback, read and download skills | |
+| *(everyone signed in)* | Read published content and its versions, see who belongs to which team, platform and practice, tick steps, report, "I hit this too", delete own feedback, read and download skills, bookmark and upvote, request a process or standard, vote for requests, withdraw own requests while they are open | |
 | `owner` | Confirm reviews; mark fixed / reopen / delete feedback; see drafts | Required: one team; applies to what that team owns |
 | `platform-owner` | Create, change and delete the processes and standards that belong to the platform, including drafts; confirm their reviews; manage their feedback; edit the guidance of their skills | Required: one platform; applies to what names it as its platform |
 | `practice-owner` | The same for what belongs to the practice | Required: one practice; applies to what names it as its practice |
 | `process-editor` | Create, change and delete every process, including drafts; manage their feedback; edit the guidance of their skills | All processes |
 | `standards-editor` | The same for every standard | All standards; it cannot be limited |
 | `catalog-manager` | Change the lists | |
-| `admin` | Everything, including roles, the activity log and the system page | |
+| `admin` | Everything, including roles, the activity log, the system page and the statistics; removing any request | |
 
 A process or standard belongs to a team (`owner`), and may belong to a platform (`platform`) and a practice (`practice`), as its content says.
 
@@ -61,6 +68,8 @@ A process or standard belongs to a team (`owner`), and may belong to a platform 
 - The members of a team, platform or practice are the people with `owner`, `platform-owner` or `practice-owner` limited to it. There is no separate membership: the Members sections in Admin › Lists give and take these roles through `/api/admin/access`, and everyone signed in can read them through `/api/members`. Membership is not read from Entra or Google groups. One person can be in a team, a platform and a practice at the same time.
 - A team, platform or practice that a role is still limited to cannot be removed from the lists; the roles have to be taken away first.
 - If the roles cannot be read, the request is treated as a consumer's.
+- **Requests:** the state of a request is changed by whoever could create what it asks for: admins; process editors for a process request; standards editors for a standard request; the owners of the platform and of the practice it names. A team's owners do not. The requester may withdraw (delete) their own request while it is open; an admin may delete any request. Marking one done needs a process or standard of the same kind that the person marking it can see. A request that is answered by a document that later becomes a draft does not name it to people who cannot see the draft (`linkedId` is empty for them); one whose document was deleted keeps the id, and the list shows it as text.
+- A platform or practice that a request names can still be removed from the lists: a request is a wish, not part of the structure. The request keeps the id, and the app shows the id where it would show the name. Nobody is then its platform or practice owner; admins and the editors of the kind still manage it.
 
 ## API
 
@@ -86,18 +95,49 @@ All under the same origin as the app. JSON in and out; errors are `{"error": "�
 | `POST` / `DELETE /api/feedback/{id}/also-hit` | "I hit this too" on / off | signed in, not the author |
 | `PATCH /api/feedback/{id}` | `{"resolved": true \| false}` | editors of the target, owners of its team |
 | `DELETE /api/feedback/{id}` | Remove an item | as above, and the author |
+| `GET /api/engagement` | `{"counts": {"process": {id: {views, people, downloads, upvotes, handled}}, "standard": {…}}, "mine": {"bookmarks": [{kind, id, at}], "upvotes": [{kind, id}]}}`. Counts are all-time, only for what the caller may see; a document with nothing yet is left out (read it as zeros). `handled` is feedback marked as fixed. Bookmarks are newest first. | signed in |
+| `POST /api/views/{process\|standard}/{id}` | Count a view: `204`, once per person, document and day; `404` "That does not exist." when the caller may not see it. A failure to store the view is logged, the answer is still `204`. | signed in |
+| `PUT` / `DELETE /api/bookmarks/{kind}/{id}` | Bookmark or drop: `204`. Putting one needs a document the caller may see (`404` otherwise); dropping always answers `204`. | signed in |
+| `PUT` / `DELETE /api/upvotes/{kind}/{id}` | Upvote or take back: `{"upvotes": n}` for the document; `404` when the caller may not see it | signed in |
+| `GET /api/requests` | `{"requests": [Request]}`, newest first. A Request is `{id, kind, title, description, platform, practice, requestedBy: {name, email}, createdAt, state, stateNote, stateBy, stateAt, linkedId, votes, votedByMe, mine, canManage}`; `platform`, `practice`, `stateNote`, `stateBy` (a name), `stateAt` (RFC 3339) and `linkedId` are `""` when not set | signed in |
+| `POST /api/requests` | `{"kind", "title", "description", "platform"?, "practice"?}` → `201` Request. Refusals are `400`: "Say whether a process or a standard is requested.", "Give the request a title of 5 to 120 characters.", "Describe what is needed and why in 10 to 1000 characters.", "The text contains characters that cannot be stored.", "There is no platform “x” in the lists." (or practice); `429` "You have made a lot of requests in the last hour. Please try again later." | signed in |
+| `PUT` / `DELETE /api/requests/{id}/vote` | Vote or take it back: `{"votes": n}` | signed in |
+| `PUT /api/requests/{id}/state` | `{"state", "note"?, "linkedId"?}` → Request. `linkedId` is kept only for `done`. Refusals: `403` "Only admins, process editors and the owners of the platform or practice it names can change the state of this request." ("standards editors" for a standard); `400` "The state must be open, planned, done or declined.", "Say why the request is declined.", "Choose the process that answers this request.", "There is no process “x”.", "Keep the note under 1000 characters." | admins, editors of the kind, owners of its platform or practice |
+| `DELETE /api/requests/{id}` | `204`. `403` "You can only withdraw your own request."; `409` "This request is no longer open, so it cannot be withdrawn." An unknown request is `404` "That request does not exist." | the requester while it is open; admins |
 | `GET /api/skills` | Every skill and review agent with its latest version number | signed in |
 | `GET /api/skills/{id}` | Text, versions, extra guidance, `canEdit` | signed in |
 | `GET /api/skills/{id}/versions/{n}` | The text of an older version | signed in |
-| `GET /api/skills/{id}/download` | The latest text as a file (`SKILL.md` or `<id>.md`) | signed in |
+| `GET /api/skills/{id}/download` | The latest text as a file (`SKILL.md` or `<id>.md`); counts one download | signed in |
 | `PUT /api/skills/{id}/extra` | `{"extra": "…"}`: hand-written guidance, then regenerate | who may edit the source |
 | `GET /api/admin/access` | Assignments, bootstrap admins, role names | admins |
 | `POST` / `DELETE /api/admin/access` | `{"email", "role", "scope"}`: give or remove a role. The activity log uses the names of the Admin panel, e.g. "Practice owner for the practice Engineering". Refusals are `400` in plain words, e.g. "A standards editor always covers all standards: it cannot be limited to a team, platform or practice.", "A platform owner needs the platform it is for.", "There is no platform “x” in the lists." | admins |
 | `GET /api/admin/audit?limit=&before=` | A page of the activity log, newest first: `{"entries", "more"}`. `limit` is 100 by default and at most 499; `before` is the id of the last entry of the page before. | admins |
 | `GET /api/admin/system` | Provider, address, counts | admins |
+| `GET /api/admin/statistics?period=7\|30\|90\|365\|all` | The statistics of a period (default `30`); `400` "Choose a period of 7, 30, 90 or 365 days, or all." See [Statistics](#statistics). | admins |
+| `GET /api/admin/statistics.csv?period=…` | The same rows as a CSV file | admins |
 | `GET /healthz`, `GET /readyz` | The process runs; it also reaches the database | anyone |
 
 There is no machine-to-machine access yet: every call needs a browser session. Repositories get skills by download or through `npm run export`.
+
+## Statistics
+
+Periods are counted in days by the server's clock in UTC. `period=7` is today and the six days before it: `from` is the first day, `to` is today, and everything from the start of `from` (00:00 UTC) until now counts. `all` starts on the first day anything was recorded (a view, download, upvote, feedback or request), or today when nothing was.
+
+```
+{ "period": "30", "from": "2026-10-19", "to": "2026-11-17",
+  "totals": {"views", "people", "downloads", "upvotes", "feedbackOpened", "feedbackHandled", "requests"},
+  "rows":   [{"kind", "id", "title", "status", "owner", "platform", "practice", "category",
+              "views", "people", "downloads", "upvotes", "upvotesTotal", "feedbackOpen", "feedbackHandled"}],
+  "groups": {"platform": [{"id", "name", "documents", "views", "people", "downloads", "upvotes", "feedbackHandled"}],
+             "practice": […], "team": […]},
+  "trend":  [{"week": "2026-10-13", "views", "people", "downloads"}] }
+```
+
+- **rows:** one per process and standard that exists, drafts included (`status` is `active`, `draft` or `deprecated`), most viewed first. `owner`, `platform`, `practice` and `category` are ids. `views`, `people`, `downloads`, `upvotes` (given in the period) and `feedbackHandled` (marked as fixed in the period) are within the period; `upvotesTotal` and `feedbackOpen` are as of now.
+- **totals:** everything recorded in the period, including the views and downloads of documents deleted since; so they can be higher than the sum of the rows. `people` is different people who viewed anything; `feedbackOpened` is feedback written in the period, `feedbackHandled` marked as fixed in it (feedback is deleted with its document, so it is not in the totals afterwards); `requests` is requests made in it.
+- **groups:** every platform, practice and team in the lists, plus any id a document names that is no longer in them (its name is then the id), most viewed first. A document counts in the group of its platform, of its practice and of its owning team; `people` is different people per group.
+- **trend:** every week of the period, quiet ones included, oldest first; a week starts on Monday. The first and last week may be partly outside the period: only days within it count.
+- **CSV:** `statistics-last-30-days-2026-11-17.csv` (`statistics-all-time-<date>.csv` for all), one line per row above, with a header line: Type, Title, Id, Status, Owning team, Platform, Practice, Category, Views, People, Skill downloads, Upvotes in the period, Upvotes in total, Open feedback, Feedback handled in the period. Teams, platforms, practices and categories are given by name (the id when it is not in the lists). The file is UTF-8 with a byte order mark and CRLF line ends, quoted where needed, and a text that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets an apostrophe in front, so that a spreadsheet does not read it as a formula.
 
 ## Settings
 
@@ -147,6 +187,12 @@ Done.
 | `audit_log` | The activity log |
 | `skills`, `skill_versions` | The registry and every generated version, with the version of the source it came from |
 | `feedback`, `feedback_also_hit` | Feedback and who else hit the same problem |
+| `document_views` | One row per person, document and day (UTC): only to count views and people. Kept when the document is deleted, with its id marked `<id>@deleted-<n>` |
+| `bookmarks`, `upvotes` | One row per person and document, with when; deleted with the document |
+| `skill_downloads` | One row per download or exported skill: the skill, its process or standard, `download` or `export`, when. No person. Kept and marked like views when the document is deleted |
+| `requests`, `request_votes` | Requests with their state, and one vote per person; votes go with their request. Platform, practice and the answering document are ids without a reference, so a request outlives what it names |
+
+Emails are stored in lower case. A person's sessions ending (sign-out, expiry) changes nothing in these tables.
 
 ## Starting, importing, exporting
 
@@ -171,6 +217,7 @@ Done.
 | jordan@example.com | `platform-owner` of `google-cloud`, `practice-owner` of `engineering`, `owner` of team `cloud-platform-team`: one person in a team, a practice and a platform |
 | dana@example.com | admin |
 
+- **Samples (`-seed`, used by `npm run dev`):** adds three feedback items when there is no feedback. With `PM_AUTH=dev`, and only when there are no views, bookmarks, upvotes, downloads and requests at all, it also adds twelve weeks of believable use (`server/cmd/server/seed.go`): views of every published process and standard by the built-in users and 30 made-up colleagues (`colleague-01@example.com` …), more on working days and a little more each week; upvotes and bookmarks of the built-in users and upvotes of colleagues; a few downloads of each skill; five requests in every state, with votes (the one that is done points to `onboard-site-to-akamai`, or stays planned when that process is not there). The numbers are random but the same for the same content. It never adds to what is there. The end-to-end tests start the server without `-seed`, so they see none of this.
 - **Every start:** the skills are brought in line with the content.
 
 | Command | Does |
@@ -179,7 +226,7 @@ Done.
 | `server -export <folder>` (`npm run export -- <folder>`) | Writes content to `processes/`, `standards/`, `catalog/` and the active skills to `.claude/`. Files of deleted documents and of withdrawn skills are removed (a skill file only if it carries the footer of a generated file). Use it as a backup or to commit. |
 | `server -migrate` (`npm run db:migrate`) | Upgrades the tables, converts content stored by an earlier version and regenerates the skills, prints what it did (or "Nothing to do") and exits. Fills nothing, gives no development roles, starts no web server; see [Database](#database). |
 | `npm run db:demo` | Loads the demo data set in `demo/` over what is stored (`server -import demo`): more processes, standards and list entries for trying the app; the lists are replaced by the demo lists, nothing is deleted. Running `db:import` afterwards puts the smaller sample lists back, which leaves the demo documents naming entries that are no longer listed; run `db:demo` again to repair that. |
-| `server -reset [-seed]` (`npm run db:reset`) | Deletes all feedback; `-seed` adds the samples again. Only with `PM_AUTH=dev`. |
+| `server -reset [-seed]` (`npm run db:reset`) | Deletes all feedback; `-seed` adds the samples again. Views, bookmarks, upvotes, downloads and requests are not deleted. Only with `PM_AUTH=dev`. |
 
 ## Deploying
 
@@ -201,7 +248,9 @@ server/internal/docs           documents with versions, the consistency check, i
 server/internal/schema         JSON schema validation of saves
 server/internal/skills         generators for skills and review agents; the registry
 server/internal/feedback       feedback store
+server/internal/engagement     views, bookmarks, upvotes, skill downloads; the counts and statistics
+server/internal/requests       requests and their votes
 server/internal/audit          activity log
 server/internal/notify         log and webhook notifiers
-server/internal/httpapi        routes, permissions, views
+server/internal/httpapi        routes, permissions, views, statistics and the CSV file
 ```
