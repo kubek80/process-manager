@@ -92,6 +92,12 @@ type Perms struct {
 func PermsFrom(assignments []Assignment, bootstrap bool) Perms {
 	p := Perms{Admin: bootstrap, Owns: []string{}, Platforms: []string{}, Practices: []string{}}
 	for _, a := range assignments {
+		// A role that covers everything gives nothing when it carries a scope: such an
+		// assignment can only come from an earlier version (a restored backup, an older server
+		// during an update). The Admin panel still lists it, so that it can be removed.
+		if a.Scope != "" && ScopeList(a.Role) == "" {
+			continue
+		}
 		switch a.Role {
 		case Admin:
 			p.Admin = true
