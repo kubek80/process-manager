@@ -42,6 +42,7 @@
 .filter-option input:focus-visible { outline: none; }
 .filter-option-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .filter-option-count { flex: none; color: var(--text-3); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.filter-none { padding: 6px 8px; font-size: 13px; color: var(--text-3); }
 .filter-option.flag { padding-left: 4px; }
 
 .filter-panel .profile-filter { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin: 0; font-size: 13px; font-weight: 400; }

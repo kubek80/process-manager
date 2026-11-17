@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Search, SlidersHorizontal, X } from "lucide-react";
 import type { Profile } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
@@ -25,18 +25,22 @@ export function chosenSummary(options: Option[]): string {
  */
 export function FilterDropdown({ name, label, options, onToggle }: { name: FilterKey; label?: string; options: Option[]; onToggle: (value: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [focusFirst, setFocusFirst] = useState(false);
   const id = useId();
   const button = useRef<HTMLButtonElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const title = label ?? FILTER_LABEL[name];
   const shown = HIDE_EMPTY.includes(name) ? options.filter((o) => o.count > 0 || o.chosen) : options;
-  if (!shown.length) return null;
-  const summary = chosenSummary(shown);
-  const n = shown.filter((o) => o.chosen).length;
   const boxes = () => [...(box.current?.querySelectorAll<HTMLInputElement>("input:not(:disabled)") ?? [])];
   const focusAt = (i: number) => { const all = boxes(); all[(i + all.length) % all.length]?.focus(); };
+  // the down arrow on the button opens the list and goes to its first option
+  useEffect(() => { if (open && focusFirst) { setFocusFirst(false); focusAt(0); } }, [open, focusFirst]); // eslint-disable-line react-hooks/exhaustive-deps
+  // a list that is empty in every case (nothing uses it) is left out
+  if (!options.length) return null;
+  const summary = chosenSummary(shown);
+  const n = shown.filter((o) => o.chosen).length;
   const onButtonKey = (e: KeyboardEvent) => {
-    if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); requestAnimationFrame(() => focusAt(0)); }
+    if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setFocusFirst(true); }
     if (e.key === "Escape" && open) { e.preventDefault(); setOpen(false); }
   };
   const onListKey = (e: KeyboardEvent) => {
@@ -61,6 +65,7 @@ export function FilterDropdown({ name, label, options, onToggle }: { name: Filte
       </button>
       {open && (
         <div ref={box} id={`${id}-list`} className="filter-dd-list" role="group" aria-label={title} onKeyDown={onListKey}>
+          {!shown.length && <p className="filter-none">Nothing to choose with the other filters.</p>}
           {shown.map((o) => {
             const off = o.count === 0 && !o.chosen;
             return (
