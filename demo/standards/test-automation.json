@@ -1,0 +1,118 @@
+{
+  "$schema": "../../schema/standard.schema.json",
+  "schemaVersion": "1.0",
+  "id": "test-automation",
+  "title": "Automated testing",
+  "summary": "Which automated tests a service needs before a release, so that changes can be made often without breaking what customers rely on.",
+  "owner": "quality-engineering-team",
+  "category": "testing",
+  "practice": "quality",
+  "scope": "Applications and libraries built by company teams. Bought software is tested by its supplier and is out of scope.",
+  "tags": [
+    "testing",
+    "release",
+    "regression"
+  ],
+  "updatedAt": "2026-10-05",
+  "status": "active",
+  "review": {
+    "intervalMonths": 12,
+    "lastReviewedAt": "2026-10-05",
+    "reviewedBy": "Practice lead"
+  },
+  "resources": [
+    {
+      "title": "Testing handbook",
+      "url": "https://wiki.example.com/quality/testing-handbook",
+      "kind": "documentation",
+      "description": "What to test at which level, with examples per language."
+    }
+  ],
+  "requirements": [
+    {
+      "id": "QA-TST-01",
+      "title": "Tests run before every release",
+      "level": "must",
+      "statement": "The automated tests of a service run in the build pipeline on every change, and a release is built only from a commit whose tests passed.",
+      "rationale": "Tests that are run by hand are skipped exactly when the deadline is close.",
+      "guidance": [
+        "Add the test command to the shared build workflow.",
+        "Do not mark failing tests as skipped to get a release out; fix or remove them in a reviewed change."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Build pipeline status checks."
+      },
+      "review": {
+        "lookFor": [
+          "A test disabled or skipped without a linked ticket",
+          "A workflow change that lets a release build run when tests fail"
+        ],
+        "severity": "blocker"
+      },
+      "processId": "set-up-build-pipeline"
+    },
+    {
+      "id": "QA-TST-02",
+      "title": "A test with every bug fix",
+      "level": "should",
+      "statement": "A pull request that fixes a bug adds a test that fails without the fix.",
+      "rationale": "Bugs that come back after a release cost customers' trust twice.",
+      "guidance": [
+        "Write the test first and check that it fails.",
+        "Name the test after the behaviour, not the ticket number."
+      ],
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "A pull request titled or labelled as a fix that changes no test file"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "id": "QA-TST-03",
+      "title": "End-to-end tests for key customer journeys",
+      "level": "should",
+      "statement": "Critical services have automated end-to-end tests for their main customer journeys, run against staging before each release.",
+      "rationale": "Unit tests do not show that the services still work together.",
+      "guidance": [
+        "List the three to five journeys that make the money, e.g. sign in, search, pay.",
+        "Keep each journey test under two minutes."
+      ],
+      "verification": {
+        "method": "manual",
+        "description": "Checked in the yearly quality review of each critical service."
+      },
+      "tiers": [
+        "tier-0",
+        "tier-1"
+      ],
+      "environments": [
+        "staging"
+      ]
+    },
+    {
+      "id": "QA-TST-04",
+      "title": "Contract tests between services",
+      "level": "may",
+      "statement": "Services that call each other's APIs may use contract tests to find breaking changes before release.",
+      "rationale": "Contract tests find a breaking API change in the pull request instead of in staging.",
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "A change to an API response with no change to its contract file"
+        ],
+        "severity": "info"
+      },
+      "languages": [
+        "java",
+        "javascript"
+      ]
+    }
+  ]
+}

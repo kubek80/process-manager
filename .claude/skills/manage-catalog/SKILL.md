@@ -7,7 +7,7 @@ description: Add, rename or remove the teams, practices, platforms, categories, 
 
 All eight lists live in one file: `catalog/catalog.json`, validated by `schema/catalog.schema.json`.
 
-This file is **sample content**: it fills an empty database on its first start. A running installation is changed in the portal (Admin › Lists), or by loading the files with `npm run db:import`.
+This file is **sample content**: it fills an empty database on its first start. `demo/catalog/catalog.json` is the list of the larger demo set (`npm run db:demo`): it replaces the stored lists when loaded, so it must hold every entry of `catalog/catalog.json` unchanged plus the entries the demo documents use. Change both files together. A running installation is changed in the portal (Admin › Lists), or by loading the files with `npm run db:import`.
 
 ```json
 {

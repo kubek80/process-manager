@@ -7,7 +7,7 @@ description: Create or change a sample process in processes/*.json (steps, lanes
 
 Each process is one file: `processes/<id>.json`, validated by `schema/process.schema.json`. The file name must equal the `id`.
 
-These files are **sample content**: they fill an empty database on its first start. A running installation is changed in the portal (Editor mode), or by loading the files with `npm run db:import`.
+These files are **sample content**: they fill an empty database on its first start. The tests count them, so a process added only to have more to try goes into `demo/processes/` instead (the larger demo set, loaded with `npm run db:demo`; check it with `npm run validate demo`, and `src/lib/__tests__/demo.test.ts` checks its spread). A running installation is changed in the portal (Editor mode), or by loading the files with `npm run db:import`.
 
 ## Before writing
 

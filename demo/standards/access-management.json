@@ -1,0 +1,143 @@
+{
+  "$schema": "../../schema/standard.schema.json",
+  "schemaVersion": "1.0",
+  "id": "access-management",
+  "title": "Access to applications and data",
+  "summary": "Who may get access to company applications, cloud projects and data, how it is given and taken away, and how often it is checked.",
+  "owner": "identity-team",
+  "category": "access",
+  "practice": "security",
+  "platform": "identity",
+  "scope": "Every internal application, cloud project and dataset. Customer accounts in our products are out of scope.",
+  "tags": [
+    "access",
+    "sso",
+    "least privilege",
+    "permissions"
+  ],
+  "updatedAt": "2025-10-01",
+  "status": "active",
+  "review": {
+    "intervalMonths": 12,
+    "lastReviewedAt": "2025-10-01",
+    "reviewedBy": "Practice lead"
+  },
+  "exceptionProcessId": "request-security-exception",
+  "resources": [
+    {
+      "title": "Access groups naming guide",
+      "url": "https://wiki.example.com/identity/group-naming",
+      "kind": "documentation"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "IAM-ACC-01",
+      "title": "Access through groups only",
+      "level": "must",
+      "statement": "Access is given to access groups, never to a named person directly. People get access by joining a group through an approved request.",
+      "rationale": "Access given to a person is invisible in reviews and stays when the person changes job.",
+      "guidance": [
+        "Create one group per application and role, e.g. app-billing-readers.",
+        "Ask for membership with the process 'Request access to an application'."
+      ],
+      "verification": {
+        "method": "review",
+        "description": "Code review of IAM changes and a monthly report of direct grants."
+      },
+      "review": {
+        "lookFor": [
+          "An IAM binding with a member of the form user:name@example.com",
+          "A role granted to a personal account in Terraform or a manifest"
+        ],
+        "paths": [
+          "terraform/**",
+          "**/*.tf"
+        ],
+        "severity": "blocker"
+      },
+      "processId": "request-application-access"
+    },
+    {
+      "id": "IAM-ACC-02",
+      "title": "Single sign-on for every application",
+      "level": "must",
+      "statement": "Internal applications let people sign in only with their company account through single sign-on; local user names and passwords are switched off.",
+      "rationale": "When someone leaves, one switch removes all their access. Local accounts are forgotten.",
+      "guidance": [
+        "Register the application in Entra ID.",
+        "Turn off local sign-in after the first admin has signed in through single sign-on."
+      ],
+      "verification": {
+        "method": "manual",
+        "description": "Checked when the application is registered and in the yearly audit."
+      }
+    },
+    {
+      "id": "IAM-ACC-03",
+      "title": "No standing admin access in production",
+      "level": "must",
+      "statement": "Nobody has permanent owner or admin rights on production projects. Changes go through the pipeline; in an emergency, access is given for at most four hours with a second person's approval.",
+      "rationale": "Standing admin access is the first thing an attacker with a stolen laptop looks for.",
+      "guidance": [
+        "Remove owner and editor roles from people and groups on production projects.",
+        "Use the process 'Get emergency access to a production GCP project' when the pipeline cannot help."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Daily policy check on all production projects."
+      },
+      "review": {
+        "lookFor": [
+          "roles/owner or roles/editor granted on a production project",
+          "A group with admin rights added to a production subscription"
+        ],
+        "severity": "blocker"
+      },
+      "environments": [
+        "production"
+      ],
+      "processId": "request-break-glass-access"
+    },
+    {
+      "id": "IAM-ACC-04",
+      "title": "Review access every six months",
+      "level": "should",
+      "statement": "The owner of a critical application confirms every six months that each member of its access groups still needs the access.",
+      "rationale": "People change jobs more often than anyone asks to remove their access.",
+      "guidance": [
+        "Answer the access review task that arrives in ServiceNow.",
+        "Remove everyone you do not recognise."
+      ],
+      "verification": {
+        "method": "manual",
+        "description": "Access review campaign in ServiceNow."
+      },
+      "tiers": [
+        "tier-0",
+        "tier-1"
+      ]
+    },
+    {
+      "id": "IAM-ACC-05",
+      "title": "Read access by default",
+      "level": "should",
+      "statement": "Groups give the smallest role that does the job; read-only is the default and write access is a separate group.",
+      "rationale": "Most people only need to look. Separate groups make write access visible in reviews.",
+      "guidance": [
+        "Create a -readers and an -editors group for every application.",
+        "Use predefined roles; avoid custom roles with wildcards."
+      ],
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "A single group with both read and write roles",
+          "A custom role with permissions ending in .*"
+        ],
+        "severity": "warning"
+      }
+    }
+  ]
+}

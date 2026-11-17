@@ -142,6 +142,9 @@
       "title": "SEV1 or SEV2?",
       "actor": "me",
       "type": "decision",
+      "instructions": [
+        "Answer Yes when many customers are affected or a main function such as sign-in or payment is down."
+      ],
       "next": [
         {
           "to": "open-channel",
@@ -218,6 +221,9 @@
       "title": "Service back to normal?",
       "actor": "me",
       "type": "decision",
+      "instructions": [
+        "Answer Yes when error rate and response time are back to the level before the incident."
+      ],
       "next": [
         {
           "to": "resolve-incident",

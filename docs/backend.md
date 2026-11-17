@@ -178,7 +178,7 @@ Done.
 | `server -import <folder>` (`npm run db:import`) | Loads the files over what is stored: each changed file becomes a new version. Files get the same checks as a save in the portal (the format, and that the parts fit together); those that fail are reported and skipped. Nothing is deleted. |
 | `server -export <folder>` (`npm run export -- <folder>`) | Writes content to `processes/`, `standards/`, `catalog/` and the active skills to `.claude/`. Files of deleted documents and of withdrawn skills are removed (a skill file only if it carries the footer of a generated file). Use it as a backup or to commit. |
 | `server -migrate` (`npm run db:migrate`) | Upgrades the tables, converts content stored by an earlier version and regenerates the skills, prints what it did (or "Nothing to do") and exits. Fills nothing, gives no development roles, starts no web server; see [Database](#database). |
-| `npm run db:demo` | Loads the demo data set in `demo/` over what is stored (`server -import demo`): more processes, standards and list entries for trying the app; the lists are replaced by the demo lists, nothing is deleted. |
+| `npm run db:demo` | Loads the demo data set in `demo/` over what is stored (`server -import demo`): more processes, standards and list entries for trying the app; the lists are replaced by the demo lists, nothing is deleted. Running `db:import` afterwards puts the smaller sample lists back, which leaves the demo documents naming entries that are no longer listed; run `db:demo` again to repair that. |
 | `server -reset [-seed]` (`npm run db:reset`) | Deletes all feedback; `-seed` adds the samples again. Only with `PM_AUTH=dev`. |
 
 ## Deploying

@@ -1,0 +1,188 @@
+{
+  "$schema": "../../schema/standard.schema.json",
+  "schemaVersion": "1.0",
+  "id": "ci-pipeline-baseline",
+  "title": "Build pipeline baseline",
+  "summary": "What every build pipeline does before code can be merged and released: build, test, scan, and produce a traceable release image.",
+  "owner": "developer-experience-team",
+  "category": "code-quality",
+  "practice": "engineering",
+  "platform": "ci-cd",
+  "scope": "Every repository that builds an application, a library or a container image. Documentation-only repositories are out of scope.",
+  "tags": [
+    "ci",
+    "pipeline",
+    "dependencies",
+    "release"
+  ],
+  "updatedAt": "2026-03-15",
+  "status": "active",
+  "review": {
+    "intervalMonths": 12,
+    "lastReviewedAt": "2026-03-15",
+    "reviewedBy": "Guild lead"
+  },
+  "resources": [
+    {
+      "title": "Shared workflows",
+      "url": "https://github.example.com/platform/shared-workflows",
+      "kind": "repository"
+    },
+    {
+      "title": "Skill: check a pipeline against the baseline",
+      "url": "https://github.example.com/platform/shared-workflows/tree/main/.claude/skills/check-baseline",
+      "kind": "skill",
+      "description": "Reads your workflow files and lists what is missing."
+    }
+  ],
+  "requirements": [
+    {
+      "id": "CI-BASE-01",
+      "title": "Every pull request is built and tested",
+      "level": "must",
+      "statement": "Every pull request runs the build and the unit tests, and cannot be merged while they fail.",
+      "rationale": "A main branch that does not build blocks everyone and hides real failures.",
+      "guidance": [
+        "Use the shared build workflow for your language.",
+        "Make build and test required status checks on the main branch."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "A nightly check of the branch protection of every repository."
+      },
+      "review": {
+        "lookFor": [
+          "A workflow change that removes the test step or marks it continue-on-error",
+          "Tests skipped with a condition that is always true"
+        ],
+        "paths": [
+          ".github/workflows/**"
+        ],
+        "severity": "blocker"
+      },
+      "processId": "set-up-build-pipeline"
+    },
+    {
+      "id": "CI-BASE-02",
+      "title": "No critical vulnerabilities in a release build",
+      "level": "must",
+      "statement": "The dependency scan runs on every build, and a release build fails when a dependency has a known critical vulnerability with a fix available.",
+      "rationale": "Most attacks on applications use known holes in libraries that were never updated.",
+      "guidance": [
+        "Keep the dependency scan step of the shared workflow.",
+        "Update the dependency; if no fix exists, ask Cyber Security for an exception."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Dependency scan in the build pipeline."
+      }
+    },
+    {
+      "id": "CI-BASE-03",
+      "title": "No secrets in pipeline files",
+      "level": "must",
+      "statement": "Workflow files contain no secret values; the pipeline reads secrets from Secret Manager through workload identity.",
+      "rationale": "Workflow files are readable by everyone with access to the repository, and so are their logs.",
+      "guidance": [
+        "Use the identity step of the shared workflow.",
+        "Never echo a secret in a run step."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Secret scanner on every pull request."
+      },
+      "review": {
+        "lookFor": [
+          "A token, key or password written in a workflow file",
+          "echo or set -x in a step that uses a secret"
+        ],
+        "paths": [
+          ".github/workflows/**"
+        ],
+        "severity": "blocker"
+      }
+    },
+    {
+      "id": "CI-BASE-04",
+      "title": "Pass the SonarQube quality gate",
+      "level": "should",
+      "statement": "New code passes the company SonarQube quality gate: no new bugs or security hotspots, and at least 70% test coverage of new lines.",
+      "rationale": "The gate stops quality from sliding a little with every change.",
+      "guidance": [
+        "Keep the sonarqube step of the shared workflow.",
+        "Mark false positives in SonarQube with a reason instead of lowering the gate."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "SonarQube status check on the pull request."
+      }
+    },
+    {
+      "id": "CI-BASE-05",
+      "title": "Use the Maven or Gradle wrapper",
+      "level": "should",
+      "statement": "Java builds run through the wrapper committed to the repository, so the build tool version is the same everywhere.",
+      "rationale": "Different build tool versions give different results on laptops and in the pipeline.",
+      "guidance": [
+        "Commit mvnw or gradlew with its wrapper properties.",
+        "Call ./mvnw or ./gradlew in the workflow, not mvn or gradle."
+      ],
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "A workflow step that calls mvn or gradle directly"
+        ],
+        "paths": [
+          ".github/workflows/**"
+        ],
+        "severity": "warning"
+      },
+      "languages": [
+        "java"
+      ]
+    },
+    {
+      "id": "CI-BASE-06",
+      "title": "Commit the lock file",
+      "level": "should",
+      "statement": "The dependency lock file is committed and the pipeline installs exactly what it lists.",
+      "rationale": "Without it two builds of the same commit can contain different libraries.",
+      "guidance": [
+        "JavaScript: commit package-lock.json and use npm ci.",
+        "Python: commit the lock file of your tool and install with --require-hashes."
+      ],
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "package-lock.json, poetry.lock or requirements lock deleted or added to .gitignore",
+          "npm install used in a workflow instead of npm ci"
+        ],
+        "severity": "warning"
+      },
+      "languages": [
+        "javascript",
+        "python"
+      ]
+    },
+    {
+      "id": "CI-BASE-07",
+      "title": "Cache dependencies between runs",
+      "level": "may",
+      "statement": "Pipelines may cache downloaded dependencies to make builds faster, keyed on the lock file.",
+      "rationale": "Faster builds mean faster feedback on pull requests.",
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "A cache key that does not include the lock file"
+        ],
+        "severity": "info"
+      }
+    }
+  ]
+}

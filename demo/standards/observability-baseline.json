@@ -1,0 +1,144 @@
+{
+  "$schema": "../../schema/standard.schema.json",
+  "schemaVersion": "1.0",
+  "id": "observability-baseline",
+  "title": "Monitoring and alerting",
+  "summary": "What every production service should show and alert on, so that problems are noticed before customers report them and incidents are quicker to solve.",
+  "owner": "observability-team",
+  "category": "operations",
+  "practice": "operations",
+  "platform": "observability",
+  "scope": "Services of tier 0 to 2 that run in production. Tier 3 tools and batch jobs are out of scope.",
+  "tiers": [
+    "tier-0",
+    "tier-1",
+    "tier-2"
+  ],
+  "tags": [
+    "monitoring",
+    "alerts",
+    "incident",
+    "tracing"
+  ],
+  "updatedAt": "2026-06-20",
+  "status": "active",
+  "review": {
+    "intervalMonths": 12,
+    "lastReviewedAt": "2026-06-20",
+    "reviewedBy": "Platform owner"
+  },
+  "resources": [
+    {
+      "title": "Dashboard and alert templates",
+      "url": "https://github.example.com/observability/service-templates",
+      "kind": "repository"
+    },
+    {
+      "title": "Writing good alerts",
+      "url": "https://wiki.example.com/observability/good-alerts",
+      "kind": "documentation"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "OBS-MON-01",
+      "title": "A standard service dashboard",
+      "level": "should",
+      "statement": "Each service has a dashboard with request rate, error rate, response time and saturation, named after its service id.",
+      "rationale": "During an incident everyone looks at the same four numbers first.",
+      "guidance": [
+        "Generate the dashboard from the template with the process 'Set up monitoring and alerts for a service'."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Weekly report of services in the catalogue without a dashboard."
+      },
+      "processId": "set-up-service-monitoring"
+    },
+    {
+      "id": "OBS-MON-02",
+      "title": "Alerts page for customer impact only",
+      "level": "should",
+      "statement": "Alerts that page someone fire on what customers notice - errors and slow responses - not on causes such as high CPU.",
+      "rationale": "On-call engineers who are woken for nothing stop trusting the alerts.",
+      "guidance": [
+        "Page on error rate and response time.",
+        "Send cause alerts (CPU, disk, queue length) to the team channel instead of paging."
+      ],
+      "verification": {
+        "method": "review",
+        "description": "Reviewed by the Observability team on every alert change."
+      },
+      "review": {
+        "lookFor": [
+          "A paging alert on CPU, memory or disk usage",
+          "An alert with no 'for' duration, which pages on every spike"
+        ],
+        "paths": [
+          "alerts/**",
+          "services/**"
+        ],
+        "severity": "warning"
+      },
+      "tiers": [
+        "tier-0",
+        "tier-1"
+      ]
+    },
+    {
+      "id": "OBS-MON-03",
+      "title": "Trace id in every log line",
+      "level": "should",
+      "statement": "Logs carry the trace id of the request, so that one customer request can be followed across services.",
+      "rationale": "Without it an incident across several services takes hours to piece together.",
+      "guidance": [
+        "Use the logging setup of the platform library; it adds the trace id."
+      ],
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "A new HTTP handler or consumer that logs without the request context"
+        ],
+        "severity": "info"
+      }
+    },
+    {
+      "id": "OBS-MON-04",
+      "title": "Every paging alert links to a runbook",
+      "level": "should",
+      "statement": "Each alert that pages someone links to a short runbook: what it means, what to check first and how to escalate.",
+      "rationale": "At 3 a.m. the on-call engineer may not know the service well.",
+      "guidance": [
+        "Add a runbook_url annotation to each paging alert.",
+        "End every runbook with a link to the incident process."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Alert rules without runbook_url are reported in the alert repository."
+      },
+      "review": {
+        "lookFor": [
+          "A paging alert rule without a runbook_url annotation"
+        ],
+        "paths": [
+          "alerts/**",
+          "services/**"
+        ],
+        "severity": "warning"
+      },
+      "processId": "handle-production-incident"
+    },
+    {
+      "id": "OBS-MON-05",
+      "title": "Service level objectives",
+      "level": "may",
+      "statement": "Teams may define service level objectives and alert on how fast the error budget is used instead of on fixed thresholds.",
+      "rationale": "Error budget alerts page less often and for the right reasons.",
+      "verification": {
+        "method": "manual"
+      }
+    }
+  ]
+}

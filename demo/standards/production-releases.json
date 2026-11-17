@@ -1,0 +1,155 @@
+{
+  "$schema": "../../schema/standard.schema.json",
+  "schemaVersion": "1.0",
+  "id": "production-releases",
+  "title": "Production releases",
+  "summary": "How changes reach production safely: approved, built by the pipeline, rolled out gradually and with a way back.",
+  "owner": "site-reliability-team",
+  "category": "release",
+  "practice": "operations",
+  "platform": "ci-cd",
+  "scope": "Every release of an application or infrastructure change to production. Changes to development and test environments are out of scope.",
+  "environments": [
+    "production"
+  ],
+  "tags": [
+    "release",
+    "change",
+    "deployment",
+    "rollback"
+  ],
+  "updatedAt": "2025-12-05",
+  "status": "active",
+  "review": {
+    "intervalMonths": 12,
+    "lastReviewedAt": "2025-12-05",
+    "reviewedBy": "Head of SRE"
+  },
+  "resources": [
+    {
+      "title": "Change management policy",
+      "url": "https://wiki.example.com/service-management/change-policy",
+      "kind": "documentation"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REL-PRD-01",
+      "title": "Every release has an approved change record",
+      "level": "must",
+      "statement": "A release to production starts only after its change record is approved, and the change number is recorded with the deployment.",
+      "rationale": "During an incident the first question is what changed. The change records answer it.",
+      "guidance": [
+        "Follow the process 'Release a service to production'.",
+        "Put the change number in the description of the deployment run."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "The production deployment step refuses to start without an approved change number."
+      },
+      "processId": "release-service-to-production"
+    },
+    {
+      "id": "REL-PRD-02",
+      "title": "Only pipeline-built images",
+      "level": "must",
+      "statement": "Only container images built and signed by the company build pipeline are deployed to production.",
+      "rationale": "An image built on a laptop cannot be traced to reviewed code and may contain anything.",
+      "guidance": [
+        "Use the shared build workflow; it signs every image it builds.",
+        "Refer to images by digest or by the version the pipeline gave them."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "The clusters refuse unsigned images."
+      },
+      "review": {
+        "lookFor": [
+          "An image reference with the tag latest in a production manifest",
+          "An image from a registry other than the company artifact registry"
+        ],
+        "paths": [
+          "deploy/**",
+          "helm/**"
+        ],
+        "severity": "blocker"
+      },
+      "processId": "set-up-build-pipeline"
+    },
+    {
+      "id": "REL-PRD-03",
+      "title": "A tested way back",
+      "level": "must",
+      "statement": "Every release has a written rollback plan, and database changes can be undone or are compatible with the previous version.",
+      "rationale": "Rolling back is the fastest fix for a bad release, but only if it works.",
+      "guidance": [
+        "Write the previous image version in the change record.",
+        "Split database changes: first add, release, then remove in a later release."
+      ],
+      "verification": {
+        "method": "review",
+        "description": "Checked by the change manager and in code review."
+      },
+      "review": {
+        "lookFor": [
+          "A migration that drops or renames a column used by the current version",
+          "A migration with no down step"
+        ],
+        "paths": [
+          "**/migrations/**",
+          "**/*.sql"
+        ],
+        "severity": "blocker"
+      }
+    },
+    {
+      "id": "REL-PRD-04",
+      "title": "Gradual roll-out for critical services",
+      "level": "should",
+      "statement": "Releases of critical services go to a small share of traffic first and to everyone only when the error rate stays normal.",
+      "rationale": "A bad release then hurts 10% of customers for 15 minutes instead of all of them.",
+      "guidance": [
+        "Turn on the canary roll-out in your Argo CD application.",
+        "Keep the automatic stop on error rate switched on."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Platform policy check on the Argo CD application."
+      },
+      "tiers": [
+        "tier-0",
+        "tier-1"
+      ]
+    },
+    {
+      "id": "REL-PRD-05",
+      "title": "No releases during a change freeze",
+      "level": "should",
+      "statement": "No release is planned during a change freeze, except to fix an incident.",
+      "rationale": "Freezes cover the busiest days, when an incident costs the most.",
+      "guidance": [
+        "Check the change freeze calendar before planning a release."
+      ],
+      "verification": {
+        "method": "manual",
+        "description": "The change manager rejects changes inside a freeze."
+      }
+    },
+    {
+      "id": "REL-PRD-06",
+      "title": "Hide unfinished work behind feature flags",
+      "level": "may",
+      "statement": "Teams may release unfinished features switched off behind a feature flag instead of keeping long-lived branches.",
+      "rationale": "Small, frequent releases are easier to roll back than big ones.",
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "A feature flag with no owner or removal date in its definition"
+        ],
+        "severity": "info"
+      }
+    }
+  ]
+}

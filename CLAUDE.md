@@ -19,10 +19,12 @@ A portal for company processes (request a GCP project, onboard to Akamai…) and
 | `npm run prompt` | regenerate `docs/llm-prompt.md` and `docs/llm-prompt-standards.md` |
 | `npm run validators` | regenerate `src/lib/validators.generated.js` after changing a schema |
 | `npm run db:import` · `npm run export -- <folder>` | files into the database · database out to files |
+| `npm run db:demo` · `npm run validate demo` | load the larger demo set in `demo/` over the database · check it |
+| `npm run db:migrate` | upgrade the tables and stored content, regenerate the skills, exit |
 
 ## Conventions
 
-- **The database is the source of truth** for processes, standards, the lists, roles, feedback and skills. The files in `processes/`, `standards/` and `catalog/` are sample content that fills an empty database; changing them does not change a running installation unless they are imported.
+- **The database is the source of truth** for processes, standards, the lists, roles, feedback and skills. The files in `processes/`, `standards/` and `catalog/` are sample content that fills an empty database; changing them does not change a running installation unless they are imported. `demo/` holds a larger demo set in the same layout, loaded only on request; tests count the sample, so new demo content goes into `demo/`, not the sample.
 - The formats are `schema/*.schema.json`. The frontend checker (`src/lib/validate.ts`) and the server (`server/internal/schema`) both read them; change a format in the schema, run `npm run validators`, then change the types (`src/types.ts`), the checker, the server's consistency check (`server/internal/docs/check.go`), the prompts and the generators (`server/internal/skills`).
 - The lists are teams, practices, platforms, categories, tools, tiers, environments and languages; processes and standards refer to them by id. A field that refers to a list also needs the server's refusal to remove a used entry (`stillUsed` in `server/internal/httpapi/content.go`), and a filter in the search (`src/lib/search.ts`) if readers should find by it. Content stored by an earlier version that no longer fits is converted at start in `server/internal/upgrade`.
 - Every save is a version. Saves go through `useDraft` (`src/lib/draft.ts`) in the app and `docs.Store.Save` in the server, which refuses a save made from an outdated version; do not add a second way to save.

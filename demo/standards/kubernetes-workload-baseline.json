@@ -1,0 +1,152 @@
+{
+  "$schema": "../../schema/standard.schema.json",
+  "schemaVersion": "1.0",
+  "id": "kubernetes-workload-baseline",
+  "title": "Kubernetes workloads",
+  "summary": "The settings every service on the shared Kubernetes clusters needs so that it cannot harm other services, stays up during maintenance and keeps its secrets safe.",
+  "owner": "kubernetes-platform-team",
+  "category": "cloud",
+  "platform": "kubernetes",
+  "scope": "Every deployment, stateful set and job on the shared clusters. Clusters run by a team on its own are out of scope.",
+  "tags": [
+    "kubernetes",
+    "containers",
+    "secret",
+    "availability"
+  ],
+  "updatedAt": "2026-07-01",
+  "status": "active",
+  "review": {
+    "intervalMonths": 12,
+    "lastReviewedAt": "2026-07-01",
+    "reviewedBy": "Platform owner"
+  },
+  "resources": [
+    {
+      "title": "Helm chart for services",
+      "url": "https://github.example.com/platform/service-chart",
+      "kind": "template",
+      "description": "Meets every requirement below with safe defaults."
+    }
+  ],
+  "requirements": [
+    {
+      "id": "K8S-WL-01",
+      "title": "Set resource requests and limits",
+      "level": "must",
+      "statement": "Every container sets CPU and memory requests and a memory limit.",
+      "rationale": "Without them one busy service takes the capacity of every other service on the same machine.",
+      "guidance": [
+        "Start from the values the platform chart suggests for your kind of service.",
+        "Adjust after a week using the dashboard of your namespace."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "The clusters refuse containers without requests and a memory limit."
+      },
+      "review": {
+        "lookFor": [
+          "A container in a manifest with no resources section",
+          "A memory request higher than the memory limit"
+        ],
+        "paths": [
+          "deploy/**",
+          "helm/**"
+        ],
+        "severity": "blocker"
+      },
+      "processId": "request-kubernetes-namespace"
+    },
+    {
+      "id": "K8S-WL-02",
+      "title": "Do not run as root",
+      "level": "must",
+      "statement": "Containers run as a non-root user with a read-only root file system and no added Linux capabilities.",
+      "rationale": "A break-out from a container running as root gives control of the whole machine.",
+      "guidance": [
+        "Set runAsNonRoot: true and readOnlyRootFilesystem: true.",
+        "Write temporary files to an emptyDir volume."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Admission policy on the clusters."
+      },
+      "review": {
+        "lookFor": [
+          "runAsUser: 0, privileged: true or allowPrivilegeEscalation: true",
+          "capabilities.add in a container spec"
+        ],
+        "severity": "blocker"
+      }
+    },
+    {
+      "id": "K8S-WL-03",
+      "title": "Secrets come from Secret Manager",
+      "level": "must",
+      "statement": "Workloads get their secrets from Secret Manager through the secrets driver; no Kubernetes Secret with a value is committed to Git.",
+      "rationale": "Kubernetes Secrets in Git are only encoded, not encrypted: anyone who can read the repository can read them.",
+      "guidance": [
+        "Mount secrets with a SecretProviderClass that names the Secret Manager secret.",
+        "Follow the standard 'Secrets management' for where the secret itself lives."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Secret scanner and a policy check on the tenant repositories."
+      },
+      "review": {
+        "lookFor": [
+          "kind: Secret with a data or stringData section in a committed manifest"
+        ],
+        "severity": "blocker"
+      }
+    },
+    {
+      "id": "K8S-WL-04",
+      "title": "Health checks",
+      "level": "should",
+      "statement": "Every long-running container has a readiness and a liveness probe.",
+      "rationale": "Without probes, traffic goes to containers that are starting or stuck.",
+      "guidance": [
+        "Use /healthz for liveness and /ready for readiness."
+      ],
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "A deployment whose containers have no readinessProbe"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "id": "K8S-WL-05",
+      "title": "Survive the loss of one zone",
+      "level": "should",
+      "statement": "Critical services run at least three replicas spread over zones, with a disruption budget that keeps two running during maintenance.",
+      "rationale": "Cluster upgrades and zone outages would otherwise take the service down.",
+      "guidance": [
+        "Set replicas: 3 and a topology spread constraint on the zone.",
+        "Add a PodDisruptionBudget with minAvailable: 2."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Weekly report of tier 0 and 1 workloads without a disruption budget."
+      },
+      "review": {
+        "lookFor": [
+          "replicas: 1 for a production deployment of a critical service",
+          "No PodDisruptionBudget next to a production deployment"
+        ],
+        "severity": "warning"
+      },
+      "tiers": [
+        "tier-0",
+        "tier-1"
+      ],
+      "environments": [
+        "production"
+      ]
+    }
+  ]
+}

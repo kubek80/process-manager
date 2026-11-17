@@ -1,0 +1,84 @@
+{
+  "$schema": "../../schema/standard.schema.json",
+  "schemaVersion": "1.0",
+  "id": "service-catalogue-entries",
+  "title": "Service catalogue entries",
+  "summary": "What every service records in the service catalogue, so that anyone can find who owns it, how critical it is and who to call when it breaks.",
+  "owner": "developer-experience-team",
+  "platform": "service-catalogue",
+  "scope": "Every service, job and library that runs or is published from a company repository.",
+  "tags": [
+    "catalogue",
+    "ownership",
+    "on-call"
+  ],
+  "updatedAt": "2026-11-12",
+  "status": "draft",
+  "review": {
+    "intervalMonths": 12
+  },
+  "requirements": [
+    {
+      "id": "SVC-CAT-01",
+      "title": "Every service is in the catalogue",
+      "level": "must",
+      "statement": "Every service that runs in a company environment has an entry in the service catalogue before it first takes traffic.",
+      "rationale": "During an incident or an audit, a service nobody can find has no owner.",
+      "guidance": [
+        "Follow the process 'Register a service in the service catalogue'."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Weekly comparison of the namespaces on the clusters with the catalogue."
+      },
+      "processId": "register-service-in-catalogue"
+    },
+    {
+      "id": "SVC-CAT-02",
+      "title": "Owner team and tier are set",
+      "level": "must",
+      "statement": "Each entry names an owner team from the teams list and a tier, and both are kept current.",
+      "rationale": "Reviews, alerts and access requests are routed by owner and tier.",
+      "guidance": [
+        "Change the owner in catalog-info.yaml in the same week a service moves to another team."
+      ],
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "A catalog-info.yaml without spec.owner or without the tier annotation",
+          "An owner that is a person instead of a team"
+        ],
+        "paths": [
+          "catalog-info.yaml"
+        ],
+        "severity": "blocker"
+      }
+    },
+    {
+      "id": "SVC-CAT-03",
+      "title": "On-call contact for production services",
+      "level": "should",
+      "statement": "Entries of production services link to the PagerDuty schedule that answers for them.",
+      "rationale": "The service desk needs to know who to page without asking around.",
+      "verification": {
+        "method": "automated",
+        "description": "Report of production services without an on-call link."
+      },
+      "environments": [
+        "production"
+      ]
+    },
+    {
+      "id": "SVC-CAT-04",
+      "title": "Link the documentation",
+      "level": "may",
+      "statement": "Entries may link the service's runbook, API description and decision records.",
+      "rationale": "One page with every link saves new team members a lot of searching.",
+      "verification": {
+        "method": "manual"
+      }
+    }
+  ]
+}

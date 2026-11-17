@@ -2,16 +2,23 @@
  * Checker for the command line: `npm run validate [folder]`.
  * Checks catalog/catalog.json, processes/*.json and standards/*.json in the folder (default: the
  * repository, i.e. the seed content; pass a folder written by `npm run export` to check live content).
+ * Another folder is checked as it is loaded: over the repository's sample content. Its documents
+ * may name the sample processes and standards, and without a catalog of its own it uses the
+ * repository's lists (`npm run validate demo`).
  */
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { validateCatalog, validateProcess, validateStandard } from "../src/lib/validate";
 import type { Catalog, Issue } from "../src/types";
 
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const root = path.resolve(process.argv[2] ?? ".");
-const read = (dir: string) => (fs.existsSync(path.join(root, dir)) ? fs.readdirSync(path.join(root, dir)).filter((f) => f.endsWith(".json")).sort() : []);
+const overSample = root !== repo;
+const read = (dir: string, at = root) => (fs.existsSync(path.join(at, dir)) ? fs.readdirSync(path.join(at, dir)).filter((f) => f.endsWith(".json")).sort() : []);
 const processFiles = read("processes"), standardFiles = read("standards");
 const ids = (files: string[]) => files.map((f) => f.replace(/\.json$/, ""));
+const known = (dir: string, files: string[]) => [...new Set([...ids(files), ...(overSample ? ids(read(dir, repo)) : [])])];
 let errors = 0, warnings = 0, files = 0;
 
 function report(file: string, issues: Issue[]) {
@@ -31,13 +38,18 @@ function load(file: string): unknown {
 
 // the lists first: processes and standards pick from them
 let catalog: Catalog | undefined;
-const rawCatalog = load("catalog/catalog.json");
-if (rawCatalog !== undefined) {
-  const issues = validateCatalog(rawCatalog);
-  report("catalog/catalog.json", issues);
-  if (!issues.length) catalog = rawCatalog as Catalog;
+const ownCatalog = fs.existsSync(path.join(root, "catalog/catalog.json"));
+if (ownCatalog || !overSample) {
+  const rawCatalog = load("catalog/catalog.json");
+  if (rawCatalog !== undefined) {
+    const issues = validateCatalog(rawCatalog);
+    report("catalog/catalog.json", issues);
+    if (!issues.length) catalog = rawCatalog as Catalog;
+  }
+} else {
+  catalog = JSON.parse(fs.readFileSync(path.join(repo, "catalog/catalog.json"), "utf8")) as Catalog;
 }
-const ctx = { processIds: ids(processFiles), standardIds: ids(standardFiles), catalog };
+const ctx = { processIds: known("processes", processFiles), standardIds: known("standards", standardFiles), catalog };
 
 for (const [dir, list, check] of [["processes", processFiles, validateProcess], ["standards", standardFiles, validateStandard]] as const) {
   for (const f of list) {

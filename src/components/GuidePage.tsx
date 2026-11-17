@@ -393,7 +393,7 @@ export function GuidePage() {
           <dl className="guide-dl">
             <div><dt>In the database</dt><dd>All content and its history, roles, feedback, generated skills and the activity log.</dd></div>
             <div><dt>In the repository</dt><dd>The code, the formats (<code>schema/</code>), and sample content that fills an empty database on its first start.</dd></div>
-            <div><dt>Import and export</dt><dd><code>npm run export -- &lt;folder&gt;</code> writes the content and the skills to files, as a backup or to commit. <code>npm run db:import</code> loads the files of the repository over what is stored; files that do not match the format are reported and skipped. An export also removes the files of skills that were withdrawn.</dd></div>
+            <div><dt>Import and export</dt><dd><code>npm run export -- &lt;folder&gt;</code> writes the content and the skills to files, as a backup or to commit. <code>npm run db:import</code> loads the files of the repository over what is stored; files that do not match the format are reported and skipped. <code>npm run db:demo</code> loads the larger demo set from the folder <code>demo/</code> in the same way. An export also removes the files of skills that were withdrawn.</dd></div>
             <div><dt>Two checks</dt><dd>The app checks a document fully before it lets you save. The server checks again: the rights, the format, that the parts of the document fit together (every step leads to a step that exists, every tier is in the lists), and that the save was made from the newest version. Nothing invalid, unauthorised or outdated is stored.</dd></div>
             <div><dt>Protection in the browser</dt><dd>The server tells the browser to run only the app’s own code and never to show the app inside another page. For that reason the format checks are not built in the browser but generated from the schemas beforehand (<code>npm run validators</code>).</dd></div>
           </dl>
@@ -412,17 +412,17 @@ export function GuidePage() {
             <div><dt>Dana Admin</dt><dd>Admin: everything, including who has which role.</dd></div>
           </dl>
           <p>Choosing who to be only works on your own machine: the server refuses to start this way on an address that others can reach.</p>
-          <p><code>npm run db:reset</code> empties the feedback and adds the samples again. To use a Postgres you already run instead of Docker, set <code>PM_PG</code>, for example <code>PM_PG=postgres://pm:pm@localhost:5432</code>.</p>
+          <p><code>npm run db:reset</code> empties the feedback and adds the samples again. <code>npm run db:demo</code> adds a larger demo set - more processes and standards, teams, platforms and practices, with reviews due and overdue - to try the search, its filters and My responsibilities; its lists replace the stored ones, and <code>npm run db:import</code> puts the smaller sample lists back. <code>npm run db:migrate</code> upgrades the database to the current version and says what it did. To use a Postgres you already run instead of Docker, set <code>PM_PG</code>, for example <code>PM_PG=postgres://pm:pm@localhost:5432</code>.</p>
         </Section>
 
         <Section id="tests" title="Tests">
           <p>Every level is tested, and <code>npm run test:all</code> runs all of it. The same runs on every pull request.</p>
           <table className="guide-table">
             <tbody>
-              <tr><td><code>npm test</code></td><td>The logic of the app: both checkers, editing, undo and the rules for saving, comparing versions, map layout, review dates, search and its filters, the AI prompts, rights and members, and that every sample file in the repository is valid.</td></tr>
+              <tr><td><code>npm test</code></td><td>The logic of the app: both checkers, editing, undo and the rules for saving, comparing versions, map layout, review dates, search and its filters, the AI prompts, rights and members, and that every sample file in the repository and the demo set are valid.</td></tr>
               <tr><td><code>npm run test:server</code></td><td>The server against a real Postgres: sign-in (with a stand-in for Entra and Google that signs real tokens), roles, content with versions and saves at the same time, the skill generators, feedback, the Admin endpoints, starting and stopping.</td></tr>
               <tr><td><code>npm run test:e2e</code></td><td>A real browser against the real server and database: signing in, following a process, reading a standard, editing both, versions and two people editing at once, feedback, the Admin panel, skills, AI import.</td></tr>
-              <tr><td><code>npm run validate</code></td><td>The sample files, or a folder written by <code>npm run export</code>, against the schemas and the rules.</td></tr>
+              <tr><td><code>npm run validate</code></td><td>The sample files, or a folder written by <code>npm run export</code>, against the schemas and the rules. <code>npm run validate demo</code> checks the demo set as it is loaded: over the sample.</td></tr>
             </tbody>
           </table>
           <p>The browser tests run on their own database, emptied and refilled at the start of every run.</p>

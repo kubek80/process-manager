@@ -44,6 +44,8 @@ Open http://localhost:5173 and pick who to be:
 | --- | --- |
 | `npm run db:reset` | Empties the feedback and adds the samples again |
 | `npm run db:import` | Loads the files of the repository over what is in the database |
+| `npm run db:demo` | Loads a larger demo set (`demo/`: 15 more processes and 9 more standards, more teams, platforms and practices) the same way, to try search, filters and My responsibilities. Its lists replace the stored ones; `db:import` afterwards puts back the smaller sample lists |
+| `npm run db:migrate` | Upgrades the database and its content to this version, says what it did and exits |
 | `npm run export -- <folder>` | Writes the content and the generated skills to files |
 
 To use a Postgres you already run instead of Docker, set `PM_PG`, for example `PM_PG=postgres://pm:pm@localhost:5432` (it needs the databases listed in `docker/init-databases.sql`). To try real sign-in locally, set `PM_AUTH=entra` or `google` with the variables in `.env.example`, and register `http://localhost:5173/auth/callback` with the provider.
@@ -111,7 +113,7 @@ npm run test:all
 
 | Command | What it covers |
 | --- | --- |
-| `npm test` | Frontend logic (Vitest): both checkers, editing helpers, undo and the rules for saving, comparing versions, layout, life-cycle, search, prompts, rights and members, and that every sample file is valid |
+| `npm test` | Frontend logic (Vitest): both checkers, editing helpers, undo and the rules for saving, comparing versions, layout, life-cycle, search, prompts, rights and members, and that every sample file and the demo set are valid |
 | `npm run test:server` | Go server against a real Postgres: sign-in incl. a fake OpenID Connect provider, roles, content with versions and concurrent saves, skill generators, feedback, admin, start-up and shutdown |
 | `npm run test:e2e` | Playwright against the real server and database: consumer and editor journeys for processes and standards, versions and two people editing at once, feedback, the Admin panel, skills, AI import |
 | `npm run typecheck`, `npm run validate` | Types; the sample files (or an exported folder) against the schemas and rules |
@@ -122,7 +124,7 @@ The end-to-end tests use their own database, emptied at the start of every run. 
 
 - `schema/process.schema.json`, `schema/standard.schema.json`, `schema/catalog.schema.json` define the formats (JSON Schema 2020-12). The app, the server and the command line all use them.
 - `npm run validators` regenerates `src/lib/validators.generated.js`, the checks the app runs, after a schema changed (the app does not build them in the browser, so that its security policy can forbid `eval`). A unit test fails when this was forgotten.
-- `npm run validate [folder]` checks files against the schemas and the rules a schema cannot express.
+- `npm run validate [folder]` checks files against the schemas and the rules a schema cannot express. A folder other than the repository is checked as it is loaded, over the sample content: `npm run validate demo`.
 - `npm run reviews [folder]` lists processes and standards whose review is overdue or due within 30 days, grouped by owner, and exits non-zero when something is overdue. Run it on an exported folder for live content.
 - `npm run prompt` regenerates `docs/llm-prompt.md` and `docs/llm-prompt-standards.md`, the prompts for chat assistants as shareable files.
 

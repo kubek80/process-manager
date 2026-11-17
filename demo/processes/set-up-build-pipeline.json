@@ -137,6 +137,11 @@
       "title": "All checks green?",
       "actor": "me",
       "type": "decision",
+      "instructions": [
+        "Open the Checks tab of the pull request and look at build, test and sonarqube.",
+        "If the quality gate failed, open the SonarQube report linked in the check to see why."
+      ],
+      "tool": "sonarqube",
       "next": [
         {
           "to": "protect-branch",

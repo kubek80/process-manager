@@ -202,6 +202,9 @@
       "title": "Is it a tier 0 service?",
       "actor": "me",
       "type": "decision",
+      "instructions": [
+        "Look up the tier of the service in the service catalogue."
+      ],
       "next": [
         {
           "to": "book-sre",
@@ -281,6 +284,9 @@
       "title": "Release healthy?",
       "actor": "me",
       "type": "decision",
+      "instructions": [
+        "Answer No when the error rate or the response time is clearly higher than before the release, or a smoke test failed."
+      ],
       "next": [
         {
           "to": "close-change",

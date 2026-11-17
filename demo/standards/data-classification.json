@@ -1,0 +1,173 @@
+{
+  "$schema": "../../schema/standard.schema.json",
+  "schemaVersion": "1.0",
+  "id": "data-classification",
+  "title": "Handling personal and confidential data",
+  "summary": "How data in the data warehouse is classified, who may see it, how long it is kept, and where personal data must never end up.",
+  "owner": "data-platform-team",
+  "category": "data",
+  "practice": "data",
+  "platform": "data-warehouse",
+  "scope": "All datasets in the data warehouse and the code that loads or queries them. Operational databases of applications follow the standard of their platform.",
+  "tags": [
+    "personal data",
+    "privacy",
+    "classification",
+    "retention"
+  ],
+  "updatedAt": "2025-08-01",
+  "status": "active",
+  "review": {
+    "intervalMonths": 12,
+    "lastReviewedAt": "2025-08-01",
+    "reviewedBy": "Data protection officer"
+  },
+  "exceptionProcessId": "request-security-exception",
+  "resources": [
+    {
+      "title": "Data classification guide",
+      "url": "https://wiki.example.com/data/classification",
+      "kind": "documentation"
+    },
+    {
+      "title": "Privacy notice for customers",
+      "url": "https://www.example.com/privacy",
+      "kind": "other",
+      "description": "What we promised customers about their data."
+    }
+  ],
+  "requirements": [
+    {
+      "id": "DATA-CLS-01",
+      "title": "Every dataset is classified",
+      "level": "must",
+      "statement": "Every dataset carries a classification label - public, internal, confidential or personal - set to the highest class of the data in it.",
+      "rationale": "Access, retention and masking rules all follow from the class. Without a label nobody knows which rules apply.",
+      "guidance": [
+        "Classify the columns when you request the dataset.",
+        "Raise the label as soon as a more sensitive column is added."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Nightly check for datasets without a classification label."
+      },
+      "processId": "request-data-warehouse-dataset"
+    },
+    {
+      "id": "DATA-CLS-02",
+      "title": "Personal data only after a privacy check",
+      "level": "must",
+      "statement": "Personal data is loaded into the warehouse only for a purpose the data protection officer has checked, and only the columns that purpose needs.",
+      "rationale": "The law allows personal data to be used only for a stated purpose and only as much as needed.",
+      "guidance": [
+        "Ask for the privacy check in the dataset request.",
+        "Replace names and emails with a hashed customer id where the purpose allows it."
+      ],
+      "verification": {
+        "method": "manual",
+        "description": "Privacy check in the dataset request and the yearly data audit."
+      }
+    },
+    {
+      "id": "DATA-CLS-03",
+      "title": "No real personal data outside production",
+      "level": "must",
+      "statement": "Development and test datasets contain no real personal data; use generated or masked data.",
+      "rationale": "Development and test environments are open to many more people and tools than production.",
+      "guidance": [
+        "Use the masked copy job to fill test datasets.",
+        "Generate test customers with the data faker library."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "A scanner samples development and test datasets for real email addresses and phone numbers."
+      },
+      "review": {
+        "lookFor": [
+          "A job that copies a production dataset to a development or test project without masking",
+          "Test data files with real-looking names, emails or phone numbers"
+        ],
+        "severity": "blocker"
+      },
+      "environments": [
+        "development",
+        "test"
+      ]
+    },
+    {
+      "id": "DATA-CLS-04",
+      "title": "Keep data only as long as needed",
+      "level": "should",
+      "statement": "Tables with personal or confidential data have an expiry that matches the retention period agreed for the dataset.",
+      "rationale": "Data that is kept for ever is a risk for ever.",
+      "guidance": [
+        "Set the default table expiry on the dataset.",
+        "For partitioned tables, set the partition expiry."
+      ],
+      "verification": {
+        "method": "automated",
+        "description": "Weekly report of personal datasets without an expiry."
+      }
+    },
+    {
+      "id": "DATA-CLS-05",
+      "title": "Select the columns you need",
+      "level": "should",
+      "statement": "Queries and views on personal datasets name the columns they need instead of selecting everything.",
+      "rationale": "SELECT * copies personal columns into reports and extracts that never needed them.",
+      "guidance": [
+        "List the columns in every query that feeds a report or an export."
+      ],
+      "examples": {
+        "good": [
+          "SELECT customer_id, order_total FROM sales.orders"
+        ],
+        "bad": [
+          "SELECT * FROM crm.customers"
+        ]
+      },
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "SELECT * on a table in a personal or confidential dataset"
+        ],
+        "paths": [
+          "**/*.sql"
+        ],
+        "severity": "warning"
+      },
+      "languages": [
+        "sql"
+      ]
+    },
+    {
+      "id": "DATA-CLS-06",
+      "title": "No local copies of personal data",
+      "level": "should",
+      "statement": "Notebooks and scripts work on personal data inside the warehouse and do not write it to local files or spreadsheets.",
+      "rationale": "Local files are not covered by the warehouse's access control, expiry or audit log.",
+      "guidance": [
+        "Aggregate in BigQuery and download only the result.",
+        "Use a hashed id instead of a name in anything you export."
+      ],
+      "verification": {
+        "method": "review"
+      },
+      "review": {
+        "lookFor": [
+          "to_csv, to_excel or open(..., 'w') on a data frame read from a personal dataset"
+        ],
+        "paths": [
+          "**/*.py",
+          "**/*.ipynb"
+        ],
+        "severity": "warning"
+      },
+      "languages": [
+        "python"
+      ]
+    }
+  ]
+}

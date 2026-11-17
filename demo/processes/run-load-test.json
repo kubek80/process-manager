@@ -114,6 +114,9 @@
       "title": "Response times within target?",
       "actor": "me",
       "type": "decision",
+      "instructions": [
+        "Compare the 95th percentile response time at peak with the target in the service's folder."
+      ],
       "next": [
         {
           "to": "store-results",

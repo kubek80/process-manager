@@ -5,7 +5,9 @@
  *   3. Vite, serving the app with hot reload and forwarding /api and /auth to the server
  *
  * `npm run db:reset` (this script with --reset) empties the feedback tables and adds the samples again.
- * `npm run db:import` loads the files of the repository over what is in the database.
+ * `npm run db:import` loads the files of the repository over what is in the database;
+ * `npm run db:demo` (--import demo) loads the larger demo set in demo/ the same way.
+ * `npm run db:migrate` upgrades the database and its content to this version, then exits.
  * `npm run export -- <folder>` writes the content and the generated skills to files.
  */
 import fs from "node:fs";
@@ -25,7 +27,13 @@ ensureDatabase();
 if (!buildServer()) process.exit(1);
 
 if (process.argv.includes("--reset")) process.exit(runAndWait(serverBin, ["-reset", "-seed"], { env }));
-if (process.argv.includes("--import")) process.exit(runAndWait(serverBin, ["-import", root], { env }));
+const importAt = process.argv.indexOf("--import");
+if (importAt > 0) {
+  const from = process.argv[importAt + 1];
+  const dir = from && !from.startsWith("--") ? path.resolve(root, from) : root;
+  process.exit(runAndWait(serverBin, ["-import", dir], { env }));
+}
+if (process.argv.includes("--migrate")) process.exit(runAndWait(serverBin, ["-migrate"], { env }));
 const exportAt = process.argv.indexOf("--export");
 if (exportAt > 0) {
   const dir = path.resolve(process.argv[exportAt + 1] ?? "export");
