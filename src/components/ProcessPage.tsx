@@ -6,8 +6,8 @@ import { isDrawableProcess, validateProcess } from "../lib/validate";
 import { go, guardLeaving, useProgress, type Tab } from "../lib/store";
 import { useDraft } from "../lib/draft";
 import { useSelectedItem } from "../lib/selection";
-import { answersFor } from "../lib/responsibilities";
-import { teamName, useCatalog } from "../lib/catalog";
+import { canEdit, canManage } from "../lib/rights";
+import { categoryName, teamName, useCatalog } from "../lib/catalog";
 import { reviewer, reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { Resources } from "./Resources";
 import { FeedbackTab, openCount, processTarget } from "./Feedback";
@@ -20,7 +20,7 @@ import { StepDrawer } from "./StepDrawer";
 import { ProcessSettings } from "./ProcessSettings";
 import type { AiSpec } from "./AiDialog";
 import { confirmDialog, IssueList, Loading, notify, scrollBehavior } from "./ui";
-import { DimTags, ReviewTag } from "./Governance";
+import { BelongsTags, DimTags, ReviewTag, useLosingWarning } from "./Governance";
 import { BehindBanner, ConflictDialog, HistoryDialog, SaveBar, VersionTag } from "./Editing";
 import { SourceSkills } from "./SkillPanel";
 import { createPrompt, modifyPrompt } from "../lib/prompt";
@@ -53,7 +53,9 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
   const [extras, setExtras] = useState(() => { try { return localStorage.getItem("pm:map-extras") === "open"; } catch { return false; } });
   const { catalog } = useCatalog();
   const perms = usePerms();
-  const editor = useEditor() && perms.processes;
+  // a process editor may change every process; a platform or practice owner what belongs to theirs
+  const editor = useEditor() && canEdit(perms, "process", process);
+  const manages = canManage(perms, "process", process);
   const d = useDraft<Process>({ docKey: `process/${process.id}`, saved: process, version: meta?.version ?? 0, tidy, stamp, save: onSave, reload: onReload, what: "this process", editable: editor });
   const { draft, clean, dirty } = d;
   const setDraft = d.change;
@@ -69,6 +71,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
   const ctx = useMemo(() => ({ processIds: knownIds, standardIds: standards.map((s) => s.id), catalog }), [knownIds, standards, catalog]);
   const issues = useMemo(() => validateProcess(clean, ctx), [clean, ctx]);
   const errors = issues.filter((i) => i.level === "error").length;
+  const losing = useLosingWarning("process", d.saved, draft);
   // A process that was stored broken can only be repaired in the JSON tab.
   const renderable = useMemo(() => isDrawableProcess(draft), [draft]);
   const view: Tab = !renderable ? "json" : tab === "json" && !editor ? "flow" : tab;
@@ -112,7 +115,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
   };
 
   const mine = renderable ? draft.steps.filter((s) => s.actor === "me").length : 0;
-  const blocked = errors ? "Fix the problems first." : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined;
+  const blocked = losing ? "Keep it with a platform or practice of yours (in Details)." : errors ? "Fix the problems first." : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined;
   // On the map the map comes first: what to prepare is one line that opens. The checklist, where
   // the work is done, shows it in full.
   const hasExtras = renderable && (draft.prerequisites.length > 0 || !!draft.resources?.length || !!draft.standards?.length);
@@ -124,12 +127,13 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
         <button className="back" onClick={back}><ArrowLeft size={16} />All processes</button>
         <div className="head-row">
           <div className="head-text">
-            <div className="eyebrow">{draft.category ?? "Process"}{draft.owner && <> · owned by {teamName(catalog, draft.owner)}</>}</div>
+            <div className="eyebrow">{draft.category ? categoryName(catalog, draft.category) : "Process"}{draft.owner && <> · owned by {teamName(catalog, draft.owner)}</>}</div>
             <h1>{draft.title}</h1>
             <p className="lead">{draft.summary}</p>
             {renderable && (
               <div className="facts">
                 {status !== "active" && <span className={`tier-tag status-${status}`}>{STATUS_LABEL[status]}</span>}
+                <BelongsTags doc={draft} compact />
                 <DimTags doc={draft} />
                 <span><ListChecks size={14} />{draft.steps.length} steps, {mine} for you</span>
                 <span><Users size={14} />{draft.actors.length - 1} other {draft.actors.length === 2 ? "party" : "parties"}</span>
@@ -141,8 +145,8 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
             )}
           </div>
           <div className="head-actions">
-            {/* the review belongs to the team that owns the process, and to whoever edits it */}
-            {(editor || answersFor(perms, "process", draft.owner)) && review.state !== "none" && <button className={`btn ${review.state === "ok" ? "" : "review-due"}`} onClick={markReviewed} disabled={!renderable}
+            {/* the review belongs to the team that owns the process, and to whoever may edit it */}
+            {(editor || manages) && review.state !== "none" && <button className={`btn ${review.state === "ok" ? "" : "review-due"}`} onClick={markReviewed} disabled={!renderable}
               title="Confirm that this process is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
             {editor && <>
               <button className="btn accent-soft" onClick={() => setDialog("ai")} disabled={!renderable}><Sparkles size={16} />Change with AI</button>
@@ -178,7 +182,10 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
       {status === "draft" && renderable && (
         <div className="check warn banner"><TriangleAlert size={16} /><span><b>Draft.</b> Consumers do not see this process until its status is set to Active in Details.</span></div>
       )}
-      {(editor || answersFor(perms, "process", draft.owner)) && review.state === "overdue" && renderable && (
+      {editor && losing && renderable && (
+        <div className="check warn banner" role="alert"><TriangleAlert size={16} /><span>{losing}</span></div>
+      )}
+      {(editor || manages) && review.state === "overdue" && renderable && (
         <div className="check bad banner"><CalendarCheck size={16} /><span><b>{review.label}.</b> Read it through, correct what changed, then press “Mark as reviewed”.</span></div>
       )}
 
@@ -268,7 +275,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
       )}
 
       {dialog === "settings" && (
-        <ProcessSettings process={draft} all={all} standards={standards} onChange={setDraft} onClose={() => setDialog(null)}
+        <ProcessSettings process={draft} saved={d.saved} all={all} standards={standards} onChange={setDraft} onClose={() => setDialog(null)}
           onDelete={async () => {
             if (await confirmDialog({ title: "Delete this process?", body: <>“{process.title}” is removed for everyone. Its skill is withdrawn and its feedback is removed.</>, confirmLabel: "Delete process", danger: true })) onDelete(d.base);
           }} />

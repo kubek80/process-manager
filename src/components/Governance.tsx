@@ -1,6 +1,8 @@
-import { CalendarCheck, Code2, Layers, Server } from "lucide-react";
-import type { Catalog, Governed, Status } from "../types";
-import { environmentLabel, languageLabel, tierLabel, useCatalog } from "../lib/catalog";
+import { Boxes, CalendarCheck, Code2, Compass, Gauge, Layers, Server, Tag, TriangleAlert } from "lucide-react";
+import type { Governed, Rigour, Status, TargetKind } from "../types";
+import { categoryName, environmentLabel, languageLabel, platformName, practiceName, tierLabel, useCatalog } from "../lib/catalog";
+import { editsAll, wouldLoseEdit, type Belongs } from "../lib/rights";
+import { usePerms } from "../lib/session";
 import type { Profile } from "../lib/edit";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { Field } from "./ui";
@@ -116,4 +118,83 @@ export function ReviewTag({ doc }: { doc: Governed }) {
   );
 }
 
-export const unitsOf = (c: Catalog) => c.teams.filter((t) => t.kind && t.kind !== "team");
+/** How binding a process is, in words for readers. */
+export const RIGOUR: Record<Rigour, { label: string; hint: string }> = {
+  mandatory: { label: "Mandatory", hint: "The only allowed way to get this done." },
+  recommended: { label: "Recommended", hint: "The expected way. Another way needs a good reason." },
+  optional: { label: "Optional", hint: "A help that may be used, or not." },
+};
+
+type Grouped = { category?: string; practice?: string; platform?: string; rigour?: Rigour };
+
+/**
+ * Tags for what a process or standard belongs to: its category, platform and practice, and for
+ * a process how binding it is. `compact` leaves out the category (a card shows it on top).
+ */
+export function BelongsTags({ doc, compact }: { doc: Grouped; compact?: boolean }) {
+  const { catalog } = useCatalog();
+  return (
+    <>
+      {doc.rigour && RIGOUR[doc.rigour] && <span className={`tier-tag rigour-${doc.rigour}`} title={RIGOUR[doc.rigour].hint}><Gauge size={12} />{RIGOUR[doc.rigour].label}</span>}
+      {!compact && doc.category && <span className="tier-tag" title="Category"><Tag size={12} />{categoryName(catalog, doc.category)}</span>}
+      {doc.platform && <span className="tier-tag" title="Platform"><Boxes size={12} />{platformName(catalog, doc.platform)}</span>}
+      {doc.practice && <span className="tier-tag" title="Practice"><Compass size={12} />{practiceName(catalog, doc.practice)}</span>}
+    </>
+  );
+}
+
+/**
+ * Why the person could not save this document as it is now, or "" when they can: for somebody
+ * who may change it only through their platforms and practices, a document moved away from all
+ * of them is no longer theirs to save. The server refuses it; this says so before they try.
+ */
+export function useLosingWarning(kind: TargetKind, saved: Belongs, now: Belongs): string {
+  const perms = usePerms();
+  const { catalog } = useCatalog();
+  if (!wouldLoseEdit(perms, kind, saved, now)) return "";
+  const yours = [...perms.platforms.map((id) => `the platform ${platformName(catalog, id)}`), ...perms.practices.map((id) => `the practice ${practiceName(catalog, id)}`)];
+  return `You may change this ${kind} because it belongs to a platform or practice you own. With this platform and practice it would no longer be yours, so you could not save it. Keep it with ${yours.join(" or ") || "one of yours"}.`;
+}
+
+/** Category, practice and platform (and for a process its rigour), as they are picked in Details. */
+export function BelongsEditor({ kind, doc, saved, onChange }: {
+  kind: TargetKind; doc: Grouped & Belongs;
+  /** The document as it was saved: what the person's right to change it comes from. */
+  saved: Belongs;
+  onChange: (patch: Grouped) => void;
+}) {
+  const { catalog } = useCatalog();
+  const perms = usePerms();
+  const limited = !editsAll(perms, kind); // edits only through platforms and practices
+  const pick = (field: "category" | "practice" | "platform", label: string, hint: string, list: { id: string; name: string; description?: string }[], mine: string[] = []) => (
+    <Field label={label} hint={hint}>
+      <select value={doc[field] ?? ""} onChange={(e) => onChange({ [field]: e.target.value || undefined })}>
+        <option value="">None</option>
+        {list.map((x) => <option key={x.id} value={x.id} title={x.description}>{x.name}{limited && mine.includes(x.id) ? " (yours)" : ""}</option>)}
+        {doc[field] && !list.some((x) => x.id === doc[field]) && <option value={doc[field]}>{doc[field]} (not in the list)</option>}
+      </select>
+    </Field>
+  );
+  const lose = useLosingWarning(kind, saved, doc);
+  return (
+    <>
+      <div className="grid3">
+        {pick("category", "Category", "where it is grouped", catalog.categories)}
+        {pick("platform", "Platform", "its owners may change it", catalog.platforms, perms.platforms)}
+        {pick("practice", "Practice", "its owners may change it", catalog.practices, perms.practices)}
+      </div>
+      {lose && <div className="check warn" role="alert"><TriangleAlert size={16} /><span>{lose}</span></div>}
+      {kind === "process" && (
+        <div className="field">
+          <span className="field-label">How binding<em>{doc.rigour ? RIGOUR[doc.rigour]?.hint : "Readers are not told whether they must use it."}</em></span>
+          <div className="chips" role="group" aria-label="How binding">
+            <button className={`chip ${!doc.rigour ? "on" : ""}`} aria-pressed={!doc.rigour} title="Readers are not told whether they must use it." onClick={() => onChange({ rigour: undefined })}>Not stated</button>
+            {(Object.keys(RIGOUR) as Rigour[]).map((r) => (
+              <button key={r} className={`chip ${doc.rigour === r ? "on" : ""}`} aria-pressed={doc.rigour === r} title={RIGOUR[r].hint} onClick={() => onChange({ rigour: r })}>{RIGOUR[r].label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

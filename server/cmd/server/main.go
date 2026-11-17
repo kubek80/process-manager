@@ -28,6 +28,7 @@ import (
 	"github.com/kubek80/process-manager/server/internal/rbac"
 	"github.com/kubek80/process-manager/server/internal/schema"
 	"github.com/kubek80/process-manager/server/internal/skills"
+	"github.com/kubek80/process-manager/server/internal/upgrade"
 )
 
 type options struct {
@@ -104,7 +105,9 @@ func run(log *slog.Logger, o options) error {
 		return err
 	}
 	defer pool.Close()
-	if err := db.Migrate(ctx, pool); err != nil {
+	// a database of an earlier version is converted under the same lock as the migrations
+	convert := func(ctx context.Context) error { return upgrade.Lists(ctx, pool, log) }
+	if err := db.Migrate(ctx, pool, convert); err != nil {
 		return fmt.Errorf("database setup: %w", err)
 	}
 	st := stores{
@@ -250,7 +253,7 @@ func serve(ctx context.Context, srv *http.Server, log *slog.Logger, drain func()
 }
 
 // prepare makes a database usable: an empty one is filled from the seed folder, development
-// users get their roles, and the generated skills are brought up to date.
+// users without roles get theirs, and the generated skills are brought up to date.
 func prepare(ctx context.Context, cfg config.Config, st stores, log *slog.Logger) error {
 	n, err := st.docs.Count(ctx)
 	if err != nil {
@@ -262,18 +265,38 @@ func prepare(ctx context.Context, cfg config.Config, st stores, log *slog.Logger
 		}
 	}
 	if cfg.Auth == config.AuthDev {
-		if count, err := st.roles.Count(ctx); err != nil {
+		if err := devRoles(ctx, st, log); err != nil {
 			return err
-		} else if count == 0 {
-			for _, r := range auth.DevRoles {
-				if err := st.roles.Grant(ctx, rbac.Assignment{Email: r.Email, Role: r.Role, Scope: r.Scope, GrantedBy: "development setup"}); err != nil {
-					return err
-				}
-			}
-			log.Info("development roles added", "roles", len(auth.DevRoles))
 		}
 	}
 	return st.skills.SyncAll(ctx, st.docs)
+}
+
+// devRoles gives each built-in development user who has no role at all the roles of
+// auth.DevRoles: a new local database gets all of them, an older one the users added since.
+func devRoles(ctx context.Context, st stores, log *slog.Logger) error {
+	all, err := st.roles.All(ctx)
+	if err != nil {
+		return err
+	}
+	has := map[string]bool{}
+	for _, a := range all {
+		has[a.Email] = true
+	}
+	added := 0
+	for _, r := range auth.DevRoles {
+		if has[r.Email] {
+			continue
+		}
+		if err := st.roles.Grant(ctx, rbac.Assignment{Email: r.Email, Role: r.Role, Scope: r.Scope, GrantedBy: "development setup"}); err != nil {
+			return err
+		}
+		added++
+	}
+	if added > 0 {
+		log.Info("development roles added", "roles", added)
+	}
+	return nil
 }
 
 func importFiles(ctx context.Context, st stores, dir string, log *slog.Logger) error {

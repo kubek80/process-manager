@@ -1,4 +1,4 @@
-import type { Process, Requirement, Standard, Step } from "../types";
+import type { Catalog, Process, Requirement, Rigour, Standard, Step } from "../types";
 
 /**
  * What changed between two versions of a process or a standard, in words a reader understands:
@@ -13,7 +13,12 @@ export interface Change {
   label: string;
   /** For changes: which parts are different. */
   details?: string[];
+  /** For a detail that holds one value (category, practice, platform, rigour): what it was and what it is now, by name. Empty: not set. */
+  from?: string;
+  to?: string;
 }
+
+export const RIGOUR_NAME: Record<Rigour, string> = { mandatory: "Mandatory", recommended: "Recommended", optional: "Optional" };
 
 type Doc = Record<string, unknown>;
 
@@ -24,7 +29,7 @@ const isObject = (v: unknown): v is Doc => !!v && typeof v === "object" && !Arra
 
 /** Names for the fields of a document, a step and a requirement. */
 const FIELD: Record<string, string> = {
-  title: "title", summary: "summary", category: "category", owner: "owner", tiers: "tiers", languages: "languages", environments: "environments",
+  title: "title", summary: "summary", category: "category", practice: "practice", platform: "platform", rigour: "rigour", owner: "owner", tiers: "tiers", languages: "languages", environments: "environments",
   estimatedDuration: "typical duration", tags: "tags", status: "status", replacedBy: "replaced by", review: "review", resources: "links",
   standards: "standards", actors: "participants", scope: "scope", exceptionProcessId: "exception process",
   actor: "who does it", type: "kind", description: "description", instructions: "instructions", tool: "tool", url: "link", urlLabel: "link text",
@@ -77,13 +82,29 @@ function compareItems<T extends { id: string }>(what: string, before: T[], after
 // what a version holds, without the entries that are not objects (a broken version is still compared, not crashed on)
 const list = <T,>(v: T[] | undefined): T[] => (Array.isArray(v) ? v.filter((x) => isObject(x)) : []);
 
-export function compareProcesses(before: Process, after: Process): Change[] {
-  if (!isObject(before) || !isObject(after)) return [];
-  const changes: Change[] = [];
-  // updatedAt changes with every save and says nothing; steps and prerequisites are listed on their own
-  for (const field of changedFields(before as unknown as Doc, after as unknown as Doc, ["steps", "prerequisites", "updatedAt", "$schema", "schemaVersion", "id"])) {
-    changes.push({ kind: "changed", what: "Details", label: field });
+/** The details that hold one value from a list: said with what they were and what they are now. */
+const VALUED = ["category", "practice", "platform", "rigour"] as const;
+
+/** The changed details of a whole document; those in VALUED say from what to what, by name where the lists are known. */
+function detailChanges(before: Doc, after: Doc, skip: string[], catalog?: Catalog): Change[] {
+  const nameIn = (list: { id: string; name: string }[] | undefined, v: unknown) => (typeof v === "string" && v ? list?.find((x) => x.id === v)?.name ?? v : "");
+  const valueName = (field: (typeof VALUED)[number], v: unknown): string => {
+    if (field === "rigour") return typeof v === "string" ? RIGOUR_NAME[v as Rigour] ?? v : "";
+    const list = field === "category" ? catalog?.categories : field === "practice" ? catalog?.practices : catalog?.platforms;
+    return nameIn(list, v);
+  };
+  const changes: Change[] = changedFields(before, after, [...skip, ...VALUED]).map((label) => ({ kind: "changed", what: "Details", label }));
+  for (const field of VALUED) {
+    if (same(before[field], after[field])) continue;
+    changes.push({ kind: "changed", what: "Details", label: name(field), from: valueName(field, before[field]), to: valueName(field, after[field]) });
   }
+  return changes;
+}
+
+export function compareProcesses(before: Process, after: Process, catalog?: Catalog): Change[] {
+  if (!isObject(before) || !isObject(after)) return [];
+  // updatedAt changes with every save and says nothing; steps and prerequisites are listed on their own
+  const changes = detailChanges(before as unknown as Doc, after as unknown as Doc, ["steps", "prerequisites", "updatedAt", "$schema", "schemaVersion", "id"], catalog);
   // prerequisites have no id: they are matched by title, and two with the same title in the order they come
   const oldPre = list(before.prerequisites), newPre = list(after.prerequisites);
   const left = [...oldPre];
@@ -101,23 +122,30 @@ export function compareProcesses(before: Process, after: Process): Change[] {
   return changes;
 }
 
-export function compareStandards(before: Standard, after: Standard): Change[] {
+export function compareStandards(before: Standard, after: Standard, catalog?: Catalog): Change[] {
   if (!isObject(before) || !isObject(after)) return [];
-  const changes: Change[] = [];
-  for (const field of changedFields(before as unknown as Doc, after as unknown as Doc, ["requirements", "updatedAt", "$schema", "schemaVersion", "id"])) {
-    changes.push({ kind: "changed", what: "Details", label: field });
-  }
+  const changes = detailChanges(before as unknown as Doc, after as unknown as Doc, ["requirements", "updatedAt", "$schema", "schemaVersion", "id"], catalog);
   compareItems<Requirement>("Requirement", list(before.requirements), list(after.requirements), (r) => `${r.id} ${r.title}`, changes);
   return changes;
 }
 
-export function compare(kind: "process" | "standard", before: unknown, after: unknown): Change[] {
-  return kind === "process" ? compareProcesses(before as Process, after as Process) : compareStandards(before as Standard, after as Standard);
+/** `catalog` gives the names of categories, practices and platforms; without it their ids are shown. */
+export function compare(kind: "process" | "standard", before: unknown, after: unknown, catalog?: Catalog): Change[] {
+  return kind === "process" ? compareProcesses(before as Process, after as Process, catalog) : compareStandards(before as Standard, after as Standard, catalog);
 }
 
-/** One line for a change, e.g. `Step “Approve the budget” changed: who does it, duration`. */
+/**
+ * One line for a change, e.g. `Step “Approve the budget” changed: who does it, duration` or
+ * `Platform changed from “Azure” to “Google Cloud”`.
+ */
 export function describeChange(c: Change): string {
-  if (c.what === "Details") return `${c.label[0].toUpperCase()}${c.label.slice(1)} changed`;
+  const Label = `${c.label[0].toUpperCase()}${c.label.slice(1)}`;
+  if (c.what === "Details" && (c.from !== undefined || c.to !== undefined)) {
+    if (c.from && c.to) return `${Label} changed from “${c.from}” to “${c.to}”`;
+    if (c.to) return `${Label} set to “${c.to}”`;
+    if (c.from) return `${Label} no longer set (was “${c.from}”)`;
+  }
+  if (c.what === "Details") return `${Label} changed`;
   const verb = c.kind === "added" ? "added" : c.kind === "removed" ? "removed" : "changed";
   return `${c.what} “${c.label}” ${verb}${c.details?.length ? `: ${c.details.join(", ")}` : ""}`;
 }

@@ -8,17 +8,17 @@ import { teamName, useCatalog } from "../lib/catalog";
 import { addRequirement, appliesTo, deleteRequirement, moveRequirement, tidyStandard, today, updateRequirement } from "../lib/edit";
 import { useDraft } from "../lib/draft";
 import { useSelectedItem } from "../lib/selection";
-import { answersFor } from "../lib/responsibilities";
 import { useProfile } from "../lib/profile";
 import { reviewer, reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { useEditor } from "../lib/mode";
 import { createStandardPrompt, modifyStandardPrompt } from "../lib/prompt";
-import { canEditStandard, useMe, usePerms } from "../lib/session";
+import { canEdit, canManage } from "../lib/rights";
+import { useMe, usePerms } from "../lib/session";
 import { go, guardLeaving, href, type StandardTab } from "../lib/store";
 import { isDrawableStandard, standardSchema, validateStandard } from "../lib/validate";
 import type { AiSpec } from "./AiDialog";
 import { FeedbackForm, FeedbackItem, FeedbackTab, openCount, standardTarget } from "./Feedback";
-import { DimsEditor, DimTags, LifecycleEditor, ProfileFilter, ReviewTag, unitsOf } from "./Governance";
+import { BelongsEditor, BelongsTags, DimsEditor, DimTags, LifecycleEditor, ProfileFilter, ReviewTag, useLosingWarning } from "./Governance";
 import { BehindBanner, ConflictDialog, HistoryDialog, SaveBar, VersionTag } from "./Editing";
 import { ResourceEditor, Resources } from "./Resources";
 import { SourceSkills } from "./SkillPanel";
@@ -264,14 +264,14 @@ function RequirementDrawer({ r, standard, processes, feedback, editing, editable
   );
 }
 
-function StandardSettings({ standard, all, processes, onChange, onClose, onDelete }: {
-  standard: Standard; all: Standard[]; processes: Process[]; onChange: (s: Standard) => void; onClose: () => void; onDelete: () => void;
+function StandardSettings({ standard, saved, all, processes, onChange, onClose, onDelete }: {
+  standard: Standard;
+  /** The standard as it was saved: whether the person may change it comes from what it belongs to there. */
+  saved: Standard;
+  all: Standard[]; processes: Process[]; onChange: (s: Standard) => void; onClose: () => void; onDelete: () => void;
 }) {
   const { catalog } = useCatalog();
-  const perms = usePerms();
   const set = (patch: Partial<Standard>) => onChange({ ...standard, ...patch });
-  // you can only give a standard to a unit you may edit for
-  const units = unitsOf(catalog).filter((u) => canEditStandard(perms, u.id) || u.id === standard.owner);
   return (
     <Modal wide title="Standard details" subtitle="Changes are applied to the draft. Press Save on the page to publish them." onClose={onClose}
       footer={<><button className="btn danger" onClick={onDelete}><Trash2 size={15} />Delete standard</button><span className="spacer" /><button className="btn primary" onClick={onClose}>Done</button></>}>
@@ -280,10 +280,10 @@ function StandardSettings({ standard, all, processes, onChange, onClose, onDelet
         <Field label="Name"><input value={standard.title} maxLength={80} onChange={(e) => set({ title: e.target.value })} /></Field>
         <Field label="Summary" hint="what it protects or achieves"><textarea rows={2} maxLength={400} value={standard.summary} onChange={(e) => set({ summary: e.target.value })} /></Field>
         <div className="grid2">
-          <Field label="Issued by">
+          <Field label="Issued by" hint="the team that reviews it and answers feedback">
             <select value={standard.owner} onChange={(e) => set({ owner: e.target.value })}>
-              {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              {!units.some((u) => u.id === standard.owner) && <option value={standard.owner}>{teamName(catalog, standard.owner)} (not a unit)</option>}
+              {catalog.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {!catalog.teams.some((t) => t.id === standard.owner) && <option value={standard.owner}>{standard.owner} (not in the list)</option>}
             </select>
           </Field>
           <Field label="Tags" hint="comma separated">
@@ -292,16 +292,19 @@ function StandardSettings({ standard, all, processes, onChange, onClose, onDelet
         </div>
         <Field label="Scope" hint="what it covers and what it does not"><textarea rows={2} maxLength={400} value={standard.scope ?? ""} onChange={(e) => set({ scope: e.target.value })} /></Field>
 
+        <h4>What it belongs to <span className="muted">how readers find it, and who besides the editors may change it</span></h4>
+        <BelongsEditor kind="standard" doc={standard} saved={saved} onChange={set} />
+
         <h4>Where it applies <span className="muted">a requirement can narrow this further</span></h4>
         <DimsEditor value={standard} onChange={set} />
 
-        <h4>Life-cycle <span className="muted">who sees it and how often the unit reviews it</span></h4>
+        <h4>Life-cycle <span className="muted">who sees it and how often the owner team reviews it</span></h4>
         <LifecycleEditor doc={standard} others={all} onChange={set} />
 
         <h4>Exceptions and background</h4>
         <Field label="How to ask for an exception">
           <select value={standard.exceptionProcessId ?? ""} onChange={(e) => set({ exceptionProcessId: e.target.value || undefined })}>
-            <option value="">Ask the unit directly</option>
+            <option value="">Ask the team directly</option>
             {processes.map((p) => <option key={p.id} value={p.id}>Process: {p.title}</option>)}
           </select>
         </Field>
@@ -328,8 +331,9 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   const { catalog } = useCatalog();
   const me = useMe();
   const perms = usePerms();
-  const mayEdit = canEditStandard(perms, standard.owner);
-  const editor = useEditor() && mayEdit;
+  // a standards editor may change every standard; a platform or practice owner what belongs to theirs
+  const editor = useEditor() && canEdit(perms, "standard", standard);
+  const manages = canManage(perms, "standard", standard);
   const d = useDraft<Standard>({ docKey: `standard/${standard.id}`, saved: standard, version: meta?.version ?? 0, tidy: tidyStandard, stamp, save: onSave, reload: onReload, what: "this standard", editable: editor });
   const { draft, clean, dirty } = d;
   const setDraft = d.change;
@@ -348,6 +352,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   const ctx = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds: all.map((s) => s.id), catalog }), [processes, all, catalog]);
   const issues = useMemo(() => validateStandard(clean, ctx), [clean, ctx]);
   const errors = issues.filter((i) => i.level === "error").length;
+  const losing = useLosingWarning("standard", d.saved, draft);
   const renderable = useMemo(() => isDrawableStandard(draft), [draft]);
   const view: StandardTab = !renderable ? "json" : tab === "json" && !editor ? "doc" : tab;
   // the open requirement is part of the address, so a link can point at it and Back closes it
@@ -364,7 +369,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
 
   const select = (id: string) => { setSelected(id); setReporting(false); };
   useEffect(() => { if (!selected) setEditing(false); }, [selected]); // a requirement opened later starts as it is read
-  const blocked = errors ? "Fix the problems first." : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined;
+  const blocked = losing ? "Keep it with a platform or practice of yours (in Details)." : errors ? "Fix the problems first." : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined;
   // bring the open requirement into view, also when the page was opened by a link to it
   useEffect(() => {
     if (!item || view !== "doc") return;
@@ -397,6 +402,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
             {renderable && (
               <div className="facts">
                 {status !== "active" && <span className={`tier-tag status-${status}`}>{STATUS_LABEL[status]}</span>}
+                <BelongsTags doc={draft} />
                 <DimTags doc={draft} />
                 <span><ListChecks size={14} />{draft.requirements.length} requirements, {draft.requirements.filter((r) => r.level === "must").length} mandatory</span>
                 {draft.updatedAt && <span>Updated {draft.updatedAt}</span>}
@@ -406,8 +412,8 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
             )}
           </div>
           <div className="head-actions">
-            {/* the review belongs to the unit that issues the standard, and to whoever edits it */}
-            {(editor || answersFor(perms, "standard", draft.owner)) && review.state !== "none" && <button className={`btn ${review.state === "ok" ? "" : "review-due"}`} onClick={markReviewed} disabled={!renderable}
+            {/* the review belongs to the team that issues the standard, and to whoever may edit it */}
+            {(editor || manages) && review.state !== "none" && <button className={`btn ${review.state === "ok" ? "" : "review-due"}`} onClick={markReviewed} disabled={!renderable}
               title="Confirm that this standard is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
             {editor && <>
               <button className="btn accent-soft" onClick={() => setDialog("ai")} disabled={!renderable}><Sparkles size={16} />Change with AI</button>
@@ -443,7 +449,10 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
       {status === "draft" && renderable && (
         <div className="check warn banner"><TriangleAlert size={16} /><span><b>Draft.</b> Consumers do not see this standard, and no skill is generated, until its status is set to Active in Details.</span></div>
       )}
-      {(editor || answersFor(perms, "standard", draft.owner)) && review.state === "overdue" && renderable && (
+      {editor && losing && renderable && (
+        <div className="check warn banner" role="alert"><TriangleAlert size={16} /><span>{losing}</span></div>
+      )}
+      {(editor || manages) && review.state === "overdue" && renderable && (
         <div className="check bad banner"><CalendarCheck size={16} /><span><b>{review.label}.</b> Read it through, correct what changed, then press “Mark as reviewed”.</span></div>
       )}
 
@@ -455,7 +464,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
               <h2>Exceptions</h2>
               <p>A mandatory requirement can only be waived by {teamName(catalog, draft.owner)}.{" "}
                 {exception ? <a href={href({ page: "process", id: exception.id, tab: "flow" })}>Follow “{exception.title}”<ArrowUpRight size={13} /></a>
-                  : draft.exceptionProcessId ? `The process “${draft.exceptionProcessId}” is not described yet.` : "Ask the unit directly."}</p>
+                  : draft.exceptionProcessId ? `The process “${draft.exceptionProcessId}” is not described yet.` : "Ask them directly."}</p>
             </div>
             {helpers.length > 0 && (
               <div><h2>Processes that help</h2>
@@ -502,7 +511,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
       )}
 
       {dialog === "settings" && (
-        <StandardSettings standard={draft} all={all} processes={processes} onChange={setDraft} onClose={() => setDialog(null)}
+        <StandardSettings standard={draft} saved={d.saved} all={all} processes={processes} onChange={setDraft} onClose={() => setDialog(null)}
           onDelete={async () => {
             if (await confirmDialog({ title: "Delete this standard?", body: <>“{standard.title}” is removed for everyone. Its skills are withdrawn and its feedback is removed.</>, confirmLabel: "Delete standard", danger: true })) onDelete(d.base);
           }} />

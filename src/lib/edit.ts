@@ -168,15 +168,18 @@ export function renameStepId(p: Process, oldId: string, wanted: string): { proce
   return { process: { ...p, steps }, id };
 }
 
+/** The platform or practice a new process or standard belongs to, when its maker chose one. */
+export type BelongsTo = { platform?: string; practice?: string };
+
 /** A new process. Its id is made from the name it is given and never changes afterwards. */
-export function blankProcess(existingIds: string[], title = ""): Process {
+export function blankProcess(existingIds: string[], title = "", belongs: BelongsTo = {}): Process {
   return {
     $schema: "../schema/process.schema.json",
     schemaVersion: "1.0",
     id: uniqueId(slugify(title) || "new-process", existingIds),
     title: title.trim() || "New process",
     summary: "Describe in one or two sentences what the reader gets at the end.",
-    category: "General",
+    ...belongs,
     updatedAt: today(),
     status: "draft",
     review: { intervalMonths: 6 },
@@ -262,7 +265,7 @@ export function moveRequirement(s: Standard, id: string, dir: -1 | 1): Standard 
 }
 
 /** A new standard. Its id is made from the name it is given and never changes afterwards. */
-export function blankStandard(existingIds: string[], owner: string, title = ""): Standard {
+export function blankStandard(existingIds: string[], owner: string, title = "", belongs: BelongsTo = {}): Standard {
   return {
     $schema: "../schema/standard.schema.json",
     schemaVersion: "1.0",
@@ -270,6 +273,7 @@ export function blankStandard(existingIds: string[], owner: string, title = ""):
     title: title.trim() || "New standard",
     summary: "Describe in one or two sentences what this standard protects or achieves.",
     owner,
+    ...belongs,
     updatedAt: today(),
     status: "draft",
     review: { intervalMonths: 12 },

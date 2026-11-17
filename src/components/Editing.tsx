@@ -4,6 +4,7 @@ import type { DocMeta, DocVersion, TargetKind } from "../types";
 import type { Draft } from "../lib/draft";
 import { compare, describeChange, summarize, type Change } from "../lib/diff";
 import { ApiError, loadHistory, loadVersion } from "../lib/store";
+import { useCatalog } from "../lib/catalog";
 import { LoadError, Modal } from "./ui";
 
 /** Shared by the pages that edit something: processes, standards and the lists. */
@@ -85,6 +86,7 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked }: {
   blocked?: string;
 }) {
   const c = d.conflict;
+  const { catalog } = useCatalog();
   const [theirs, setTheirs] = useState<Change[] | "failed" | null>(null);
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -92,7 +94,7 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked }: {
     setTheirs(null);
     if (!c?.exists || !c.version || kind === "catalog") return;
     let live = true;
-    loadVersion<unknown>(kind, id, c.version).then((doc) => { if (live) setTheirs(compare(kind, d.saved, doc)); }, () => { if (live) setTheirs("failed"); });
+    loadVersion<unknown>(kind, id, c.version).then((doc) => { if (live) setTheirs(compare(kind, d.saved, doc, catalog)); }, () => { if (live) setTheirs("failed"); });
     return () => { live = false; };
   }, [c?.version, c?.exists, kind, id, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!c) return null;
@@ -141,6 +143,7 @@ export function HistoryDialog<T>({ kind, id, title, onRestore, onClose }: {
   const [error, setError] = useState("");
   const [open, setOpen] = useState<number | null>(null);
   const [changes, setChanges] = useState<Record<number, Change[] | string>>({});
+  const { catalog } = useCatalog();
   const load = () => { setError(""); loadHistory(kind, id).then(setVersions, (e) => setError(e.message)); };
   useEffect(load, [kind, id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -155,7 +158,7 @@ export function HistoryDialog<T>({ kind, id, title, onRestore, onClose }: {
     if (!before) return setChanges((all) => ({ ...all, [v.version]: "This is the first version that was published." }));
     try {
       const [a, b] = await Promise.all([loadVersion<unknown>(kind, id, before.version), loadVersion<unknown>(kind, id, v.version)]);
-      setChanges((all) => ({ ...all, [v.version]: compare(kind, a, b) }));
+      setChanges((all) => ({ ...all, [v.version]: compare(kind, a, b, catalog) }));
     } catch (e) {
       const why = e instanceof ApiError && e.status === 404
         ? "One of the two versions was a draft that only its editors can open, so there is nothing to compare."

@@ -14,17 +14,47 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Roles. Some can be limited to one team or unit through the scope of the assignment.
+// Roles. Some are limited to one team, platform or practice through the scope of the
+// assignment.
 const (
 	Admin           = "admin"            // everything, including access
 	CatalogManager  = "catalog-manager"  // the lists
 	ProcessEditor   = "process-editor"   // all processes
-	StandardsEditor = "standards-editor" // standards of one unit (scope) or of all (no scope)
-	Owner           = "owner"            // closes feedback on what one team or unit owns (scope required)
+	StandardsEditor = "standards-editor" // all standards
+	Owner           = "owner"            // reviews, feedback and drafts of what one team owns (scope: a team)
+	PlatformOwner   = "platform-owner"   // edits what belongs to one platform (scope: a platform)
+	PracticeOwner   = "practice-owner"   // edits what belongs to one practice (scope: a practice)
 )
 
 // Roles in the order the Admin panel shows them.
-var Roles = []string{Admin, CatalogManager, ProcessEditor, StandardsEditor, Owner}
+var Roles = []string{Admin, CatalogManager, ProcessEditor, StandardsEditor, Owner, PlatformOwner, PracticeOwner}
+
+// ScopeList names the list the scope of a role comes from ("teams", "platforms" or
+// "practices"); "" for a role that takes no scope.
+func ScopeList(role string) string {
+	switch role {
+	case Owner:
+		return "teams"
+	case PlatformOwner:
+		return "platforms"
+	case PracticeOwner:
+		return "practices"
+	}
+	return ""
+}
+
+// ScopeNoun is the word for what the scope of a role names: "team", "platform", "practice".
+func ScopeNoun(role string) string {
+	switch role {
+	case Owner:
+		return "team"
+	case PlatformOwner:
+		return "platform"
+	case PracticeOwner:
+		return "practice"
+	}
+	return ""
+}
 
 var (
 	// ErrInvalid marks an assignment that makes no sense.
@@ -49,17 +79,18 @@ type Assignment struct {
 
 // Perms is what one person may do, worked out from their assignments.
 type Perms struct {
-	Admin         bool     `json:"admin"`
-	Catalog       bool     `json:"catalog"`       // edit the lists
-	Processes     bool     `json:"processes"`     // edit every process
-	Standards     bool     `json:"standards"`     // edit every standard
-	StandardUnits []string `json:"standardUnits"` // edit the standards of these units
-	Owns          []string `json:"owns"`          // close feedback on what these teams or units own
+	Admin     bool     `json:"admin"`
+	Catalog   bool     `json:"catalog"`   // edit the lists
+	Processes bool     `json:"processes"` // edit every process
+	Standards bool     `json:"standards"` // edit every standard
+	Owns      []string `json:"owns"`      // teams: reviews, feedback and drafts of what they own
+	Platforms []string `json:"platforms"` // edit the processes and standards of these platforms
+	Practices []string `json:"practices"` // edit the processes and standards of these practices
 }
 
 // PermsFrom combines assignments. bootstrap marks an admin named in the server settings.
 func PermsFrom(assignments []Assignment, bootstrap bool) Perms {
-	p := Perms{Admin: bootstrap, StandardUnits: []string{}, Owns: []string{}}
+	p := Perms{Admin: bootstrap, Owns: []string{}, Platforms: []string{}, Practices: []string{}}
 	for _, a := range assignments {
 		switch a.Role {
 		case Admin:
@@ -69,20 +100,21 @@ func PermsFrom(assignments []Assignment, bootstrap bool) Perms {
 		case ProcessEditor:
 			p.Processes = true
 		case StandardsEditor:
-			if a.Scope == "" {
-				p.Standards = true
-			} else {
-				p.StandardUnits = append(p.StandardUnits, a.Scope)
-			}
+			p.Standards = true
 		case Owner:
 			p.Owns = append(p.Owns, a.Scope)
+		case PlatformOwner:
+			p.Platforms = append(p.Platforms, a.Scope)
+		case PracticeOwner:
+			p.Practices = append(p.Practices, a.Scope)
 		}
 	}
 	if p.Admin {
 		p.Catalog, p.Processes, p.Standards = true, true, true
 	}
-	sort.Strings(p.StandardUnits)
 	sort.Strings(p.Owns)
+	sort.Strings(p.Platforms)
+	sort.Strings(p.Practices)
 	return p
 }
 
@@ -98,29 +130,38 @@ func in(list []string, v string) bool {
 	return false
 }
 
-// CanEditStandard: every standard, or those of the unit that owns this one.
-func (p Perms) CanEditStandard(unit string) bool { return p.Standards || in(p.StandardUnits, unit) }
+// Belongs is what a process or standard belongs to, as its content says: the team that
+// maintains it, and the platform and practice it is part of. Any of them may be empty.
+type Belongs struct {
+	Owner    string // team id
+	Platform string // platform id
+	Practice string // practice id
+}
 
-// CanEdit reports whether the person may change a document of this kind owned by owner.
-func (p Perms) CanEdit(kind, owner string) bool {
+// CanEdit reports whether the person may change (save, create, delete) a document of this
+// kind that belongs to b: editors of the kind, and the owners of its platform or practice.
+// For the lists b does not matter.
+func (p Perms) CanEdit(kind string, b Belongs) bool {
 	switch kind {
 	case "process":
-		return p.Processes
+		return p.Processes || in(p.Platforms, b.Platform) || in(p.Practices, b.Practice)
 	case "standard":
-		return p.CanEditStandard(owner)
+		return p.Standards || in(p.Platforms, b.Platform) || in(p.Practices, b.Practice)
 	case "catalog":
 		return p.Catalog
 	}
 	return false
 }
 
-// CanManageFeedback: whoever may edit the thing, and the team or unit that owns it.
-func (p Perms) CanManageFeedback(kind, owner string) bool {
-	return p.CanEdit(kind, owner) || in(p.Owns, owner)
+// CanManageFeedback: whoever may edit the thing, and the team that owns it. The same people
+// confirm its reviews and see it while it is a draft.
+func (p Perms) CanManageFeedback(kind string, b Belongs) bool {
+	return p.CanEdit(kind, b) || in(p.Owns, b.Owner)
 }
 
-// AnyStandards reports whether the person can edit at least some standards.
-func (p Perms) AnyStandards() bool { return p.Standards || len(p.StandardUnits) > 0 }
+// EditsSome reports whether the person may edit some, but not necessarily all, documents of
+// this kind: through a platform or a practice.
+func (p Perms) EditsSome() bool { return len(p.Platforms)+len(p.Practices) > 0 }
 
 // Store keeps the assignments.
 type Store struct {
@@ -162,6 +203,34 @@ func (s *Store) query(ctx context.Context, where string, args ...any) ([]Assignm
 // All lists every assignment.
 func (s *Store) All(ctx context.Context) ([]Assignment, error) { return s.query(ctx, "") }
 
+// Member is one person in a team, platform or practice: an assignment of a scoped role.
+type Member struct {
+	Email string `json:"email"`
+	Role  string `json:"role"`
+	Scope string `json:"scope"`
+}
+
+// Members lists every assignment of the roles that are limited to a team, platform or
+// practice, sorted by role, scope and email. It is what everyone may know about who belongs to
+// what; who gave a role and when is for admins.
+func (s *Store) Members(ctx context.Context) ([]Member, error) {
+	rows, err := s.Pool.Query(ctx, `select email, role, scope from role_assignments where role = any($1) order by role collate "C", scope collate "C", email collate "C"`,
+		[]string{Owner, PlatformOwner, PracticeOwner})
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Member{}
+	for rows.Next() {
+		var m Member
+		if err := rows.Scan(&m.Email, &m.Role, &m.Scope); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 // Perms returns what the person with this email may do.
 func (s *Store) Perms(ctx context.Context, email string) (Perms, error) {
 	list, err := s.query(ctx, "where email = $1", norm(email))
@@ -171,23 +240,24 @@ func (s *Store) Perms(ctx context.Context, email string) (Perms, error) {
 	return PermsFrom(list, s.IsBootstrap(email)), nil
 }
 
-// Check validates an assignment before it is stored.
+// Check validates an assignment before it is stored. Whether the team, platform or practice
+// of a scope exists is for the caller to check against the lists.
 func Check(a Assignment) error {
 	if !emailPattern.MatchString(a.Email) {
 		return fmt.Errorf("%w: %q is not an email address", ErrInvalid, a.Email)
 	}
 	switch a.Role {
-	case Admin, CatalogManager, ProcessEditor:
+	case Admin, CatalogManager, ProcessEditor, StandardsEditor:
 		if a.Scope != "" {
-			return fmt.Errorf("%w: the role %s cannot be limited to a team", ErrInvalid, a.Role)
+			return fmt.Errorf("%w: the role %s cannot be limited to a team, platform or practice", ErrInvalid, a.Role)
 		}
-	case StandardsEditor:
-		if a.Scope != "" && !scopePattern.MatchString(a.Scope) {
-			return fmt.Errorf("%w: %q is not a unit id", ErrInvalid, a.Scope)
+	case Owner, PlatformOwner, PracticeOwner:
+		noun := ScopeNoun(a.Role)
+		if a.Scope == "" {
+			return fmt.Errorf("%w: the role %s needs the %s it is for", ErrInvalid, a.Role, noun)
 		}
-	case Owner:
 		if !scopePattern.MatchString(a.Scope) {
-			return fmt.Errorf("%w: an owner needs the team or unit they own things for", ErrInvalid)
+			return fmt.Errorf("%w: %q is not a %s id", ErrInvalid, a.Scope, noun)
 		}
 	default:
 		return fmt.Errorf("%w: unknown role %q", ErrInvalid, a.Role)

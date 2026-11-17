@@ -143,6 +143,9 @@ func New(d Deps) http.Handler {
 	mux.Handle("GET /api/skills/{id}/download", user(a.downloadSkill))
 	mux.Handle("PUT /api/skills/{id}/extra", user(a.putSkillExtra))
 
+	// who belongs to which team, platform and practice
+	mux.Handle("GET /api/members", user(a.listMembers))
+
 	// admin panel
 	mux.Handle("GET /api/admin/access", admin(a.listAccess))
 	mux.Handle("POST /api/admin/access", admin(a.grantAccess))

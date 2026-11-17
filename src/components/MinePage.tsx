@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
-import { ArrowUpRight, CalendarCheck, Check, CircleCheck, Flag, PencilLine, ShieldCheck, Users, Workflow } from "lucide-react";
+import { ArrowUpRight, Boxes, CalendarCheck, Check, CircleCheck, Compass, Flag, PencilLine, ShieldCheck, Users, Workflow } from "lucide-react";
 import type { DocMeta, FeedbackByTarget, Process, Standard, TargetKind } from "../types";
-import { teamName, useCatalog } from "../lib/catalog";
+import { groupName, useCatalog } from "../lib/catalog";
 import { STATUS_LABEL } from "../lib/lifecycle";
-import { myTeams, responsibilities, type Owned, type Task } from "../lib/responsibilities";
+import { groupKey, myGroups, responsibilities, type Group, type Owned, type Task } from "../lib/responsibilities";
 import { useFeedbackActions, usePerms } from "../lib/session";
 import { href, type MetaById } from "../lib/store";
 import { FEEDBACK_KINDS } from "./Feedback";
@@ -13,6 +13,8 @@ const pageOf = (o: Owned, feedback = false) => href(o.kind === "process"
   ? { page: "process", id: o.doc.id, tab: feedback ? "feedback" : "flow" }
   : { page: "standard", id: o.doc.id, tab: feedback ? "feedback" : "doc" });
 const noun = (kind: TargetKind) => (kind === "process" ? "process" : "standard");
+const GROUP_ICON = { team: Users, platform: Boxes, practice: Compass };
+const GROUP_TITLE = { team: "Team", platform: "Platform", practice: "Practice" };
 
 /** The name of the step or requirement a piece of feedback is about. */
 function partOf(o: Owned, itemId?: string): string {
@@ -27,8 +29,8 @@ function partOf(o: Owned, itemId?: string): string {
 }
 
 /**
- * What the signed-in person answers for: the processes and standards of their teams and units,
- * what needs doing about them now, and how the rest stands.
+ * What the signed-in person answers for: what their teams maintain and what belongs to their
+ * platforms and practices, what needs doing about it now, and how the rest stands.
  */
 export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
   processes: Process[]; standards: Standard[]; feedback: FeedbackByTarget;
@@ -39,10 +41,12 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
   const { catalog } = useCatalog();
   const perms = usePerms();
   const actions = useFeedbackActions();
-  const teams = useMemo(() => myTeams(perms), [perms]);
-  const [team, setTeam] = useState<string | null>(null); // null: all of mine
+  const groups = useMemo(() => myGroups(perms), [perms]);
+  const [group, setGroup] = useState<string | null>(null); // a groupKey; null: all of mine
   const [busy, setBusy] = useState<string | null>(null);
-  const only = team && teams.includes(team) ? team : null;
+  const only = group && groups.some((g) => groupKey(g) === group) ? group : null;
+  const nameOf = (g: Group) => groupName(catalog, g.kind, g.id);
+  const via = (o: Owned) => o.groups.map(nameOf).join(", ");
   const { owned, tasks } = useMemo(() => responsibilities(perms, only, processes, standards, feedback), [perms, only, processes, standards, feedback]);
 
   const of = (...kinds: Task["kind"][]) => tasks.filter((t) => kinds.includes(t.kind));
@@ -53,11 +57,17 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
   };
   const Icon = ({ o }: { o: Owned }) => (o.kind === "process" ? <Workflow size={15} aria-label="Process" /> : <ShieldCheck size={15} aria-label="Standard" />);
 
-  if (teams.length === 0) {
+  if (groups.length === 0) {
     return (
       <div className="page mine">
         <h1>My responsibilities</h1>
-        <p className="lead">Nothing is assigned to you. A process or standard becomes yours when an admin makes you <b>Owner</b> for the team or unit that owns it, or <b>Standards editor</b> for a unit.</p>
+        <p className="lead">Nothing is assigned to you. A process or standard becomes yours in one of these ways, each given by an admin:</p>
+        <ul className="mine-ways">
+          <li><Users size={15} /><span>You are <b>Owner</b> of the team that maintains it: you confirm its reviews and answer its feedback.</span></li>
+          <li><Boxes size={15} /><span>You are <b>Platform owner</b> of the platform it belongs to: you may also change it.</span></li>
+          <li><Compass size={15} /><span>You are <b>Practice owner</b> of the practice it belongs to: you may also change it.</span></li>
+        </ul>
+        <p className="muted">Who belongs to which team, platform and practice is shown under <a href={href({ page: "catalog" })}>Teams &amp; tools</a>.</p>
       </div>
     );
   }
@@ -66,11 +76,14 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
     <div className="page mine">
       <header className="mine-head">
         <h1>My responsibilities</h1>
-        <p className="lead">The processes and standards of {teams.length === 1 ? <b>{teamName(catalog, teams[0])}</b> : "your teams and units"}: what needs you now, and how everything else stands.</p>
-        {teams.length > 1 && (
+        <p className="lead">The processes and standards of {groups.length === 1 ? <b>{nameOf(groups[0])}</b> : "your teams, platforms and practices"}: what needs you now, and how everything else stands.</p>
+        {groups.length > 1 && (
           <div className="chips" role="group" aria-label="Show what belongs to">
-            <button className={`chip ${team === null ? "on" : ""}`} aria-pressed={team === null} onClick={() => setTeam(null)}>All of mine</button>
-            {teams.map((t) => <button key={t} className={`chip ${team === t ? "on" : ""}`} aria-pressed={team === t} onClick={() => setTeam(t)}><Users size={13} />{teamName(catalog, t)}</button>)}
+            <button className={`chip ${only === null ? "on" : ""}`} aria-pressed={only === null} onClick={() => setGroup(null)}>All of mine</button>
+            {groups.map((g) => {
+              const Icon = GROUP_ICON[g.kind];
+              return <button key={groupKey(g)} className={`chip ${only === groupKey(g) ? "on" : ""}`} aria-pressed={only === groupKey(g)} title={GROUP_TITLE[g.kind]} onClick={() => setGroup(groupKey(g))}><Icon size={13} aria-label={GROUP_TITLE[g.kind]} />{nameOf(g)}</button>;
+            })}
           </div>
         )}
       </header>
@@ -94,7 +107,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
             {[...overdue, ...soon].map(({ item: o }) => (
               <li key={o.kind + o.doc.id}>
                 <Icon o={o} />
-                <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a><em>{teamName(catalog, o.team)}{o.doc.review?.lastReviewedAt ? ` · last reviewed ${o.doc.review.lastReviewedAt}${o.doc.review.reviewedBy ? ` by ${o.doc.review.reviewedBy}` : ""}` : " · never reviewed"}</em></span>
+                <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a><em>{via(o)}{o.doc.review?.lastReviewedAt ? ` · last reviewed ${o.doc.review.lastReviewedAt}${o.doc.review.reviewedBy ? ` by ${o.doc.review.reviewedBy}` : ""}` : " · never reviewed"}</em></span>
                 <span className={`tier-tag review-${o.review.state}`}>{o.review.label}</span>
                 <a className="btn small" href={pageOf(o)}>Read it<ArrowUpRight size={13} /></a>
                 <button className="btn small primary" disabled={busy === o.kind + o.doc.id} onClick={() => review(o)} title={`Records today and your name as the review of this ${noun(o.kind)}`}><Check size={14} />Still correct</button>
@@ -146,18 +159,18 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
 
       <section className="admin-card" aria-labelledby="mine-all">
         <h2 id="mine-all">Everything that is yours <span>{owned.length}</span></h2>
-        {owned.length === 0 && <p className="muted">{teams.map((t) => teamName(catalog, t)).join(", ")} {teams.length === 1 ? "does" : "do"} not own a process or standard yet.</p>}
+        {owned.length === 0 && <p className="muted">Nothing belongs to {(only ? groups.filter((g) => groupKey(g) === only) : groups).map(nameOf).join(", ")} yet.</p>}
         {owned.length > 0 && (
           <div className="mine-table-wrap">
             <table className="mine-table">
-              <thead><tr><th>Name</th><th>Owned by</th><th>Status</th><th>Review</th><th>Open feedback</th><th>Last change</th></tr></thead>
+              <thead><tr><th>Name</th><th>Yours through</th><th>Status</th><th>Review</th><th>Open feedback</th><th>Last change</th></tr></thead>
               <tbody>
                 {owned.map((o) => {
                   const m: DocMeta | undefined = meta[o.kind][o.doc.id];
                   return (
                     <tr key={o.kind + o.doc.id}>
                       <td><a href={pageOf(o)}><Icon o={o} />{o.doc.title}</a></td>
-                      <td>{teamName(catalog, o.team)}</td>
+                      <td>{via(o)}</td>
                       <td>{o.status === "active" ? "In use" : <span className={`tier-tag status-${o.status}`}>{STATUS_LABEL[o.status]}</span>}</td>
                       <td>{o.review.state === "ok" ? o.review.label : o.review.state === "none" ? <span className="muted">—</span> : <span className={`tier-tag review-${o.review.state}`}>{o.review.label}</span>}</td>
                       <td>{o.open.length ? <a href={pageOf(o, true)} className="tier-tag flagged">{o.open.length} open</a> : <span className="muted">none</span>}</td>

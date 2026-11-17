@@ -62,10 +62,12 @@ type Version struct {
 	SavedBy string    `json:"savedBy"`
 	Note    string    `json:"note"` // what changed, in the words of whoever saved it
 	Deleted bool      `json:"deleted"`
-	// Owner and Status of the document as it was in this version: who may see it follows from
-	// them (a version that was a draft stays with the people who work on the document).
-	Owner  string `json:"-"`
-	Status string `json:"-"`
+	// What the document belonged to and its status in this version: who may see it follows
+	// from them (a version that was a draft stays with the people who work on the document).
+	Owner    string `json:"-"`
+	Platform string `json:"-"`
+	Practice string `json:"-"`
+	Status   string `json:"-"`
 }
 
 // Storable reports whether text can be stored: the database refuses a NUL character and
@@ -201,6 +203,19 @@ func (s *Store) Put(ctx context.Context, kind, id string, body []byte, by string
 // catalog its "id" must equal the id. Saving an unchanged body creates no version
 // (changed=false). A *Conflict is returned when c.Base is not the current version.
 func (s *Store) Save(ctx context.Context, c Change) (doc Doc, changed bool, err error) {
+	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		doc, changed, err = SaveIn(ctx, tx, c)
+		return err
+	})
+	if err != nil {
+		return Doc{}, false, err
+	}
+	return doc, changed, nil
+}
+
+// SaveIn is Save inside a transaction of the caller, for changes that must go together with
+// others (converting an older database).
+func SaveIn(ctx context.Context, tx pgx.Tx, c Change) (doc Doc, changed bool, err error) {
 	kind, id := c.Kind, c.ID
 	if !ValidKind(kind) || !ValidID(id) || (kind == Catalog && id != CatalogID) {
 		return doc, false, fmt.Errorf("%w: id %q", ErrInvalid, id)
@@ -228,51 +243,45 @@ func (s *Store) Save(ctx context.Context, c Change) (doc Doc, changed bool, err 
 	if r := []rune(note); len(r) > MaxNote {
 		note = string(r[:MaxNote])
 	}
-	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		if err := lock(ctx, tx, kind, id); err != nil {
-			return err
-		}
-		cur, err := current(ctx, tx, kind, id)
-		if err != nil {
-			return err
-		}
-		if c.Check != nil {
-			if err := c.Check(cur); err != nil {
-				return err
-			}
-		}
-		if err := checkBase(c.Base, cur); err != nil {
-			return err
-		}
-		if cur != nil && bytes.Equal(cur.Body, pretty) {
-			doc = *cur
-			return nil
-		}
-		// continue the numbering even if the document was deleted in between
-		var next int
-		if err := tx.QueryRow(ctx, `select coalesce(max(version), 0) + 1 from document_versions where kind = $1 and id = $2`, kind, id).Scan(&next); err != nil {
-			return err
-		}
-		err = tx.QueryRow(ctx, `insert into documents (kind, id, version, body, updated_by) values ($1, $2, $3, $4, $5)
-			on conflict (kind, id) do update set version = excluded.version, body = excluded.body, updated_by = excluded.updated_by, updated_at = now()
-			returning kind, id, version, body, updated_at, updated_by`, kind, id, next, pretty, c.By).
-			Scan(&doc.Kind, &doc.ID, &doc.Version, &doc.Body, &doc.UpdatedAt, &doc.UpdatedBy)
-		if err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `insert into document_versions (kind, id, version, body, saved_by, note) values ($1, $2, $3, $4, $5, $6)`, kind, id, next, pretty, c.By, note); err != nil {
-			return err
-		}
-		changed = true
-		if c.After != nil {
-			return c.After(ctx, tx, doc)
-		}
-		return nil
-	})
-	if err != nil {
-		return Doc{}, false, err
+	if err := lock(ctx, tx, kind, id); err != nil {
+		return doc, false, err
 	}
-	return doc, changed, nil
+	cur, err := current(ctx, tx, kind, id)
+	if err != nil {
+		return doc, false, err
+	}
+	if c.Check != nil {
+		if err := c.Check(cur); err != nil {
+			return doc, false, err
+		}
+	}
+	if err := checkBase(c.Base, cur); err != nil {
+		return doc, false, err
+	}
+	if cur != nil && bytes.Equal(cur.Body, pretty) {
+		return *cur, false, nil
+	}
+	// continue the numbering even if the document was deleted in between
+	var next int
+	if err := tx.QueryRow(ctx, `select coalesce(max(version), 0) + 1 from document_versions where kind = $1 and id = $2`, kind, id).Scan(&next); err != nil {
+		return doc, false, err
+	}
+	err = tx.QueryRow(ctx, `insert into documents (kind, id, version, body, updated_by) values ($1, $2, $3, $4, $5)
+		on conflict (kind, id) do update set version = excluded.version, body = excluded.body, updated_by = excluded.updated_by, updated_at = now()
+		returning kind, id, version, body, updated_at, updated_by`, kind, id, next, pretty, c.By).
+		Scan(&doc.Kind, &doc.ID, &doc.Version, &doc.Body, &doc.UpdatedAt, &doc.UpdatedBy)
+	if err != nil {
+		return doc, false, err
+	}
+	if _, err := tx.Exec(ctx, `insert into document_versions (kind, id, version, body, saved_by, note) values ($1, $2, $3, $4, $5, $6)`, kind, id, next, pretty, c.By, note); err != nil {
+		return doc, false, err
+	}
+	if c.After != nil {
+		if err := c.After(ctx, tx, doc); err != nil {
+			return doc, false, err
+		}
+	}
+	return doc, true, nil
 }
 
 // Delete removes a document and records the deletion in its history. See Remove.
@@ -317,7 +326,8 @@ func (s *Store) Remove(ctx context.Context, r Removal) error {
 
 // History lists the versions of a document, newest first.
 func (s *Store) History(ctx context.Context, kind, id string) ([]Version, error) {
-	rows, err := s.Pool.Query(ctx, `select version, saved_at, saved_by, note, body is null, coalesce(body->>'owner', ''), coalesce(body->>'status', '')
+	rows, err := s.Pool.Query(ctx, `select version, saved_at, saved_by, note, body is null, coalesce(body->>'owner', ''),
+		coalesce(body->>'platform', ''), coalesce(body->>'practice', ''), coalesce(body->>'status', '')
 		from document_versions where kind = $1 and id = $2 order by version desc`, kind, id)
 	if err != nil {
 		return nil, err
@@ -326,7 +336,7 @@ func (s *Store) History(ctx context.Context, kind, id string) ([]Version, error)
 	out := []Version{}
 	for rows.Next() {
 		var v Version
-		if err := rows.Scan(&v.Version, &v.SavedAt, &v.SavedBy, &v.Note, &v.Deleted, &v.Owner, &v.Status); err != nil {
+		if err := rows.Scan(&v.Version, &v.SavedAt, &v.SavedBy, &v.Note, &v.Deleted, &v.Owner, &v.Platform, &v.Practice, &v.Status); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
@@ -458,8 +468,10 @@ type Target struct {
 	Kind   string
 	ID     string
 	Title  string
-	Owner  string            // team or unit id
-	Status string            // "" counts as active
+	Owner    string            // team id
+	Platform string            // platform id
+	Practice string            // practice id
+	Status   string            // "" counts as active
 	Items  map[string]string // step or requirement id -> fingerprint of its content
 	Titles map[string]string // step or requirement id -> title
 }
@@ -472,6 +484,8 @@ func TargetOf(d Doc) (Target, bool) {
 	var p struct {
 		Title        string            `json:"title"`
 		Owner        string            `json:"owner"`
+		Platform     string            `json:"platform"`
+		Practice     string            `json:"practice"`
 		Status       string            `json:"status"`
 		Steps        []json.RawMessage `json:"steps"`
 		Requirements []json.RawMessage `json:"requirements"`
@@ -479,7 +493,7 @@ func TargetOf(d Doc) (Target, bool) {
 	if json.Unmarshal(d.Body, &p) != nil {
 		return Target{}, false
 	}
-	t := Target{Kind: d.Kind, ID: d.ID, Title: p.Title, Owner: p.Owner, Status: p.Status, Items: map[string]string{}, Titles: map[string]string{}}
+	t := Target{Kind: d.Kind, ID: d.ID, Title: p.Title, Owner: p.Owner, Platform: p.Platform, Practice: p.Practice, Status: p.Status, Items: map[string]string{}, Titles: map[string]string{}}
 	items := p.Steps
 	if d.Kind == Standard {
 		items = p.Requirements
@@ -509,24 +523,27 @@ func Fingerprint(v any) string {
 
 // Named is an entry of one of the lists.
 type Named struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Kind    string `json:"kind,omitempty"`
-	Contact string `json:"contact,omitempty"`
-	URL     string `json:"url,omitempty"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Contact     string `json:"contact,omitempty"`
+	URL         string `json:"url,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
-// Lists is the catalog document.
+// Lists is the catalog document. A list that is missing is empty.
 type Lists struct {
 	Tiers        []Named `json:"tiers"`
 	Environments []Named `json:"environments"`
 	Languages    []Named `json:"languages"`
 	Teams        []Named `json:"teams"`
+	Practices    []Named `json:"practices"`
+	Platforms    []Named `json:"platforms"`
+	Categories   []Named `json:"categories"`
 	Tools        []Named `json:"tools"`
 }
 
 // EmptyCatalog is served before any lists exist.
-const EmptyCatalog = `{"tiers":[],"environments":[],"languages":[],"teams":[],"tools":[]}`
+const EmptyCatalog = `{"tiers":[],"environments":[],"languages":[],"teams":[],"practices":[],"platforms":[],"categories":[],"tools":[]}`
 
 // Lists returns the catalog. A missing catalog is empty, not an error.
 func (s *Store) Lists(ctx context.Context) (Lists, error) {
@@ -560,12 +577,46 @@ func Names(list []Named, ids []string) []string {
 	return out
 }
 
-// Team finds a team or unit.
-func (l Lists) Team(id string) (Named, bool) {
-	for _, t := range l.Teams {
-		if t.ID == id {
-			return t, true
+func find(list []Named, id string) (Named, bool) {
+	for _, n := range list {
+		if n.ID == id {
+			return n, true
 		}
 	}
 	return Named{}, false
+}
+
+// Team finds a team.
+func (l Lists) Team(id string) (Named, bool) { return find(l.Teams, id) }
+
+// Platform finds a platform.
+func (l Lists) Platform(id string) (Named, bool) { return find(l.Platforms, id) }
+
+// Practice finds a practice.
+func (l Lists) Practice(id string) (Named, bool) { return find(l.Practices, id) }
+
+// Category finds a category.
+func (l Lists) Category(id string) (Named, bool) { return find(l.Categories, id) }
+
+// ByKey returns one list by its key in the document ("teams", "platforms", ...).
+func (l Lists) ByKey(key string) []Named {
+	switch key {
+	case "tiers":
+		return l.Tiers
+	case "environments":
+		return l.Environments
+	case "languages":
+		return l.Languages
+	case "teams":
+		return l.Teams
+	case "practices":
+		return l.Practices
+	case "platforms":
+		return l.Platforms
+	case "categories":
+		return l.Categories
+	case "tools":
+		return l.Tools
+	}
+	return nil
 }

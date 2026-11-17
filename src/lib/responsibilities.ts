@@ -1,16 +1,22 @@
 import type { Feedback, FeedbackByTarget, Perms, Process, Standard, TargetKind } from "../types";
 import { reviewInfo, statusOf, type ReviewInfo } from "./lifecycle";
+import type { GroupKind } from "./members";
+
+/** A team, platform or practice somebody belongs to. */
+export interface Group { kind: GroupKind; id: string }
+/** A name for a group that is unique across the three kinds (a team and a practice may share an id). */
+export const groupKey = (g: Group) => `${g.kind}:${g.id}`;
 
 /**
- * What somebody answers for: the processes and standards of the teams and units they own (the
- * Owner role) or edit standards for. From these the "My responsibilities" page shows what
- * needs doing now and how everything else stands.
+ * What somebody answers for: what the teams they are Owner of maintain, and what belongs to the
+ * platforms and practices they own. From these the "My responsibilities" page shows what needs
+ * doing now and how everything else stands.
  */
 export interface Owned {
   kind: TargetKind;
   doc: Process | Standard;
-  /** The team or unit through which this is theirs. */
-  team: string;
+  /** The groups of the person through which this is theirs, teams first. */
+  groups: Group[];
   status: "draft" | "active" | "deprecated";
   review: ReviewInfo;
   /** Feedback that nobody marked as fixed yet, oldest first. */
@@ -26,32 +32,48 @@ export interface Task {
   feedback?: Feedback;
 }
 
-/** The teams and units somebody answers for. */
-export function myTeams(perms: Perms): string[] {
-  return [...new Set([...perms.owns, ...perms.standardUnits])].sort();
+const KIND_ORDER: GroupKind[] = ["team", "platform", "practice"];
+const sorted = (ids: string[] | undefined) => [...new Set(ids ?? [])].sort();
+
+/** The teams, platforms and practices somebody belongs to: teams first, then platforms, then practices. */
+export function myGroups(perms: Perms): Group[] {
+  return [
+    ...sorted(perms.owns).map((id) => ({ kind: "team" as const, id })),
+    ...sorted(perms.platforms).map((id) => ({ kind: "platform" as const, id })),
+    ...sorted(perms.practices).map((id) => ({ kind: "practice" as const, id })),
+  ];
 }
 
 /**
- * Whether somebody answers for a process or a standard of this team or unit. Being Owner for it
- * covers both. Editing a unit's standards covers its standards only - the same rule the server
- * applies when a review is confirmed or feedback is closed.
+ * Through which of the person's groups a process or standard is theirs: its team (when they are
+ * Owner of it), its platform and its practice (when they own them). Empty: it is not theirs.
  */
-export const answersFor = (perms: Perms, kind: TargetKind, owner?: string) =>
-  !!owner && (perms.owns.includes(owner) || (kind === "standard" && perms.standardUnits.includes(owner)));
+export function groupsOf(perms: Perms, doc: { owner?: string; platform?: string; practice?: string }): Group[] {
+  const out: Group[] = [];
+  if (doc.owner && (perms.owns ?? []).includes(doc.owner)) out.push({ kind: "team", id: doc.owner });
+  if (doc.platform && (perms.platforms ?? []).includes(doc.platform)) out.push({ kind: "platform", id: doc.platform });
+  if (doc.practice && (perms.practices ?? []).includes(doc.practice)) out.push({ kind: "practice", id: doc.practice });
+  return out;
+}
 
 const ORDER: TaskKind[] = ["review-overdue", "feedback", "review-soon", "draft", "no-rhythm"];
 
-/** `only` narrows it to one of the person's teams or units; null: all of them. */
+/** `only` narrows it to one of the person's groups (its `groupKey`); null: all of them. */
 export function responsibilities(perms: Perms, only: string | null, processes: Process[], standards: Standard[], feedback: FeedbackByTarget, today?: string): { owned: Owned[]; tasks: Task[] } {
-  const mine = (kind: TargetKind, owner?: string) => answersFor(perms, kind, owner) && (only === null || owner === only);
-  const item = (kind: TargetKind, doc: Process | Standard): Owned => ({
-    kind, doc, team: doc.owner!, status: statusOf(doc), review: reviewInfo(doc, today),
-    open: (feedback[kind][doc.id] ?? []).filter((f) => !f.resolved).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
-  });
+  const item = (kind: TargetKind, doc: Process | Standard): Owned | null => {
+    const groups = groupsOf(perms, doc);
+    if (!groups.length || (only !== null && !groups.some((g) => groupKey(g) === only))) return null;
+    return {
+      kind, doc, groups, status: statusOf(doc), review: reviewInfo(doc, today),
+      open: (feedback[kind][doc.id] ?? []).filter((f) => !f.resolved).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    };
+  };
+  const first = (o: Owned) => `${KIND_ORDER.indexOf(o.groups[0].kind)}:${o.groups[0].id}`;
   const owned = [
-    ...processes.filter((p) => mine("process", p.owner)).map((p) => item("process", p)),
-    ...standards.filter((s) => mine("standard", s.owner)).map((s) => item("standard", s)),
-  ].sort((a, b) => a.team.localeCompare(b.team) || a.doc.title.localeCompare(b.doc.title));
+    ...processes.map((p) => item("process", p)),
+    ...standards.map((s) => item("standard", s)),
+  ].filter((o): o is Owned => o !== null)
+    .sort((a, b) => first(a).localeCompare(first(b)) || a.doc.title.localeCompare(b.doc.title));
 
   const tasks: Task[] = [];
   for (const o of owned) {

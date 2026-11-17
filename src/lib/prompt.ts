@@ -39,8 +39,12 @@ A. ACTORS (the swim lanes)
 
 - When an actor is one of the TEAMS listed below, set its "teamId" to that team's id and use the team's name as "name".
 
-B. OWNER AND TIERS
-- "owner": the id of the team that owns the process, ONLY from the TEAMS list below. If unknown or not on the list, leave it out.
+B. OWNER, WHAT IT BELONGS TO, AND WHERE IT APPLIES
+- "owner": the id of the team that maintains the process, ONLY from the TEAMS list below. If unknown or not on the list, leave it out.
+- "category": the id of the category it is grouped under, ONLY from the CATEGORIES list below. Pick the closest one; leave it out if none fits.
+- "platform": the id of the platform the process is about (the system or service it gives access to or changes), ONLY from the PLATFORMS list below. Leave it out if it is not about one platform.
+- "practice": the id of the practice whose way of working it describes, ONLY from the PRACTICES list below. Leave it out if no practice is named or obvious.
+- "rigour": how binding the process is. "mandatory" when the text says this is the only allowed way (must, required, only way). "recommended" when it is the expected way but another way is allowed with a good reason (should, recommended). "optional" when it is a help that may be used (may, can, optional). Leave it out when the text does not say.
 - "tiers": the ids of the application tiers the process applies to, ONLY from the TIERS list below. If the text does not restrict the process to certain tiers, leave "tiers" out (that means: all tiers).
 
 - "environments": the ids of the environments the process applies to, ONLY from the ENVIRONMENTS list below. If the text does not restrict it, leave "environments" out (that means: all environments).
@@ -77,7 +81,7 @@ E. FLOW ("next")
 - Every step has id, title, actor, type and next.
 - Every step id used in "next.to" exists; every "actor" exists in "actors".
 - Every decision has 2+ labelled paths. Every "subprocess" step has "subProcessId".
-- "owner", "teamId", "tool", "tiers", "environments", "languages" and "standards" only use ids from the lists below.
+- "owner", "teamId", "category", "platform", "practice", "tool", "tiers", "environments", "languages" and "standards" only use ids from the lists below. "rigour" is "mandatory", "recommended" or "optional", or left out.
 - All ids are kebab-case. No field outside the schema.
 
 # EXISTING PROCESSES (usable in "subProcessId" and prerequisite "processId")
@@ -85,6 +89,15 @@ ${knownList}
 
 # TEAMS (usable in "owner" and actor "teamId")
 ${list(catalog?.teams)}
+
+# CATEGORIES (usable in "category")
+${list(catalog?.categories)}
+
+# PLATFORMS (usable in "platform")
+${list(catalog?.platforms)}
+
+# PRACTICES (usable in "practice")
+${list(catalog?.practices)}
 
 # TOOLS (usable in step "tool")
 ${list(catalog?.tools)}
@@ -107,7 +120,7 @@ ${JSON.stringify(schema)}
 \`\`\`
 
 # EXAMPLE OF A CORRECT ANSWER
-(The ids in the example are illustrative. For "owner", "teamId", "tool", "tiers" and "languages" use only the lists above.)
+(The ids in the example are illustrative. For "owner", "teamId", "category", "platform", "practice", "tool", "tiers" and "languages" use only the lists above.)
 \`\`\`json
 ${JSON.stringify(example, null, 2)}
 \`\`\`
@@ -157,7 +170,6 @@ ${list}
 /** The instruction block for turning a policy or guideline text into a standard. */
 export function standardBasePrompt(catalog?: Catalog, processes: KnownProcess[] = []): string {
   const list = (rows: { id: string; name: string }[] = []) => (rows.length ? rows.map((r) => `- "${r.id}" - ${r.name}`).join("\n") : "- (none yet)");
-  const units = (catalog?.teams ?? []).filter((t) => t.kind && t.kind !== "team");
   return `# ROLE
 You convert policies, guidelines and engineering rules into a strict JSON format used by the "Process Manager" tool. Each standard becomes a readable document for engineers, a skill for AI coding assistants, and a checklist for an AI pull request reviewer, so every requirement must be precise and testable.
 
@@ -172,16 +184,19 @@ You convert policies, guidelines and engineering rules into a strict JSON format
 A. THE STANDARD
 - "title": short name of the topic, e.g. "Secure logging".
 - "summary": what it protects or achieves, in one or two sentences.
-- "owner": the id of the unit that issues it, ONLY from the UNITS list below.
+- "owner": the id of the team that issues and maintains it, ONLY from the TEAMS list below. If the text does not say, pick the team that is closest to the subject.
+- "category": the id of the category it is grouped under, ONLY from the CATEGORIES list below. Leave it out if none fits.
+- "practice": the id of the practice that sets the rule (for example cyber security or engineering), ONLY from the PRACTICES list below. Leave it out if no practice is named or obvious.
+- "platform": the id of the platform the standard is about, ONLY from the PLATFORMS list below. Leave it out when it applies whatever the platform.
 - "scope": what it covers and what is out of scope, if the text says so.
 - "tiers", "languages", "environments": only when the WHOLE standard is limited to some; otherwise leave them out. Use ids from the lists below.
-- "status": always "draft", so that the unit reviews it before it is published. Add "review": { "intervalMonths": 12 } unless the text names another rhythm.
+- "status": always "draft", so that the owner team reviews it before it is published. Add "review": { "intervalMonths": 12 } unless the text names another rhythm.
 - "exceptionProcessId": the id of the process for asking for an exception, ONLY from the EXISTING PROCESSES list.
 
 B. REQUIREMENTS (the core)
 - One requirement = one rule that can be checked on its own. Split "encrypt data and rotate keys yearly" into two.
 - "id": upper case, a short prefix for the standard plus a running number, e.g. "LOG-01", "LOG-02". Unique. Keep existing ids when changing a standard.
-- "level": "must" for mandatory wording (must, shall, required, never, always), "should" for expected (should, recommended), "may" for optional.
+- "level": "must" for mandatory wording (must, shall, required, never, always), "should" for expected (should, recommended), "may" for optional. A standard has no "rigour" field: how binding it is follows from the levels of its requirements.
 - "statement": the rule itself, testable, one or two sentences. No reasons here.
 - "rationale": why the rule exists, if the text says.
 - "guidance": how to comply, one concrete action per item.
@@ -195,11 +210,20 @@ B. REQUIREMENTS (the core)
 - schemaVersion is "1.0"; "status" is "draft"; "updatedAt" is "${today()}".
 - Every requirement has id, title, level, statement and verification.
 - Requirement ids are unique and upper case with dashes.
-- "owner", "tiers", "languages", "environments", "processId" and "exceptionProcessId" only use ids from the lists below.
+- "owner", "category", "practice", "platform", "tiers", "languages", "environments", "processId" and "exceptionProcessId" only use ids from the lists below.
 - No field outside the schema.
 
-# UNITS (usable in "owner")
-${list(units)}
+# TEAMS (usable in "owner")
+${list(catalog?.teams)}
+
+# CATEGORIES (usable in "category")
+${list(catalog?.categories)}
+
+# PRACTICES (usable in "practice")
+${list(catalog?.practices)}
+
+# PLATFORMS (usable in "platform")
+${list(catalog?.platforms)}
 
 # TIERS
 ${list(catalog?.tiers)}

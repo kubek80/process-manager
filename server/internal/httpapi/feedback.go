@@ -10,6 +10,7 @@ import (
 	"github.com/kubek80/process-manager/server/internal/docs"
 	"github.com/kubek80/process-manager/server/internal/feedback"
 	"github.com/kubek80/process-manager/server/internal/notify"
+	"github.com/kubek80/process-manager/server/internal/rbac"
 )
 
 // maxFeedbackPerHour is how much one person can report in an hour.
@@ -72,16 +73,19 @@ func (v *viewer) target(kind, id string) *docs.Target {
 // hidden: feedback on a draft is for the people who can see the draft.
 func (v *viewer) hidden(kind, id string) bool {
 	t := v.target(kind, id)
-	return t != nil && t.Status == "draft" && !v.s.CanManageFeedback(kind, t.Owner)
+	return t != nil && t.Status == "draft" && !v.s.CanManageFeedback(kind, belongsTo(t))
 }
 
-// canManage: whoever may edit the process or standard, and the team or unit that owns it.
-func (v *viewer) canManage(kind, id string) bool {
-	owner := ""
-	if t := v.target(kind, id); t != nil {
-		owner = t.Owner
+func belongsTo(t *docs.Target) rbac.Belongs {
+	if t == nil {
+		return rbac.Belongs{}
 	}
-	return v.s.CanManageFeedback(kind, owner)
+	return rbac.Belongs{Owner: t.Owner, Platform: t.Platform, Practice: t.Practice}
+}
+
+// canManage: whoever may edit the process or standard, and the team that owns it.
+func (v *viewer) canManage(kind, id string) bool {
+	return v.s.CanManageFeedback(kind, belongsTo(v.target(kind, id)))
 }
 
 func (v *viewer) view(it feedback.Item) itemView {

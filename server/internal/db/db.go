@@ -55,10 +55,22 @@ func WithLock(ctx context.Context, pool *pgxpool.Pool, key int64, fn func() erro
 	}
 }
 
-// Migrate applies the SQL files that have not run yet. Safe to call on every start, and from
-// several instances at once - also on a database that is still completely empty.
-func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
-	return WithLock(ctx, pool, lockMigrate, func() error { return migrate(ctx, pool) })
+// Migrate applies the SQL files that have not run yet, then the conversions of content given
+// as after (each must find nothing to do when it has run before). Safe to call on every start,
+// and from several instances at once - also on a database that is still completely empty: one
+// instance does the work under a lock, the others wait and then find it done.
+func Migrate(ctx context.Context, pool *pgxpool.Pool, after ...func(context.Context) error) error {
+	return WithLock(ctx, pool, lockMigrate, func() error {
+		if err := migrate(ctx, pool); err != nil {
+			return err
+		}
+		for _, step := range after {
+			if err := step(ctx); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func migrate(ctx context.Context, pool *pgxpool.Pool) error {

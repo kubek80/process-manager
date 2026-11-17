@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, ClipboardCheck, Eye, LayoutGrid, LogOut, Moon, Pencil, Settings2, ShieldCheck, Sun, Users } from "lucide-react";
+import { BookOpen, ClipboardCheck, Eye, LayoutGrid, LogOut, Moon, Pencil, Search, Settings2, ShieldCheck, Sun, Users } from "lucide-react";
 import type { Catalog, DocMeta, Feedback, FeedbackByTarget, Me, Process, Standard, TargetKind } from "./types";
 import {
   ApiError, confirmReview, createFeedback, deleteFeedback, go, href, loadCatalog, loadFeedback, loadMe, loadProcesses, loadStandards, logout, pageTitle, putCatalog, putProcess, putStandard,
@@ -23,6 +23,8 @@ import { confirmDialog, ErrorBoundary, Field, LoadError, Loading, Modal, Notices
 // loaded when first opened: most visits never need them
 const AdminPage = lazy(() => import("./components/AdminPage").then((m) => ({ default: m.AdminPage })));
 const GuidePage = lazy(() => import("./components/GuidePage").then((m) => ({ default: m.GuidePage })));
+const HomePage = lazy(() => import("./components/HomePage").then((m) => ({ default: m.HomePage })));
+const SearchPage = lazy(() => import("./components/SearchPage").then((m) => ({ default: m.SearchPage })));
 const AiDialog = lazy(() => import("./components/AiDialog").then((m) => ({ default: m.AiDialog }))) as typeof import("./components/AiDialog").AiDialog;
 
 function useTheme() {
@@ -397,6 +399,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
           <span className="brand-name">Process Manager</span>
         </a>
         <nav className="nav" aria-label="Main">
+          <a className={`nav-link ${on("home", "search")}`} aria-current={current("home", "search")} href={href({ page: "home" })} aria-label="Home" title="Home: search processes and standards"><Search size={15} /><span>Home</span></a>
           <a className={`nav-link ${on("library", "process")}`} aria-current={current("library", "process")} href={href({ page: "library" })} aria-label="Processes" title="Processes"><LayoutGrid size={15} /><span>Processes</span></a>
           <a className={`nav-link ${on("standards", "standard")}`} aria-current={current("standards", "standard")} href={href({ page: "standards" })} aria-label="Standards" title="Standards"><ShieldCheck size={15} /><span>Standards</span></a>
           {mine.length > 0 && (
@@ -424,6 +427,8 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       {!processes && !error && <Loading page />}
       <ErrorBoundary resetKey={href(route)}>
       <Suspense fallback={<Loading page />}>
+      {processes && route.page === "home" && <HomePage processes={all} standards={standards} />}
+      {processes && route.page === "search" && <SearchPage route={route} processes={all} standards={standards} />}
       {processes && route.page === "library" && (
         <Library processes={all} standardIds={standards.map((s) => s.id)} feedback={feedback.process} onAi={() => setAi("process")}
           onNew={() => setNaming("process")} />
@@ -444,7 +449,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         ? <ProcessPage key={process.id} process={process} meta={processMeta[process.id]} all={all} standards={standards} tab={route.tab} item={route.item}
           onSave={saveProcess} onReload={() => reloadProcess(process.id)} onDelete={(base) => deleteProcess(process.id, base)} onReviewed={(base) => reviewed("process", process.id, base)}
           feedback={feedback.process[process.id] ?? []} />
-        : <div className="page"><h1>Process not found</h1><p className="muted">There is no process “{route.id}”.</p><a className="btn" href="#/">Back to all processes</a></div>)}
+        : <div className="page"><h1>Process not found</h1><p className="muted">There is no process “{route.id}”.</p><a className="btn" href={href({ page: "library" })}>Back to all processes</a></div>)}
       {processes && route.page === "standard" && (standard
         ? <StandardPage key={standard.id} standard={standard} meta={standardMeta[standard.id]} all={standards} processes={all} tab={route.tab} item={route.item}
           onSave={saveStandard} onReload={() => reloadStandard(standard.id)} onDelete={(base) => deleteStandard(standard.id, base)} onReviewed={(base) => reviewed("standard", standard.id, base)}

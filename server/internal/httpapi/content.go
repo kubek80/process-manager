@@ -17,6 +17,7 @@ import (
 	"github.com/kubek80/process-manager/server/internal/audit"
 	"github.com/kubek80/process-manager/server/internal/docs"
 	"github.com/kubek80/process-manager/server/internal/feedback"
+	"github.com/kubek80/process-manager/server/internal/rbac"
 )
 
 // nouns for messages and the audit trail
@@ -47,26 +48,28 @@ func metaOf(d docs.Doc) docMeta {
 	return docMeta{Version: d.Version, UpdatedAt: d.UpdatedAt, UpdatedBy: d.UpdatedBy}
 }
 
-// headOf reads the owning team or unit and the status from a document body.
-func headOf(body []byte) (owner, status string) {
+// headOf reads what a document belongs to (its team, platform and practice) and its status.
+func headOf(body []byte) (rbac.Belongs, string) {
 	var head struct {
-		Owner  string `json:"owner"`
-		Status string `json:"status"`
+		Owner    string `json:"owner"`
+		Platform string `json:"platform"`
+		Practice string `json:"practice"`
+		Status   string `json:"status"`
 	}
 	_ = json.Unmarshal(body, &head)
-	return head.Owner, head.Status
+	return rbac.Belongs{Owner: head.Owner, Platform: head.Platform, Practice: head.Practice}, head.Status
 }
 
-func ownerOf(body []byte) string {
-	owner, _ := headOf(body)
-	return owner
+func belongsOf(body []byte) rbac.Belongs {
+	b, _ := headOf(body)
+	return b
 }
 
 // canSee: a draft is only for the people who work on it - whoever may edit it and the team
-// or unit that owns it. Everything else is for everyone who is signed in.
+// that owns it. Everything else is for everyone who is signed in.
 func canSee(s session, kind string, body []byte) bool {
-	owner, status := headOf(body)
-	return status != "draft" || s.CanManageFeedback(kind, owner)
+	b, status := headOf(body)
+	return status != "draft" || s.CanManageFeedback(kind, b)
 }
 
 func (a *api) listDocs(kind, key string) http.HandlerFunc {
@@ -108,12 +111,22 @@ func (a *api) getCatalog(w http.ResponseWriter, r *http.Request) {
 func denied(w http.ResponseWriter, kind string) {
 	switch kind {
 	case docs.Standard:
-		writeError(w, 403, "Only editors of that unit's standards can change this.")
+		writeError(w, 403, "Only standards editors and the owners of its platform or practice can change this standard.")
 	case docs.Catalog:
 		writeError(w, 403, "Only people who manage the lists can change them.")
 	default:
-		writeError(w, 403, "Only process editors can change processes.")
+		writeError(w, 403, "Only process editors and the owners of its platform or practice can change this process.")
 	}
+}
+
+// deniedFor answers a save whose new content the caller may not store. Somebody who edits
+// for a platform or a practice is told what is missing: it has to stay with one of theirs.
+func deniedFor(w http.ResponseWriter, kind string, s session) {
+	if kind != docs.Catalog && s.EditsSome() {
+		writeError(w, 403, "You can only save a "+noun[kind]+" that belongs to a platform or practice you own.")
+		return
+	}
+	denied(w, kind)
 }
 
 // conflict tells the app that somebody else saved first, and who.
@@ -231,7 +244,8 @@ func (a *api) stillUsed(ctx context.Context, s session, body []byte) error {
 		return err
 	}
 	for _, as := range assignments {
-		if entry := "teams/" + as.Scope; as.Scope != "" && contains(removed, entry) {
+		key := rbac.ScopeList(as.Role)
+		if entry := key + "/" + as.Scope; key != "" && contains(removed, entry) {
 			if roles[entry] == nil {
 				roles[entry] = map[string]bool{}
 			}
@@ -300,9 +314,10 @@ func (a *api) putDoc(kind string) http.HandlerFunc {
 			return
 		}
 		s := who(r)
-		// the right is needed for the unit it belongs to now and for the unit it is moved to
-		if !s.CanEdit(kind, ownerOf(body)) {
-			denied(w, kind)
+		// The right is needed for what it belongs to now and for what it is moved to: an owner of
+		// one platform can neither take over a document of another nor hand theirs away.
+		if !s.CanEdit(kind, belongsOf(body)) {
+			deniedFor(w, kind, s)
 			return
 		}
 		if err := a.Schemas.Validate(kind, body); err != nil {
@@ -327,7 +342,7 @@ func (a *api) putDoc(kind string) http.HandlerFunc {
 		doc, changed, err := a.Docs.Save(r.Context(), docs.Change{
 			Kind: kind, ID: id, Body: body, By: s.Email, Note: note, Base: base,
 			Check: func(current *docs.Doc) error {
-				if current != nil && !s.CanEdit(kind, ownerOf(current.Body)) {
+				if current != nil && !s.CanEdit(kind, belongsOf(current.Body)) {
 					return errDenied
 				}
 				return nil
@@ -372,7 +387,7 @@ func reviewerName(name string) string {
 }
 
 // reviewDoc records that somebody confirmed a process or standard as still correct: today's
-// date and their name. This is the one change the owning team or unit may make themselves -
+// date and their name. This is the one change the owning team may make themselves -
 // they are the ones who are asked to review - besides everyone who may edit it. It is saved as
 // a version like every other change.
 func (a *api) reviewDoc(kind string) http.HandlerFunc {
@@ -384,13 +399,13 @@ func (a *api) reviewDoc(kind string) http.HandlerFunc {
 			a.fail(w, r, err)
 			return
 		}
-		owner, status := headOf(current.Body)
+		belongs, status := headOf(current.Body)
 		switch {
 		case !canSee(s, kind, current.Body):
 			writeError(w, 404, "That does not exist.")
 			return
-		case !s.CanManageFeedback(kind, owner):
-			writeError(w, 403, "Only the team or unit that owns this, and the people who can edit it, can confirm its review.")
+		case !s.CanManageFeedback(kind, belongs):
+			writeError(w, 403, "Only the team that owns this, and the people who can edit it, can confirm its review.")
 			return
 		case status != "" && status != "active":
 			writeError(w, 400, "Only something that is in use is reviewed. Set its status to Active first.")
@@ -453,7 +468,7 @@ func (a *api) deleteDoc(kind string) http.HandlerFunc {
 			Kind: kind, ID: id, By: s.Email, Base: base,
 			Check: func(current *docs.Doc) error {
 				switch {
-				case s.CanEdit(kind, ownerOf(current.Body)):
+				case s.CanEdit(kind, belongsOf(current.Body)):
 					return nil
 				case !canSee(s, kind, current.Body):
 					return docs.ErrNotFound // a draft somebody cannot see does not exist for them
@@ -523,7 +538,7 @@ func (a *api) history(w http.ResponseWriter, r *http.Request) {
 	s := who(r)
 	shown := versions[:0]
 	for _, v := range versions {
-		if v.Deleted || v.Status != "draft" || s.CanManageFeedback(kind, v.Owner) {
+		if v.Deleted || v.Status != "draft" || s.CanManageFeedback(kind, rbac.Belongs{Owner: v.Owner, Platform: v.Platform, Practice: v.Practice}) {
 			shown = append(shown, v)
 		}
 	}

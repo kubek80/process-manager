@@ -4,10 +4,13 @@ import { slugify, uniqueId } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
 import { Field, Modal } from "./ui";
 import { ResourceEditor } from "./Resources";
-import { DimsEditor, LifecycleEditor } from "./Governance";
+import { BelongsEditor, DimsEditor, LifecycleEditor } from "./Governance";
 
-export function ProcessSettings({ process, all, standards, onChange, onClose, onDelete }: {
-  process: Process; all: Process[]; standards: Standard[]; onChange: (p: Process) => void; onClose: () => void; onDelete: () => void;
+export function ProcessSettings({ process, saved, all, standards, onChange, onClose, onDelete }: {
+  process: Process;
+  /** The process as it was saved: whether the person may change it comes from what it belongs to there. */
+  saved: Process;
+  all: Process[]; standards: Standard[]; onChange: (p: Process) => void; onClose: () => void; onDelete: () => void;
 }) {
   const set = (patch: Partial<Process>) => onChange({ ...process, ...patch });
   const pre = process.prerequisites;
@@ -28,9 +31,8 @@ export function ProcessSettings({ process, all, standards, onChange, onClose, on
         <h4>About</h4>
         <Field label="Name" hint="start with a verb"><input value={process.title} maxLength={80} onChange={(e) => set({ title: e.target.value })} /></Field>
         <Field label="Summary" hint="what the reader gets at the end"><textarea rows={2} maxLength={400} value={process.summary} onChange={(e) => set({ summary: e.target.value })} /></Field>
-        <div className="grid3">
-          <Field label="Category"><input value={process.category ?? ""} maxLength={40} placeholder="Cloud" onChange={(e) => set({ category: e.target.value })} /></Field>
-          <Field label="Owning team">
+        <div className="grid2">
+          <Field label="Owning team" hint="reviews it and answers feedback">
             <select value={process.owner ?? ""} onChange={(e) => set({ owner: e.target.value || undefined })}>
               <option value="">Not set</option>
               {catalog.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -39,8 +41,13 @@ export function ProcessSettings({ process, all, standards, onChange, onClose, on
           </Field>
           <Field label="Typical lead time"><input value={process.estimatedDuration ?? ""} maxLength={40} placeholder="3-5 working days" onChange={(e) => set({ estimatedDuration: e.target.value })} /></Field>
         </div>
+
+        <h4>What it belongs to <span className="muted">how readers find it, and who besides the editors may change it</span></h4>
+        <BelongsEditor kind="process" doc={process} saved={saved} onChange={set} />
+
+        <h4>Where it applies</h4>
         <DimsEditor value={process} onChange={set} />
-        <a className="small" href="#/admin/lists">Manage tiers, environments and languages</a>
+        <a className="small" href="#/admin/lists">Manage the lists</a>
         <Field label="Tags" hint="comma separated">
           <input value={(process.tags ?? []).join(", ")} onChange={(e) => set({ tags: e.target.value.split(",").map((t) => t.trimStart().slice(0, 30)).slice(0, 12) })} />
         </Field>

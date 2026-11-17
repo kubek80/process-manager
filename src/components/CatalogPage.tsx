@@ -1,30 +1,51 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpRight, Code2, Server, ExternalLink, Layers, Plus, Search, Trash2, Users, Wrench } from "lucide-react";
-import type { Catalog, Process, Standard, Team } from "../types";
-import { TeamMembers } from "./TeamMembers";
+import { ArrowDown, ArrowUp, ArrowUpRight, Boxes, Code2, Compass, Server, ExternalLink, Layers, Plus, Search, Tag, Trash2, Users, Wrench } from "lucide-react";
+import type { Catalog, Membership, Process, Standard } from "../types";
+import { GroupMembers } from "./TeamMembers";
+import type { GroupKind } from "../lib/members";
 import { slugify, uniqueId } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
 import { useDraft } from "../lib/draft";
 import { BehindBanner, ConflictDialog, SaveBar } from "./Editing";
-import { UNIT_KINDS } from "../lib/catalog";
-import { go } from "../lib/store";
+import { go, loadMembers } from "../lib/store";
 import { hasErrors, validateCatalog } from "../lib/validate";
 import { Field, IssueList, notify } from "./ui";
 
-type Key = "teams" | "tools" | "tiers" | "environments" | "languages";
-type Row = { id: string; name: string; kind?: string; contact?: string; url?: string; description?: string };
+type Key = "teams" | "practices" | "platforms" | "categories" | "tools" | "tiers" | "environments" | "languages";
+type Row = { id: string; name: string; contact?: string; url?: string; description?: string };
 
 const KINDS: Record<Key, {
   title: string; noun: string; icon: typeof Users; color: string; blurb: string;
   fields: { field: "contact" | "url" | "description"; label: string; placeholder: string; long?: boolean }[];
 }> = {
   teams: {
-    title: "Teams and units", noun: "team", icon: Users, color: "#0d9488",
-    blurb: "Teams own processes. Units also issue standards.",
+    title: "Teams", noun: "team", icon: Users, color: "#0d9488",
+    blurb: "Maintain processes and standards, and take part in them.",
     fields: [
       { field: "contact", label: "How to reach them", placeholder: "Slack #cloud-platform, a mailbox or a queue" },
       { field: "description", label: "What they do", placeholder: "One sentence on what this team is responsible for", long: true },
     ],
+  },
+  practices: {
+    title: "Practices", noun: "practice", icon: Compass, color: "#7c3aed",
+    blurb: "Ways of working, such as cyber security or engineering.",
+    fields: [
+      { field: "contact", label: "How to reach them", placeholder: "Slack #engineering-practice or a mailbox" },
+      { field: "description", label: "What it covers", placeholder: "One sentence on what this practice agrees on", long: true },
+    ],
+  },
+  platforms: {
+    title: "Platforms", noun: "platform", icon: Boxes, color: "#0284c7",
+    blurb: "Systems and services people get access to or build on.",
+    fields: [
+      { field: "contact", label: "How to reach its owners", placeholder: "Slack #cloud-platform or a mailbox" },
+      { field: "description", label: "What it is", placeholder: "One sentence on what this platform is for", long: true },
+    ],
+  },
+  categories: {
+    title: "Categories", noun: "category", icon: Tag, color: "#be123c",
+    blurb: "How processes and standards are grouped for readers.",
+    fields: [{ field: "description", label: "What belongs here", placeholder: "e.g. Getting and changing cloud accounts", long: true }],
   },
   tools: {
     title: "Tools", noun: "tool", icon: Wrench, color: "#4f46e5",
@@ -50,7 +71,9 @@ const KINDS: Record<Key, {
     fields: [{ field: "description", label: "Notes", placeholder: "e.g. Includes TypeScript", long: true }],
   },
 };
-const KEYS: Key[] = ["teams", "tools", "tiers", "environments", "languages"];
+const KEYS: Key[] = ["teams", "practices", "platforms", "categories", "tools", "tiers", "environments", "languages"];
+/** The lists whose entries have members. */
+const GROUP_OF: Partial<Record<Key, GroupKind>> = { teams: "team", practices: "practice", platforms: "platform" };
 const ORDERED: Key[] = ["tiers", "environments"]; // lists whose order means something
 
 interface Use { process: Process | Standard; how: string }
@@ -60,9 +83,11 @@ function usesOf(key: Key, id: string, processes: (Process | Standard)[]): Use[] 
   for (const p of processes) {
     const how: string[] = [];
     if (key === "teams") {
-      if (p.owner === id) how.push("owns it");
+      if (p.owner === id) how.push("requirements" in p ? "issues this standard" : "owns it");
       if ("actors" in p && p.actors?.some((a) => a.teamId === id)) how.push("takes part");
-      if ("requirements" in p && p.owner === id) { how.pop(); how.push("issues this standard"); }
+    } else if (key === "practices" || key === "platforms" || key === "categories") {
+      const field = key === "practices" ? "practice" : key === "platforms" ? "platform" : "category";
+      if (p[field] === id) how.push(key === "categories" ? "grouped here" : `belongs to this ${field}`);
     } else if (key === "tools") {
       const n = "steps" in p ? p.steps?.filter((s) => s.tool === id).length ?? 0 : 0;
       if (n) how.push(`${n} step${n > 1 ? "s" : ""}`);
@@ -79,7 +104,10 @@ function usesOf(key: Key, id: string, processes: (Process | Standard)[]): Use[] 
 const strip = (r: Row): Row => Object.fromEntries(Object.entries(r).filter(([k, v]) => k === "id" || k === "name" || (v ?? "").trim() !== "")) as Row;
 /** The lists without empty optional fields: what is compared with the saved lists, and saved. */
 const tidyCatalog = (c: Catalog): Catalog =>
-  ({ ...c, teams: c.teams.map(strip), tools: c.tools.map(strip), tiers: c.tiers.map(strip), environments: c.environments.map(strip), languages: c.languages.map(strip) }) as Catalog;
+  ({
+    ...c, teams: c.teams.map(strip), practices: (c.practices ?? []).map(strip), platforms: (c.platforms ?? []).map(strip), categories: (c.categories ?? []).map(strip),
+    tools: c.tools.map(strip), tiers: c.tiers.map(strip), environments: c.environments.map(strip), languages: c.languages.map(strip),
+  }) as Catalog;
 
 /** The lists. Read-only it is a directory for everyone; editable it is the Lists section of the Admin panel. */
 export function CatalogPage({ processes, standards, editable: editor }: { processes: Process[]; standards: Standard[]; editable: boolean }) {
@@ -95,13 +123,18 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
   const [newName, setNewName] = useState("");
   const [q, setQ] = useState("");
   const issues = validateCatalog(clean);
+  // who belongs to which team, platform and practice: everyone may read it
+  const [members, setMembers] = useState<Membership[] | null>(null);
+  const [membersError, setMembersError] = useState("");
+  useEffect(() => { loadMembers().then(setMembers, (e) => setMembersError(e.message)); }, []);
 
   const kind = KINDS[key];
-  const rows = draft[key] as Row[];
+  const rows = (draft[key] ?? []) as Row[];
   const shown = rows.filter((r) => `${r.name} ${r.contact ?? ""} ${r.description ?? ""} ${r.url ?? ""}`.toLowerCase().includes(q.toLowerCase()));
   const current = adding ? undefined : rows.find((r) => r.id === selected) ?? shown[0];
   const uses = current ? usesOf(key, current.id, docs) : [];
-  const isNew = (id: string) => !(catalog[key] as Row[]).some((r) => r.id === id);
+  const isNew = (id: string) => !((catalog[key] ?? []) as Row[]).some((r) => r.id === id);
+  const group = GROUP_OF[key];
 
   const setRows = (next: Row[]) => setDraft({ ...draft, [key]: next });
   const upd = (patch: Partial<Row>) => current && setRows(rows.map((r) => (r.id === current.id ? { ...r, ...patch } : r)));
@@ -127,7 +160,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
         <div className="head-row">
           <div className="head-text">
             <h1>Teams, tools &amp; more</h1>
-            <p className="lead">Who owns what, how to reach them, and which systems, tiers and environments the processes and standards refer to.</p>
+            <p className="lead">Who owns what, who belongs to each team, platform and practice, how to reach them, and which systems, tiers and environments the processes and standards refer to.</p>
           </div>
         </div>
       )}
@@ -139,7 +172,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
             <button key={k} role="tab" aria-selected={key === k} className={key === k ? "on" : ""} style={{ "--c": K.color } as React.CSSProperties} onClick={() => switchTo(k)}>
               <span className="cat-tab-icon"><Icon size={18} /></span>
               <span className="cat-tab-text"><strong>{K.title}</strong><em>{K.blurb}</em></span>
-              <span className="cat-tab-n">{draft[k].length}</span>
+              <span className="cat-tab-n">{(draft[k] ?? []).length}</span>
             </button>
           );
         })}
@@ -181,7 +214,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
               <h2>New {kind.noun}</h2>
               <p className="muted">Give it the name people already use. You can add the details afterwards.</p>
               <Field label="Name">
-                <input autoFocus value={newName} maxLength={40} placeholder={key === "teams" ? "Cloud Platform team" : key === "tools" ? "ServiceNow" : key === "tiers" ? "Tier 4" : key === "environments" ? "Pre-production" : "Rust"}
+                <input autoFocus value={newName} maxLength={40} placeholder={key === "teams" ? "Cloud Platform team" : key === "practices" ? "Cyber security" : key === "platforms" ? "Google Cloud" : key === "categories" ? "Cloud" : key === "tools" ? "ServiceNow" : key === "tiers" ? "Tier 4" : key === "environments" ? "Pre-production" : "Rust"}
                   onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
               </Field>
               <p className="muted small">Id: <code>{slugify(newName) ? newId : "…"}</code>. It is made from the name and never changes, even if you rename.</p>
@@ -197,7 +230,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
               <header className="cat-detail-head">
                 <span className="cat-avatar big">{ORDERED.includes(key) ? rows.findIndex((x) => x.id === current.id) + (key === "tiers" ? 0 : 1) : current.name.slice(0, 1).toUpperCase()}</span>
                 <div>
-                  <span className="eyebrow">{key === "teams" ? UNIT_KINDS[current.kind ?? "team"] : kind.noun}</span>
+                  <span className="eyebrow">{kind.noun}</span>
                   <h2>{current.name || "Unnamed"}</h2>
                   <code>{current.id}</code>
                 </div>
@@ -212,16 +245,6 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
               {editor ? (
                 <div className="form">
                   <Field label="Name"><input value={current.name} maxLength={40} onChange={(e) => upd({ name: e.target.value })} /></Field>
-                  {key === "teams" && (
-                    <div className="field">
-                      <span className="field-label">Kind<em>{current.kind && current.kind !== "team" ? "a unit: can issue standards" : "a team: owns and takes part in processes"}</em></span>
-                      <div className="chips" role="group" aria-label="Kind">
-                        {Object.entries(UNIT_KINDS).map(([k, label]) => (
-                          <button key={k} className={`chip ${(current.kind ?? "team") === k ? "on" : ""}`} aria-pressed={(current.kind ?? "team") === k} onClick={() => upd({ kind: k === "team" ? undefined : k })}>{label}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                   {kind.fields.map((f) => (
                     <Field key={f.field} label={f.label}>
                       {f.long
@@ -257,8 +280,8 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
                 </ul>
               </div>
 
-              {/* who belongs to the team: only where the lists are managed, and only for a team */}
-              {editor && key === "teams" && <TeamMembers team={current as unknown as Team} saved={!isNew(current.id)} />}
+              {/* who belongs to the team, platform or practice: everyone sees it, admins change it where the lists are managed */}
+              {group && <GroupMembers kind={group} id={current.id} name={current.name} saved={!isNew(current.id)} manage={editor} members={members} membersError={membersError} />}
 
               {editor && (
                 <div className="cat-danger">

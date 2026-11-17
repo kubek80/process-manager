@@ -29,6 +29,10 @@ type process struct {
 	Title             string   `json:"title"`
 	Summary           string   `json:"summary"`
 	Owner             string   `json:"owner"`
+	Category          string   `json:"category"`
+	Practice          string   `json:"practice"`
+	Platform          string   `json:"platform"`
+	Rigour            string   `json:"rigour"`
 	EstimatedDuration string   `json:"estimatedDuration"`
 	Status            string   `json:"status"`
 	Tiers             []string `json:"tiers"`
@@ -98,6 +102,9 @@ type standard struct {
 	Title              string        `json:"title"`
 	Summary            string        `json:"summary"`
 	Owner              string        `json:"owner"`
+	Category           string        `json:"category"`
+	Practice           string        `json:"practice"`
+	Platform           string        `json:"platform"`
 	Scope              string        `json:"scope"`
 	Status             string        `json:"status"`
 	Tiers              []string      `json:"tiers"`
@@ -176,7 +183,7 @@ func (c Context) appliesTo(tiers, languages, environments []string) string {
 	}, "; ")
 }
 
-func (c Context) unit(id string) string {
+func (c Context) team(id string) string {
 	t, ok := c.Lists.Team(id)
 	if !ok {
 		if id == "" {
@@ -188,6 +195,27 @@ func (c Context) unit(id string) string {
 		return t.Name + " (" + t.Contact + ")"
 	}
 	return t.Name
+}
+
+// rigour says in plain words how binding a process is.
+var rigour = map[string]string{
+	"mandatory":   "Mandatory - this is the only allowed way to get this done.",
+	"recommended": "Recommended - this is the expected way; another way needs a good reason.",
+	"optional":    "Optional - a help that may be used.",
+}
+
+// placement writes the lines that say where a process or standard sits: its category,
+// practice and platform, by name, each only when it is set.
+func (c Context) placement(b *strings.Builder, category, practice, platform string) {
+	if category != "" {
+		fmt.Fprintf(b, "- Category: %s\n", docs.Name(c.Lists.Categories, category))
+	}
+	if practice != "" {
+		fmt.Fprintf(b, "- Practice: %s\n", docs.Name(c.Lists.Practices, practice))
+	}
+	if platform != "" {
+		fmt.Fprintf(b, "- Platform: %s\n", docs.Name(c.Lists.Platforms, platform))
+	}
 }
 
 func extraSection(extra string) string {
@@ -233,7 +261,12 @@ func ForProcess(body []byte, c Context, extra map[string]string) ([]Generated, e
 	var b strings.Builder
 	b.WriteString(frontMatter(id, fmt.Sprintf("Follow the company process “%s” on behalf of a person: %s Use when someone asks for this, or asks how to get it.", p.Title, p.Summary)))
 	fmt.Fprintf(&b, "# Process: %s\n\n%s\n\n", p.Title, p.Summary)
-	fmt.Fprintf(&b, "- Owner: %s\n- Applies to: %s\n", c.unit(p.Owner), c.appliesTo(p.Tiers, p.Languages, p.Environments))
+	fmt.Fprintf(&b, "- Owner: %s\n", c.team(p.Owner))
+	c.placement(&b, p.Category, p.Practice, p.Platform)
+	if text := rigour[p.Rigour]; text != "" {
+		fmt.Fprintf(&b, "- Rigour: %s\n", text)
+	}
+	fmt.Fprintf(&b, "- Applies to: %s\n", c.appliesTo(p.Tiers, p.Languages, p.Environments))
 	if p.EstimatedDuration != "" {
 		fmt.Fprintf(&b, "- Typical lead time: %s\n", p.EstimatedDuration)
 	}
@@ -395,13 +428,15 @@ func ForStandard(body []byte, c Context, extra map[string]string) ([]Generated, 
 	if !active(s.Status) || len(s.Requirements) == 0 {
 		return nil, nil
 	}
-	unit := c.unit(s.Owner)
-	exception := "Ask " + unit + "."
+	team := c.team(s.Owner)
+	exception := "Ask " + team + "."
 	if s.ExceptionProcessID != "" {
 		exception = fmt.Sprintf("Follow the process “%s”%s.", c.title(docs.Process, s.ExceptionProcessID), c.skill(docs.Process, s.ExceptionProcessID, ProcessSkillID(s.ExceptionProcessID)))
 	}
 	head := func(b *strings.Builder) {
-		fmt.Fprintf(b, "- Issued by: %s\n- Applies to: %s\n", unit, c.appliesTo(s.Tiers, s.Languages, s.Environments))
+		fmt.Fprintf(b, "- Issued by: %s\n", team)
+		c.placement(b, s.Category, s.Practice, s.Platform)
+		fmt.Fprintf(b, "- Applies to: %s\n", c.appliesTo(s.Tiers, s.Languages, s.Environments))
 		if s.Scope != "" {
 			fmt.Fprintf(b, "- Scope: %s\n", s.Scope)
 		}
@@ -451,7 +486,7 @@ func ForStandard(body []byte, c Context, extra map[string]string) ([]Generated, 
 			fmt.Fprintf(&b, "Helpful process: “%s”%s.\n\n", c.title(docs.Process, r.ProcessID), c.skill(docs.Process, r.ProcessID, ProcessSkillID(r.ProcessID)))
 		}
 	}
-	fmt.Fprintf(&b, "## Exceptions\n\nA MUST can only be waived by the unit that issued the standard. %s\n", exception)
+	fmt.Fprintf(&b, "## Exceptions\n\nA MUST can only be waived by the team that issued the standard. %s\n", exception)
 	if len(s.Resources) > 0 {
 		b.WriteString("\n## Background\n\n")
 		writeResources(&b, "", s.Resources)

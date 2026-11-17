@@ -1,87 +1,116 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Trash2, UserPlus } from "lucide-react";
-import type { Role, Team } from "../types";
-import { looksLikeEmail, membersOf } from "../lib/members";
+import type { Membership } from "../types";
+import { GROUP, looksLikeEmail, MEMBER_ROLE, membersOf, type GroupKind } from "../lib/members";
 import { usePerms } from "../lib/session";
 import { grantAccess, loadAccess, revokeAccess, type Access } from "../lib/store";
 import { confirmDialog, LoadError, Loading, notify } from "./ui";
 
-const LABEL: Partial<Record<Role, string>> = { owner: "Owner", "standards-editor": "Standards editor" };
+/** What a member of a team, platform or practice may do, in one sentence. */
+export const memberText = (kind: GroupKind) => `A member is ${GROUP[kind].member} of this ${GROUP[kind].noun}: they ${GROUP[kind].may}, under “My responsibilities”.`;
+
+/** The people of a group, read-only: what everyone may see. `members` is null while they load. */
+function MemberList({ kind, id, members, error, manage }: { kind: GroupKind; id: string; members: Membership[] | null; error?: string; manage?: boolean }) {
+  const list = members ? membersOf(members, kind, id) : [];
+  return (
+    <div className="cat-members">
+      <h3>Members {members && <span>{list.length}</span>}</h3>
+      <p className="muted small">{memberText(kind)}{manage && " An admin adds and removes them."}</p>
+      {error && <p className="muted">The members could not be loaded: {error}</p>}
+      {!members && !error && <Loading />}
+      {members && list.length === 0 && <p className="muted">Nobody yet.</p>}
+      {list.length > 0 && (
+        <ul className="people">
+          {list.map((m) => (
+            <li key={m.email}>
+              <span className="avatar">{m.email.slice(0, 1).toUpperCase()}</span>
+              <span className="person"><a href={`mailto:${m.email}`}><strong>{m.email}</strong></a><em>{GROUP[kind].member}</em></span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 /**
- * Who belongs to a team or unit. A member is somebody with the Owner role for it: what the team
- * owns is theirs to review, and its feedback theirs to close. A unit can also have people who
- * edit its standards. Members are added and removed here by an admin; it is the same thing as
- * giving or taking the role under Access, seen from the team's side.
+ * Who belongs to a team, a platform or a practice. A team's members are its Owners; a
+ * platform's and a practice's members are their owners, who may also change what belongs to
+ * them. An admin adds and removes members where the lists are managed: it is the same as giving
+ * or taking the role under Access, seen from the group's side. Everyone else sees who they are.
  *
- * `saved` is false for a team that was added but not saved yet: it has to exist before anybody
+ * `saved` is false for an entry that was added but not saved yet: it has to exist before anybody
  * can belong to it.
  */
-export function TeamMembers({ team, saved }: { team: Team; saved: boolean }) {
+export function GroupMembers({ kind, id, name, saved, manage, members, membersError }: {
+  kind: GroupKind; id: string; name: string; saved: boolean;
+  /** Where the lists are managed: an admin can add and remove members here. */
+  manage: boolean;
+  /** What everyone may read about members; null while it loads. */
+  members: Membership[] | null; membersError?: string;
+}) {
   const perms = usePerms();
-  const unit = !!team.kind && team.kind !== "team";
+  const admin = manage && perms.admin;
+  const role = MEMBER_ROLE[kind];
+  const noun = GROUP[kind].noun;
   const [access, setAccess] = useState<Access | null>(null);
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<Role>("owner");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => { setError(""); loadAccess().then(setAccess, (e) => setError(e.message)); }, []);
-  useEffect(() => { if (perms.admin) load(); }, [perms.admin, load]);
-  useEffect(() => { setEmail(""); setRole("owner"); }, [team.id]);
+  useEffect(() => { if (admin) load(); }, [admin, load]);
+  useEffect(() => { setEmail(""); }, [kind, id]);
 
-  // who has which role is for admins; everyone else who manages the lists is told where to ask
-  if (!perms.admin) {
-    return (
-      <div className="cat-members">
-        <h3>Members</h3>
-        <p className="muted small">The people who are Owner for this {unit ? "unit" : "team"} see what it owns under “My responsibilities”. An admin adds and removes them.</p>
-      </div>
-    );
+  if (!admin) {
+    if (!saved) return null; // nobody can belong to something that does not exist yet
+    return <MemberList kind={kind} id={id} members={members} error={membersError} manage={manage} />;
   }
 
-  const members = access ? membersOf(access.assignments, team.id) : [];
+  const list = access ? membersOf(access.assignments, kind, id) : [];
   const add = async () => {
     const who = email.trim().toLowerCase();
     if (!looksLikeEmail(who) || busy) return;
     setBusy(true);
-    try { setAccess(await grantAccess({ email: who, role, scope: team.id })); setEmail(""); }
+    try { setAccess(await grantAccess({ email: who, role, scope: id })); setEmail(""); }
     catch (e) { notify.error(`${who} could not be added.`, e); /* what was typed stays in the field */ }
     finally { setBusy(false); }
   };
-  const remove = async (who: string, r: Role) => {
+  const remove = async (who: string) => {
     const ok = await confirmDialog({
       title: "Remove this member?",
-      body: <>{who} is no longer {LABEL[r]} for “{team.name}”. {r === "owner" ? "What the team owns disappears from their responsibilities." : "They can no longer edit its standards."} This takes effect at once.</>,
+      body: <>{who} is no longer {GROUP[kind].member} of “{name}”. {kind === "team"
+        ? "What the team maintains disappears from their responsibilities."
+        : `They can no longer change what belongs to this ${noun}, unless another role lets them.`} This takes effect at once.</>,
       confirmLabel: "Remove", danger: true,
     });
     if (!ok) return;
-    try { setAccess(await revokeAccess({ email: who, role: r, scope: team.id })); }
+    try { setAccess(await revokeAccess({ email: who, role, scope: id })); }
     catch (e) { notify.error(`${who} could not be removed.`, e); }
   };
 
   return (
     <div className="cat-members">
-      <h3>Members {access && <span>{members.length}</span>}</h3>
-      <p className="muted small">A member is Owner for this {unit ? "unit" : "team"}: what it owns is theirs to review and its feedback theirs to close, under “My responsibilities”.{unit && " A unit can also have people who edit its standards."}</p>
-      {!saved && <p className="muted">Save the lists first: the {unit ? "unit" : "team"} has to exist before somebody can belong to it.</p>}
+      <h3>Members {access && <span>{list.length}</span>}</h3>
+      <p className="muted small">{memberText(kind)}</p>
+      {!saved && <p className="muted">Save the lists first: the {noun} has to exist before somebody can belong to it.</p>}
       {saved && error && <LoadError what="The members could not be loaded." error={error} onRetry={load} />}
       {saved && !access && !error && <Loading />}
       {saved && access && (
         <>
-          {members.length === 0 && <p className="muted">Nobody yet. Until somebody is added, nobody is asked to review what this {unit ? "unit" : "team"} owns.</p>}
+          {list.length === 0 && <p className="muted">{kind === "team"
+            ? "Nobody yet. Until somebody is added, nobody is asked to review what this team maintains."
+            : `Nobody yet. Until somebody is added, only the editors can change what belongs to this ${noun}.`}</p>}
           <ul className="people">
-            {members.map((m) => (
+            {list.map((m) => (
               <li key={m.email}>
                 <span className="avatar">{m.email.slice(0, 1).toUpperCase()}</span>
-                <span className="person"><strong>{m.email}</strong><em>since {m.roles[0].grantedAt.slice(0, 10)}, added by {m.roles[0].grantedBy}</em></span>
+                <span className="person"><strong>{m.email}</strong><em>since {m.grantedAt.slice(0, 10)}, added by {m.grantedBy}</em></span>
                 <span className="role-chips">
-                  {m.roles.map((r) => (
-                    <span key={r.role} className="role-chip">
-                      {LABEL[r.role]}
-                      <button aria-label={`Remove ${m.email} as ${LABEL[r.role]}`} onClick={() => remove(m.email, r.role)}><Trash2 size={12} /></button>
-                    </span>
-                  ))}
+                  <span className="role-chip">
+                    {GROUP[kind].member}
+                    <button aria-label={`Remove ${m.email} as ${GROUP[kind].member}`} onClick={() => remove(m.email)}><Trash2 size={12} /></button>
+                  </span>
                 </span>
               </li>
             ))}
@@ -89,12 +118,6 @@ export function TeamMembers({ team, saved }: { team: Team; saved: boolean }) {
           <form className="member-add" onSubmit={(e) => { e.preventDefault(); add(); }}>
             <UserPlus size={15} aria-hidden="true" />
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" aria-label="Email of the new member" />
-            {unit && (
-              <select value={role} onChange={(e) => setRole(e.target.value as Role)} aria-label="As">
-                <option value="owner">as Owner</option>
-                <option value="standards-editor">as Standards editor</option>
-              </select>
-            )}
             <button className="btn small primary" disabled={!looksLikeEmail(email) || busy}><Plus size={14} />Add member</button>
           </form>
         </>

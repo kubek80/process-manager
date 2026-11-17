@@ -19,7 +19,9 @@ const vpn = `{"schemaVersion":"1.0","id":"request-vpn","title":"Request VPN","ow
 const logging = `{"schemaVersion":"1.0","id":"secure-logging","title":"Secure logging","owner":"security","status":"active",
  "requirements":[{"id":"SEC-LOG-01","title":"No secrets","level":"must","statement":"Never log secrets."},{"id":"SEC-LOG-02","title":"No PII","level":"must","statement":"Never log personal data."}]}`
 const lists = `{"tiers":[{"id":"tier-0","name":"Tier 0"}],"environments":[{"id":"production","name":"Production"}],"languages":[],
- "teams":[{"id":"security","name":"Cyber Security","kind":"security","contact":"Slack #security"}],"tools":[{"id":"github","name":"GitHub","url":"https://github.example.com"}]}`
+ "teams":[{"id":"security","name":"Cyber Security","contact":"Slack #security"}],
+ "practices":[{"id":"security","name":"Cyber security","description":"Keeps us safe."}],"platforms":[{"id":"google-cloud","name":"Google Cloud"}],
+ "categories":[{"id":"cloud","name":"Cloud"}],"tools":[{"id":"github","name":"GitHub","url":"https://github.example.com"}]}`
 
 func newStore(t *testing.T) *docs.Store { return &docs.Store{Pool: dbtest.NewPool(t)} }
 
@@ -126,8 +128,21 @@ func TestListsAndNames(t *testing.T) {
 		t.Fatalf("lists: %+v %v", l, err)
 	}
 	team, ok := l.Team("security")
-	if !ok || team.Name != "Cyber Security" || team.Kind != "security" || team.Contact != "Slack #security" {
+	if !ok || team.Name != "Cyber Security" || team.Contact != "Slack #security" {
 		t.Fatalf("team: %+v", team)
+	}
+	// a team and a practice may have the same id: each list is looked up on its own
+	if p, ok := l.Practice("security"); !ok || p.Name != "Cyber security" || p.Description != "Keeps us safe." {
+		t.Fatalf("practice: %+v", p)
+	}
+	if p, ok := l.Platform("google-cloud"); !ok || p.Name != "Google Cloud" {
+		t.Fatalf("platform: %+v", p)
+	}
+	if c, ok := l.Category("cloud"); !ok || c.Name != "Cloud" {
+		t.Fatalf("category: %+v", c)
+	}
+	if _, ok := l.Platform("security"); ok {
+		t.Fatal("a practice id must not be found among the platforms")
 	}
 	if _, ok := l.Team("nobody"); ok {
 		t.Fatal("unknown team found")

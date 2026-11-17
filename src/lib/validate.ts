@@ -40,6 +40,21 @@ function describe(e: ErrorObject): string {
 }
 
 /**
+ * The lists a process or standard belongs to: its category, practice and platform must be in
+ * their lists, like a tier. The server refuses a save that names one that is not.
+ */
+function checkBelongs(doc: { category?: string; practice?: string; platform?: string }, cat: Catalog, err: (path: string, message: string) => void) {
+  const known = (list: { id: string }[] | undefined) => (list ?? []).map((x) => x.id);
+  const one = (field: "category" | "practice" | "platform", list: { id: string }[] | undefined, noun: string, plural: string) => {
+    const id = doc[field];
+    if (id && !known(list).includes(id)) err(field, `"${id}" is not a known ${noun}. Known ${plural}: ${known(list).join(", ") || "(none)"}`);
+  };
+  one("category", cat.categories, "category", "categories");
+  one("practice", cat.practices, "practice", "practices");
+  one("platform", cat.platforms, "platform", "platforms");
+}
+
+/**
  * Full check of a process: JSON schema first, then the rules a schema cannot express
  * (references, uniqueness, reachability). The context enables checks against other processes
  * and against the catalog (tiers, teams, tools).
@@ -66,6 +81,7 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
   if (cat) {
     if (p.owner && !cat.teams.some((t) => t.id === p.owner))
       warn("owner", `"${p.owner}" is not in the teams list. Known teams: ${ids(cat.teams).join(", ") || "(none)"}`);
+    checkBelongs(p, cat, err);
     (p.tiers ?? []).forEach((tier, i) => {
       if (!cat.tiers.some((t) => t.id === tier)) err(`tiers[${i}]`, `"${tier}" is not a known tier. Known tiers: ${ids(cat.tiers).join(", ") || "(none)"}`);
     });
@@ -167,9 +183,10 @@ export function validateCatalog(data: unknown): Issue[] {
     return issues;
   }
   const c = data as unknown as Catalog;
-  (["tiers", "environments", "languages", "teams", "tools"] as const).forEach((key) => {
+  // ids are unique within one list; a team, a practice and a platform may share one
+  (["tiers", "environments", "languages", "teams", "practices", "platforms", "categories", "tools"] as const).forEach((key) => {
     const seen = new Set<string>();
-    c[key].forEach((x, i) => {
+    (c[key] ?? []).forEach((x, i) => {
       if (seen.has(x.id)) issues.push({ level: "error", path: `${key}[${i}].id`, message: `duplicate id "${x.id}"` });
       seen.add(x.id);
     });
@@ -213,16 +230,15 @@ export function validateStandard(data: unknown, ctx: CheckContext = {}): Issue[]
   dims("", s);
 
   if (cat) {
-    const unit = cat.teams.find((t) => t.id === s.owner);
-    if (!unit) warn("owner", `"${s.owner}" is not in the teams list. Known units: ${ids(cat.teams.filter((t) => t.kind && t.kind !== "team")).join(", ") || "(none)"}`);
-    else if (!unit.kind || unit.kind === "team") warn("owner", `"${unit.name}" is a team, not a unit that issues standards (cyber security, platform owner, practice). Change its kind in the lists or pick a unit.`);
+    if (!cat.teams.some((t) => t.id === s.owner)) warn("owner", `"${s.owner}" is not in the teams list. Known teams: ${ids(cat.teams).join(", ") || "(none)"}`);
+    checkBelongs(s, cat, err);
   }
   if (s.replacedBy) {
     if (s.replacedBy === s.id) err("replacedBy", "a standard cannot replace itself");
     else if (standards && !standards.has(s.replacedBy)) warn("replacedBy", `no standard with id "${s.replacedBy}" exists yet`);
     if (s.status !== "deprecated") warn("replacedBy", "replacedBy only makes sense when status is \"deprecated\"");
   }
-  if (active && !s.review) warn("review", "no review interval is set - the unit will never be asked to confirm this standard is still correct");
+  if (active && !s.review) warn("review", "no review interval is set - the owner team will never be asked to confirm this standard is still correct");
   if (s.review?.lastReviewedAt && !isDate(s.review.lastReviewedAt)) err("review.lastReviewedAt", `"${s.review.lastReviewedAt}" is not a date`);
   if (s.exceptionProcessId && processes && !processes.has(s.exceptionProcessId)) warn("exceptionProcessId", `no process with id "${s.exceptionProcessId}" exists yet`);
 

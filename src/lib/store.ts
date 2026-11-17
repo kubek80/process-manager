@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Assignment, AuditEntry, Catalog, DocMeta, DocVersion, Feedback, FeedbackByTarget, Me, Process, Role, Skill, SkillDetail, Standard, TargetKind } from "../types";
+import type { Assignment, AuditEntry, Catalog, DocMeta, DocVersion, Feedback, FeedbackByTarget, Me, Membership, Process, Role, Skill, SkillDetail, Standard, TargetKind } from "../types";
 import type { Conflict } from "./draftState";
+import { completeCatalog } from "./catalog";
+import { completePerms } from "./rights";
 
 export class ApiError extends Error {
   /** Set when a save was refused because somebody else saved (or deleted) first. */
@@ -43,7 +45,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return { data: data as T, headers: res.headers };
 }
 
-export const loadMe = () => call<Me>("GET", "/api/me");
+export async function loadMe(): Promise<Me> {
+  const me = await call<Me>("GET", "/api/me");
+  return me.perms ? { ...me, perms: completePerms(me.perms) } : me;
+}
 export const devLogin = (email: string) => call<void>("POST", "/auth/dev/login", { email });
 export const logout = () => call<void>("POST", "/auth/logout");
 
@@ -76,7 +81,7 @@ export const confirmReview = <T extends Process | Standard>(kind: TargetKind, id
 export async function loadCatalog(): Promise<{ catalog: Catalog; version: number }> {
   const { data: c, headers } = await request<Partial<Catalog>>("GET", "/api/catalog");
   return {
-    catalog: { ...c, tiers: c.tiers ?? [], environments: c.environments ?? [], languages: c.languages ?? [], teams: c.teams ?? [], tools: c.tools ?? [] },
+    catalog: completeCatalog(c),
     version: Number(headers.get("X-Document-Version") ?? 0) || 0,
   };
 }
@@ -99,6 +104,9 @@ export const loadSkills = async () => (await call<{ skills: Skill[] }>("GET", "/
 export const loadSkill = (id: string) => call<SkillDetail>("GET", `/api/skills/${id}`);
 export const loadSkillVersion = async (id: string, version: number) => (await call<{ content: string }>("GET", `/api/skills/${id}/versions/${version}`)).content;
 export const putSkillExtra = (id: string, extra: string) => call<SkillDetail>("PUT", `/api/skills/${id}/extra`, { extra });
+
+/** Who belongs to which team, platform and practice. Everyone who is signed in may read it. */
+export const loadMembers = async () => (await call<{ members?: Membership[] }>("GET", "/api/members")).members ?? [];
 
 // admin panel
 export interface Access { assignments: Assignment[]; bootstrapAdmins: string[]; roles: Role[] }
@@ -134,12 +142,53 @@ export type StandardTab = "doc" | "feedback" | "skills" | "json";
 export type AdminSection = "access" | "lists" | "skills" | "health" | "activity" | "system";
 /** `item` is the step or the requirement that is open, so that a link can point at one. */
 export type Route =
+  | { page: "home" } | ({ page: "search" } & SearchState)
   | { page: "library" } | { page: "standards" } | { page: "catalog" } | { page: "guide" } | { page: "mine" }
   | { page: "admin"; section: AdminSection }
   | { page: "process"; id: string; tab: Tab; item?: string }
   | { page: "standard"; id: string; tab: StandardTab; item?: string };
 
+/**
+ * What the results page shows: the words searched for and the filters. Several values of one
+ * filter mean "any of these"; different filters all apply. Empty ones are left out.
+ */
+export interface SearchState {
+  q?: string;
+  type?: TargetKind[];
+  rigour?: import("../types").Rigour[];
+  category?: string[];
+  practice?: string[];
+  platform?: string[];
+}
+const SEARCH_LISTS = ["type", "rigour", "category", "practice", "platform"] as const;
+const SEARCH_ALLOWED: Partial<Record<(typeof SEARCH_LISTS)[number], string[]>> = { type: ["process", "standard"], rigour: ["mandatory", "recommended", "optional"] };
+const decode = (s: string) => { try { return decodeURIComponent(s.replace(/\+/g, " ")); } catch { return null; } };
+/** `#/search?q=…&platform=azure,github`: unknown or empty parts are ignored. */
+function parseSearch(query: string): Route {
+  const r: { page: "search" } & SearchState = { page: "search" };
+  for (const part of query.split("&")) {
+    const eq = part.indexOf("=");
+    if (eq <= 0) continue;
+    const key = part.slice(0, eq), raw = part.slice(eq + 1);
+    if (key === "q") { const q = decode(raw); if (q?.trim()) r.q = q; continue; }
+    if (!(SEARCH_LISTS as readonly string[]).includes(key)) continue;
+    const k = key as (typeof SEARCH_LISTS)[number];
+    const values = [...new Set(raw.split(",").map((v) => decode(v)?.trim() ?? "").filter((v) => v && (!SEARCH_ALLOWED[k] || SEARCH_ALLOWED[k]!.includes(v))))];
+    if (values.length) r[k] = values as never; // checked against the allowed values above
+  }
+  return r;
+}
+function searchHref(r: SearchState): string {
+  const parts: string[] = [];
+  if (r.q?.trim()) parts.push(`q=${encodeURIComponent(r.q)}`);
+  for (const k of SEARCH_LISTS) if (r[k]?.length) parts.push(`${k}=${(r[k] as string[]).map(encodeURIComponent).join(",")}`);
+  return `#/search${parts.length ? `?${parts.join("&")}` : ""}`;
+}
+
 const parse = (h: string = location.hash): Route => {
+  const search = h.match(/^#\/search(?:\?(.*))?$/);
+  if (search) return parseSearch(search[1] ?? "");
+  if (h.startsWith("#/processes")) return { page: "library" };
   if (h.startsWith("#/catalog")) return { page: "catalog" };
   if (h.startsWith("#/guide")) return { page: "guide" };
   if (h.startsWith("#/mine")) return { page: "mine" };
@@ -149,7 +198,7 @@ const parse = (h: string = location.hash): Route => {
   const s = h.match(/^#\/s\/([a-z0-9-]+)(?:\/(doc|feedback|skills|json)(?:\/([A-Z][A-Z0-9-]*))?)?/);
   if (s) return { page: "standard", id: s[1], tab: (s[2] as StandardTab) ?? "doc", ...(s[3] ? { item: s[3] } : {}) };
   const m = h.match(/^#\/p\/([a-z0-9-]+)(?:\/(flow|list|feedback|skills|json)(?:\/([a-z0-9-]+))?)?/);
-  return m ? { page: "process", id: m[1], tab: (m[2] as Tab) ?? "flow", ...(m[3] ? { item: m[3] } : {}) } : { page: "library" };
+  return m ? { page: "process", id: m[1], tab: (m[2] as Tab) ?? "flow", ...(m[3] ? { item: m[3] } : {}) } : { page: "home" };
 };
 /** The route an address stands for; exported for tests. */
 export const parseRoute = (hash: string): Route => parse(hash);
@@ -277,7 +326,9 @@ export function useRoute(ask?: (what: string) => Promise<boolean>): Route {
 
 export const href = (r: Route): string => {
   switch (r.page) {
-    case "library": return "#/";
+    case "home": return "#/";
+    case "search": return searchHref(r);
+    case "library": return "#/processes";
     case "standards": return "#/standards";
     case "catalog": return "#/catalog";
     case "guide": return "#/guide";
@@ -300,6 +351,8 @@ export function pageTitle(r: Route, names: { process?: string; standard?: string
   const of = (name: string | undefined, missing: string) => name ?? (names.loading ? "" : missing);
   let here: string;
   switch (r.page) {
+    case "home": here = ""; break;
+    case "search": here = r.q?.trim() ? `“${r.q.trim()}” · Search` : "Search"; break;
     case "library": here = "Processes"; break;
     case "standards": here = "Standards"; break;
     case "catalog": here = "Teams & tools"; break;

@@ -9,14 +9,33 @@ import (
 )
 
 // The format of a document is checked against the JSON schema. This file checks what a schema
-// cannot: that the parts of a document fit together, and that it only names tiers, languages
-// and environments that exist. These are the same rules the checker in the browser treats as
+// cannot: that the parts of a document fit together, and that it only names tiers, languages,
+// environments, categories, practices and platforms that exist. These are the same rules the checker in the browser treats as
 // errors (src/lib/validate.ts); what the browser only warns about is allowed here too.
 
 type dims struct {
 	Tiers        []string `json:"tiers"`
 	Languages    []string `json:"languages"`
 	Environments []string `json:"environments"`
+}
+
+// belongs is where a process or standard sits: its category, practice and platform. The
+// owner is a team; a team that is not in the lists is only a warning in the app.
+type belongs struct {
+	Category string `json:"category"`
+	Practice string `json:"practice"`
+	Platform string `json:"platform"`
+}
+
+func (b belongs) check(l Lists, add func(string, ...any)) {
+	one := func(field, noun, plural, id string, list []Named) {
+		if id != "" && !has(list, id) {
+			add("%s: %q is not a known %s. Known %s: %s", field, id, noun, plural, ids(list))
+		}
+	}
+	one("category", "category", "categories", b.Category, l.Categories)
+	one("practice", "practice", "practices", b.Practice, l.Practices)
+	one("platform", "platform", "platforms", b.Platform, l.Platforms)
 }
 
 // lifecycle is what a process and a standard record about their review.
@@ -40,6 +59,7 @@ type processShape struct {
 	ID string `json:"id"`
 	lifecycle
 	dims
+	belongs
 	Owner         string   `json:"owner"`
 	ReplacedBy    string   `json:"replacedBy"`
 	Standards     []string `json:"standards"`
@@ -67,6 +87,7 @@ type standardShape struct {
 	ID string `json:"id"`
 	lifecycle
 	dims
+	belongs
 	Owner              string `json:"owner"`
 	ReplacedBy         string `json:"replacedBy"`
 	ExceptionProcessID string `json:"exceptionProcessId"`
@@ -127,6 +148,7 @@ func Check(kind string, body []byte, l Lists) error {
 			return fmt.Errorf("%w: not a process: %v", ErrInvalid, err)
 		}
 		p.dims.check("", l, add)
+		p.belongs.check(l, add)
 		p.lifecycle.check(add)
 		if p.ReplacedBy != "" && p.ReplacedBy == p.ID {
 			add("replacedBy: a process cannot replace itself")
@@ -190,6 +212,7 @@ func Check(kind string, body []byte, l Lists) error {
 			return fmt.Errorf("%w: not a standard: %v", ErrInvalid, err)
 		}
 		s.dims.check("", l, add)
+		s.belongs.check(l, add)
 		s.lifecycle.check(add)
 		if s.ReplacedBy != "" && s.ReplacedBy == s.ID {
 			add("replacedBy: a standard cannot replace itself")
@@ -207,7 +230,8 @@ func Check(kind string, body []byte, l Lists) error {
 		if err := json.Unmarshal(body, &c); err != nil {
 			return fmt.Errorf("%w: not the lists: %v", ErrInvalid, err)
 		}
-		for key, list := range map[string][]Named{"tiers": c.Tiers, "environments": c.Environments, "languages": c.Languages, "teams": c.Teams, "tools": c.Tools} {
+		for _, key := range ListKeys {
+			list := c.ByKey(key)
 			seen := map[string]bool{}
 			for i, n := range list {
 				if seen[n.ID] {
@@ -229,8 +253,11 @@ func Check(kind string, body []byte, l Lists) error {
 	return fmt.Errorf("%w: %s%s", ErrInvalid, strings.Join(problems, "; "), more)
 }
 
+// ListKeys are the keys of the lists in the catalog document, in the order it has them.
+var ListKeys = []string{"tiers", "environments", "languages", "teams", "practices", "platforms", "categories", "tools"}
+
 // Uses is what one process or standard takes from the lists and which other documents it
-// names. Keys of Lists: "tiers", "environments", "languages", "teams", "tools".
+// names. Keys of Lists: see ListKeys.
 type Uses struct {
 	Lists map[string]map[string]bool
 	Docs  map[string]bool // "process/<id>" and "standard/<id>"
@@ -260,6 +287,11 @@ func UsesOf(kind string, body []byte) Uses {
 		list("languages", d.Languages...)
 		list("environments", d.Environments...)
 	}
+	where := func(b belongs) {
+		list("categories", b.Category)
+		list("practices", b.Practice)
+		list("platforms", b.Platform)
+	}
 	switch kind {
 	case Process:
 		var p processShape
@@ -267,6 +299,7 @@ func UsesOf(kind string, body []byte) Uses {
 			return u
 		}
 		dim(p.dims)
+		where(p.belongs)
 		list("teams", p.Owner)
 		doc(Process, p.ReplacedBy)
 		for _, sid := range p.Standards {
@@ -288,6 +321,7 @@ func UsesOf(kind string, body []byte) Uses {
 			return u
 		}
 		dim(s.dims)
+		where(s.belongs)
 		list("teams", s.Owner)
 		doc(Standard, s.ReplacedBy)
 		doc(Process, s.ExceptionProcessID)
@@ -310,11 +344,9 @@ func Removed(old, new Lists) []string {
 			}
 		}
 	}
-	diff("tiers", old.Tiers, new.Tiers)
-	diff("environments", old.Environments, new.Environments)
-	diff("languages", old.Languages, new.Languages)
-	diff("teams", old.Teams, new.Teams)
-	diff("tools", old.Tools, new.Tools)
+	for _, key := range ListKeys {
+		diff(key, old.ByKey(key), new.ByKey(key))
+	}
 	sort.Strings(out)
 	return out
 }

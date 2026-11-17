@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, CalendarCheck, Flag, KeyRound, List, Plus, Search, Server, ShieldCheck, Sparkles, Trash2, Workflow } from "lucide-react";
 import type { Assignment, AuditEntry, FeedbackByTarget, Process, Role, Skill, Standard } from "../types";
-import { teamName, useCatalog } from "../lib/catalog";
+import { groupName, teamName, useCatalog } from "../lib/catalog";
+import { groupKindOf } from "../lib/members";
 import { reviewInfo, statusOf } from "../lib/lifecycle";
 import { usePerms } from "../lib/session";
 import { go, grantAccess, href, loadAccess, loadAudit, loadSkills, loadSystem, revokeAccess, type Access, type AdminSection, type SystemInfo } from "../lib/store";
@@ -10,17 +11,23 @@ import { openCount } from "./Feedback";
 import { SKILL_KIND, SkillPanel } from "./SkillPanel";
 import { confirmDialog, Field, LoadError, Loading, notify } from "./ui";
 
-export const ROLES: Record<Role, { label: string; can: string; scope: "none" | "optional" | "required"; scopeLabel?: string }> = {
+/** The roles, what they allow in plain words, and for the three that are limited to a group: which list it is picked from. */
+export const ROLES: Record<Role, { label: string; can: string; scope: "none" | "required"; scopeLabel?: string; always?: string }> = {
   admin: { label: "Admin", can: "Everything, including who has access", scope: "none" },
-  "catalog-manager": { label: "Lists manager", can: "Teams, tools, tiers, environments, languages", scope: "none" },
+  "catalog-manager": { label: "Lists manager", can: "Teams, practices, platforms, categories, tools, tiers, environments, languages", scope: "none" },
   "process-editor": { label: "Process editor", can: "Create and change every process; close its feedback", scope: "none" },
-  "standards-editor": { label: "Standards editor", can: "Create and change standards; close their feedback", scope: "optional", scopeLabel: "For the unit" },
-  owner: { label: "Owner", can: "Confirm reviews and close feedback on what a team or unit owns; see its drafts", scope: "required", scopeLabel: "For the team or unit" },
+  "standards-editor": { label: "Standards editor", can: "Create and change every standard; close its feedback", scope: "none" },
+  "platform-owner": { label: "Platform owner", can: "Create and change the processes and standards that belong to a platform; confirm their reviews and close their feedback", scope: "required", scopeLabel: "For the platform", always: "Always for one platform" },
+  "practice-owner": { label: "Practice owner", can: "Create and change the processes and standards that belong to a practice; confirm their reviews and close their feedback", scope: "required", scopeLabel: "For the practice", always: "Always for one practice" },
+  owner: { label: "Owner", can: "Confirm reviews and close feedback on what a team maintains; see its drafts", scope: "required", scopeLabel: "For the team", always: "Always for one team" },
 };
+
+/** The name of what a role is limited to: a team, a platform or a practice. */
+const scopeName = (catalog: ReturnType<typeof useCatalog>["catalog"], role: Role, scope: string) => groupName(catalog, groupKindOf(role) ?? "team", scope);
 
 const SECTIONS: { id: AdminSection; label: string; icon: typeof List; admin?: boolean; hint: string }[] = [
   { id: "access", label: "Access", icon: KeyRound, admin: true, hint: "Who may do what" },
-  { id: "lists", label: "Lists", icon: List, hint: "Teams, tools, tiers, environments, languages" },
+  { id: "lists", label: "Lists", icon: List, hint: "Teams, practices, platforms, categories, tools and more" },
   { id: "skills", label: "Skills", icon: Sparkles, hint: "Generated skills and review agents" },
   { id: "health", label: "Health", icon: CalendarCheck, hint: "Reviews due and open feedback" },
   { id: "activity", label: "Activity", icon: Activity, admin: true, hint: "Who changed what" },
@@ -52,7 +59,7 @@ function AccessSection() {
     const label = ROLES[a.role]?.label ?? a.role;
     const yes = await confirmDialog({
       title: "Remove this role?",
-      body: <>{a.email} will no longer be {label}{a.scope ? ` for ${teamName(catalog, a.scope)}` : ""}. You can give the role again at any time.</>,
+      body: <>{a.email} will no longer be {label}{a.scope ? ` for ${scopeName(catalog, a.role, a.scope)}` : ""}. You can give the role again at any time.</>,
       confirmLabel: "Remove role", danger: true,
     });
     if (!yes) return;
@@ -68,7 +75,7 @@ function AccessSection() {
 
   return (
     <div className="admin-section">
-      <p className="lead small">People sign in with their company account. What they may do is decided here. Everyone who can sign in can read, tick steps and give feedback. The members of one team or unit are easier to manage on the team itself, under <a href="#/admin/lists">Lists</a>.</p>
+      <p className="lead small">People sign in with their company account. What they may do is decided here. Everyone who can sign in can read, tick steps and give feedback. The members of one team, platform or practice are easier to manage on it, under <a href="#/admin/lists">Lists</a>.</p>
       {error && <LoadError what="The list of people with roles could not be loaded." error={error} onRetry={load} />}
 
       <section className="admin-card">
@@ -83,8 +90,8 @@ function AccessSection() {
           {spec.scope !== "none" && (
             <Field label={spec.scopeLabel!}>
               <select value={scope} onChange={(e) => setScope(e.target.value)}>
-                <option value="">{spec.scope === "optional" ? "All units" : "Choose…"}</option>
-                {catalog.teams.filter((t) => role === "owner" || (t.kind && t.kind !== "team")).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                <option value="">Choose…</option>
+                {(role === "platform-owner" ? catalog.platforms : role === "practice-owner" ? catalog.practices : catalog.teams).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </Field>
           )}
@@ -112,7 +119,7 @@ function AccessSection() {
               <span className="role-chips">
                 {list.map((a) => (
                   <span key={a.role + a.scope} className="role-chip">
-                    {ROLES[a.role]?.label ?? a.role}{a.scope && <em>{teamName(catalog, a.scope)}</em>}
+                    {ROLES[a.role]?.label ?? a.role}{a.scope && <em>{scopeName(catalog, a.role, a.scope)}</em>}
                     <button aria-label={`Remove ${ROLES[a.role]?.label ?? a.role} from ${person}`} onClick={() => revoke(a)}><Trash2 size={12} /></button>
                   </span>
                 ))}
@@ -126,7 +133,7 @@ function AccessSection() {
       <section className="admin-card">
         <h2>What each role can do</h2>
         <table className="guide-table"><tbody>
-          {(Object.keys(ROLES) as Role[]).map((r) => <tr key={r}><td><b>{ROLES[r].label}</b></td><td>{ROLES[r].can}{ROLES[r].scope === "optional" && ". Can be limited to one unit"}{ROLES[r].scope === "required" && ". Always for one team or unit"}</td></tr>)}
+          {(Object.keys(ROLES) as Role[]).map((r) => <tr key={r}><td><b>{ROLES[r].label}</b></td><td>{ROLES[r].can}{ROLES[r].always && `. ${ROLES[r].always}`}</td></tr>)}
         </tbody></table>
       </section>
     </div>

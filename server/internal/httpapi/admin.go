@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -29,11 +30,29 @@ type accessInput struct {
 	Scope string `json:"scope"`
 }
 
-func describe(in accessInput) string {
-	if in.Scope != "" {
+// describe is the detail of an audit entry for a role: "owner for team Cyber Security
+// (security)". The name is the one in the lists at the time; the id stays when it is gone.
+func describe(in accessInput, lists docs.Lists) string {
+	if in.Scope == "" {
+		return in.Role
+	}
+	noun := rbac.ScopeNoun(in.Role)
+	if noun == "" {
 		return in.Role + " for " + in.Scope
 	}
-	return in.Role
+	if n, ok := find(lists.ByKey(rbac.ScopeList(in.Role)), in.Scope); ok && n.Name != "" && n.Name != in.Scope {
+		return fmt.Sprintf("%s for %s %s (%s)", in.Role, noun, n.Name, in.Scope)
+	}
+	return in.Role + " for " + noun + " " + in.Scope
+}
+
+func find(list []docs.Named, id string) (docs.Named, bool) {
+	for _, n := range list {
+		if n.ID == id {
+			return n, true
+		}
+	}
+	return docs.Named{}, false
 }
 
 func (a *api) grantAccess(w http.ResponseWriter, r *http.Request) {
@@ -47,15 +66,19 @@ func (a *api) grantAccess(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "That is not an email address.")
 		return
 	}
-	// a role limited to a team must name a team that exists
-	if in.Scope != "" {
-		lists, err := a.Docs.Lists(r.Context())
-		if err != nil {
-			a.fail(w, r, err)
-			return
-		}
-		if _, ok := lists.Team(in.Scope); !ok {
-			writeError(w, 400, "There is no team or unit “"+in.Scope+"” in the lists.")
+	lists, err := a.Docs.Lists(r.Context())
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	// the format of the assignment first, then whether its team, platform or practice exists
+	if err := rbac.Check(rbac.Assignment{Email: in.Email, Role: in.Role, Scope: in.Scope}); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if key := rbac.ScopeList(in.Role); key != "" {
+		if _, ok := find(lists.ByKey(key), in.Scope); !ok {
+			writeError(w, 400, "There is no "+rbac.ScopeNoun(in.Role)+" “"+in.Scope+"” in the lists.")
 			return
 		}
 	}
@@ -63,7 +86,7 @@ func (a *api) grantAccess(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	a.record(r, "access.grant", in.Email, describe(in))
+	a.record(r, "access.grant", in.Email, describe(in, lists))
 	a.listAccess(w, r)
 }
 
@@ -77,8 +100,24 @@ func (a *api) revokeAccess(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	a.record(r, "access.revoke", strings.ToLower(strings.TrimSpace(in.Email)), describe(in))
+	lists, err := a.Docs.Lists(r.Context())
+	if err != nil {
+		a.Log.Error("lists not read for the activity log", "error", err) // the role is gone all the same
+	}
+	a.record(r, "access.revoke", strings.ToLower(strings.TrimSpace(in.Email)), describe(in, lists))
 	a.listAccess(w, r)
+}
+
+// listMembers tells everyone who is signed in who belongs to which team, platform and
+// practice: the people with a role limited to it. This is how a reader finds out who may
+// change what belongs to a platform or a practice.
+func (a *api) listMembers(w http.ResponseWriter, r *http.Request) {
+	list, err := a.Roles.Members(r.Context())
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"members": list})
 }
 
 func (a *api) listAudit(w http.ResponseWriter, r *http.Request) {
@@ -196,11 +235,11 @@ func (a *api) downloadSkill(w http.ResponseWriter, r *http.Request) {
 
 // canEditSkill: whoever may edit the process or standard the skill is generated from.
 func (a *api) canEditSkill(r *http.Request, sk skills.Skill) bool {
-	owner := ""
+	var b rbac.Belongs
 	if d, err := a.Docs.Get(r.Context(), sk.SourceKind, sk.SourceID); err == nil {
-		owner = ownerOf(d.Body)
+		b = belongsOf(d.Body)
 	}
-	return who(r).CanEdit(sk.SourceKind, owner)
+	return who(r).CanEdit(sk.SourceKind, b)
 }
 
 func (a *api) putSkillExtra(w http.ResponseWriter, r *http.Request) {
