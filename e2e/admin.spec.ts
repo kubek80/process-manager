@@ -22,7 +22,7 @@ test("the Admin panel is for admins and for people who manage the lists", async 
   await signIn(page, DANA);
   await open(page, "/");
   await page.locator(".nav").getByRole("link", { name: "Admin" }).click();
-  await expect(page.locator(".admin-nav a")).toHaveText(["Access", "Lists", "Skills", "Health", "Activity", "System"]);
+  await expect(page.locator(".admin-nav a")).toHaveText(["Access", "Lists", "Skills", "Health", "Activity", "Statistics", "System"]);
 });
 
 test("an admin gives someone a role and it takes effect at once", async ({ page, browser }) => {
