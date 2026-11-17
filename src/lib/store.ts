@@ -99,6 +99,23 @@ export const setAlsoHit = (id: string, on: boolean) => call<Feedback>(on ? "POST
 export const setResolved = (id: string, resolved: boolean) => call<Feedback>("PATCH", `/api/feedback/${id}`, { resolved });
 export const deleteFeedback = (id: string) => call<void>("DELETE", `/api/feedback/${id}`);
 
+// views, bookmarks and upvotes: counted on the server; who viewed what is never shown
+export interface EngagementCounts { views: number; people: number; downloads: number; upvotes: number; handled: number }
+export interface EngagementData {
+  counts: Record<TargetKind, Record<string, Partial<EngagementCounts>>>;
+  mine: { bookmarks: { kind: TargetKind; id: string; at: string }[]; upvotes: { kind: TargetKind; id: string }[] };
+}
+export async function loadEngagement(): Promise<EngagementData> {
+  const r = await call<Partial<EngagementData> | null>("GET", "/api/engagement");
+  return {
+    counts: { process: r?.counts?.process ?? {}, standard: r?.counts?.standard ?? {} },
+    mine: { bookmarks: r?.mine?.bookmarks ?? [], upvotes: r?.mine?.upvotes ?? [] },
+  };
+}
+export const recordViewOn = (kind: TargetKind, id: string) => call<void>("POST", `/api/views/${kind}/${encodeURIComponent(id)}`);
+export const setBookmark = (kind: TargetKind, id: string, on: boolean) => call<void>(on ? "PUT" : "DELETE", `/api/bookmarks/${kind}/${encodeURIComponent(id)}`);
+export const setUpvote = (kind: TargetKind, id: string, on: boolean) => call<{ upvotes: number }>(on ? "PUT" : "DELETE", `/api/upvotes/${kind}/${encodeURIComponent(id)}`);
+
 // skills and review agents generated from processes and standards
 export const loadSkills = async () => (await call<{ skills: Skill[] }>("GET", "/api/skills")).skills;
 export const loadSkill = (id: string) => call<SkillDetail>("GET", `/api/skills/${id}`);
