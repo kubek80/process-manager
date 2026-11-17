@@ -9,6 +9,7 @@ const GCP = "request-gcp-project"; // platform Google Cloud
 const AZURE = "request-azure-landing-zone"; // platform Azure, no practice: not his
 const REVIEW = "code-review"; // practice Engineering
 const LOGGING = "secure-logging"; // practice Cyber security (Riley)
+const LIBRARY = "publish-internal-library"; // practice Engineering, platform GitHub
 
 const PROCESS_NOT_YOURS = "You can only save a process that belongs to a platform or practice you own.";
 const PROCESS_DENIED = "Only process editors and the owners of its platform or practice can change this process.";
@@ -72,12 +73,14 @@ test("moving a document away from his platform is warned about, blocked, and ref
   await details(page).click();
   const modal = page.locator(".modal");
   const platform = modal.getByLabel(/^Platform/);
-  await expect(platform.locator("option", { hasText: "Google Cloud (yours)" })).toHaveCount(1);
-  await platform.selectOption({ label: "Azure" });
+  // he is offered only his own platform and practice
+  await expect(platform.locator("option")).toHaveText(["None", "Google Cloud"]);
+  await expect(modal.getByLabel(/^Practice/).locator("option")).toHaveText(["None", "Engineering"]);
+  await platform.selectOption({ label: "None" });
   await expect(modal.getByRole("alert")).toContainText("it would no longer be yours, so you could not save it");
   await expect(modal.getByRole("alert")).toContainText("Keep it with the platform Google Cloud or the practice Engineering");
   // with his practice it stays his: no warning
-  await modal.getByLabel(/^Practice/).selectOption({ label: "Engineering (yours)" });
+  await modal.getByLabel(/^Practice/).selectOption({ label: "Engineering" });
   await expect(modal.getByRole("alert")).toHaveCount(0);
   await modal.getByLabel(/^Practice/).selectOption({ label: "None" });
   await expect(modal.getByRole("alert")).toBeVisible();
@@ -91,8 +94,40 @@ test("moving a document away from his platform is warned about, blocked, and ref
   const gcp = (await readProcess(page, GCP))!;
   const res = await putDoc(page, "process", GCP, { ...gcp, platform: "azure" });
   expect(res.status()).toBe(403);
-  expect((await res.json()).error).toBe(PROCESS_NOT_YOURS);
   expect((await readProcess(page, GCP))!.platform).toBe("google-cloud");
+});
+
+test("a platform that is not his stays as it is on a document of his practice", async ({ page }) => {
+  // "Publish an internal library" belongs to his practice Engineering and to the platform GitHub, which is not his
+  await signIn(page, JORDAN, { editor: true });
+  const library = (await readProcess(page, LIBRARY))!;
+  expect(library).toMatchObject({ practice: "engineering", platform: "github" });
+  await open(page, `/p/${LIBRARY}/flow`);
+  await details(page).click();
+  const modal = page.locator(".modal");
+  const platform = modal.getByLabel(/^Platform/);
+  await expect(platform).toBeDisabled();
+  await expect(platform).toHaveValue("github");
+  await expect(modal.locator(".field", { has: platform })).toContainText("Only its owners or an editor can change this");
+  // the practice is his: he may keep or clear it, but only pick his own
+  await expect(modal.getByLabel(/^Practice/)).toBeEnabled();
+  await expect(modal.getByLabel(/^Practice/).locator("option")).toHaveText(["None", "Engineering"]);
+  // everything else he may change, the owning team included
+  await modal.getByLabel("Summary").fill("Share code inside the company, changed by a practice owner.");
+  await modal.getByLabel(/^Owning team/).selectOption({ label: "Cloud Platform team" });
+  await modal.getByRole("button", { name: "Done" }).click();
+  await save(page);
+  expect((await readProcess(page, LIBRARY))!).toMatchObject({ summary: "Share code inside the company, changed by a practice owner.", owner: "cloud-platform-team", platform: "github" });
+
+  // the server refuses a change of the platform, also to his own, and also taking it away
+  const now = (await readProcess(page, LIBRARY))!;
+  for (const platform of ["google-cloud", undefined]) {
+    const res = await putDoc(page, "process", LIBRARY, { ...now, platform });
+    expect(res.status()).toBe(403);
+    expect((await res.json()).error).toMatch(/GitHub/);
+  }
+  expect((await readProcess(page, LIBRARY))!.platform).toBe("github");
+  expect((await putDoc(page, "process", LIBRARY, library)).ok()).toBeTruthy(); // as it was
 });
 
 test("a platform owner creates a process for his platform and a standard for his practice, and deletes them", async ({ page }) => {

@@ -46,8 +46,11 @@ export interface SearchInput {
   catalog: Pick<Catalog, "teams" | "tools"> & Partial<Pick<Catalog, "categories" | "practices" | "platforms">>;
   q?: string;
   filters?: Filters;
-  /** Whether drafts may be shown (editor mode). */
-  drafts: boolean;
+  /**
+   * Which drafts may be shown: none (false), all (true), or those this says yes to - in editor
+   * mode, the drafts the person may edit, as in the libraries.
+   */
+  drafts: boolean | ((kind: "process" | "standard", doc: Process | Standard) => boolean);
 }
 
 export interface SearchOutput {
@@ -163,10 +166,11 @@ export function search(input: SearchInput): SearchOutput {
   const { catalog: c, drafts } = input;
   const filters = input.filters ?? {};
   const words = wordsOf(input.q);
-  const visible = (d: Process | Standard) => drafts || d.status !== "draft";
+  const visible = (kind: "process" | "standard") => (d: Process | Standard) =>
+    d.status !== "draft" || (typeof drafts === "function" ? drafts(kind, d) : drafts);
   const docs = [
-    ...input.processes.filter(visible).map((p) => index("process", p, c)),
-    ...input.standards.filter(visible).map((s) => index("standard", s, c)),
+    ...input.processes.filter(visible("process")).map((p) => index("process", p, c)),
+    ...input.standards.filter(visible("standard")).map((s) => index("standard", s, c)),
   ];
   // what the query finds, before the filters
   const found = docs.map((d) => ({ d, score: words.length ? scoreOf(d, words) : 1 })).filter((x) => x.score > 0);

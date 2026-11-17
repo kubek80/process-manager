@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { ALEX, CSRF, open, SAM, signIn, watchErrors } from "./helpers";
+import { ALEX, CSRF, JORDAN, open, SAM, signIn, watchErrors } from "./helpers";
 
 // Home is one search over processes and standards; the results page narrows it down with
 // filters, and its address carries all of it. The sample has 7 processes and 3 standards.
@@ -183,17 +183,24 @@ test("when nothing is found, the filters can be dropped from there", async ({ pa
   await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
 });
 
-test("a draft is found only by the people who may see it, and is marked as one", async ({ page }) => {
-  // a draft process, made by a process editor
+test("a draft is found only by the people who may edit it, in editor mode, and is marked as one", async ({ page }) => {
+  // a draft process of the Cloud Platform team on Azure, made by a process editor
   await page.request.post("/auth/dev/login", { data: { email: ALEX }, headers: CSRF });
   const { processes } = await (await page.request.get("/api/processes")).json();
   const src = processes.find((p: { id: string }) => p.id === "request-gcp-project");
   const made = await page.request.put("/api/processes/search-draft-demo?base=0", {
-    data: { ...src, id: "search-draft-demo", title: "Zebra draft demo", status: "draft" }, headers: CSRF,
+    data: { ...src, id: "search-draft-demo", title: "Zebra draft demo", status: "draft", owner: "cloud-platform-team", platform: "azure", practice: undefined }, headers: CSRF,
   });
   expect(made.ok()).toBeTruthy();
   try {
     await signIn(page, SAM);
+    await open(page, "/search?q=zebra");
+    await expect(page.locator(".search-empty h2")).toHaveText("Nothing found");
+
+    // Jordan is Owner of the team, so the draft reaches his browser, and he has an editor mode
+    // for his platform Google Cloud - but he may not edit this draft, so it is not listed for him
+    await signIn(page, JORDAN, { editor: true });
+    expect((await (await page.request.get("/api/processes")).json()).processes.some((p: { id: string }) => p.id === "search-draft-demo")).toBe(true);
     await open(page, "/search?q=zebra");
     await expect(page.locator(".search-empty h2")).toHaveText("Nothing found");
 

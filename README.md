@@ -55,7 +55,7 @@ React + Vite frontend; Go server; Postgres. Everything people change lives in th
 | **Search** | Home (`#/`) searches processes and standards together; results (`#/search?…`) filter by type, rigour, category, practice and platform, and the address holds the whole search so it can be shared. The process list is `#/processes`, standards `#/standards` |
 | **Processes** | Map and checklist, sub-processes, prerequisites, block types, editing on the map and in the checklist |
 | **Standards** | Requirements with level (must / should / may), reason, how to comply, examples, how it is checked, and what a reviewer looks for |
-| **What it belongs to** | An owning team, and optionally a category, a platform and a practice; a process also says how binding it is (mandatory, recommended, optional), a standard follows from its requirements' levels |
+| **What it belongs to** | An owning team, and optionally a category, a platform and a practice; a process also has a rigour, how binding it is (mandatory, recommended, optional), a standard follows from its requirements' levels |
 | **Where it applies** | Application tiers, environments and programming languages, on a process, a standard or a single requirement; “My application” hides the rest |
 | **Life-cycle** | Draft (hidden from readers), active, retired; periodic reviews by the owner |
 | **Versions** | Every save is a version with who, when and a note; what changed between versions in plain words; restore; undo while editing; a warning before unsaved changes are left; a decision when somebody else saved first |
@@ -84,6 +84,8 @@ Everyone who signs in (Entra ID or Google) can read, tick and give feedback. Rol
 | Owner (of one team) | Confirm reviews and close feedback on what the team maintains; a page of their own, **My responsibilities**, shows what is waiting |
 | Platform owner (of one platform) | Create, change and delete the processes and standards that belong to the platform, and everything an Owner does for them |
 | Practice owner (of one practice) | The same for one practice |
+
+A platform or practice owner may set or change the platform of a process or standard only from one of their own platforms to another (or to or from none): a platform that is not theirs stays as it is, and only its owners or an editor can change it. The same goes, separately, for the practice. They may change everything else, the owning team included; editors are not limited this way.
 | Process editor | Create and change every process |
 | Standards editor | Create and change every standard |
 | Lists manager | Teams, practices, platforms, categories, tools, tiers, environments, languages |

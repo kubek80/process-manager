@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowRight, LayoutGrid, ShieldCheck } from "lucide-react";
 import type { Process, Standard } from "../types";
 import { useCatalog } from "../lib/catalog";
-import { useEditor } from "../lib/mode";
+import { useVisibleDrafts } from "../lib/session";
 import { go, href } from "../lib/store";
 import { search, type FilterKey } from "../lib/search";
 import { SearchBox } from "./SearchPage";
@@ -17,9 +17,9 @@ const WAYS: { key: Extract<FilterKey, "platform" | "practice" | "category">; tit
 /** The start: one search over processes and standards, and ways to browse them. */
 export function HomePage({ processes, standards }: { processes: Process[]; standards: Standard[] }) {
   const { catalog } = useCatalog();
-  const editor = useEditor(); // drafts only count for editors, as they are only shown to them
+  const drafts = useVisibleDrafts(); // drafts only count for those who may edit them, as they are only shown to them
   const [text, setText] = useState("");
-  const out = useMemo(() => search({ processes, standards, catalog, drafts: editor }), [processes, standards, catalog, editor]);
+  const out = useMemo(() => search({ processes, standards, catalog, drafts }), [processes, standards, catalog, drafts]);
   const count = (kind: string) => out.options.type.find((o) => o.value === kind)?.count ?? 0;
   const nProcesses = count("process");
   const nStandards = count("standard");

@@ -7,7 +7,7 @@ import {
 } from "./lib/store";
 import { CatalogContext, EMPTY_CATALOG, useCatalog } from "./lib/catalog";
 import { canEditSomething, canOpenAdmin, FeedbackContext, MeContext, roleLabel, usePerms, type FeedbackActions } from "./lib/session";
-import { canEdit, editsAll } from "./lib/rights";
+import { belongsRefused, canEdit, editsAll } from "./lib/rights";
 import { ModeContext, type Mode } from "./lib/mode";
 import { blankProcess, blankStandard, slugify, tidy, tidyStandard, today, uniqueId, type BelongsTo } from "./lib/edit";
 import { CatalogPage } from "./components/CatalogPage";
@@ -373,7 +373,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   // accident and never lands on top of something that exists.
   const createProcess = async (p: Process) => {
     // somebody who may only change what belongs to their platforms and practices first says which
-    if (!canEdit(perms, "process", p)) { setPending(p); setAi(null); setNaming("process"); return; }
+    if (!canEdit(perms, "process", p) || belongsRefused(perms, "process", undefined, p).length) { setPending(p); setAi(null); setNaming("process"); return; }
     const id = uniqueId(p.id, all.map((x) => x.id));
     const doc = tidy({ ...p, id, status: "draft", $schema: "../schema/process.schema.json", updatedAt: today() });
     try { await saveProcess(doc, 0, "Created"); } catch (e) { notify.error("The process could not be created.", whyNotCreated(e, "process")); if ((e as ApiError).conflict) load(); throw e; }
@@ -381,7 +381,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     go({ page: "process", id, tab: "flow" });
   };
   const createStandard = async (s: Standard) => {
-    if (!canEdit(perms, "standard", s)) { setPending(s); setAi(null); setNaming("standard"); return; }
+    if (!canEdit(perms, "standard", s) || belongsRefused(perms, "standard", undefined, s).length) { setPending(s); setAi(null); setNaming("standard"); return; }
     const id = uniqueId(s.id, standards.map((x) => x.id));
     const doc = tidyStandard({ ...s, id, status: "draft", $schema: "../schema/standard.schema.json", updatedAt: today() });
     try { await saveStandard(doc, 0, "Created"); } catch (e) { notify.error("The standard could not be created.", whyNotCreated(e, "standard")); if ((e as ApiError).conflict) load(); throw e; }
@@ -418,13 +418,15 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   };
   // what the name dialog creates: something blank, or what was made with AI, with what the person chose
   const createNamed = (noun: "process" | "standard", title: string, choice: NewChoice) => {
+    // somebody who sets only their own platform or practice: what AI suggested is replaced by what they chose
+    const own = editsAll(perms, noun) ? {} : { platform: undefined, practice: undefined };
     if (noun === "process") {
       const from = pending && !("requirements" in pending) ? pending : null;
-      return createProcess(from ? { ...from, title, ...choice.belongs } : blankProcess(all.map((p) => p.id), title, choice.belongs));
+      return createProcess(from ? { ...from, title, ...own, ...choice.belongs } : blankProcess(all.map((p) => p.id), title, choice.belongs));
     }
     const from = pending && "requirements" in pending ? pending : null;
     const owner = choice.owner ?? from?.owner ?? "";
-    return createStandard(from ? { ...from, title, owner, ...choice.belongs } : blankStandard(standards.map((s) => s.id), owner, title, choice.belongs));
+    return createStandard(from ? { ...from, title, owner, ...own, ...choice.belongs } : blankStandard(standards.map((s) => s.id), owner, title, choice.belongs));
   };
 
   const all = processes ?? [];

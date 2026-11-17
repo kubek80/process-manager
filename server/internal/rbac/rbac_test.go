@@ -97,14 +97,14 @@ func TestCheck(t *testing.T) {
 		}
 	}
 	bad := map[string]rbac.Assignment{
-		"not an email":                       {Email: "nobody", Role: rbac.Admin},
-		"process-editor cannot be limited":   {Email: "a@b.co", Role: rbac.ProcessEditor, Scope: "x"},
-		"standards-editor cannot be limited": {Email: "a@b.co", Role: rbac.StandardsEditor, Scope: "security"},
-		"owner needs the team":               {Email: "a@b.co", Role: rbac.Owner},
-		"platform-owner needs the platform":  {Email: "a@b.co", Role: rbac.PlatformOwner},
-		"practice-owner needs the practice":  {Email: "a@b.co", Role: rbac.PracticeOwner},
-		`"Bad Scope" is not a platform id`:   {Email: "a@b.co", Role: rbac.PlatformOwner, Scope: "Bad Scope"},
-		"unknown role":                       {Email: "a@b.co", Role: "god"},
+		"not an email": {Email: "nobody", Role: rbac.Admin},
+		"A process editor always covers all processes: it cannot be limited to a team, platform or practice.":   {Email: "a@b.co", Role: rbac.ProcessEditor, Scope: "x"},
+		"A standards editor always covers all standards: it cannot be limited to a team, platform or practice.": {Email: "a@b.co", Role: rbac.StandardsEditor, Scope: "security"},
+		"An owner needs the team it is for.":             {Email: "a@b.co", Role: rbac.Owner},
+		"A platform owner needs the platform it is for.": {Email: "a@b.co", Role: rbac.PlatformOwner},
+		"A practice owner needs the practice it is for.": {Email: "a@b.co", Role: rbac.PracticeOwner},
+		`"Bad Scope" is not the id of a platform.`:       {Email: "a@b.co", Role: rbac.PlatformOwner, Scope: "Bad Scope"},
+		`There is no role "god".`:                        {Email: "a@b.co", Role: "god"},
 	}
 	for want, a := range bad {
 		if err := rbac.Check(a); !errors.Is(err, rbac.ErrInvalid) || !strings.Contains(err.Error(), want) {
@@ -199,5 +199,43 @@ func TestTheLastAdminCannotBeRemoved(t *testing.T) {
 	s.Bootstrap = []string{"root@example.com"}
 	if err := s.Revoke(ctx, "b@example.com", rbac.Admin, ""); err != nil {
 		t.Fatalf("with a bootstrap admin: %v", err)
+	}
+}
+
+func TestALimitedRoleThatCoversEverythingGivesNothing(t *testing.T) {
+	p := rbac.PermsFrom([]rbac.Assignment{{Role: rbac.StandardsEditor, Scope: "security"}, {Role: rbac.Admin, Scope: "x"}, {Role: rbac.ProcessEditor, Scope: "x"}}, false)
+	if p.Standards || p.Admin || p.Processes || p.CanEdit("standard", B{Owner: "security", Practice: "security"}) {
+		t.Fatalf("%+v", p)
+	}
+}
+
+func TestMisplaced(t *testing.T) {
+	o := rbac.PermsFrom([]rbac.Assignment{{Role: rbac.PlatformOwner, Scope: "gcp"}, {Role: rbac.PlatformOwner, Scope: "azure"}, {Role: rbac.PracticeOwner, Scope: "eng"}}, false)
+	for _, c := range []struct {
+		before      *B
+		after       B
+		field, id   string
+		description string
+	}{
+		{&B{Platform: "gcp"}, B{Platform: "azure"}, "", "", "between two of one's own"},
+		{&B{Platform: "gcp", Practice: "eng"}, B{Practice: "eng"}, "", "", "off one's own platform"},
+		{&B{Platform: "github", Practice: "eng"}, B{Platform: "github", Practice: "eng", Owner: "x"}, "", "", "only the team changes"},
+		{&B{Platform: "github", Practice: "eng"}, B{Platform: "azure", Practice: "eng"}, "platform", "github", "off another's platform"},
+		{&B{Platform: "github", Practice: "eng"}, B{Practice: "eng"}, "platform", "github", "removing another's platform"},
+		{&B{Platform: "gcp", Practice: "sec"}, B{Platform: "gcp"}, "practice", "sec", "removing another's practice"},
+		{&B{Practice: "eng"}, B{Practice: "eng", Platform: "aws"}, "platform", "aws", "adding another's platform"},
+		{nil, B{Platform: "gcp", Practice: "sec"}, "practice", "sec", "creating in another's practice"},
+		{nil, B{Platform: "gcp", Practice: "eng"}, "", "", "creating in one's own"},
+	} {
+		if field, id := o.Misplaced("process", c.before, c.after); field != c.field || id != c.id {
+			t.Errorf("%s: %q %q", c.description, field, id)
+		}
+	}
+	editor := rbac.PermsFrom([]rbac.Assignment{{Role: rbac.ProcessEditor}}, false)
+	if f, _ := editor.Misplaced("process", &B{Platform: "github"}, B{Platform: "aws"}); f != "" {
+		t.Fatal("a process editor is not limited")
+	}
+	if f, _ := editor.Misplaced("standard", &B{Platform: "github"}, B{Platform: "aws"}); f == "" {
+		t.Fatal("a process editor has no say over standards")
 	}
 }

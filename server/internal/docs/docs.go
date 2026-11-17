@@ -344,6 +344,14 @@ func (s *Store) History(ctx context.Context, kind, id string) ([]Version, error)
 	return out, rows.Err()
 }
 
+// LastDeletion returns the version that records the most recent deletion of a document, or 0
+// when it was never deleted.
+func (s *Store) LastDeletion(ctx context.Context, kind, id string) (int, error) {
+	var n int
+	err := s.Pool.QueryRow(ctx, `select coalesce(max(version), 0) from document_versions where kind = $1 and id = $2 and body is null`, kind, id).Scan(&n)
+	return n, err
+}
+
 // VersionBody returns the body of one saved version.
 func (s *Store) VersionBody(ctx context.Context, kind, id string, version int) (json.RawMessage, error) {
 	var body []byte

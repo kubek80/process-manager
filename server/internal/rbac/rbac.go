@@ -165,6 +165,55 @@ func (p Perms) CanManageFeedback(kind string, b Belongs) bool {
 	return p.CanEdit(kind, b) || in(p.Owns, b.Owner)
 }
 
+// EditsAll reports whether the person edits every document of this kind: admins, process
+// editors for processes, standards editors for standards.
+func (p Perms) EditsAll(kind string) bool {
+	switch kind {
+	case "process":
+		return p.Processes
+	case "standard":
+		return p.Standards
+	case "catalog":
+		return p.Catalog
+	}
+	return false
+}
+
+// Misplaced checks a save by somebody who edits a document only because they own its
+// platform or practice: such a person may put it on a platform, or take it off one, only for
+// platforms they own - the same for practices, separately. Another platform or practice that
+// shares the document keeps it. before is the stored document (nil when it is created).
+// The result names the first field ("platform" or "practice") and the id that is not theirs;
+// field is "" when the save is fine. People who edit every document of the kind are not limited.
+func (p Perms) Misplaced(kind string, before *Belongs, after Belongs) (field, id string) {
+	if p.EditsAll(kind) {
+		return "", ""
+	}
+	var was Belongs
+	if before != nil {
+		was = *before
+	}
+	check := func(owned []string, old, now string) string {
+		if old == now {
+			return ""
+		}
+		if old != "" && !in(owned, old) {
+			return old
+		}
+		if now != "" && !in(owned, now) {
+			return now
+		}
+		return ""
+	}
+	if id := check(p.Platforms, was.Platform, after.Platform); id != "" {
+		return "platform", id
+	}
+	if id := check(p.Practices, was.Practice, after.Practice); id != "" {
+		return "practice", id
+	}
+	return "", ""
+}
+
 // EditsSome reports whether the person may edit some, but not necessarily all, documents of
 // this kind: through a platform or a practice.
 func (p Perms) EditsSome() bool { return len(p.Platforms)+len(p.Practices) > 0 }
@@ -246,27 +295,61 @@ func (s *Store) Perms(ctx context.Context, email string) (Perms, error) {
 	return PermsFrom(list, s.IsBootstrap(email)), nil
 }
 
+// Label is the name of a role as the Admin panel shows it.
+func Label(role string) string {
+	switch role {
+	case Admin:
+		return "Admin"
+	case CatalogManager:
+		return "Lists manager"
+	case ProcessEditor:
+		return "Process editor"
+	case StandardsEditor:
+		return "Standards editor"
+	case Owner:
+		return "Owner"
+	case PlatformOwner:
+		return "Platform owner"
+	case PracticeOwner:
+		return "Practice owner"
+	}
+	return role
+}
+
+// covers says, for a role that cannot be limited, what it always covers.
+var covers = map[string]string{
+	Admin:           "An admin always covers everything",
+	CatalogManager:  "A lists manager always covers all the lists",
+	ProcessEditor:   "A process editor always covers all processes",
+	StandardsEditor: "A standards editor always covers all standards",
+}
+
 // Check validates an assignment before it is stored. Whether the team, platform or practice
-// of a scope exists is for the caller to check against the lists.
+// of a scope exists is for the caller to check against the lists. The messages are for the
+// people who manage access.
 func Check(a Assignment) error {
 	if !emailPattern.MatchString(a.Email) {
-		return fmt.Errorf("%w: %q is not an email address", ErrInvalid, a.Email)
+		return fmt.Errorf("%w: %q is not an email address.", ErrInvalid, a.Email)
 	}
 	switch a.Role {
 	case Admin, CatalogManager, ProcessEditor, StandardsEditor:
 		if a.Scope != "" {
-			return fmt.Errorf("%w: the role %s cannot be limited to a team, platform or practice", ErrInvalid, a.Role)
+			return fmt.Errorf("%w: %s: it cannot be limited to a team, platform or practice.", ErrInvalid, covers[a.Role])
 		}
 	case Owner, PlatformOwner, PracticeOwner:
 		noun := ScopeNoun(a.Role)
+		article := "A"
+		if a.Role == Owner {
+			article = "An"
+		}
 		if a.Scope == "" {
-			return fmt.Errorf("%w: the role %s needs the %s it is for", ErrInvalid, a.Role, noun)
+			return fmt.Errorf("%w: %s %s needs the %s it is for.", ErrInvalid, article, strings.ToLower(Label(a.Role)), noun)
 		}
 		if !scopePattern.MatchString(a.Scope) {
-			return fmt.Errorf("%w: %q is not a %s id", ErrInvalid, a.Scope, noun)
+			return fmt.Errorf("%w: %q is not the id of a %s.", ErrInvalid, a.Scope, noun)
 		}
 	default:
-		return fmt.Errorf("%w: unknown role %q", ErrInvalid, a.Role)
+		return fmt.Errorf("%w: There is no role %q.", ErrInvalid, a.Role)
 	}
 	return nil
 }

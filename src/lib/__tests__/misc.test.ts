@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { json } from "@codemirror/lang-json";
-import { categoryName, completeCatalog, environmentLabel, groupName, languageLabel, platformName, practiceName, teamName, tierLabel, toolName } from "../catalog";
+import { categoryName, completeCatalog, docCount, removeHint, environmentLabel, groupName, languageLabel, platformName, practiceName, teamName, tierLabel, toolName } from "../catalog";
 import { reviewInfo, statusOf } from "../lifecycle";
 import { locate } from "../jsonLocate";
 import { basePrompt, createPrompt, createStandardPrompt, fixPrompt, modifyPrompt, modifyStandardPrompt } from "../prompt";
@@ -225,5 +225,20 @@ describe("review dates and names", () => {
     const long = reviewer("Maximilian-Alexander ".repeat(5));
     expect([...long]).toHaveLength(60);
     expect(long.endsWith("…")).toBe(true);
+  });
+});
+
+describe("what uses an entry of the lists", () => {
+  it("is counted in plain words for processes, standards and both", () => {
+    expect(docCount(1, 0)).toBe("1 process");
+    expect(docCount(2, 1)).toBe("2 processes and 1 standard");
+    expect(docCount(0, 3)).toBe("3 standards");
+    expect(docCount(0, 0)).toBe("");
+  });
+  it("and its members keep it from being removed", () => {
+    expect(removeHint("", 0, "platform")).toBe("Nothing uses it, so it is safe to remove.");
+    expect(removeHint("1 process", 0, "team")).toBe("Still used by 1 process. Change those first, then it can be removed.");
+    expect(removeHint("", 2, "platform")).toBe("2 people are still members of this platform. Remove them from the members first, then it can be removed.");
+    expect(removeHint("1 standard", 1, "practice")).toBe("Still used by 1 standard, and 1 person is still a member of this practice. Change those first and remove the members, then it can be removed.");
   });
 });

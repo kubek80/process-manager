@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpRight, Boxes, Code2, Compass, Server, ExternalLink, Layers, Plus, Search, Tag, Trash2, Users, Wrench } from "lucide-react";
 import type { Catalog, Membership, Process, Standard } from "../types";
 import { GroupMembers } from "./TeamMembers";
-import type { GroupKind } from "../lib/members";
+import { membersOf, type GroupKind } from "../lib/members";
 import { slugify, uniqueId } from "../lib/edit";
-import { useCatalog } from "../lib/catalog";
+import { docCount, removeHint, useCatalog } from "../lib/catalog";
 import { useDraft } from "../lib/draft";
 import { BehindBanner, ConflictDialog, SaveBar } from "./Editing";
 import { go, loadMembers } from "../lib/store";
 import { hasErrors, validateCatalog } from "../lib/validate";
-import { Field, IssueList, notify } from "./ui";
+import { Field, IssueList, notify, useBottomBar } from "./ui";
 
 type Key = "teams" | "practices" | "platforms" | "categories" | "tools" | "tiers" | "environments" | "languages";
 type Row = { id: string; name: string; contact?: string; url?: string; description?: string };
@@ -101,6 +101,9 @@ function usesOf(key: Key, id: string, processes: (Process | Standard)[]): Use[] 
   return out;
 }
 
+/** What uses something, counted by kind: "2 processes and 1 standard". */
+const countOf = (uses: Use[]) => docCount(uses.filter((u) => !("requirements" in u.process)).length, uses.filter((u) => "requirements" in u.process).length);
+
 const strip = (r: Row): Row => Object.fromEntries(Object.entries(r).filter(([k, v]) => k === "id" || k === "name" || (v ?? "").trim() !== "")) as Row;
 /** The lists without empty optional fields: what is compared with the saved lists, and saved. */
 const tidyCatalog = (c: Catalog): Catalog =>
@@ -123,16 +126,22 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
   const [newName, setNewName] = useState("");
   const [q, setQ] = useState("");
   const issues = validateCatalog(clean);
+  // the bar with Save and Discard sticks to the bottom while there are changes: messages go above it
+  const saveBar = useRef<HTMLDivElement>(null);
+  useBottomBar(saveBar, editor && dirty);
   // who belongs to which team, platform and practice: everyone may read it
   const [members, setMembers] = useState<Membership[] | null>(null);
   const [membersError, setMembersError] = useState("");
-  useEffect(() => { loadMembers().then(setMembers, (e) => setMembersError(e.message)); }, []);
+  const reloadMembers = useCallback(() => { loadMembers().then((m) => { setMembers(m); setMembersError(""); }, (e) => setMembersError(e.message)); }, []);
+  useEffect(reloadMembers, [reloadMembers]);
 
   const kind = KINDS[key];
   const rows = (draft[key] ?? []) as Row[];
   const shown = rows.filter((r) => `${r.name} ${r.contact ?? ""} ${r.description ?? ""} ${r.url ?? ""}`.toLowerCase().includes(q.toLowerCase()));
   const current = adding ? undefined : rows.find((r) => r.id === selected) ?? shown[0];
   const uses = current ? usesOf(key, current.id, docs) : [];
+  // people who are still members: the server refuses to remove an entry that roles point to
+  const stillMembers = current && GROUP_OF[key] && members ? membersOf(members, GROUP_OF[key]!, current.id).length : 0;
   const isNew = (id: string) => !((catalog[key] ?? []) as Row[]).some((r) => r.id === id);
   const group = GROUP_OF[key];
 
@@ -188,7 +197,8 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
           </div>
           <ul>
             {shown.map((r) => {
-              const n = usesOf(key, r.id, docs).length;
+              const used = usesOf(key, r.id, docs);
+              const n = used.length;
               const rank = rows.findIndex((x) => x.id === r.id);
               return (
                 <li key={r.id}>
@@ -198,7 +208,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
                       <strong>{r.name || "Unnamed"}{isNew(r.id) && <i>new</i>}</strong>
                       <em>{r.contact ?? r.url?.replace(/^https?:\/\//, "") ?? r.description ?? "No details yet"}</em>
                     </span>
-                    <span className={`cat-uses ${n ? "" : "none"}`} title={n ? `Used by ${n} process${n > 1 ? "es" : ""}` : "Not used by any process"}>{n}</span>
+                    <span className={`cat-uses ${n ? "" : "none"}`} title={n ? `Used by ${countOf(used)}` : "Not used by any process or standard"}>{n}</span>
                   </button>
                 </li>
               );
@@ -268,7 +278,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
               )}
 
               <div className="cat-usage">
-                <h3>Used by {uses.length ? `${uses.length} process${uses.length > 1 ? "es" : ""} and standards` : "nothing yet"}</h3>
+                <h3>Used by {uses.length ? countOf(uses) : "nothing yet"}</h3>
                 <ul>
                   {uses.map((u) => (
                     <li key={("requirements" in u.process ? "s/" : "p/") + u.process.id}>
@@ -281,16 +291,14 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
               </div>
 
               {/* who belongs to the team, platform or practice: everyone sees it, admins change it where the lists are managed */}
-              {group && <GroupMembers kind={group} id={current.id} name={current.name} saved={!isNew(current.id)} manage={editor} members={members} membersError={membersError} />}
+              {group && <GroupMembers kind={group} id={current.id} name={current.name} saved={!isNew(current.id)} manage={editor} members={members} membersError={membersError} onChanged={reloadMembers} />}
 
               {editor && (
                 <div className="cat-danger">
-                  <button className="btn danger" disabled={uses.length > 0} onClick={() => { setRows(rows.filter((r) => r.id !== current.id)); setSelected(null); }}>
+                  <button className="btn danger" disabled={uses.length > 0 || stillMembers > 0} onClick={() => { setRows(rows.filter((r) => r.id !== current.id)); setSelected(null); }}>
                     <Trash2 size={15} />Remove this {kind.noun}
                   </button>
-                  <span className="muted small">{uses.length > 0
-                    ? `Still used by ${uses.length} process${uses.length > 1 ? "es" : ""}. Change those first, then it can be removed.`
-                    : "Nothing uses it, so it is safe to remove."}</span>
+                  <span className="muted small">{removeHint(countOf(uses), stillMembers, kind.noun)}</span>
                 </div>
               )}
             </>
@@ -301,7 +309,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
 
       {editor && <BehindBanner d={d} meta={{ version, updatedAt: "", updatedBy: "" }} noun="the lists" />}
       {editor && (
-        <div className={`cat-save ${dirty ? "dirty" : ""}`}>
+        <div ref={saveBar} className={`cat-save ${dirty ? "dirty" : ""}`}>
           {dirty && <span className="cat-save-text" role="status"><b>Unsaved changes</b> to the lists</span>}
           <SaveBar d={d} editor blocked={hasErrors(issues) ? "Fix the problems first" : undefined} />
         </div>

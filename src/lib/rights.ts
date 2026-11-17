@@ -48,6 +48,34 @@ export const canCreate = (p: Perms, kind: TargetKind) => editsAll(p, kind) || (p
  */
 export const wouldLoseEdit = (p: Perms, kind: TargetKind, saved?: Belongs, now?: Belongs) => canEdit(p, kind, saved) && !canEdit(p, kind, now);
 
+export type BelongsField = "platform" | "practice";
+const ownsValue = (p: Perms, field: BelongsField, id: string) => ((field === "platform" ? p.platforms : p.practices) ?? []).includes(id);
+
+/**
+ * How somebody may set the platform (or the practice) of a document whose saved value is
+ * `saved` (undefined: none, or a new document). A general editor may pick any. Somebody who
+ * edits only through their platforms and practices may set or change it only when they own both
+ * the saved value (if any) and the new one (if any): "own" means None or one of theirs, "locked"
+ * means the saved value is somebody else's and stays as it is. The server applies the same rule.
+ */
+export function belongsChoice(p: Perms, kind: TargetKind, field: BelongsField, saved?: string): "any" | "own" | "locked" {
+  if (editsAll(p, kind)) return "any";
+  return saved && !ownsValue(p, field, saved) ? "locked" : "own";
+}
+
+/**
+ * Which of platform and practice a save from `saved` (undefined: a new document) to `now` would
+ * change in a way the person may not, by the rule of `belongsChoice`. Empty: allowed.
+ */
+export function belongsRefused(p: Perms, kind: TargetKind, saved: Belongs | undefined, now: Belongs): BelongsField[] {
+  if (editsAll(p, kind)) return [];
+  return (["platform", "practice"] as const).filter((field) => {
+    const was = saved?.[field] || undefined, is = now[field] || undefined;
+    if (was === is) return false;
+    return (!!was && !ownsValue(p, field, was)) || (!!is && !ownsValue(p, field, is));
+  });
+}
+
 /** Anyone who can change some process or standard gets the Consumer / Editor switch. */
 export const canEditSomething = (p: Perms) => canCreate(p, "process") || canCreate(p, "standard");
 

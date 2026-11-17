@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canCreate, canEdit, canEditSomething, canManage, canOpenAdmin, completePerms, editsAll, NO_PERMS, roleLabel, wouldLoseEdit } from "../rights";
+import { belongsChoice, belongsRefused, canCreate, canEdit, canEditSomething, canManage, canOpenAdmin, completePerms, editsAll, NO_PERMS, roleLabel, wouldLoseEdit } from "../rights";
 import type { Perms } from "../../types";
 
 const perms = (p: Partial<Perms>): Perms => ({ ...NO_PERMS, ...p });
@@ -90,5 +90,32 @@ describe("who may change a process or standard", () => {
     expect(p).toEqual({ ...NO_PERMS, processes: true });
     expect(canEdit({ admin: false, catalog: false, processes: false, standards: false } as Perms, "process", gcp)).toBe(false);
     expect(completePerms(undefined)).toEqual(NO_PERMS);
+  });
+
+  it("somebody who edits only through ownership sets a platform or practice only from one of theirs to one of theirs", () => {
+    const jordan = perms({ platforms: ["google-cloud"], practices: ["engineering"] });
+    const library = { owner: "developer-experience-team", practice: "engineering", platform: "github" };
+    // the pickers
+    expect(belongsChoice(jordan, "process", "platform", "github")).toBe("locked");
+    expect(belongsChoice(jordan, "process", "practice", "engineering")).toBe("own");
+    expect(belongsChoice(jordan, "process", "platform", undefined)).toBe("own");
+    expect(belongsChoice(jordan, "standard", "practice", "security")).toBe("locked");
+    expect(belongsChoice(perms({ processes: true }), "process", "platform", "github")).toBe("any");
+    expect(belongsChoice(perms({ processes: true }), "standard", "platform", "github")).toBe("locked"); // a process editor is not a standards editor
+    // the saves
+    expect(belongsRefused(jordan, "process", library, { ...library, summary: "x", owner: "cloud-platform-team" } as never)).toEqual([]);
+    expect(belongsRefused(jordan, "process", library, { ...library, platform: "google-cloud" })).toEqual(["platform"]);
+    expect(belongsRefused(jordan, "process", library, { ...library, platform: undefined })).toEqual(["platform"]);
+    expect(belongsRefused(jordan, "process", library, { ...library, practice: undefined })).toEqual([]);
+    expect(belongsRefused(jordan, "process", library, { ...library, practice: "security", platform: "azure" })).toEqual(["platform", "practice"]);
+    expect(belongsRefused(jordan, "process", gcp, { ...gcp, platform: "azure" })).toEqual(["platform"]);
+    expect(belongsRefused(jordan, "process", gcp, { ...gcp, practice: "engineering" })).toEqual([]);
+    expect(belongsRefused(jordan, "process", { platform: "" }, { platform: undefined })).toEqual([]); // empty is none
+    // creating: every platform and practice set must be his
+    expect(belongsRefused(jordan, "process", undefined, { platform: "google-cloud", practice: "engineering" })).toEqual([]);
+    expect(belongsRefused(jordan, "standard", undefined, { practice: "engineering", platform: "azure" })).toEqual(["platform"]);
+    // general editors are not restricted
+    expect(belongsRefused(perms({ standards: true }), "standard", library, { platform: "azure", practice: "security" })).toEqual([]);
+    expect(belongsRefused(perms({ admin: true }), "process", library, {})).toEqual([]);
   });
 });

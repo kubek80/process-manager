@@ -42,12 +42,14 @@ function MemberList({ kind, id, members, error, manage }: { kind: GroupKind; id:
  * `saved` is false for an entry that was added but not saved yet: it has to exist before anybody
  * can belong to it.
  */
-export function GroupMembers({ kind, id, name, saved, manage, members, membersError }: {
+export function GroupMembers({ kind, id, name, saved, manage, members, membersError, onChanged }: {
   kind: GroupKind; id: string; name: string; saved: boolean;
   /** Where the lists are managed: an admin can add and remove members here. */
   manage: boolean;
   /** What everyone may read about members; null while it loads. */
   members: Membership[] | null; membersError?: string;
+  /** Called after an admin added or removed somebody here. */
+  onChanged?: () => void;
 }) {
   const perms = usePerms();
   const admin = manage && perms.admin;
@@ -72,7 +74,7 @@ export function GroupMembers({ kind, id, name, saved, manage, members, membersEr
     const who = email.trim().toLowerCase();
     if (!looksLikeEmail(who) || busy) return;
     setBusy(true);
-    try { setAccess(await grantAccess({ email: who, role, scope: id })); setEmail(""); }
+    try { setAccess(await grantAccess({ email: who, role, scope: id })); setEmail(""); onChanged?.(); }
     catch (e) { notify.error(`${who} could not be added.`, e); /* what was typed stays in the field */ }
     finally { setBusy(false); }
   };
@@ -85,7 +87,7 @@ export function GroupMembers({ kind, id, name, saved, manage, members, membersEr
       confirmLabel: "Remove", danger: true,
     });
     if (!ok) return;
-    try { setAccess(await revokeAccess({ email: who, role, scope: id })); }
+    try { setAccess(await revokeAccess({ email: who, role, scope: id })); onChanged?.(); }
     catch (e) { notify.error(`${who} could not be removed.`, e); }
   };
 

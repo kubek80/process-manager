@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -30,20 +29,23 @@ type accessInput struct {
 	Scope string `json:"scope"`
 }
 
-// describe is the detail of an audit entry for a role: "owner for team Cyber Security
-// (security)". The name is the one in the lists at the time; the id stays when it is gone.
+// describe is the detail of an audit entry for a role, in the words of the Admin panel:
+// "Practice owner for the practice Engineering". The name is the one in the lists at the time;
+// the id stands in when it is not there.
 func describe(in accessInput, lists docs.Lists) string {
+	label := rbac.Label(in.Role)
 	if in.Scope == "" {
-		return in.Role
+		return label
 	}
 	noun := rbac.ScopeNoun(in.Role)
-	if noun == "" {
-		return in.Role + " for " + in.Scope
+	if noun == "" { // a role of an earlier version that was limited
+		return label + " (limited to " + in.Scope + ")"
 	}
-	if n, ok := find(lists.ByKey(rbac.ScopeList(in.Role)), in.Scope); ok && n.Name != "" && n.Name != in.Scope {
-		return fmt.Sprintf("%s for %s %s (%s)", in.Role, noun, n.Name, in.Scope)
+	name := in.Scope
+	if n, ok := find(lists.ByKey(rbac.ScopeList(in.Role)), in.Scope); ok && n.Name != "" {
+		name = n.Name
 	}
-	return in.Role + " for " + noun + " " + in.Scope
+	return label + " for the " + noun + " " + name
 }
 
 func find(list []docs.Named, id string) (docs.Named, bool) {

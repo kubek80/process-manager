@@ -159,6 +159,15 @@ describe("search: drafts", () => {
     expect(ids("draft", {}, true)).toEqual(["secret-draft"]);
     expect(search(input("", {}, true)).options.rigour.find((o) => o.value === "optional")?.count).toBe(2);
   });
+  it("can be limited to the drafts somebody may edit, counts included", () => {
+    const azureOnly = (kind: "process" | "standard", d: { platform?: string }) => kind === "process" && d.platform === "azure";
+    const noAzure = (_kind: "process" | "standard", d: { platform?: string }) => d.platform !== "azure";
+    expect(search({ ...input("draft"), drafts: azureOnly }).results.map((r) => r.doc.id)).toEqual(["secret-draft"]);
+    expect(search({ ...input("draft"), drafts: noAzure }).results).toEqual([]);
+    expect(search({ ...input(""), drafts: noAzure }).options.rigour.find((o) => o.value === "optional")?.count).toBe(1);
+    // what is not a draft is never left out
+    expect(search({ ...input("gcp"), drafts: () => false }).results.map((r) => r.doc.id)).toEqual(["request-gcp-project"]);
+  });
 });
 
 describe("search: labels and highlighting", () => {
@@ -216,7 +225,11 @@ describe("addresses of home and search", () => {
   });
   it("ignores what it does not know, and what is empty", () => {
     expect(parseRoute("#/search?q=&type=&foo=bar&rigour=often,mandatory&type=widget")).toEqual({ page: "search", rigour: ["mandatory"] });
-    expect(parseRoute("#/search?q=%E0%A4%A&platform=azure,,azure")).toEqual({ page: "search", platform: ["azure"] });
+    expect(parseRoute("#/search?q=%E0%A4%A&platform=azure,,azure")).toEqual({ page: "search", q: "%E0%A4%A", platform: ["azure"] });
+    // a broken escape keeps the text as it was typed, and the good escapes around it are still read
+    expect(parseRoute("#/search?q=100%")).toEqual({ page: "search", q: "100%" });
+    expect(parseRoute("#/search?q=caf%C3%A9+100%+sure&type=process")).toEqual({ page: "search", q: "café 100% sure", type: ["process"] });
+    expect(parseRoute("#/search?q=50%25")).toEqual({ page: "search", q: "50%" });
     expect(parseRoute("#/search?q=gcp+project")).toEqual({ page: "search", q: "gcp project" });
   });
   it("names the tab of the browser", () => {

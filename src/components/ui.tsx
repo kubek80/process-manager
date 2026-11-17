@@ -174,6 +174,23 @@ function ConfirmDialog({ q }: { q: Question }) {
 }
 
 /** Mounted once, at the top of the app: shows the open question and the notices. */
+/**
+ * A bar stuck to the bottom of the window (unsaved changes, with Save and Discard): while it is
+ * there, the messages bottom right are lifted above it, so that they never cover its buttons.
+ */
+export function useBottomBar(ref: RefObject<HTMLElement | null>, active: boolean) {
+  useEffect(() => {
+    const el = ref.current;
+    const root = document.documentElement;
+    if (!active || !el) return;
+    const set = () => root.style.setProperty("--bottom-bar", `${Math.ceil(el.getBoundingClientRect().height) + 12}px`);
+    set();
+    const watch = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(set);
+    watch?.observe(el);
+    return () => { watch?.disconnect(); root.style.removeProperty("--bottom-bar"); };
+  }, [ref, active]);
+}
+
 export function Notices() {
   const state = useSyncExternalStore(subscribe, () => ui);
   return (

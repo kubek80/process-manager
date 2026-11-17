@@ -2,7 +2,7 @@ import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Search, ShieldCheck, SlidersHorizontal, Workflow, X } from "lucide-react";
 import type { Process, Standard, TargetKind } from "../types";
 import { useCatalog } from "../lib/catalog";
-import { useEditor } from "../lib/mode";
+import { useVisibleDrafts } from "../lib/session";
 import { go, href, type SearchState } from "../lib/store";
 import {
   FILTER_KEYS, FILTER_LABEL, filterCount, filtersOf, matchRanges, rigourText, search, toggleFilter, wordsOf,
@@ -64,7 +64,7 @@ const HIT_WORD: Record<Hit["where"], string> = { step: "Step", requirement: "Req
 
 export function SearchPage({ route, processes, standards }: { route: SearchState; processes: Process[]; standards: Standard[] }) {
   const { catalog } = useCatalog();
-  const editor = useEditor();
+  const drafts = useVisibleDrafts(); // in editor mode, the drafts the person may edit
   const filters = useMemo(() => filtersOf(route), [route]);
   const chosen = filterCount(filters);
   const q = route.q ?? "";
@@ -81,9 +81,9 @@ export function SearchPage({ route, processes, standards }: { route: SearchState
   const setFilters = (f: Filters) => go({ page: "search", q, ...f }, { replace: true });
 
   const words = useMemo(() => wordsOf(q), [q]);
-  const out = useMemo(() => search({ processes, standards, catalog, q, filters, drafts: editor }), [processes, standards, catalog, q, filters, editor]);
-  const withoutFilters = useMemo(() => (chosen && !out.results.length ? search({ processes, standards, catalog, q, drafts: editor }).results.length : 0),
-    [chosen, out, processes, standards, catalog, q, editor]);
+  const out = useMemo(() => search({ processes, standards, catalog, q, filters, drafts }), [processes, standards, catalog, q, filters, drafts]);
+  const withoutFilters = useMemo(() => (chosen && !out.results.length ? search({ processes, standards, catalog, q, drafts }).results.length : 0),
+    [chosen, out, processes, standards, catalog, q, drafts]);
 
   const [open, setOpen] = useState(false); // the filters on a narrow screen
   const [shown, setShown] = useState(PAGE);

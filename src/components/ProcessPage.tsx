@@ -6,7 +6,7 @@ import { isDrawableProcess, validateProcess } from "../lib/validate";
 import { go, guardLeaving, useProgress, type Tab } from "../lib/store";
 import { useDraft } from "../lib/draft";
 import { useSelectedItem } from "../lib/selection";
-import { canEdit, canManage } from "../lib/rights";
+import { belongsRefused, canEdit, canManage } from "../lib/rights";
 import { categoryName, teamName, useCatalog } from "../lib/catalog";
 import { reviewer, reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { Resources } from "./Resources";
@@ -20,7 +20,7 @@ import { StepDrawer } from "./StepDrawer";
 import { ProcessSettings } from "./ProcessSettings";
 import type { AiSpec } from "./AiDialog";
 import { confirmDialog, IssueList, Loading, notify, scrollBehavior } from "./ui";
-import { BelongsTags, DimTags, ReviewTag, useLosingWarning } from "./Governance";
+import { BelongsTags, DimTags, ReviewTag, useBelongsWarning } from "./Governance";
 import { BehindBanner, ConflictDialog, HistoryDialog, SaveBar, VersionTag } from "./Editing";
 import { SourceSkills } from "./SkillPanel";
 import { createPrompt, modifyPrompt } from "../lib/prompt";
@@ -71,7 +71,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
   const ctx = useMemo(() => ({ processIds: knownIds, standardIds: standards.map((s) => s.id), catalog }), [knownIds, standards, catalog]);
   const issues = useMemo(() => validateProcess(clean, ctx), [clean, ctx]);
   const errors = issues.filter((i) => i.level === "error").length;
-  const losing = useLosingWarning("process", d.saved, draft);
+  const losing = useBelongsWarning("process", d.saved, draft);
   // A process that was stored broken can only be repaired in the JSON tab.
   const renderable = useMemo(() => isDrawableProcess(draft), [draft]);
   const view: Tab = !renderable ? "json" : tab === "json" && !editor ? "flow" : tab;
@@ -115,7 +115,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
   };
 
   const mine = renderable ? draft.steps.filter((s) => s.actor === "me").length : 0;
-  const blocked = losing ? "Keep it with a platform or practice of yours (in Details)." : errors ? "Fix the problems first." : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined;
+  const blocked = belongsRefused(perms, "process", d.saved, draft).length ? "Put the platform or practice back as it was (in Details)." : losing ? "Keep it with a platform or practice of yours (in Details)." : errors ? "Fix the problems first." : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined;
   // On the map the map comes first: what to prepare is one line that opens. The checklist, where
   // the work is done, shows it in full.
   const hasExtras = renderable && (draft.prerequisites.length > 0 || !!draft.resources?.length || !!draft.standards?.length);

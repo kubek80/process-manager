@@ -83,14 +83,16 @@ func TestOwnersCannotTakeOverOrGiveAway(t *testing.T) {
 		if kind == docs.Process {
 			wantError(t, status, body, 403, notYoursFor(kind))
 		} else {
-			wantStatus(t, status, 200, body) // the standard stays in the practice engineering, which is Jordan's too
+			// Jordan may edit it through the practice engineering, but the platform Azure is not
+			// Jordan's to put it on
+			wantError(t, status, body, 403, "Only an owner of the platform “Azure”, or a standards editor, can put this standard on that platform or take it off it.")
 		}
 		// or to nothing at all
 		status, body = j.do("PUT", path+mine, strings.NewReplacer(`"platform": "google-cloud",`, ``, `"platform": "azure",`, ``, `"practice": "engineering",`, ``).Replace(e.body(kind, mine, "", "")))
 		wantError(t, status, body, 403, notYoursFor(kind))
 	}
-	// moving between two of one's own is fine
-	status, body := j.do("PUT", "/api/processes/"+gcp, e.body(docs.Process, gcp, `"platform": "google-cloud",`, `"practice": "engineering", "platform": "azure",`))
+	// adding a practice of one's own is fine
+	status, body := j.do("PUT", "/api/processes/"+gcp, e.body(docs.Process, gcp, `"platform": "google-cloud",`, `"practice": "engineering", "platform": "google-cloud",`))
 	wantStatus(t, status, 200, body)
 	// nothing of the refused saves was stored
 	if d, _ := e.deps.Docs.Get(bg, docs.Process, repoP); d.Version != 1 {
@@ -260,7 +262,7 @@ func TestEveryoneCanSeeWhoBelongsToWhat(t *testing.T) {
 		t.Fatalf("perms: %v", body["perms"])
 	}
 	entries, _ := e.deps.Audit.Recent(bg, 1)
-	if entries[0].Action != "access.grant" || entries[0].Target != sam || entries[0].Detail != "platform-owner for platform Google Cloud (google-cloud)" {
+	if entries[0].Action != "access.grant" || entries[0].Target != sam || entries[0].Detail != "Platform owner for the platform Google Cloud" {
 		t.Fatalf("audit: %+v", entries[0])
 	}
 	// the new right applies at once

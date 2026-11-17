@@ -875,15 +875,15 @@ func TestAccessIsManagedByAdminsAndTakesEffectAtOnce(t *testing.T) {
 	wantStatus(t, status, 403, nil)
 
 	for want, in := range map[string]map[string]string{
-		"not an email address":                         {"email": "nobody", "role": "admin"},
-		"unknown role":                                 {"email": "x@example.com", "role": "god"},
-		"cannot be limited":                            {"email": "x@example.com", "role": "process-editor", "scope": "security"},
-		"owner needs the team":                         {"email": "x@example.com", "role": "owner"},
-		"platform-owner needs the platform":            {"email": "x@example.com", "role": "platform-owner"},
-		"standards-editor cannot be limited":           {"email": "x@example.com", "role": "standards-editor", "scope": "security"},
-		"There is no team “ghosts” in the lists":       {"email": "x@example.com", "role": "owner", "scope": "ghosts"},
-		"There is no platform “security” in the lists": {"email": "x@example.com", "role": "platform-owner", "scope": "security"}, // a practice and a team, not a platform
-		"There is no practice “azure” in the lists":    {"email": "x@example.com", "role": "practice-owner", "scope": "azure"},
+		"not an email address":                           {"email": "nobody", "role": "admin"},
+		`There is no role "god".`:                        {"email": "x@example.com", "role": "god"},
+		"cannot be limited":                              {"email": "x@example.com", "role": "process-editor", "scope": "security"},
+		"An owner needs the team it is for.":             {"email": "x@example.com", "role": "owner"},
+		"A platform owner needs the platform it is for.": {"email": "x@example.com", "role": "platform-owner"},
+		"A standards editor always covers all standards: it cannot be limited to a team, platform or practice.": {"email": "x@example.com", "role": "standards-editor", "scope": "security"},
+		"There is no team “ghosts” in the lists":                                                                {"email": "x@example.com", "role": "owner", "scope": "ghosts"},
+		"There is no platform “security” in the lists":                                                          {"email": "x@example.com", "role": "platform-owner", "scope": "security"}, // a practice and a team, not a platform
+		"There is no practice “azure” in the lists":                                                             {"email": "x@example.com", "role": "practice-owner", "scope": "azure"},
 	} {
 		if status, body := admin.do("POST", "/api/admin/access", in); status != 400 || !strings.Contains(body["error"].(string), want) {
 			t.Errorf("want 400 with %q, got %d %v", want, status, body)
@@ -896,7 +896,7 @@ func TestAccessIsManagedByAdminsAndTakesEffectAtOnce(t *testing.T) {
 	status, body = admin.do("GET", "/api/admin/audit?limit=3", nil)
 	entries := body["entries"].([]any)
 	first, second := entries[0].(map[string]any), entries[2].(map[string]any)
-	if status != 200 || len(entries) != 3 || first["action"] != "access.revoke" || first["target"] != sam || first["detail"] != "practice-owner for practice Engineering (engineering)" ||
+	if status != 200 || len(entries) != 3 || first["action"] != "access.revoke" || first["target"] != sam || first["detail"] != "Practice owner for the practice Engineering" ||
 		first["name"] != "Dana Admin" || second["action"] != "access.grant" {
 		t.Fatalf("audit: %d %v", status, entries)
 	}

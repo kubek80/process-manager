@@ -119,6 +119,29 @@ func denied(w http.ResponseWriter, kind string) {
 	}
 }
 
+// misplaced refuses a save that puts a document on a platform or in a practice, or takes it
+// off one, that the caller does not own while they edit it only through such ownership.
+type misplaced struct{ kind, field, name string }
+
+func (m *misplaced) Error() string {
+	editor := "a process editor"
+	if m.kind == docs.Standard {
+		editor = "a standards editor"
+	}
+	if m.field == "practice" {
+		return fmt.Sprintf("Only an owner of the practice “%s”, or %s, can put this %s in that practice or take it out of it.", m.name, editor, noun[m.kind])
+	}
+	return fmt.Sprintf("Only an owner of the platform “%s”, or %s, can put this %s on that platform or take it off it.", m.name, editor, noun[m.kind])
+}
+
+// placeName is the name of a platform or practice in the lists, or its id.
+func placeName(l docs.Lists, field, id string) string {
+	if field == "practice" {
+		return docs.Name(l.Practices, id)
+	}
+	return docs.Name(l.Platforms, id)
+}
+
 // deniedFor answers a save whose new content the caller may not store. Somebody who edits
 // for a platform or a practice is told what is missing: it has to stay with one of theirs.
 func deniedFor(w http.ResponseWriter, kind string, s session) {
@@ -342,8 +365,17 @@ func (a *api) putDoc(kind string) http.HandlerFunc {
 		doc, changed, err := a.Docs.Save(r.Context(), docs.Change{
 			Kind: kind, ID: id, Body: body, By: s.Email, Note: note, Base: base,
 			Check: func(current *docs.Doc) error {
-				if current != nil && !s.CanEdit(kind, belongsOf(current.Body)) {
-					return errDenied
+				var stored *rbac.Belongs
+				if current != nil {
+					b := belongsOf(current.Body)
+					if !s.CanEdit(kind, b) {
+						return errDenied
+					}
+					stored = &b
+				}
+				// a document shared with another platform or practice stays with it
+				if field, id := s.Misplaced(kind, stored, belongsOf(body)); field != "" {
+					return &misplaced{kind: kind, field: field, name: placeName(lists, field, id)}
 				}
 				return nil
 			},
@@ -356,9 +388,13 @@ func (a *api) putDoc(kind string) http.HandlerFunc {
 			},
 		})
 		var c *docs.Conflict
+		var m *misplaced
 		switch {
 		case errors.Is(err, errDenied):
 			denied(w, kind)
+			return
+		case errors.As(err, &m):
+			writeError(w, 403, m.Error())
 			return
 		case errors.As(err, &c):
 			conflict(w, kind, c)
@@ -534,10 +570,19 @@ func (a *api) history(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// versions that were drafts stay with the people who work on the document: number, note
-	// and author included
+	// and author included; versions from before the last deletion are for editors of the kind
 	s := who(r)
+	deleted := 0
+	for _, v := range versions {
+		if v.Deleted && v.Version > deleted {
+			deleted = v.Version
+		}
+	}
 	shown := versions[:0]
 	for _, v := range versions {
+		if v.Version < deleted && !s.EditsAll(kind) {
+			continue
+		}
 		if v.Deleted || v.Status != "draft" || s.CanManageFeedback(kind, rbac.Belongs{Owner: v.Owner, Platform: v.Platform, Practice: v.Practice}) {
 			shown = append(shown, v)
 		}
@@ -563,6 +608,19 @@ func (a *api) historyVersion(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.fail(w, r, err)
 		return
+	}
+	// A deleted document's versions are not passed on to whoever creates something new under
+	// its id: they are for the editors of every document of the kind.
+	if s := who(r); !s.EditsAll(kind) {
+		deleted, err := a.Docs.LastDeletion(r.Context(), kind, id)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		if n < deleted {
+			writeError(w, 404, "That does not exist.")
+			return
+		}
 	}
 	// earlier drafts stay with the people who work on the document
 	if !canSee(who(r), kind, body) {

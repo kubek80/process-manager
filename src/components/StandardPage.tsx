@@ -12,13 +12,13 @@ import { useProfile } from "../lib/profile";
 import { reviewer, reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { useEditor } from "../lib/mode";
 import { createStandardPrompt, modifyStandardPrompt } from "../lib/prompt";
-import { canEdit, canManage } from "../lib/rights";
+import { belongsRefused, canEdit, canManage } from "../lib/rights";
 import { useMe, usePerms } from "../lib/session";
 import { go, guardLeaving, href, type StandardTab } from "../lib/store";
 import { isDrawableStandard, standardSchema, validateStandard } from "../lib/validate";
 import type { AiSpec } from "./AiDialog";
 import { FeedbackForm, FeedbackItem, FeedbackTab, openCount, standardTarget } from "./Feedback";
-import { BelongsEditor, BelongsTags, DimsEditor, DimTags, LifecycleEditor, ProfileFilter, ReviewTag, useLosingWarning } from "./Governance";
+import { BelongsEditor, BelongsTags, DimsEditor, DimTags, LifecycleEditor, ProfileFilter, ReviewTag, useBelongsWarning } from "./Governance";
 import { BehindBanner, ConflictDialog, HistoryDialog, SaveBar, VersionTag } from "./Editing";
 import { ResourceEditor, Resources } from "./Resources";
 import { SourceSkills } from "./SkillPanel";
@@ -352,7 +352,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   const ctx = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds: all.map((s) => s.id), catalog }), [processes, all, catalog]);
   const issues = useMemo(() => validateStandard(clean, ctx), [clean, ctx]);
   const errors = issues.filter((i) => i.level === "error").length;
-  const losing = useLosingWarning("standard", d.saved, draft);
+  const losing = useBelongsWarning("standard", d.saved, draft);
   const renderable = useMemo(() => isDrawableStandard(draft), [draft]);
   const view: StandardTab = !renderable ? "json" : tab === "json" && !editor ? "doc" : tab;
   // the open requirement is part of the address, so a link can point at it and Back closes it
@@ -369,7 +369,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
 
   const select = (id: string) => { setSelected(id); setReporting(false); };
   useEffect(() => { if (!selected) setEditing(false); }, [selected]); // a requirement opened later starts as it is read
-  const blocked = losing ? "Keep it with a platform or practice of yours (in Details)." : errors ? "Fix the problems first." : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined;
+  const blocked = belongsRefused(perms, "standard", d.saved, draft).length ? "Put the platform or practice back as it was (in Details)." : losing ? "Keep it with a platform or practice of yours (in Details)." : errors ? "Fix the problems first." : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined;
   // bring the open requirement into view, also when the page was opened by a link to it
   useEffect(() => {
     if (!item || view !== "doc") return;

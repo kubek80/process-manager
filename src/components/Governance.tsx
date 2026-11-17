@@ -1,7 +1,7 @@
 import { Boxes, CalendarCheck, Code2, Compass, Gauge, Layers, Server, Tag, TriangleAlert } from "lucide-react";
 import type { Governed, Rigour, Status, TargetKind } from "../types";
 import { categoryName, environmentLabel, languageLabel, platformName, practiceName, tierLabel, useCatalog } from "../lib/catalog";
-import { editsAll, wouldLoseEdit, type Belongs } from "../lib/rights";
+import { belongsChoice, belongsRefused, wouldLoseEdit, type Belongs, type BelongsField } from "../lib/rights";
 import { usePerms } from "../lib/session";
 import type { Profile } from "../lib/edit";
 import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
@@ -144,17 +144,27 @@ export function BelongsTags({ doc, compact }: { doc: Grouped; compact?: boolean 
 }
 
 /**
- * Why the person could not save this document as it is now, or "" when they can: for somebody
- * who may change it only through their platforms and practices, a document moved away from all
- * of them is no longer theirs to save. The server refuses it; this says so before they try.
+ * Why the person could not save this document as it is now, or "" when they can. For somebody
+ * who may change it only through their platforms and practices: a platform or practice that is
+ * not theirs cannot be set, changed or taken away; and a document moved away from all of theirs
+ * is no longer theirs to save. The server refuses both; this says so before they try.
  */
-export function useLosingWarning(kind: TargetKind, saved: Belongs, now: Belongs): string {
+export function useBelongsWarning(kind: TargetKind, saved: Belongs, now: Belongs): string {
   const perms = usePerms();
   const { catalog } = useCatalog();
+  const refused = belongsRefused(perms, kind, saved, now);
+  if (refused.length) {
+    const name = (f: BelongsField, id?: string) => (id ? `“${f === "platform" ? platformName(catalog, id) : practiceName(catalog, id)}”` : "none");
+    const parts = refused.map((f) => `the ${f} (it was ${name(f, saved[f])}, now ${name(f, now[f])})`);
+    return `Only the owners of a platform or practice, or an editor, can change ${parts.join(" and ")}. Put it back as it was in Details.`;
+  }
   if (!wouldLoseEdit(perms, kind, saved, now)) return "";
   const yours = [...perms.platforms.map((id) => `the platform ${platformName(catalog, id)}`), ...perms.practices.map((id) => `the practice ${practiceName(catalog, id)}`)];
   return `You may change this ${kind} because it belongs to a platform or practice you own. With this platform and practice it would no longer be yours, so you could not save it. Keep it with ${yours.join(" or ") || "one of yours"}.`;
 }
+
+/** The hint beside a platform or practice picker that the person may not change. */
+export const LOCKED_HINT = "Only its owners or an editor can change this";
 
 /** Category, practice and platform (and for a process its rigour), as they are picked in Details. */
 export function BelongsEditor({ kind, doc, saved, onChange }: {
@@ -165,29 +175,41 @@ export function BelongsEditor({ kind, doc, saved, onChange }: {
 }) {
   const { catalog } = useCatalog();
   const perms = usePerms();
-  const limited = !editsAll(perms, kind); // edits only through platforms and practices
-  const pick = (field: "category" | "practice" | "platform", label: string, hint: string, list: { id: string; name: string; description?: string }[], mine: string[] = []) => (
-    <Field label={label} hint={hint}>
-      <select value={doc[field] ?? ""} onChange={(e) => onChange({ [field]: e.target.value || undefined })}>
-        <option value="">None</option>
-        {list.map((x) => <option key={x.id} value={x.id} title={x.description}>{x.name}{limited && mine.includes(x.id) ? " (yours)" : ""}</option>)}
-        {doc[field] && !list.some((x) => x.id === doc[field]) && <option value={doc[field]}>{doc[field]} (not in the list)</option>}
+  type Row = { id: string; name: string; description?: string };
+  const select = (field: "category" | BelongsField, list: Row[], choice: "any" | "own" | "locked") => {
+    const mine = field === "platform" ? perms.platforms : field === "practice" ? perms.practices : [];
+    // somebody who edits only through their platforms and practices is offered only their own
+    const offered = choice === "any" ? list : choice === "own" ? list.filter((x) => mine.includes(x.id)) : [];
+    const value = doc[field] ?? "";
+    return (
+      <select value={value} disabled={choice === "locked"} onChange={(e) => onChange({ [field]: e.target.value || undefined })}>
+        {(choice !== "locked" || !value) && <option value="">None</option>}
+        {offered.map((x) => <option key={x.id} value={x.id} title={x.description}>{x.name}</option>)}
+        {value && !offered.some((x) => x.id === value) && <option value={value}>{list.find((x) => x.id === value)?.name ?? `${value} (not in the list)`}</option>}
       </select>
-    </Field>
-  );
-  const lose = useLosingWarning(kind, saved, doc);
+    );
+  };
+  const belongs = (field: BelongsField, label: string, list: Row[]) => {
+    const choice = belongsChoice(perms, kind, field, saved[field]);
+    return (
+      <Field label={label} hint={choice === "locked" ? LOCKED_HINT : choice === "own" ? "you can pick one of yours" : "its owners may change it"}>
+        {select(field, list, choice)}
+      </Field>
+    );
+  };
+  const lose = useBelongsWarning(kind, saved, doc);
   return (
     <>
       <div className="grid3">
-        {pick("category", "Category", "where it is grouped", catalog.categories)}
-        {pick("platform", "Platform", "its owners may change it", catalog.platforms, perms.platforms)}
-        {pick("practice", "Practice", "its owners may change it", catalog.practices, perms.practices)}
+        <Field label="Category" hint="where it is grouped">{select("category", catalog.categories, "any")}</Field>
+        {belongs("platform", "Platform", catalog.platforms)}
+        {belongs("practice", "Practice", catalog.practices)}
       </div>
       {lose && <div className="check warn" role="alert"><TriangleAlert size={16} /><span>{lose}</span></div>}
       {kind === "process" && (
         <div className="field">
-          <span className="field-label">How binding<em>{doc.rigour ? RIGOUR[doc.rigour]?.hint : "Readers are not told whether they must use it."}</em></span>
-          <div className="chips" role="group" aria-label="How binding">
+          <span className="field-label">Rigour<em>how binding it is: {doc.rigour ? RIGOUR[doc.rigour]?.hint : "readers are not told whether they must use it."}</em></span>
+          <div className="chips" role="group" aria-label="Rigour">
             <button className={`chip ${!doc.rigour ? "on" : ""}`} aria-pressed={!doc.rigour} title="Readers are not told whether they must use it." onClick={() => onChange({ rigour: undefined })}>Not stated</button>
             {(Object.keys(RIGOUR) as Rigour[]).map((r) => (
               <button key={r} className={`chip ${doc.rigour === r ? "on" : ""}`} aria-pressed={doc.rigour === r} title={RIGOUR[r].hint} onClick={() => onChange({ rigour: r })}>{RIGOUR[r].label}</button>

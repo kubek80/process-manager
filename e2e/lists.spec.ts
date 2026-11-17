@@ -208,7 +208,7 @@ test("My responsibilities lists what belongs to his platform, his practice and h
   await expect(row("Code review")).toHaveCount(0);
 });
 
-test("Details: an editor says what a process belongs to and how binding it is; readers see it by name", async ({ page }) => {
+test("Details: an editor says what a process belongs to and its rigour; readers see it by name", async ({ page }) => {
   test.setTimeout(60_000);
   await copy(page, "details-demo", "Details demo");
     await signIn(page, ALEX, { editor: true });
@@ -216,7 +216,8 @@ test("Details: an editor says what a process belongs to and how binding it is; r
     await page.getByRole("button", { name: "Details", exact: true }).click();
     const modal = page.locator(".modal");
     await expect(modal.getByRole("heading", { name: /What it belongs to/ })).toBeVisible();
-    const binding = modal.getByRole("group", { name: "How binding" });
+    const binding = modal.getByRole("group", { name: "Rigour" });
+    await expect(modal.locator(".field", { has: binding })).toContainText("Rigourhow binding it is");
     await expect(binding.getByRole("button")).toHaveText(["Not stated", "Mandatory", "Recommended", "Optional"]);
     await expect(binding.getByRole("button", { name: "Not stated" })).toHaveAttribute("aria-pressed", "true");
     await modal.getByLabel(/^Category/).selectOption({ label: "Network" });
@@ -293,7 +294,7 @@ test("a process without a category is listed under Other", async ({ page }) => {
   await page.locator(".filters .chip", { hasText: "All" }).click();
 });
 
-test("a platform that still has members is not removed: the admin is told who they are", async ({ page }) => {
+test("a platform that still has members cannot be removed until they are gone", async ({ page }) => {
   await signIn(page, DANA, { editor: true });
   await open(page, "/admin/lists");
   await tab(page, "Platforms").click();
@@ -306,16 +307,23 @@ test("a platform that still has members is not removed: the admin is told who th
   await members.getByRole("button", { name: "Add member" }).click();
   await expect(members.locator("li", { hasText: SAM })).toBeVisible();
 
-  // nothing belongs to it, but somebody does: removing it is refused when the lists are saved
+  // nothing belongs to it, but somebody does: it is not safe to remove
   await expect(page.locator(".cat-usage")).toContainText("nothing yet");
-  await page.getByRole("button", { name: "Remove this platform" }).click();
-  await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.locator(".toast", { hasText: "The lists could not be saved." })).toContainText("the roles of sam@example.com");
-  expect((await readCatalog(page)).platforms.map((p: { id: string }) => p.id)).toContain("mainframe");
-  // the message stays until it is closed, over the bottom of the page where Save and Discard are
-  await page.locator(".toast", { hasText: "The lists could not be saved." }).getByRole("button", { name: "Close this message" }).click();
-  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(page.getByRole("button", { name: "Remove this platform" })).toBeDisabled();
+  await expect(page.locator(".cat-danger")).toContainText("1 person is still a member of this platform. Remove them from the members first");
 
+  // a lists manager who is not an admin sees the same, from the members everyone may read
+  await signIn(page, ALEX, { editor: true });
+  await open(page, "/admin/lists");
+  await tab(page, "Platforms").click();
+  await item(page, "Mainframe").click();
+  await expect(members.locator("li", { hasText: SAM })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove this platform" })).toBeDisabled();
+  await expect(page.locator(".cat-danger")).toContainText("1 person is still a member of this platform");
+
+  await signIn(page, DANA, { editor: true });
+  await open(page, "/admin/lists");
+  await tab(page, "Platforms").click();
   // without its member it goes
   await item(page, "Mainframe").click();
   await members.getByRole("button", { name: `Remove ${SAM} as Platform owner` }).click();
@@ -325,3 +333,28 @@ test("a platform that still has members is not removed: the admin is told who th
   await save(page);
   expect((await readCatalog(page)).platforms.map((p: { id: string }) => p.id)).not.toContain("mainframe");
 });
+
+for (const [width, theme] of [[1440, "light"], [390, "dark"]] as const) {
+  test(`a message about a failed save never covers Save and Discard (${width} wide, ${theme})`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await signIn(page, DANA, { editor: true });
+    await page.addInitScript((t) => { try { localStorage.setItem("pm:theme", t); } catch { /* ignore */ } }, theme);
+    await open(page, "/admin/lists");
+    await item(page, "DNS team").click();
+    await page.locator(".cat-detail").getByLabel("What they do").fill("Changed for a test that is not saved.");
+    // the server refuses the save, with a long message
+    await page.route("**/api/catalog?*", (route) => (route.request().method() === "PUT"
+      ? route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "Refused for this test. ".repeat(6) }) })
+      : route.continue()));
+    await page.getByRole("button", { name: "Save changes" }).click();
+    const toast = page.locator(".toast", { hasText: "The lists could not be saved." });
+    await expect(toast).toBeVisible();
+    const bar = page.locator(".cat-save.dirty");
+    const [t, b] = [(await toast.boundingBox())!, (await bar.boundingBox())!];
+    expect(t.y + t.height).toBeLessThanOrEqual(b.y + 1); // the message sits above the bar
+    // Discard can be pressed without closing the message first (a covered button fails this click)
+    await page.getByRole("button", { name: "Discard" }).click();
+    await expect(bar).toHaveCount(0);
+    await expect(toast).toBeVisible();
+  });
+}

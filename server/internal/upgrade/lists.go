@@ -35,18 +35,24 @@ const (
 // Lists moves an older database to the lists of practices, platforms and categories:
 //
 //   - a team of kind "platform" is also added to the platforms, one of kind "practice" or
-//     "security" to the practices (same id, name, contact and description); every team loses
-//     its kind and stays a team;
-//   - every free-text category of a process or standard becomes an entry of the categories
-//     (its id made from the text) and the document names that id;
+//     "security" to the practices (same id, name, contact and description, cut to the limits
+//     of the format); every team loses its kind and stays a team;
+//   - when the lists have no categories yet, every category text of a published process or
+//     standard becomes an entry: the same text (trimmed, whatever its case) is one category, a
+//     different text that gives the same id gets the next free one ("cloud-2"); a text used
+//     only by drafts or deleted documents is dropped from them, and so is an empty one;
 //   - a process or standard owned by such a platform or practice team belongs to it, unless it
 //     already says which platform or practice it belongs to;
+//   - the stored older versions get the same changes in place, without new versions, so that
+//     one can be put back;
 //   - a standards editor limited to a unit becomes the owner of the platform or practice made
 //     from that unit; one limited to anything else loses the role, and the log says so;
 //   - the lists always have the three new lists, empty if need be.
 //
 // Everything is one transaction, saved as new versions by By with Note, and recorded in the
-// activity log. A database that is already converted is left as it is.
+// activity log. A document the save refuses is skipped with a warning; one that names a
+// category, platform or practice that is not in the lists is left as it is and reported. A
+// database that is already converted is left as it is.
 func Lists(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) error {
 	return pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error { return lists(ctx, tx, log) })
 }
@@ -151,13 +157,18 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 	}
 
 	// ----- the lists
-	if catBody == nil {
-		catBody = []byte(docs.EmptyCatalog) // written only when a category has to be added
+	noCatalog := catBody == nil
+	if noCatalog {
+		catBody = []byte(docs.EmptyCatalog)
 	}
 	cat, err := parse(catBody)
 	if err != nil {
 		return fmt.Errorf("the lists: %w", err)
 	}
+	// Before this version the lists had no categories: the categories of processes were free
+	// text. Only then are they turned into entries; later, an unknown one is only reported.
+	_, hasCategories := cat.get("categories")
+	old := noCatalog || !hasCategories
 	practices, err := readList(cat, "practices")
 	if err != nil {
 		return err
@@ -170,7 +181,8 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	kindOf := map[string]string{} // team id -> "platform" or "practice"
+	kindOf := map[string]string{}   // team id -> "platform" or "practice"
+	teamName := map[string]string{} // team id -> name
 	catChanged := false
 	if v, ok := cat.get("teams"); ok {
 		var teams []json.RawMessage
@@ -182,6 +194,9 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 			if err := json.Unmarshal(raw, &t); err != nil {
 				return fmt.Errorf("teams: %w", err)
 			}
+			if t.Name != "" {
+				teamName[t.ID] = t.Name
+			}
 			o, err := parse(raw)
 			if err != nil {
 				return fmt.Errorf("teams: %w", err)
@@ -191,66 +206,109 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 			}
 			teams[i] = o.without("kind").bytes()
 			catChanged = true
+			copied := func() json.RawMessage {
+				name := fit(log, "name of "+t.ID, t.Name, 60)
+				if name == "" {
+					name = t.ID
+				}
+				return entry(t.ID, name, fit(log, "contact of "+t.ID, t.Contact, 120), fit(log, "description of "+t.ID, t.Description, 200))
+			}
 			switch t.Kind {
 			case "platform":
 				kindOf[t.ID] = "platform"
-				platforms.add(t.ID, entry(t.ID, t.Name, t.Contact, t.Description))
+				platforms.add(t.ID, copied())
 			case "practice", "security":
 				kindOf[t.ID] = "practice"
-				practices.add(t.ID, entry(t.ID, t.Name, t.Contact, t.Description))
+				practices.add(t.ID, copied())
 			}
 		}
 		b, _ := json.Marshal(teams)
 		cat = cat.with("teams", b)
 	}
 
-	// ----- the documents
-	type change struct {
+	// ----- the categories: from what readers can see, the same text (whatever its case or the
+	// spaces around it) being one category, a different text getting an id of its own
+	type parsed struct {
 		kind, id string
-		body     []byte
+		o        object
+		draft    bool
 	}
-	var changes []change
-	// every free-text category becomes an entry, in the order of their ids; texts that differ
-	// only in how they are written ("Cloud", "cloud") share one, named as a person wrote it
-	categoryOf := map[string]string{} // free text -> id
-	nameOf := map[string]string{}     // new id -> name
-	var newIDs []string
-	for _, d := range all {
-		var head struct {
-			Category string `json:"category"`
-		}
-		if json.Unmarshal(d.body, &head) != nil || head.Category == "" || categories.ids[head.Category] {
-			continue
-		}
-		text := head.Category
-		id := slug(text)
-		categoryOf[text] = id
-		if categories.ids[id] {
-			continue
-		}
-		name := truncate(strings.Join(strings.Fields(text), " "), 40)
-		if _, seen := nameOf[id]; !seen {
-			newIDs = append(newIDs, id)
-			nameOf[id] = name
-		} else if nameOf[id] == id && name != id {
-			nameOf[id] = name
-		}
-	}
-	sort.Strings(newIDs)
-	for _, id := range newIDs {
-		categories.add(id, entry(id, nameOf[id], "", ""))
-	}
+	var docsNow []parsed
 	for _, d := range all {
 		o, err := parse(d.body)
 		if err != nil {
 			log.Warn("not converted: not a JSON object", "kind", d.kind, "id", d.id)
 			continue
 		}
-		changed := false
-		if id, ok := categoryOf[o.str("category")]; ok && id != o.str("category") {
-			o = o.with("category", raw(id))
-			changed = true
+		docsNow = append(docsNow, parsed{d.kind, d.id, o, o.str("status") == "draft"})
+	}
+	categoryOf := map[string]string{} // trimmed lower-case text -> id
+	firstText := map[string]string{}  // trimmed lower-case text -> the text as first seen
+	if old {
+		used := map[string]bool{}
+		for id := range categories.ids {
+			used[id] = true
 		}
+		var newIDs []string
+		nameOf := map[string]string{}
+		for _, d := range docsNow {
+			text := strings.TrimSpace(d.o.str("category"))
+			if d.draft || text == "" {
+				continue
+			}
+			key := strings.ToLower(text)
+			if id, ok := categoryOf[key]; ok {
+				if firstText[key] != text {
+					log.Info("category texts written differently became one category", "first", firstText[key], "also", text, "id", id)
+					if firstText[key] == strings.ToLower(firstText[key]) && text != strings.ToLower(text) {
+						nameOf[id] = fit(log, "category "+id, text, 40) // named as a person writes it
+					}
+				}
+				continue
+			}
+			base := slug(text)
+			id := base
+			for n := 2; used[id]; n++ {
+				suffix := fmt.Sprintf("-%d", n)
+				id = strings.TrimRight(truncate(base, 80-len(suffix)), "-") + suffix
+			}
+			if id != base {
+				log.Info("category got a numbered id: another text already has the plain one", "text", text, "id", id)
+			}
+			used[id] = true
+			categoryOf[key], firstText[key] = id, text
+			nameOf[id] = fit(log, "category "+id, text, 40)
+			newIDs = append(newIDs, id)
+		}
+		sort.Strings(newIDs)
+		for _, id := range newIDs {
+			categories.add(id, entry(id, nameOf[id], "", ""))
+		}
+	}
+	// recategorise moves a free-text category to its id, or drops it when no published
+	// document uses the text. It reports whether something changed.
+	recategorise := func(o object, what string) (object, bool) {
+		value, had := o.get("category")
+		if !old || !had {
+			return o, false
+		}
+		var text string
+		_ = json.Unmarshal(value, &text)
+		id, ok := categoryOf[strings.ToLower(strings.TrimSpace(text))]
+		if !ok {
+			if strings.TrimSpace(text) != "" && what != "" {
+				log.Warn("category dropped: only drafts or deleted documents use it, so it is not published as an entry of the lists", "document", what, "category", text)
+			}
+			return o.without("category"), true
+		}
+		if id == text {
+			return o, false
+		}
+		return o.with("category", raw(id)), true
+	}
+	// place puts a document on the platform or in the practice of its former owner unit
+	place := func(o object) (object, bool) {
+		changed := false
 		owner := o.str("owner")
 		if kindOf[owner] == "practice" && o.str("practice") == "" {
 			o = o.after("practice", raw(owner), "owner", "category")
@@ -260,12 +318,37 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 			o = o.after("platform", raw(owner), "owner", "category", "practice")
 			changed = true
 		}
-		if changed {
+		return o, changed
+	}
+
+	// ----- the documents
+	type change struct {
+		kind, id string
+		body     []byte
+	}
+	var changes []change
+	for _, d := range docsNow {
+		o, recategorised := recategorise(d.o, d.kind+" "+d.id)
+		o, placed := place(o)
+		if recategorised || placed {
 			changes = append(changes, change{d.kind, d.id, o.bytes()})
+		}
+		// what this conversion does not decide is left alone, but said
+		if c := o.str("category"); c != "" && !categories.ids[c] {
+			log.Warn("document names a category that is not in the lists", "kind", d.kind, "id", d.id, "category", c)
+		}
+		if p := o.str("platform"); p != "" && !platforms.ids[p] {
+			log.Warn("document names a platform that is not in the lists", "kind", d.kind, "id", d.id, "platform", p)
+		}
+		if p := o.str("practice"); p != "" && !practices.ids[p] {
+			log.Warn("document names a practice that is not in the lists", "kind", d.kind, "id", d.id, "practice", p)
 		}
 	}
 
 	// ----- the lists always carry the three new lists
+	if old {
+		catChanged = true
+	}
 	for _, l := range []struct {
 		key   string
 		list  *named
@@ -305,16 +388,76 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 		return nil
 	}
 
+	// ----- the history: older versions are converted in place, without new versions, so
+	// that putting one back neither fails on its category nor takes it off its platform
+	versions := 0
+	if old || len(kindOf) > 0 {
+		type version struct {
+			kind, id string
+			n        int
+			body     []byte
+		}
+		var list []version
+		rows, err := tx.Query(ctx, `select kind, id, version, body from document_versions where kind in ($1, $2) and body is not null order by kind, id, version`, docs.Process, docs.Standard)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var v version
+			if err := rows.Scan(&v.kind, &v.id, &v.n, &v.body); err != nil {
+				rows.Close()
+				return err
+			}
+			list = append(list, v)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for _, v := range list {
+			o, err := parse(v.body)
+			if err != nil {
+				continue
+			}
+			o, recategorised := recategorise(o, "")
+			o, placed := place(o)
+			if !recategorised && !placed {
+				continue
+			}
+			pretty, err := docs.Pretty(o.bytes())
+			if err != nil {
+				continue
+			}
+			if _, err := tx.Exec(ctx, `update document_versions set body = $4 where kind = $1 and id = $2 and version = $3`, v.kind, v.id, v.n, string(pretty)); err != nil {
+				return err
+			}
+			versions++
+		}
+	}
+
 	if catChanged {
 		if _, _, err := docs.SaveIn(ctx, tx, docs.Change{Kind: docs.Catalog, ID: docs.CatalogID, Body: cat.bytes(), By: By, Note: Note}); err != nil {
 			return fmt.Errorf("the lists: %w", err)
 		}
 	}
+	saved := 0
 	for _, c := range changes {
-		if _, _, err := docs.SaveIn(ctx, tx, docs.Change{Kind: c.kind, ID: c.id, Body: c.body, By: By, Note: Note}); err != nil {
-			return fmt.Errorf("%s %s: %w", c.kind, c.id, err)
+		// one document that cannot be saved must not keep the server from starting
+		sp, err := tx.Begin(ctx)
+		if err != nil {
+			return err
 		}
+		if _, _, err := docs.SaveIn(ctx, sp, docs.Change{Kind: c.kind, ID: c.id, Body: c.body, By: By, Note: Note}); err != nil {
+			_ = sp.Rollback(ctx)
+			log.Warn("not converted: the document cannot be saved", "kind", c.kind, "id", c.id, "error", err)
+			continue
+		}
+		if err := sp.Commit(ctx); err != nil {
+			return err
+		}
+		saved++
 	}
+	converted, dropped := 0, 0
 	for _, r := range scoped {
 		newRole := ""
 		switch {
@@ -330,10 +473,15 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 		if _, err := tx.Exec(ctx, `delete from role_assignments where email = $1 and role = $2 and scope = $3`, r.email, rbac.StandardsEditor, r.scope); err != nil {
 			return err
 		}
-		old := rbac.StandardsEditor + " for " + r.scope
+		scopeName := r.scope
+		if n := teamName[r.scope]; n != "" {
+			scopeName = n
+		}
+		was := rbac.Label(rbac.StandardsEditor) + " for " + scopeName
 		if newRole == "" {
+			dropped++
 			log.Warn("role removed: it was limited to something that is neither a platform nor a practice", "email", r.email, "role", rbac.StandardsEditor, "scope", r.scope)
-			if err := audit.AddIn(ctx, tx, By, Name, "access.revoke", r.email, old+": no platform or practice "+r.scope); err != nil {
+			if err := audit.AddIn(ctx, tx, By, Name, "access.revoke", r.email, was+" removed: it is neither a platform nor a practice"); err != nil {
 				return err
 			}
 			continue
@@ -342,17 +490,29 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 			r.email, newRole, r.scope, r.by); err != nil {
 			return err
 		}
-		detail := fmt.Sprintf("%s became %s for %s %s", old, newRole, rbac.ScopeNoun(newRole), r.scope)
-		log.Info("role converted", "email", r.email, "from", old, "to", newRole+" for "+r.scope)
+		converted++
+		detail := fmt.Sprintf("%s became %s for the %s %s", was, rbac.Label(newRole), rbac.ScopeNoun(newRole), scopeName)
+		log.Info("role converted", "email", r.email, "from", was, "to", rbac.Label(newRole)+" for "+r.scope)
 		if err := audit.AddIn(ctx, tx, By, Name, "access.grant", r.email, detail); err != nil {
 			return err
 		}
 	}
-	summary := fmt.Sprintf("%d documents moved to the new lists; added %d practices, %d platforms, %d categories; %d roles converted",
-		len(changes), len(practices.added), len(platforms.added), len(categories.added), len(scoped))
-	log.Info("database converted to practices, platforms and categories", "documents", len(changes), "practices", len(practices.added),
-		"platforms", len(platforms.added), "categories", len(categories.added), "roles", len(scoped))
+	summary := fmt.Sprintf("%d documents moved to the new lists (%d older versions adjusted); added %d practices, %d platforms, %d categories; %d roles converted, %d removed",
+		saved, versions, len(practices.added), len(platforms.added), len(categories.added), converted, dropped)
+	log.Info("database converted to practices, platforms and categories", "documents", saved, "versions", versions, "practices", len(practices.added),
+		"platforms", len(platforms.added), "categories", len(categories.added), "rolesConverted", converted, "rolesRemoved", dropped)
 	return audit.AddIn(ctx, tx, By, Name, "content.convert", "lists", summary)
+}
+
+// fit makes a text fit a limit of the format: spaces collapsed, cut to n characters. A cut is
+// logged, with the whole text.
+func fit(log *slog.Logger, what, text string, n int) string {
+	t := strings.Join(strings.Fields(text), " ")
+	if len([]rune(t)) > n {
+		log.Warn("text cut to fit the lists", "what", what, "text", text, "limit", n)
+		t = strings.TrimSpace(truncate(t, n))
+	}
+	return t
 }
 
 // slug makes an id out of a free text: "Source control" -> "source-control".

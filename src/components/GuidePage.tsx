@@ -127,8 +127,8 @@ export function GuidePage() {
             <thead><tr><th>Role</th><th>Adds</th><th>Limited to</th></tr></thead>
             <tbody>
               <tr><td><b>Owner</b></td><td>Confirm reviews; mark feedback as fixed, reopen or delete it; see drafts. Does not change the content.</td><td>What one team maintains</td></tr>
-              <tr><td><b>Platform owner</b></td><td>Create, change and delete processes and standards; confirm their reviews; close their feedback; see drafts</td><td>What belongs to one platform</td></tr>
-              <tr><td><b>Practice owner</b></td><td>Create, change and delete processes and standards; confirm their reviews; close their feedback; see drafts</td><td>What belongs to one practice</td></tr>
+              <tr><td><b>Platform owner</b></td><td>Create, change and delete processes and standards; confirm their reviews; close their feedback; see drafts. Sets a platform or practice only from one of their own to another</td><td>What belongs to one platform</td></tr>
+              <tr><td><b>Practice owner</b></td><td>Create, change and delete processes and standards; confirm their reviews; close their feedback; see drafts. Sets a platform or practice only from one of their own to another</td><td>What belongs to one practice</td></tr>
               <tr><td><b>Process editor</b></td><td>Create and change processes; close their feedback</td><td>All processes</td></tr>
               <tr><td><b>Standards editor</b></td><td>Create and change standards; close their feedback</td><td>All standards</td></tr>
               <tr><td><b>Lists manager</b></td><td>Teams, practices, platforms, categories, tools, tiers, environments and languages</td><td>—</td></tr>
@@ -180,13 +180,14 @@ export function GuidePage() {
             <div><dt>May change it</dt><dd>Change, delete, bring back an earlier version, and create new ones: admins, process editors for every process, standards editors for every standard, and the owners of the platform or the practice it belongs to.</dd></div>
             <div><dt>May look after it</dt><dd>Confirm reviews, answer feedback and see it while it is a draft: everyone who may change it, and the members of its owning team.</dd></div>
             <div><dt>Staying within your own</dt><dd>A platform or practice owner changes only what belongs to their platforms and practices. They cannot take over a process or standard of another platform, nor move one of theirs to a platform and practice that are not theirs: Details warns about it, and the save is refused. When they create something new, they choose which of their platforms or practices it belongs to.</dd></div>
+            <div><dt>A platform that is not yours</dt><dd>A platform or practice owner may set or change the platform of a process or standard only from one of their own platforms to another, or to or from none. A platform that is not theirs stays as it is: in Details its picker is locked, with “Only its owners or an editor can change this”, and the server refuses such a save. The same goes, separately, for the practice. Everything else they may change, the owning team included. Admins and editors are not limited this way.</dd></div>
           </dl>
         </Section>
 
         <Section id="read" title="Reading a process">
           <p>Open a process from a search or from <b>Processes</b> in the top bar. The header tells you its category and owning team, how binding it is, the platform and practice it belongs to, which <b>application tiers</b>, <b>environments</b> and <b>programming languages</b> it applies to, how long it usually takes and when it was last reviewed. Use “My application” in the list of processes to hide what does not apply to you; your choice is remembered. The header also shows the <b>version</b>: press it to see who changed what and when. Below the header:</p>
           <dl className="guide-dl">
-            <div><dt>How binding</dt><dd><b>Mandatory</b>: the only allowed way to get this done. <b>Recommended</b>: the expected way; another way needs a good reason. <b>Optional</b>: a help that may be used, or not. Some processes do not say.</dd></div>
+            <div><dt>Rigour</dt><dd><b>Mandatory</b>: the only allowed way to get this done. <b>Recommended</b>: the expected way; another way needs a good reason. <b>Optional</b>: a help that may be used, or not. Some processes do not say.</dd></div>
             <div><dt>Before you start</dt><dd>The prerequisites, useful links and the standards the process helps to meet. On the map this is one line that opens when you press it, so the map itself is on the first screen; the checklist shows it in full. Tick what you already have. If a prerequisite is itself a process, a link takes you there.</dd></div>
             <div><dt>Map</dt><dd>Time runs left to right, each lane is one participant. Dashed arrows loop back, for example after a rejection. Click a block to open its details on the right.</dd></div>
             <div><dt>Checklist</dt><dd>Steps in order. Yours show the exact actions, the link to open and what you get at the end. Steps of others are collapsed so you know what you are waiting for. “Only my steps” hides them.</dd></div>

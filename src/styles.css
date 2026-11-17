@@ -784,7 +784,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .btn.primary.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--bad) 88%, #000); border-color: transparent; }
 .confirm-body { font-size: 14.5px; color: var(--text-2); max-width: 60ch; }
 .modal:focus, .drawer:focus, .quick-add:focus { outline: none; }
-.toasts { position: fixed; z-index: 60; right: 16px; bottom: 16px; display: grid; gap: 8px; width: min(400px, calc(100vw - 32px)); pointer-events: none; }
+.toasts { position: fixed; z-index: 60; right: 16px; bottom: calc(16px + var(--bottom-bar, 0px)); display: grid; gap: 8px; width: min(400px, calc(100vw - 32px)); pointer-events: none; }
 .toast { pointer-events: auto; display: flex; align-items: flex-start; gap: 10px; padding: 12px 10px 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line-strong); border-left: 4px solid var(--good); box-shadow: var(--shadow-3); font-size: 13.5px; animation: pop .16s ease-out; }
 .toast.error { border-left-color: var(--bad); }
 .toast > svg { flex: none; margin-top: 2px; color: var(--good); }

@@ -1,6 +1,7 @@
 package upgrade_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -20,6 +21,144 @@ import (
 	"github.com/kubek80/process-manager/server/internal/schema"
 	"github.com/kubek80/process-manager/server/internal/upgrade"
 )
+
+func loadSchemas(t *testing.T) *schema.Set {
+	t.Helper()
+	set, err := schema.Load(filepath.Join("..", "..", "..", "schema"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return set
+}
+
+// valid checks a converted document as a save in the portal would.
+func valid(t *testing.T, set *schema.Set, l docs.Lists, kind, what string, body []byte) {
+	t.Helper()
+	if err := set.Validate(kind, body); err != nil {
+		t.Errorf("%s: %v", what, err)
+	}
+	if err := docs.Check(kind, body, l); err != nil {
+		t.Errorf("%s: %v", what, err)
+	}
+}
+
+func TestOddInputStillFitsTheFormat(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	store := &docs.Store{Pool: pool}
+	var logged bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&logged, nil))
+	long := strings.Repeat("Very long category text ", 6) // about 140 characters
+	catalog := `{"tiers":[],"environments":[],"languages":[],"tools":[],"teams":[
+	 {"id":"big-platform","name":"Big platform","kind":"platform","contact":"` + strings.Repeat("c", 120) + `","description":"` + strings.Repeat("d", 200) + `"},
+	 {"id":"ops","name":"Ops","kind":"practice"}]}`
+	put := func(kind, id, body string) {
+		if _, _, err := store.Put(ctx, kind, id, []byte(body), "import"); err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+	}
+	put(docs.Catalog, docs.CatalogID, catalog)
+	for id, category := range map[string]string{
+		"p-cloud": "  Cloud  ", "p-cloud-upper": "CLOUD", "p-cloud-bang": "Cloud!", "p-chinese": "云计算", "p-chinese-2": "网络",
+		"p-blank": "   ", "p-long": long, "p-plain": "General",
+	} {
+		put(docs.Process, id, process(id, "big-platform", category, ""))
+	}
+	put(docs.Process, "p-draft", process("p-draft", "ops", "Secret plans", `"status":"draft",`))
+	put(docs.Process, "p-draft-shared", process("p-draft-shared", "ops", "general", `"status":"draft",`))
+	put(docs.Process, "p-ghost", process("p-ghost", "ops", "General", `"platform":"ghost",`))
+	// a deleted document: its category is not published, its versions lose it
+	put(docs.Process, "p-gone", process("p-gone", "ops", "Retired things", ""))
+	if err := store.Delete(ctx, docs.Process, "p-gone", "alex"); err != nil {
+		t.Fatal(err)
+	}
+	// a stored row whose body does not match it: the save refuses it, the start goes on
+	if _, err := pool.Exec(ctx, `insert into documents (kind, id, version, body, updated_by) values ('process', 'p-broken', 1, $1, 'import')`,
+		process("p-other-id", "ops", "General", "")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := upgrade.Lists(ctx, pool, log); err != nil {
+		t.Fatal(err)
+	}
+	set := loadSchemas(t)
+	l, _ := store.Lists(ctx)
+	cat, _ := store.Get(ctx, docs.Catalog, docs.CatalogID)
+	if err := set.Validate(docs.Catalog, cat.Body); err != nil {
+		t.Fatalf("the converted lists do not match the format: %v\n%s", err, cat.Body)
+	}
+	if err := docs.Check(docs.Catalog, cat.Body, l); err != nil {
+		t.Fatal(err)
+	}
+	var cats []string
+	for _, c := range l.Categories {
+		cats = append(cats, c.ID+"="+c.Name)
+	}
+	want := "category=云计算,category-2=网络,cloud=Cloud,cloud-2=Cloud!,general=General," +
+		"very-long-category-text-very-long-category-text-very-long-category-text-very-lon=Very long category text Very long catego"
+	if strings.Join(cats, ",") != want {
+		t.Fatalf("categories:\n%s", strings.Join(cats, "\n"))
+	}
+	for _, d := range must(store.List(ctx, docs.Process)) {
+		var head struct{ Category, Platform string }
+		json.Unmarshal(d.Body, &head)
+		switch d.ID {
+		case "p-broken":
+			continue // left as it was
+		case "p-ghost":
+			if head.Platform != "ghost" {
+				t.Errorf("an unknown platform must be left: %q", head.Platform)
+			}
+			continue
+		case "p-blank", "p-draft":
+			if head.Category != "" {
+				t.Errorf("%s keeps the category %q", d.ID, head.Category)
+			}
+		case "p-cloud", "p-cloud-upper":
+			if head.Category != "cloud" {
+				t.Errorf("%s: %q", d.ID, head.Category)
+			}
+		case "p-draft-shared":
+			if head.Category != "general" {
+				t.Errorf("a draft with a published text keeps it: %q", head.Category)
+			}
+		}
+		valid(t, set, l, docs.Process, d.ID, d.Body)
+	}
+	// the deleted document's versions lose the category nobody can see, the marker stays
+	history, _ := store.History(ctx, docs.Process, "p-gone")
+	if len(history) != 2 || !history[0].Deleted {
+		t.Fatalf("history: %+v", history)
+	}
+	old, _ := store.VersionBody(ctx, docs.Process, "p-gone", 1)
+	if strings.Contains(string(old), "category") || !strings.Contains(string(old), `"practice": "ops"`) {
+		t.Fatalf("old version:\n%s", old)
+	}
+	text := logged.String()
+	for _, want := range []string{"text cut to fit the lists", "numbered id", "written differently became one category", "only drafts or deleted documents",
+		"the document cannot be saved", "names a platform that is not in the lists"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the log does not say %q:\n%s", want, text)
+		}
+	}
+	// and a second start finds nothing to do
+	logged.Reset()
+	if err := upgrade.Lists(ctx, pool, log); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := store.Get(ctx, docs.Catalog, docs.CatalogID); again.Version != cat.Version {
+		t.Fatal("converted twice")
+	}
+	if strings.Contains(logged.String(), "converted to practices") {
+		t.Fatal("a second start converted again")
+	}
+}
+
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
 
 var (
 	ctx   = context.Background()
@@ -64,6 +203,7 @@ func oldDatabase(t *testing.T) fixture {
 		}
 	}
 	put(docs.Catalog, docs.CatalogID, oldCatalog)
+	put(docs.Process, "request-gcp-project", process("request-gcp-project", "cloud-platform-team", "Cloud", `"tags":["first"],`))
 	put(docs.Process, "request-gcp-project", process("request-gcp-project", "cloud-platform-team", "Cloud", ""))
 	put(docs.Process, "request-gcp-folder", process("request-gcp-folder", "cloud-platform-team", "cloud", ""))
 	put(docs.Process, "publish-library", process("publish-library", "engineering-practice", "Source control", `"platform":"cloud-platform-team",`))
@@ -140,7 +280,7 @@ func TestAnOlderDatabaseIsConvertedOnce(t *testing.T) {
 
 	// the documents name ids, and belong to the platform or practice of their former unit
 	gcp, d := f.body(t, docs.Process, "request-gcp-project")
-	if gcp["category"] != "cloud" || gcp["platform"] != "cloud-platform-team" || gcp["practice"] != nil || d.Version != 2 || d.UpdatedBy != upgrade.By {
+	if gcp["category"] != "cloud" || gcp["platform"] != "cloud-platform-team" || gcp["practice"] != nil || d.Version != 3 || d.UpdatedBy != upgrade.By {
 		t.Fatalf("gcp: %v", gcp)
 	}
 	if !strings.Contains(string(d.Body), "\"category\": \"cloud\",\n  \"platform\": \"cloud-platform-team\",\n  \"prerequisites\"") {
@@ -205,13 +345,27 @@ func TestAnOlderDatabaseIsConvertedOnce(t *testing.T) {
 	}
 	joined := strings.Join(actions, "\n")
 	for _, want := range []string{
-		"content.convert lists 5 documents moved to the new lists; added 2 practices, 1 platforms, 3 categories; 4 roles converted",
-		"access.grant riley@example.com standards-editor for security became practice-owner for practice security",
-		"access.revoke lee@example.com standards-editor for dns-team: no platform or practice dns-team",
+		"content.convert lists 5 documents moved to the new lists (6 older versions adjusted); added 2 practices, 1 platforms, 3 categories; 3 roles converted, 1 removed",
+		"access.grant riley@example.com Standards editor for Cyber Security became Practice owner for the practice Cyber Security",
+		"access.revoke lee@example.com Standards editor for DNS team removed: it is neither a platform nor a practice",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("activity log lacks %q:\n%s", want, joined)
 		}
+	}
+
+	// a version from before the conversion can be put back: it passes the checks of a save and
+	// stays on its platform
+	first, err := f.docs.VersionBody(ctx, docs.Process, "request-gcp-project", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid(t, schemas, l, docs.Process, "version 1", first)
+	if !strings.Contains(string(first), `"category": "cloud"`) || !strings.Contains(string(first), `"platform": "cloud-platform-team"`) || !strings.Contains(string(first), `"first"`) {
+		t.Fatalf("version 1:\n%s", first)
+	}
+	if _, changed, err := f.docs.Save(ctx, docs.Change{Kind: docs.Process, ID: "request-gcp-project", Body: first, By: "alex@example.com"}); err != nil || !changed {
+		t.Fatalf("restore: %v %v", changed, err)
 	}
 
 	// a second start finds nothing to do
@@ -221,7 +375,7 @@ func TestAnOlderDatabaseIsConvertedOnce(t *testing.T) {
 	if _, again := f.body(t, docs.Catalog, docs.CatalogID); again.Version != 2 {
 		t.Fatalf("lists converted twice: v%d", again.Version)
 	}
-	if _, again := f.body(t, docs.Process, "request-gcp-project"); again.Version != 2 {
+	if _, again := f.body(t, docs.Process, "request-gcp-project"); again.Version != 4 {
 		t.Fatalf("process converted twice: v%d", again.Version)
 	}
 	if later, _ := f.audit.Recent(ctx, 20); len(later) != len(entries) {
@@ -247,7 +401,7 @@ func TestSeveralServersStartingTogetherConvertOnce(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, d := f.body(t, docs.Process, "request-gcp-project"); d.Version != 2 {
+	if _, d := f.body(t, docs.Process, "request-gcp-project"); d.Version != 3 {
 		t.Fatalf("v%d", d.Version)
 	}
 	entries, _ := f.audit.Recent(ctx, 50)

@@ -46,3 +46,21 @@ export const environmentLabel = (c: Catalog, envs?: string[]) =>
   !envs?.length ? "All environments" : envs.map((e) => nameOf(c.environments, e)).join(", ");
 export const tierLabel = (c: Catalog, tiers?: string[]) =>
   !tiers?.length ? "All tiers" : tiers.map((t) => nameOf(c.tiers, t)).join(", ");
+
+/** "1 process", "2 processes and 1 standard", "3 standards"; "" for none. */
+export function docCount(processes: number, standards: number): string {
+  const parts: string[] = [];
+  if (processes) parts.push(`${processes} process${processes === 1 ? "" : "es"}`);
+  if (standards) parts.push(`${standards} standard${standards === 1 ? "" : "s"}`);
+  return parts.join(" and ");
+}
+
+/** Whether an entry of the lists can be removed, and if not, why. */
+export function removeHint(usedBy: string, members: number, noun: string): string {
+  const why: string[] = [];
+  if (usedBy) why.push(`still used by ${usedBy}`);
+  if (members) why.push(`${members} ${members === 1 ? "person is" : "people are"} still ${members === 1 ? "a member" : "members"} of this ${noun}`);
+  if (!why.length) return "Nothing uses it, so it is safe to remove.";
+  const first = why.join(", and ");
+  return `${first[0].toUpperCase()}${first.slice(1)}. ${usedBy ? "Change those first" : "Remove them from the members first"}${usedBy && members ? " and remove the members" : ""}, then it can be removed.`;
+}

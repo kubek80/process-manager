@@ -23,7 +23,7 @@ This file is **sample content**: it fills an empty database on its first start. 
 ```
 
 - A **team** is a group of people. Any team can own a process or issue a standard; teams have no kind.
-- A **practice** (cyber security, engineering…) and a **platform** (Google Cloud, Apigee, GitHub…) are lists of their own. The owners of a platform or practice may change the processes and standards that belong to it.
+- A **practice** (cyber security, engineering…) and a **platform** (Google Cloud, Apigee, GitHub…) are lists of their own. The owners of a platform or practice may change the processes and standards that belong to it. They cannot change a platform or practice of such a document that is not theirs; only editors can.
 - A **category** groups processes and standards for readers; it gives no rights.
 - Ids are unique within one list only: a team, a practice and a platform may share an id (the sample has team `security` and practice `security`).
 

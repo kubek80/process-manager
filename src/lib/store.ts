@@ -162,7 +162,16 @@ export interface SearchState {
 }
 const SEARCH_LISTS = ["type", "rigour", "category", "practice", "platform"] as const;
 const SEARCH_ALLOWED: Partial<Record<(typeof SEARCH_LISTS)[number], string[]>> = { type: ["process", "standard"], rigour: ["mandatory", "recommended", "optional"] };
-const decode = (s: string) => { try { return decodeURIComponent(s.replace(/\+/g, " ")); } catch { return null; } };
+/**
+ * A value from the address in plain text. A broken escape (a typed "100%") is kept as it was
+ * typed instead of losing the whole value; the escapes around it are still read.
+ */
+export function decode(s: string): string {
+  const text = s.replace(/\+/g, " ");
+  try { return decodeURIComponent(text); } catch {
+    return text.replace(/(%[0-9A-Fa-f]{2})+/g, (run) => { try { return decodeURIComponent(run); } catch { return run; } });
+  }
+}
 /** `#/search?q=…&platform=azure,github`: unknown or empty parts are ignored. */
 function parseSearch(query: string): Route {
   const r: { page: "search" } & SearchState = { page: "search" };
@@ -170,10 +179,10 @@ function parseSearch(query: string): Route {
     const eq = part.indexOf("=");
     if (eq <= 0) continue;
     const key = part.slice(0, eq), raw = part.slice(eq + 1);
-    if (key === "q") { const q = decode(raw); if (q?.trim()) r.q = q; continue; }
+    if (key === "q") { const q = decode(raw); if (q.trim()) r.q = q; continue; }
     if (!(SEARCH_LISTS as readonly string[]).includes(key)) continue;
     const k = key as (typeof SEARCH_LISTS)[number];
-    const values = [...new Set(raw.split(",").map((v) => decode(v)?.trim() ?? "").filter((v) => v && (!SEARCH_ALLOWED[k] || SEARCH_ALLOWED[k]!.includes(v))))];
+    const values = [...new Set(raw.split(",").map((v) => decode(v).trim()).filter((v) => v && (!SEARCH_ALLOWED[k] || SEARCH_ALLOWED[k]!.includes(v))))];
     if (values.length) r[k] = values as never; // checked against the allowed values above
   }
   return r;
