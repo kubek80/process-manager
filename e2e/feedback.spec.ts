@@ -33,7 +33,10 @@ test("a consumer flags a step from the checklist and everyone sees the flag", as
 test("report on the whole process from the feedback tab; send needs a sentence", async ({ page }) => {
   await signIn(page, SAM);
   await open(page, `/p/${GCP}/flow`);
-  await page.getByRole("button", { name: "Report a problem" }).click();
+  await expect(page.getByRole("button", { name: "Report a problem", exact: true })).toHaveCount(0); // "Give feedback" replaced it
+  await page.locator(".doc-engage").getByRole("button", { name: "Give feedback" }).click();
+  await expect(page).toHaveURL(/#\/p\/request-gcp-project\/feedback/);
+  await expect(page.getByPlaceholder(/What happened/)).toBeFocused();
   const send = page.getByRole("button", { name: "Send feedback" });
   await expect(send).toBeDisabled();
   await page.getByRole("button", { name: "Suggestion" }).click();
@@ -43,7 +46,7 @@ test("report on the whole process from the feedback tab; send needs a sentence",
   const item = page.locator(".fb-item");
   await expect(item).toContainText("Whole process");
   await expect(item).toContainText("Suggestion");
-  await expect(page.getByRole("heading", { name: /1 open/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "1 open · 0 handled" })).toBeVisible();
 });
 
 test("a consumer cannot mark feedback as fixed, but can delete their own", async ({ page, request }) => {
@@ -93,7 +96,7 @@ test("the owner team closes feedback on its own process only", async ({ page, re
   await page.getByRole("button", { name: "Mark as fixed" }).click();
   const item = page.locator(".fb-item");
   await expect(item).toContainText("Marked as fixed by Casey Owner");
-  await expect(page.getByRole("heading", { name: /0 open/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "0 open · 1 handled" })).toBeVisible();
   await expect(page.getByRole("tab", { name: /Feedback/ }).locator(".tab-count")).toHaveCount(0);
   await page.getByRole("tab", { name: "Map" }).click();
   await expect(page.locator(".block-flag")).toHaveCount(0);

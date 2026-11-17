@@ -35,7 +35,9 @@ test("find a process by searching and by tier and language", async ({ page }) =>
   await mine.getByLabel("Language").selectOption({ label: "Go" });
   await expect(cards.filter({ hasText: "Publish an internal library" })).toBeVisible();
 
-  await page.locator(".filters .chip", { hasText: "Source control" }).click();
+  await page.getByRole("button", { name: /^Category:/ }).click();
+  await page.getByRole("checkbox", { name: /^Source control,/ }).check();
+  await expect(page.getByRole("button", { name: "Category: Source control", exact: true })).toBeVisible();
   await expect(cards.filter({ hasText: "Request a GCP project" })).toHaveCount(0);
   expect(errors).toEqual([]);
 });
@@ -100,11 +102,11 @@ test("a sub-process can be expanded in place and opened", async ({ page }) => {
 
 test("a prerequisite links to the process that provides it", async ({ page }) => {
   await open(page, "/p/onboard-api-to-apigee/flow");
-  // on the map, what to prepare is one line that opens; the choice is remembered
+  // on the map, what to prepare is open on arrival (map.spec.ts covers closing it)
   const strip = page.getByRole("button", { name: /Before you start/ });
   await expect(strip).toContainText("0/4 ready");
-  await expect(page.locator(".prereq")).toHaveCount(0);
-  await strip.click();
+  await expect(strip).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator(".prereq")).toHaveCount(4);
   await page.getByRole("button", { name: /Don’t have it\? Request a GCP project/ }).click();
   await expect(page.getByRole("heading", { name: "Request a GCP project" })).toBeVisible();
 });

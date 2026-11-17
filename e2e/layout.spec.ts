@@ -4,8 +4,8 @@ import { CSRF, DANA, JORDAN, RILEY, SAM, open, signIn } from "./helpers";
 // What a phone, a tablet and a small laptop show. A page that scrolls sideways hides controls
 // off screen, so no page may be wider than the screen.
 const PAGES = ["/", "/search?q=gcp", "/search?q=logging&type=standard&rigour=mandatory", "/processes", "/standards", "/p/request-gcp-project/flow", "/p/request-gcp-project/list", "/p/request-gcp-project/flow/raise-request",
-  "/s/secure-logging/doc", "/s/secure-logging/doc/SEC-LOG-02", "/catalog", "/guide", "/mine"];
-const ADMIN = ["/p/request-gcp-project/json", "/admin/access", "/admin/lists", "/admin/skills", "/admin/health", "/admin/activity", "/admin/system"];
+  "/s/secure-logging/doc", "/s/secure-logging/doc/SEC-LOG-02", "/catalog", "/guide", "/mine", "/requests", "/requests?state=all"];
+const ADMIN = ["/p/request-gcp-project/json", "/admin/access", "/admin/lists", "/admin/skills", "/admin/health", "/admin/activity", "/admin/statistics", "/admin/system"];
 
 const sideways = (page: import("@playwright/test").Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
@@ -39,7 +39,7 @@ for (const [name, width] of [["a small phone", 360], ["a phone", 390], ["a table
 for (const width of [390, 360]) {
   test(`on a phone ${width} wide the top bar keeps every control within reach`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
-    // the longest top bar there can be: an admin who also answers for a team has seven links
+    // the longest top bar there can be: an admin who also answers for a team has eight links
     await signIn(page, DANA, { editor: true });
     const role = { email: DANA, role: "owner", scope: "dns-team" };
     expect((await page.request.post("/api/admin/access", { data: role, headers: CSRF })).ok()).toBeTruthy();
@@ -50,7 +50,7 @@ for (const width of [390, 360]) {
         await expect(page.locator("h1").first()).toBeVisible();
         const nav = page.locator(".nav");
         const controls = [
-          nav.getByRole("link", { name: "Home" }), nav.getByRole("link", { name: "Processes" }), nav.getByRole("link", { name: "Standards" }),
+          nav.getByRole("link", { name: "Home" }), nav.getByRole("link", { name: "Processes" }), nav.getByRole("link", { name: "Standards" }), nav.getByRole("link", { name: "Requests" }),
           nav.getByRole("link", { name: /My responsibilities/ }), nav.getByRole("link", { name: "Teams & tools" }), nav.getByRole("link", { name: "Guide" }),
           page.getByRole("button", { name: "Consumer" }), page.getByRole("button", { name: "Editor", exact: true }), page.getByRole("button", { name: "Your account" }),
         ];
@@ -71,7 +71,7 @@ test("the longest top bar fits every width without scrolling sideways", async ({
   expect((await page.request.post("/api/admin/access", { data: role, headers: CSRF })).ok()).toBeTruthy();
   try {
     await open(page, "/");
-    await expect(page.locator(".nav a")).toHaveCount(7);
+    await expect(page.locator(".nav a")).toHaveCount(8);
     for (const width of [1440, 1366, 1280, 1200, 1100, 1024, 1000, 900, 800, 700, 600, 520, 480, 440, 414, 400, 375, 360]) {
       await page.setViewportSize({ width, height: 800 });
       expect(await sideways(page), `top bar at ${width}px`).toBe(0);

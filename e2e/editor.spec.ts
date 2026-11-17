@@ -40,6 +40,8 @@ test("insert a step on an arrow of the map, exactly between two blocks", async (
 
 test("drag a block to another lane to change who does it", async ({ page }) => {
   await open(page, `/p/${LIB}/flow`);
+  // "Before you start" is open above the map: bring the block and the lane below it into view together
+  await page.locator(".lane").nth(2).scrollIntoViewIfNeeded();
   await page.locator(".block", { hasText: "Tag the first version" }).dragTo(page.locator(".lane").nth(2), { targetPosition: { x: 320, y: 30 } });
   await save(page);
   expect((await readProcess(page, LIB))!.steps.find((s: { id: string }) => s.id === "tag-version").actor).toBe("pipeline");
@@ -140,13 +142,15 @@ test("details: restrict to tiers, an environment and a language, retire with a r
 
 test("reviews: the library shows what is due, and one click confirms a process", async ({ page }) => {
   await open(page, "/processes");
-  const strip = page.locator(".review-strip");
-  await expect(strip).toContainText("need a review");
-  await strip.click();
-  await expect(page.locator(".card", { hasText: "Onboard a site to Akamai" })).toContainText("Review overdue");
+  const due = page.getByRole("checkbox", { name: /^Only what needs a review, \d+ results?$/ });
+  await expect(due).not.toBeChecked();
+  await due.check();
+  await expect(page.locator(".filter-chosen").getByRole("button", { name: "Remove filter Review: due or overdue" })).toBeVisible();
+  const akamai = page.locator(".card", { hasText: "Onboard a site to Akamai" });
+  await expect(akamai.locator('[data-line="review"]')).toContainText("Overdue since 2026-09-02");
   await expect(page.locator(".card", { hasText: "Request a GCP project" })).toHaveCount(0);
 
-  await page.locator(".card", { hasText: "Onboard a site to Akamai" }).click();
+  await akamai.locator(".card-link").click();
   await expect(page.locator(".banner", { hasText: "Review overdue since 2026-09-02" })).toBeVisible();
   await page.getByRole("button", { name: "Mark as reviewed" }).click();
   await expect(page.locator(".banner", { hasText: "Review overdue" })).toHaveCount(0);
