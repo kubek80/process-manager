@@ -187,13 +187,8 @@ func run(log *slog.Logger, o options) error {
 		return err
 	}
 	if o.seed {
-		if err := seedFeedback(ctx, st, log); err != nil {
+		if err := seed(ctx, cfg, st, log); err != nil {
 			return err
-		}
-		if cfg.Auth == config.AuthDev {
-			if err := seedEngagement(ctx, st, log, time.Now()); err != nil {
-				return err
-			}
 		}
 	}
 	if o.reset {
@@ -456,6 +451,19 @@ func exportFiles(ctx context.Context, st stores, dir string, log *slog.Logger) e
 	}
 	log.Info("exported", "to", dir, "documents", n, "skills", k)
 	return nil
+}
+
+// seed adds the samples that make a local database worth looking at: feedback, and with
+// development sign-in also views, bookmarks, upvotes, downloads and requests. Each only fills
+// what is empty.
+func seed(ctx context.Context, cfg config.Config, st stores, log *slog.Logger) error {
+	if err := seedFeedback(ctx, st, log); err != nil {
+		return err
+	}
+	if cfg.Auth != config.AuthDev {
+		return nil
+	}
+	return seedEngagement(ctx, st, log, time.Now())
 }
 
 // seedFeedback gives a fresh local database something to look at.
