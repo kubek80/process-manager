@@ -101,7 +101,7 @@ test("when somebody else saved first, nothing is overwritten without a decision"
 test("leaving with unsaved changes asks first, whichever way out is taken", async ({ page }) => {
   await signIn(page, ALEX, { editor: true });
   await copyOf(page, "leave-demo", "Leave demo");
-  await open(page, "/");
+  await open(page, "/processes");
   await page.locator(".card", { hasText: "Leave demo" }).click();
   await renameFirstStep(page, "Not saved yet");
   const mine = page.getByText("Not saved yet").first();
@@ -213,7 +213,7 @@ test("when the session ends in the middle of an edit, the edit survives signing 
 
 test("a new process starts with its name, as a draft that readers cannot reach", async ({ page }) => {
   await signIn(page, ALEX, { editor: true });
-  await open(page, "/");
+  await open(page, "/processes");
   await page.getByRole("button", { name: "Blank process" }).click();
   const dialog = page.getByRole("dialog", { name: "New process" });
   await expect(dialog.getByRole("button", { name: "Create process" })).toBeDisabled();
@@ -244,7 +244,7 @@ test("the app runs under a strict security policy", async ({ page }) => {
   expect(res!.headers()["x-frame-options"]).toBe("DENY");
   await expect(page.locator(".cm-editor")).toBeVisible(); // the code editor and the checker both work under it
   await expect(page.locator(".status.good")).toBeVisible();
-  for (const hash of ["/", "/standards", "/s/secure-logging/doc", "/catalog", "/guide", "/admin/skills"]) {
+  for (const hash of ["/", "/search?q=gcp", "/processes", "/standards", "/s/secure-logging/doc", "/catalog", "/guide", "/admin/skills"]) {
     await open(page, hash);
     await expect(page.locator("h1").first()).toBeVisible();
   }
@@ -259,7 +259,7 @@ async function comeBackLater(page: Page) {
 
 test("the Back button closes a step and never opens again what was closed", async ({ page }) => {
   await signIn(page, SAM);
-  await open(page, "/");
+  await open(page, "/processes");
   await page.locator(".card", { hasText: "Request a GCP project" }).click();
   for (const n of [0, 1]) {
     await page.locator(".block-main").nth(n).click();
@@ -390,7 +390,7 @@ test("deleting something with unsaved changes does not ask about them afterwards
 
 test("closing a step stays on the tab where it was closed", async ({ page }) => {
   await signIn(page, SAM);
-  await open(page, "/");
+  await open(page, "/processes");
   await page.locator(".card", { hasText: "Request a GCP project" }).click();
   await page.locator(".block-main").nth(1).click(); // opened on the map
   await page.getByRole("tab", { name: "Checklist" }).click(); // still open in the checklist

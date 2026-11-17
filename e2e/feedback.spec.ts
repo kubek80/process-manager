@@ -26,7 +26,7 @@ test("a consumer flags a step from the checklist and everyone sees the flag", as
   await expect(page.locator(".block", { hasText: "Raise the 'New GCP project' request" }).locator(".block-flag")).toHaveText("1");
   await expect(page.getByRole("tab", { name: /Feedback/ }).locator(".tab-count")).toHaveText("1");
 
-  await open(page, "/");
+  await open(page, "/processes");
   await expect(page.locator(".card", { hasText: "Request a GCP project" })).toContainText("1 open feedback");
 });
 

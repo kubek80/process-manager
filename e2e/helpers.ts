@@ -1,13 +1,15 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 // The built-in development users and what they may do (see server/internal/auth/dev.go).
-export const SAM = "sam@example.com"; // consumer
-export const ALEX = "alex@example.com"; // edits processes and the lists
-export const CASEY = "casey@example.com"; // owner for the Cloud Platform team ("Request a GCP project")
-export const RILEY = "riley@example.com"; // edits and owns the standards of Cyber Security
+export const SAM = "sam@example.com"; // a reader (consumer), no role
+export const ALEX = "alex@example.com"; // process editor (every process) and lists manager
+export const CASEY = "casey@example.com"; // Owner of the team Cloud Platform team: confirms reviews, cannot edit
+export const RILEY = "riley@example.com"; // Practice owner of Cyber security (edits what belongs to it) and Owner of the team Cyber Security
+export const JORDAN = "jordan@example.com"; // a reader who is Platform owner of Google Cloud, Practice owner of Engineering and Owner of the Cloud Platform team
 export const DANA = "dana@example.com"; // admin
 
-const CSRF = { "X-Requested-With": "process-manager" };
+export const CSRF = { "X-Requested-With": "process-manager" };
+
 
 /** Today as the server sees it. A review is dated by the server, whatever the clock of the browser says. */
 export const serverToday = () => new Date().toISOString().slice(0, 10);
@@ -75,3 +77,19 @@ export const save = async (page: Page) => {
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.locator(".saved")).toBeVisible();
 };
+
+/** The stored version of a process or standard: what a save sends as `?base=`. */
+export async function versionOf(from: Page | APIRequestContext, kind: "process" | "standard", id: string): Promise<number> {
+  const body = await (await api(from).get(kind === "process" ? "/api/processes" : "/api/standards")).json();
+  return body.meta?.[id]?.version ?? 0;
+}
+
+/**
+ * Save a process or standard straight through the API, as the signed-in user, from the stored
+ * version (or as a new one when it does not exist). For proving what the server allows,
+ * whatever the browser shows.
+ */
+export async function putDoc(from: Page | APIRequestContext, kind: "process" | "standard", id: string, body: Doc) {
+  const base = await versionOf(from, kind, id);
+  return api(from).put(`/api/${kind === "process" ? "processes" : "standards"}/${id}?base=${base}`, { data: body, headers: CSRF });
+}

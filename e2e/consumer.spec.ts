@@ -5,7 +5,7 @@ test.beforeEach(async ({ page }) => { await signIn(page, SAM); });
 
 test("find a process by searching and by tier and language", async ({ page }) => {
   const errors = watchErrors(page);
-  await open(page, "/");
+  await open(page, "/processes");
   const cards = page.locator(".card");
   await expect(cards.filter({ hasText: "Request a GCP project" })).toBeVisible();
 
@@ -112,12 +112,12 @@ test("a prerequisite links to the process that provides it", async ({ page }) =>
 test("teams and tools are a read-only directory", async ({ page }) => {
   await open(page, "/catalog");
   await expect(page.getByRole("heading", { name: /Teams, tools/ })).toBeVisible();
-  await expect(page.getByRole("tab")).toHaveCount(5); // teams and units, tools, tiers, environments, languages
+  await expect(page.getByRole("tab")).toHaveCount(8); // teams, practices, platforms, categories, tools, tiers, environments, languages
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   await expect(page.locator(".cat-detail")).toContainText("Slack #cloud-platform");
-  await expect(page.locator(".cat-detail .eyebrow")).toHaveText("Platform owner");
+  await expect(page.locator(".cat-detail .eyebrow")).toHaveText("team");
   await expect(page.locator(".cat-usage")).toContainText("Request a GCP project");
-  await expect(page.locator(".cat-usage")).toContainText("Infrastructure as code"); // the standard this unit issues
+  await expect(page.locator(".cat-usage")).toContainText("Infrastructure as code"); // the standard this team issues
   await expect(page.locator(".cat-detail input")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /New team/ })).toHaveCount(0);
   await page.getByRole("tab", { name: /Tools/ }).click();

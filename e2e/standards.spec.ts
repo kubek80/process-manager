@@ -1,14 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { ALEX, answer, clearFeedback, open, readSkill, readStandard, report, RILEY, SAM, save, serverToday, signIn, watchErrors } from "./helpers";
+import { ALEX, answer, clearFeedback, open, putDoc, readSkill, readStandard, report, RILEY, SAM, save, serverToday, signIn, watchErrors } from "./helpers";
 
-const LOGGING = "secure-logging"; // issued by Cyber Security: Riley edits it
+const LOGGING = "secure-logging"; // belongs to the practice Cyber security: Riley edits it
 const IAC = "infrastructure-as-code"; // issued by the Cloud Platform team
-const REVIEW = "code-review"; // issued by the Engineering practice
+const REVIEW = "code-review"; // issued by the Developer Experience team, belongs to the practice Engineering
 const example = JSON.parse(fs.readFileSync(path.join(process.cwd(), "schema/example.standard.json"), "utf8"));
 
-test("a consumer finds standards by unit and by what applies to their application", async ({ page }) => {
+test("a consumer finds standards by the team that issues them and by what applies to their application", async ({ page }) => {
   const errors = watchErrors(page);
   await signIn(page, SAM);
   await open(page, "/standards");
@@ -23,8 +23,10 @@ test("a consumer finds standards by unit and by what applies to their applicatio
   await expect(cards.first()).toContainText("Infrastructure as code");
   await page.getByPlaceholder(/Search/).fill("");
 
-  await page.locator(".filters .chip", { hasText: "Engineering practice" }).click();
+  await page.locator(".filters .chip", { hasText: "Developer Experience team" }).click();
   await expect(cards).toHaveCount(1);
+  await expect(cards.first()).toContainText("Code review");
+  await expect(cards.first()).toContainText("Engineering"); // the practice it belongs to
   await page.locator(".filters .chip", { hasText: "All" }).click();
 
   // for a development environment one of the four mandatory logging rules falls away
@@ -84,7 +86,7 @@ test("standards and processes point to each other", async ({ page }) => {
   await expect(page.locator(".standard-intro .link-list").getByRole("link", { name: "Request a GCP project" })).toBeVisible();
 });
 
-test("feedback on a requirement goes to the unit that issued the standard", async ({ page, request }) => {
+test("feedback on a requirement goes to the people who answer for the standard", async ({ page, request }) => {
   await clearFeedback(request, "standard", LOGGING);
   await signIn(page, SAM);
   await open(page, `/s/${LOGGING}/doc`);
@@ -107,7 +109,7 @@ test("feedback on a requirement goes to the unit that issued the standard", asyn
   await expect(page.locator(".fb-item")).toContainText("SEC-LOG-02: No personal data in logs");
   await expect(page.getByRole("button", { name: "Mark as fixed" })).toHaveCount(0);
 
-  // the unit does
+  // the owner of its practice does
   await signIn(page, RILEY);
   await open(page, `/s/${LOGGING}/feedback`);
   await page.getByRole("button", { name: "Mark as fixed" }).click();
@@ -115,15 +117,20 @@ test("feedback on a requirement goes to the unit that issued the standard", asyn
   await expect(page.getByRole("heading", { name: /0 open/ })).toBeVisible();
 });
 
-test("a unit edits its own standards only", async ({ page }) => {
+test("a practice owner edits the standards of the practice only", async ({ page }) => {
   await signIn(page, RILEY, { editor: true });
-  await open(page, `/s/${REVIEW}/doc`); // another unit's standard: reading only
+  await open(page, `/s/${REVIEW}/doc`); // belongs to another practice: reading only
   await expect(page.locator(".req").first()).toBeVisible();
   await expect(page.locator('[aria-label^="Edit "]')).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Details", exact: true })).toHaveCount(0);
   const theirs = await readStandard(page, REVIEW);
-  const res = await page.request.put(`/api/standards/${REVIEW}`, { data: { ...theirs, title: "Hijacked" }, headers: { "X-Requested-With": "process-manager" } });
+  const res = await putDoc(page, "standard", REVIEW, { ...theirs, title: "Hijacked" });
   expect(res.status()).toBe(403);
+  expect((await res.json()).error).toContain("You can only save a standard that belongs to a platform or practice you own.");
+  // nor take it over by moving it into her practice: what it belongs to now counts as well
+  const takeOver = await putDoc(page, "standard", REVIEW, { ...theirs, practice: "security" });
+  expect(takeOver.status()).toBe(403);
+  expect((await takeOver.json()).error).toContain("Only standards editors and the owners of its platform or practice can change this standard.");
 
   await open(page, `/s/${LOGGING}/doc`);
   await expect(page.locator('[aria-label^="Edit "]')).toHaveCount(5);
@@ -209,7 +216,7 @@ test("create a standard from a policy text with AI; it is a draft without skills
   await modal.locator("textarea").nth(0).fill("Dependencies with critical vulnerabilities must be updated within 7 days.");
   await modal.getByRole("button", { name: "Copy prompt" }).click();
   const prompt = await page.evaluate(() => navigator.clipboard.readText());
-  for (const part of ["# UNITS", '"security" - Cyber Security', '"production" - Production', "# JSON SCHEMA", '"id": "dependency-updates"', "must be updated within 7 days"]) expect(prompt).toContain(part);
+  for (const part of ["# TEAMS", '"security" - Cyber Security', '"production" - Production', "# JSON SCHEMA", '"id": "dependency-updates"', "must be updated within 7 days"]) expect(prompt).toContain(part);
 
   const wrong = JSON.parse(JSON.stringify(example));
   wrong.requirements[0].level = "always";

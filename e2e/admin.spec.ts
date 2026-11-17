@@ -39,22 +39,33 @@ test("an admin gives someone a role and it takes effect at once", async ({ page,
   const people = page.locator(".people li");
   await expect(people.filter({ hasText: "dana@example.com" })).toContainText("Cannot be removed here");
   await expect(people.filter({ hasText: "dana@example.com" }).getByRole("button")).toHaveCount(0);
-  await expect(people.filter({ hasText: "riley@example.com" })).toContainText("Standards editor");
-  await expect(people.filter({ hasText: "riley@example.com" })).toContainText("Cyber Security");
+  await expect(people.filter({ hasText: "riley@example.com" })).toContainText("Practice owner");
+  await expect(people.filter({ hasText: "riley@example.com" })).toContainText("Cyber security");
+  await expect(people.filter({ hasText: "jordan@example.com" })).toContainText("Platform owner");
+  await expect(people.filter({ hasText: "jordan@example.com" })).toContainText("Google Cloud");
 
   const grant = page.locator(".grant");
   await expect(grant.getByRole("button", { name: "Give role" })).toBeDisabled();
   await grant.getByLabel("Email").fill("sam@example.com");
+  // each role limited to a group asks for it from its own list; the others take no group at all
   await grant.getByLabel("Role").selectOption({ label: "Owner" });
   await expect(grant.getByRole("button", { name: "Give role" })).toBeDisabled(); // an owner needs a team
+  await expect(grant.getByLabel("For the team").locator("option", { hasText: "Cloud Platform team" })).toHaveCount(1);
+  await grant.getByLabel("Role").selectOption({ label: "Platform owner" });
+  await expect(grant.getByLabel("For the team")).toHaveCount(0);
+  await expect(grant.getByLabel("For the platform").locator("option", { hasText: "Google Cloud" })).toHaveCount(1);
+  await expect(grant.getByLabel("For the platform").locator("option", { hasText: "Cloud Platform team" })).toHaveCount(0);
   await grant.getByLabel("Role").selectOption({ label: "Standards editor" });
-  await grant.getByLabel("For the unit").selectOption({ label: "Engineering practice" });
+  await expect(grant.getByLabel(/^For the/)).toHaveCount(0); // every standard: not limited to anything
+  await grant.getByLabel("Role").selectOption({ label: "Practice owner" });
+  await expect(grant.getByRole("button", { name: "Give role" })).toBeDisabled();
+  await grant.getByLabel("For the practice").selectOption({ label: "Engineering" });
   await grant.getByRole("button", { name: "Give role" }).click();
   const row = people.filter({ hasText: "sam@example.com" });
-  await expect(row.locator(".role-chip")).toContainText("Standards editor");
-  await expect(row.locator(".role-chip")).toContainText("Engineering practice");
+  await expect(row.locator(".role-chip")).toContainText("Practice owner");
+  await expect(row.locator(".role-chip")).toContainText("Engineering");
 
-  // Sam reloads: the Editor switch is there and the practice's standard can be edited, no other
+  // Sam reloads: the Editor switch is there and the standard of the practice can be edited, no other
   await sam.reload();
   await expect(sam.locator(".mode-switch")).toBeVisible();
   await expect(sam.locator('[aria-label^="Edit "]')).toHaveCount(4);
@@ -67,7 +78,7 @@ test("an admin gives someone a role and it takes effect at once", async ({ page,
   await expect(sam.locator('[aria-label^="Edit "]')).toHaveCount(0);
 
   // taking the role away works the same way
-  await row.getByRole("button", { name: /Remove Standards editor/ }).click();
+  await row.getByRole("button", { name: /Remove Practice owner/ }).click();
   await answer(page, "Remove this role?", "Remove role");
   await expect(people.filter({ hasText: "sam@example.com" })).toHaveCount(0);
   await sam.reload();
@@ -80,7 +91,7 @@ test("an admin gives someone a role and it takes effect at once", async ({ page,
   await expect(log.nth(0)).toContainText("Dana Admin removed a role from sam@example.com");
   await expect(log.nth(1)).toContainText("Sam Consumer saved the standard code-review");
   await expect(log.nth(2)).toContainText("Dana Admin gave a role to sam@example.com");
-  await expect(log.nth(2)).toContainText("standards-editor for engineering-practice");
+  await expect(log.nth(2)).toContainText("practice-owner for engineering");
 });
 
 test("mistakes when giving a role are explained", async ({ page }) => {
@@ -89,7 +100,20 @@ test("mistakes when giving a role are explained", async ({ page }) => {
   const headers = { "X-Requested-With": "process-manager" };
   const res = await page.request.post("/api/admin/access", { data: { email: "x@example.com", role: "owner", scope: "no-such-team" }, headers });
   expect(res.status()).toBe(400);
-  expect((await res.json()).error).toContain("no team or unit");
+  expect((await res.json()).error).toContain("There is no team “no-such-team” in the lists.");
+  for (const [role, scope, message] of [
+    ["platform-owner", "no-such-platform", "There is no platform “no-such-platform” in the lists."],
+    ["practice-owner", "google-cloud", "There is no practice “google-cloud” in the lists."], // a platform, not a practice: the lists are separate
+    ["platform-owner", "", "needs the platform"],
+  ]) {
+    const refused = await page.request.post("/api/admin/access", { data: { email: "x@example.com", role, scope }, headers });
+    expect(refused.status(), `${role} for “${scope}”`).toBe(400);
+    expect((await refused.json()).error).toContain(message);
+  }
+  // a standards editor changes every standard: the role cannot be limited to a group any more
+  const limited = await page.request.post("/api/admin/access", { data: { email: "x@example.com", role: "standards-editor", scope: "security" }, headers });
+  expect(limited.status()).toBe(400);
+  expect((await limited.json()).error).toContain("cannot be limited");
   // the admin named in the server settings cannot be removed through the API either: there is nothing stored to remove
   await page.request.delete("/api/admin/access", { data: { email: DANA, role: "admin", scope: "" }, headers });
   expect((await page.request.get("/api/admin/access")).ok()).toBeTruthy();

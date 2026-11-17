@@ -6,13 +6,17 @@ test("the app is closed until you sign in", async ({ page, request }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Process Manager" })).toBeVisible();
   await expect(page.getByText("Local development.")).toBeVisible();
-  await expect(page.locator(".login-users button")).toHaveCount(5);
+  await expect(page.locator(".login-users button")).toHaveCount(6);
+  await expect(page.locator(".login-users")).toContainText("Jordan Platform");
   await expect(page.locator(".topbar")).toHaveCount(0);
 });
 
 test("a consumer signs in, sees no editing, and can switch user", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /Sam Consumer/ }).click();
+  // signed in, the app starts at Home: one search over processes and standards
+  await expect(page.getByRole("heading", { name: "Find a process or a standard" })).toBeVisible();
+  await page.locator(".nav").getByRole("link", { name: "Processes" }).click();
   await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
   await expect(page.locator(".mode-switch")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Create from text with AI/ })).toHaveCount(0);
@@ -32,7 +36,7 @@ test("a consumer signs in, sees no editing, and can switch user", async ({ page 
 
 test("the session survives a reload and ends on sign-out", async ({ page }) => {
   await signIn(page, SAM);
-  await page.goto("/");
+  await page.goto("/#/processes");
   await expect(page.locator(".card").first()).toBeVisible();
   await page.reload();
   await expect(page.locator(".card").first()).toBeVisible();

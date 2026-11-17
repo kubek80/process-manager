@@ -139,7 +139,7 @@ test("details: restrict to tiers, an environment and a language, retire with a r
 });
 
 test("reviews: the library shows what is due, and one click confirms a process", async ({ page }) => {
-  await open(page, "/");
+  await open(page, "/processes");
   const strip = page.locator(".review-strip");
   await expect(strip).toContainText("need a review");
   await strip.click();

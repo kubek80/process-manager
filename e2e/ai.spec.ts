@@ -10,7 +10,7 @@ test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 test.beforeEach(async ({ page }) => { await signIn(page, ALEX, { editor: true }); });
 
 test("create a process from text with any chat assistant", async ({ page }) => {
-  await open(page, "/");
+  await open(page, "/processes");
   await page.getByRole("button", { name: "Create from text with AI" }).click();
   const modal = page.locator(".modal");
   const [description, answer] = [modal.locator("textarea").nth(0), modal.locator("textarea").nth(1)];
@@ -49,11 +49,11 @@ test("create a process from text with any chat assistant", async ({ page }) => {
 });
 
 test("a draft is invisible to consumers until it is set to active", async ({ page }) => {
-  await open(page, "/");
+  await open(page, "/processes");
   await expect(page.locator(".card", { hasText: "Request VPN access" })).toContainText("Draft");
 
   await signIn(page, SAM);
-  await open(page, "/");
+  await open(page, "/processes");
   await expect(page.locator(".card", { hasText: "Request a GCP project" })).toBeVisible();
   await expect(page.locator(".card", { hasText: "Request VPN access" })).toHaveCount(0);
 
@@ -66,7 +66,7 @@ test("a draft is invisible to consumers until it is set to active", async ({ pag
   await save(page);
 
   await signIn(page, SAM);
-  await open(page, "/");
+  await open(page, "/processes");
   await expect(page.locator(".card", { hasText: "Request VPN access" })).toBeVisible();
 });
 
@@ -103,7 +103,7 @@ test("change an existing process with AI, then delete it", async ({ page }) => {
 });
 
 test("a blank process starts as a valid draft", async ({ page }) => {
-  await open(page, "/");
+  await open(page, "/processes");
   await page.getByRole("button", { name: "Blank process" }).click();
   // it is named first: the name gives it its address, which never changes
   await page.getByRole("dialog", { name: "New process" }).getByLabel("Name of the process").fill("Order a laptop");

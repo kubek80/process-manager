@@ -66,13 +66,22 @@ test("a missing tool can be added straight from a step", async ({ page }) => {
   expect((await readProcess(page, "raise-servicenow-request"))!.steps[0].tool).toBe("confluence");
 });
 
-test("a team becomes a unit that can issue standards; a new environment can be chosen in a process", async ({ page }) => {
+test("a new environment can be chosen in a process; the lists of groups are separate", async ({ page }) => {
   await open(page, "/admin/lists");
   await expect(page.locator(".admin-nav a")).toHaveText(["Lists", "Skills", "Health"]); // no Access, Activity or System for a lists manager
+  // teams, practices and platforms are three lists: a team is just a group of people, of no kind
+  await expect(page.locator(".cat-tabs [role=tab] strong")).toHaveText(["Teams", "Practices", "Platforms", "Categories", "Tools", "Application tiers", "Environments", "Languages"]);
   await page.locator(".cat-item", { hasText: "DNS team" }).click();
-  await expect(page.locator(".cat-detail .eyebrow")).toHaveText("Team");
-  await page.locator(".cat-detail").getByRole("button", { name: "Platform owner" }).click();
-  await expect(page.locator(".cat-detail .eyebrow")).toHaveText("Platform owner");
+  await expect(page.locator(".cat-detail .eyebrow")).toHaveText("team");
+  await expect(page.locator(".cat-detail").getByRole("button", { name: "Platform owner" })).toHaveCount(0);
+  // the team Cyber Security and the practice Cyber security share an id, each in its own list
+  await page.locator(".cat-item", { hasText: "Cyber Security" }).click();
+  await expect(page.locator(".cat-detail code").first()).toHaveText("security");
+  await page.getByRole("tab", { name: /Practices/ }).click();
+  await page.locator(".cat-item", { hasText: "Cyber security" }).click();
+  await expect(page.locator(".cat-detail .eyebrow")).toHaveText("practice");
+  await expect(page.locator(".cat-detail code").first()).toHaveText("security");
+  await expect(page.locator(".cat-usage")).toContainText("Secure logging");
 
   await page.getByRole("tab", { name: /Environments/ }).click();
   await page.getByRole("button", { name: "New environment" }).click();
@@ -80,7 +89,7 @@ test("a team becomes a unit that can issue standards; a new environment can be c
   await page.keyboard.press("Enter");
   await save(page);
   const catalog = await readCatalog(page);
-  expect(catalog.teams.find((t: { id: string }) => t.id === "dns-team").kind).toBe("platform");
+  expect(catalog.teams.every((t: Record<string, unknown>) => !("kind" in t))).toBe(true);
   expect(catalog.environments.at(-1)).toEqual({ id: "pre-production", name: "Pre-production" });
 
   await signIn(page, ALEX, { editor: true });

@@ -1,9 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ALEX, CASEY, DANA, RILEY, SAM, open, readProcess, report, serverToday, signIn } from "./helpers";
+import { ALEX, CASEY, DANA, JORDAN, RILEY, SAM, open, readProcess, report, serverToday, signIn } from "./helpers";
 
 const CSRF = { "X-Requested-With": "process-manager" };
 
-// Casey is Owner for the Cloud Platform team; Riley owns and edits the standards of Cyber Security.
+// Casey is Owner of the Cloud Platform team; Riley is Practice owner of Cyber security and Owner of the team Cyber Security.
 
 /** A process of the Cloud Platform team whose review is long overdue. */
 async function overdueProcess(page: Page, id: string, title: string) {
@@ -83,12 +83,15 @@ test("the review is refused when somebody changed it since the owner looked", as
   await other.dispose();
 });
 
-test("a unit sees its standards; somebody who owns nothing has no such page in the way", async ({ page }) => {
+test("a practice owner sees what belongs to the practice; somebody who owns nothing has no such page in the way", async ({ page }) => {
   await signIn(page, RILEY);
   await open(page, "/mine");
   const all = page.getByRole("region", { name: /Everything that is yours/ });
+  await expect(all.locator("th").nth(1)).toHaveText("Yours through");
+  // Secure logging is hers twice: it belongs to her practice, and her team maintains it
+  await expect(all.locator("tr", { hasText: "Secure logging" })).toContainText("Cyber security");
   await expect(all.locator("tr", { hasText: "Secure logging" })).toContainText("Cyber Security");
-  await expect(all.locator("tr", { hasText: "Code review" })).toHaveCount(0); // another unit's standard
+  await expect(all.locator("tr", { hasText: "Code review" })).toHaveCount(0); // belongs to another practice
 
   await signIn(page, SAM);
   await open(page, "/");
@@ -103,12 +106,13 @@ test("an admin adds and removes the members of a team on the team itself", async
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   const members = page.locator(".cat-members");
   await expect(members.locator("li", { hasText: CASEY })).toContainText("Owner");
+  await expect(members.locator("li", { hasText: JORDAN })).toContainText("Owner");
 
-  // a second member: a team can have as many as it needs
+  // one more member: a team can have as many as it needs
   await members.getByLabel("Email of the new member").fill("Sam@Example.com ");
   await members.getByRole("button", { name: "Add member" }).click();
   await expect(members.locator("li", { hasText: SAM })).toContainText("Owner");
-  await expect(members.locator("h3")).toContainText("2");
+  await expect(members.locator("h3")).toContainText("3");
   await expect(members.getByLabel("Email of the new member")).toHaveValue("");
 
   // it takes effect at once: Sam now answers for what the team owns
@@ -132,29 +136,32 @@ test("an admin adds and removes the members of a team on the team itself", async
   await expect(page.getByRole("link", { name: /My responsibilities/ })).toHaveCount(0);
 });
 
-test("a unit has members who own it and members who edit its standards; a new team needs saving first", async ({ page }) => {
+test("a practice has members, each with the one role it gives; a new team needs saving first", async ({ page }) => {
   await signIn(page, DANA, { editor: true });
   await open(page, "/admin/lists");
+  // the team Cyber Security: Riley is its Owner
   await page.locator(".cat-item", { hasText: "Cyber Security" }).click();
+  await expect(page.locator(".cat-members li", { hasText: RILEY })).toContainText("Owner");
+  // the practice Cyber security: Riley is its Practice owner; every group has one member role, nothing to choose
+  await page.getByRole("tab", { name: /Practices/ }).click();
+  await page.locator(".cat-item", { hasText: "Cyber security" }).click();
   const members = page.locator(".cat-members");
-  const riley = members.locator("li", { hasText: RILEY });
-  await expect(riley).toContainText("Owner");
-  await expect(riley).toContainText("Standards editor");
+  await expect(members.locator("li", { hasText: RILEY })).toContainText("Practice owner");
+  await expect(members.getByLabel("As", { exact: true })).toHaveCount(0);
   await members.getByLabel("Email of the new member").fill("kim@example.com");
-  await members.getByLabel("As", { exact: true }).selectOption("standards-editor");
   await members.getByRole("button", { name: "Add member" }).click();
-  await expect(members.locator("li", { hasText: "kim@example.com" })).toContainText("Standards editor");
+  await expect(members.locator("li", { hasText: "kim@example.com" })).toContainText("Practice owner");
   // something that is not an address cannot be added
   await members.getByLabel("Email of the new member").fill("not an address");
   await expect(members.getByRole("button", { name: "Add member" })).toBeDisabled();
   await members.getByLabel("Email of the new member").fill("");
-  await members.getByRole("button", { name: "Remove kim@example.com as Standards editor" }).click();
+  await members.getByRole("button", { name: "Remove kim@example.com as Practice owner" }).click();
   await page.getByRole("dialog", { name: "Remove this member?" }).getByRole("button", { name: "Remove", exact: true }).click();
   await expect(members.locator("li", { hasText: "kim@example.com" })).toHaveCount(0);
 
-  // a plain team has owners only
+  // a team nobody belongs to
+  await page.getByRole("tab", { name: /Teams/ }).click();
   await page.locator(".cat-item", { hasText: "Service Management" }).click();
-  await expect(page.locator(".cat-members").getByLabel("As", { exact: true })).toHaveCount(0);
   await expect(page.locator(".cat-members")).toContainText("Nobody yet");
 
   // a team that was added but not saved does not exist yet for anybody to belong to
@@ -166,12 +173,16 @@ test("a unit has members who own it and members who edit its standards; a new te
   await page.getByRole("button", { name: "Discard" }).click();
 });
 
-test("who is a member is for admins: somebody who only manages the lists is told where to ask", async ({ page }) => {
+test("who is a member is changed by admins only: somebody who only manages the lists sees them and is told who adds them", async ({ page }) => {
   await signIn(page, ALEX, { editor: true });
   await open(page, "/admin/lists");
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   const members = page.locator(".cat-members");
   await expect(members).toContainText("An admin adds and removes them");
-  await expect(members).not.toContainText(CASEY);
+  await expect(members.locator("li", { hasText: CASEY })).toContainText("Owner");
+  await expect(members.locator("li", { hasText: JORDAN })).toContainText("Owner");
   await expect(members.getByLabel("Email of the new member")).toHaveCount(0);
+  await expect(members.getByRole("button", { name: /^Remove / })).toHaveCount(0);
+  // and the server agrees
+  expect((await page.request.post("/api/admin/access", { data: { email: SAM, role: "owner", scope: "cloud-platform-team" }, headers: CSRF })).status()).toBe(403);
 });
