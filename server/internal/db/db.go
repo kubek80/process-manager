@@ -60,8 +60,18 @@ func WithLock(ctx context.Context, pool *pgxpool.Pool, key int64, fn func() erro
 // and from several instances at once - also on a database that is still completely empty: one
 // instance does the work under a lock, the others wait and then find it done.
 func Migrate(ctx context.Context, pool *pgxpool.Pool, after ...func(context.Context) error) error {
-	return WithLock(ctx, pool, lockMigrate, func() error {
-		if err := migrate(ctx, pool); err != nil {
+	_, err := Upgrade(ctx, pool, after...)
+	return err
+}
+
+// Upgrade is Migrate that also says which SQL files it applied, by name, in the order they
+// ran. None means the tables were already up to date (or another instance, which held the lock
+// first, did the work).
+func Upgrade(ctx context.Context, pool *pgxpool.Pool, after ...func(context.Context) error) ([]string, error) {
+	var applied []string
+	err := WithLock(ctx, pool, lockMigrate, func() error {
+		var err error
+		if applied, err = migrate(ctx, pool); err != nil {
 			return err
 		}
 		for _, step := range after {
@@ -71,16 +81,18 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, after ...func(context.Cont
 		}
 		return nil
 	})
+	return applied, err
 }
 
-func migrate(ctx context.Context, pool *pgxpool.Pool) error {
+func migrate(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 	if _, err := pool.Exec(ctx, `create table if not exists schema_migrations (version int primary key, applied_at timestamptz not null default now())`); err != nil {
-		return err
+		return nil, err
 	}
 	entries, err := migrations.ReadDir("migrations")
 	if err != nil {
-		return err
+		return nil, err
 	}
+	applied := []string{}
 	names := []string{}
 	for _, e := range entries {
 		names = append(names, e.Name())
@@ -89,9 +101,10 @@ func migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	for _, name := range names {
 		version, err := strconv.Atoi(strings.SplitN(name, "_", 2)[0])
 		if err != nil {
-			return fmt.Errorf("migration %s: name must start with a number", name)
+			return applied, fmt.Errorf("migration %s: name must start with a number", name)
 		}
 		sql, _ := migrations.ReadFile("migrations/" + name)
+		ran := false
 		err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
 			var done bool
 			if err := tx.QueryRow(ctx, `select exists (select 1 from schema_migrations where version = $1)`, version).Scan(&done); err != nil || done {
@@ -101,11 +114,15 @@ func migrate(ctx context.Context, pool *pgxpool.Pool) error {
 				return err
 			}
 			_, err := tx.Exec(ctx, `insert into schema_migrations (version) values ($1)`, version)
+			ran = err == nil
 			return err
 		})
 		if err != nil {
-			return fmt.Errorf("migration %s: %w", name, err)
+			return applied, fmt.Errorf("migration %s: %w", name, err)
+		}
+		if ran {
+			applied = append(applied, name)
 		}
 	}
-	return nil
+	return applied, nil
 }

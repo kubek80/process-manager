@@ -124,7 +124,19 @@ Who somebody is: with Entra ID only the sign-in name (`preferred_username`, then
 
 ## Database
 
-Postgres 16. The server creates and upgrades its tables on start (`server/internal/db/migrations/`), and then converts content stored by an earlier version (`server/internal/upgrade`), under the same lock; starting several instances at once is safe, also on a database that is still empty: one of them does the work, the others wait and then find it done.
+Postgres 16. The server creates and upgrades its tables on start (`server/internal/db/migrations/`), and then converts content stored by an earlier version (`server/internal/upgrade`), under the same lock; starting several instances at once is safe, also on a database that is still empty: one of them does the work, the others wait and then find it done. The start logs which table migrations it applied ("tables upgraded").
+
+The same step can be run by hand with `server -migrate` (`npm run db:migrate`): it upgrades the tables, converts older content and brings the skills up to date, prints what it did and exits, without starting the web server, without filling an empty database from `PM_SEED_DIR` and without giving development roles. It takes the same lock as a start, so it is safe while a server is running and when several are started at once; the one that comes second finds the work done. Run it before rolling out a new version, so that the instances start on a database that is already upgraded and the outcome can be read in one place, or on a copy of the database to see what a conversion will do. Take a backup first: the conversion rewrites documents (as new versions) and adjusts their older versions in place; every earlier version is kept. The account looks like this, and a second run says "Nothing to do":
+
+```
+Database migration
+  Tables:  already up to date
+  Content: 2 documents moved to the new lists (3 older versions adjusted); added 1 practices, 1 platforms, 2 categories; 1 roles converted, 1 removed; the lists were updated
+  Skills:  2 regenerated
+Done.
+```
+
+`Tables` names the migration files applied in this run, `Content` says what the conversion did or "nothing to convert: the content already fits this version", and `Skills` how many skills got a new version (and how many were withdrawn). The details of a conversion (each role converted, each category made) go to the log. A failure exits with a non-zero code and the reason, e.g. `migration failed: database setup: …`.
 
 | Table | Holds |
 | --- | --- |
@@ -165,6 +177,8 @@ Postgres 16. The server creates and upgrades its tables on start (`server/intern
 | --- | --- |
 | `server -import <folder>` (`npm run db:import`) | Loads the files over what is stored: each changed file becomes a new version. Files get the same checks as a save in the portal (the format, and that the parts fit together); those that fail are reported and skipped. Nothing is deleted. |
 | `server -export <folder>` (`npm run export -- <folder>`) | Writes content to `processes/`, `standards/`, `catalog/` and the active skills to `.claude/`. Files of deleted documents and of withdrawn skills are removed (a skill file only if it carries the footer of a generated file). Use it as a backup or to commit. |
+| `server -migrate` (`npm run db:migrate`) | Upgrades the tables, converts content stored by an earlier version and regenerates the skills, prints what it did (or "Nothing to do") and exits. Fills nothing, gives no development roles, starts no web server; see [Database](#database). |
+| `npm run db:demo` | Loads the demo data set in `demo/` over what is stored (`server -import demo`): more processes, standards and list entries for trying the app; the lists are replaced by the demo lists, nothing is deleted. |
 | `server -reset [-seed]` (`npm run db:reset`) | Deletes all feedback; `-seed` adds the samples again. Only with `PM_AUTH=dev`. |
 
 ## Deploying
@@ -176,10 +190,10 @@ Not built yet: machine access for repositories and agents (API tokens, the MCP s
 ## Code map
 
 ```
-server/cmd/server              start-up, seeding, flags (-import, -export, -seed, -reset)
+server/cmd/server              start-up, seeding, flags (-migrate, -import, -export, -seed, -reset)
 server/internal/config         settings from the environment
 server/internal/db             migrations, the start-up lock; dbtest gives tests a real database
-server/internal/upgrade        converts content stored by an earlier version, at start
+server/internal/upgrade        converts content stored by an earlier version, at start and by -migrate
 server/internal/auth           sessions, sign-outs, OpenID Connect, dev users
 server/internal/auth/oidctest  fake provider that signs real tokens, for tests
 server/internal/rbac           roles and what they allow

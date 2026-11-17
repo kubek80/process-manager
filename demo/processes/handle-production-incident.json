@@ -1,0 +1,279 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "handle-production-incident",
+  "title": "Handle a production incident",
+  "summary": "What the on-call engineer does from the first alert until the service is back and the lessons are written down: who to call, how to keep customers informed and when to escalate.",
+  "owner": "site-reliability-team",
+  "category": "operations",
+  "practice": "operations",
+  "rigour": "mandatory",
+  "tiers": [
+    "tier-0",
+    "tier-1",
+    "tier-2"
+  ],
+  "environments": [
+    "production"
+  ],
+  "estimatedDuration": "from minutes to a day",
+  "tags": [
+    "incident",
+    "on-call",
+    "outage",
+    "postmortem"
+  ],
+  "updatedAt": "2026-09-01",
+  "status": "active",
+  "review": {
+    "intervalMonths": 6,
+    "lastReviewedAt": "2026-09-01",
+    "reviewedBy": "Head of SRE"
+  },
+  "resources": [
+    {
+      "title": "Incident severity levels",
+      "url": "https://wiki.example.com/sre/severity",
+      "kind": "documentation",
+      "description": "SEV1 to SEV4 with examples, and who must be told for each."
+    },
+    {
+      "title": "Postmortem template",
+      "url": "https://wiki.example.com/sre/postmortem-template",
+      "kind": "template"
+    },
+    {
+      "title": "Skill: draft the incident timeline",
+      "url": "https://github.example.com/sre/incident-tools/tree/main/.claude/skills/incident-timeline",
+      "kind": "skill",
+      "description": "Builds the timeline from the incident channel, the alerts and the deployments."
+    }
+  ],
+  "standards": [
+    "observability-baseline",
+    "production-releases"
+  ],
+  "prerequisites": [
+    {
+      "title": "You are on the on-call rota",
+      "description": "Your PagerDuty account is in the schedule of your service and the app is installed on your phone."
+    },
+    {
+      "title": "Alerts for your service",
+      "processId": "set-up-service-monitoring",
+      "description": "Without alerts nobody is paged; without a dashboard nobody sees the impact."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The on-call engineer of the service."
+    },
+    {
+      "id": "incident-commander",
+      "name": "Incident commander",
+      "description": "An SRE on duty who leads SEV1 and SEV2 incidents.",
+      "teamId": "site-reliability-team"
+    },
+    {
+      "id": "service-desk",
+      "name": "Service desk",
+      "description": "Updates the status page and answers customers.",
+      "teamId": "service-management"
+    },
+    {
+      "id": "pagerduty",
+      "name": "PagerDuty",
+      "description": "Pages the on-call engineer."
+    }
+  ],
+  "steps": [
+    {
+      "id": "page-on-call",
+      "title": "Page the on-call engineer",
+      "actor": "pagerduty",
+      "type": "automation",
+      "description": "An alert fires or someone raises an incident by hand in PagerDuty.",
+      "tool": "pagerduty",
+      "next": [
+        {
+          "to": "acknowledge"
+        }
+      ]
+    },
+    {
+      "id": "acknowledge",
+      "title": "Acknowledge the page",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Acknowledge in PagerDuty within 5 minutes.",
+        "Open the service dashboard linked in the alert."
+      ],
+      "tool": "pagerduty",
+      "duration": "5 min",
+      "next": [
+        {
+          "to": "set-severity"
+        }
+      ]
+    },
+    {
+      "id": "set-severity",
+      "title": "Decide the severity",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Check how many customers are affected and which functions are down.",
+        "Pick SEV1 to SEV4 from the severity table.",
+        "Set the severity on the PagerDuty incident."
+      ],
+      "tool": "grafana",
+      "duration": "5 min",
+      "next": [
+        {
+          "to": "is-major"
+        }
+      ]
+    },
+    {
+      "id": "is-major",
+      "title": "SEV1 or SEV2?",
+      "actor": "me",
+      "type": "decision",
+      "next": [
+        {
+          "to": "open-channel",
+          "label": "Yes"
+        },
+        {
+          "to": "fix-problem",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "open-channel",
+      "title": "Open the incident channel and call the commander",
+      "actor": "me",
+      "type": "communication",
+      "instructions": [
+        "Press 'Start incident channel' in PagerDuty; it creates #inc-<number>.",
+        "Page the incident commander from the same screen.",
+        "Post what you see and what you have tried."
+      ],
+      "tool": "pagerduty",
+      "next": [
+        {
+          "to": "lead-incident"
+        }
+      ]
+    },
+    {
+      "id": "lead-incident",
+      "title": "Lead the incident",
+      "actor": "incident-commander",
+      "type": "meeting",
+      "description": "The commander runs the call, decides who does what and posts an update every 30 minutes.",
+      "next": [
+        {
+          "to": "inform-customers"
+        }
+      ]
+    },
+    {
+      "id": "inform-customers",
+      "title": "Update the status page",
+      "actor": "service-desk",
+      "type": "communication",
+      "description": "The service desk publishes the first notice within 15 minutes of a SEV1 and updates it with every commander update.",
+      "next": [
+        {
+          "to": "fix-problem"
+        }
+      ]
+    },
+    {
+      "id": "fix-problem",
+      "title": "Restore the service",
+      "actor": "me",
+      "type": "task",
+      "description": "Restore first, find the cause later. The quickest fix is usually rolling back the last release or turning off a feature flag.",
+      "instructions": [
+        "Check the deployments of the last 24 hours in Argo CD.",
+        "If a release is the likely cause, roll it back.",
+        "Otherwise turn off the newest feature flag or scale up the service.",
+        "Post every action and its time in the incident channel."
+      ],
+      "tool": "argo-cd",
+      "next": [
+        {
+          "to": "service-back"
+        }
+      ]
+    },
+    {
+      "id": "service-back",
+      "title": "Service back to normal?",
+      "actor": "me",
+      "type": "decision",
+      "next": [
+        {
+          "to": "resolve-incident",
+          "label": "Yes"
+        },
+        {
+          "to": "escalate",
+          "label": "No, after 30 min"
+        }
+      ]
+    },
+    {
+      "id": "escalate",
+      "title": "Escalate to the next level",
+      "actor": "incident-commander",
+      "type": "communication",
+      "description": "The commander pages the secondary on-call and the team lead, and raises the severity if the impact grew.",
+      "tool": "pagerduty",
+      "next": [
+        {
+          "to": "fix-problem"
+        }
+      ]
+    },
+    {
+      "id": "resolve-incident",
+      "title": "Resolve the incident",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Watch the dashboard for 15 minutes after the fix.",
+        "Resolve the incident in PagerDuty with a one-line summary.",
+        "Ask the service desk to close the status page notice."
+      ],
+      "tool": "pagerduty",
+      "next": [
+        {
+          "to": "write-postmortem"
+        }
+      ]
+    },
+    {
+      "id": "write-postmortem",
+      "title": "Write the postmortem",
+      "actor": "me",
+      "type": "document",
+      "description": "Needed for SEV1 and SEV2 within five working days. It looks for causes, not for someone to blame.",
+      "instructions": [
+        "Copy the postmortem template.",
+        "Write the timeline, the impact and the causes.",
+        "Agree actions with an owner and a date for each.",
+        "Create a Jira ticket per action and link them."
+      ],
+      "tool": "jira",
+      "duration": "2-3 hours",
+      "next": []
+    }
+  ]
+}

@@ -1,0 +1,323 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "release-service-to-production",
+  "title": "Release a service to production",
+  "summary": "Take a tested change from staging to production with an approved change record, a watched roll-out and a rollback if something goes wrong. Use it for every release of a tier 0, 1 or 2 service.",
+  "owner": "site-reliability-team",
+  "category": "release",
+  "practice": "operations",
+  "platform": "ci-cd",
+  "rigour": "mandatory",
+  "tiers": [
+    "tier-0",
+    "tier-1",
+    "tier-2"
+  ],
+  "environments": [
+    "production"
+  ],
+  "estimatedDuration": "1-2 working days",
+  "tags": [
+    "release",
+    "deployment",
+    "change",
+    "rollback"
+  ],
+  "updatedAt": "2026-09-30",
+  "status": "active",
+  "review": {
+    "intervalMonths": 6,
+    "lastReviewedAt": "2026-06-02",
+    "reviewedBy": "Head of SRE"
+  },
+  "resources": [
+    {
+      "title": "Release checklist template",
+      "url": "https://wiki.example.com/sre/release-checklist",
+      "kind": "template",
+      "description": "Copy into the change record: what changes, who watches, how to roll back."
+    },
+    {
+      "title": "Skill: prepare a release",
+      "url": "https://github.example.com/platform/release-tools/tree/main/.claude/skills/prepare-release",
+      "kind": "skill",
+      "description": "Writes the release notes from the merged pull requests and fills in the change record."
+    },
+    {
+      "title": "Change freeze calendar",
+      "url": "https://wiki.example.com/sre/change-freeze",
+      "kind": "other",
+      "description": "Dates when no production release is allowed."
+    }
+  ],
+  "standards": [
+    "production-releases",
+    "ci-pipeline-baseline"
+  ],
+  "prerequisites": [
+    {
+      "title": "A build pipeline that produces signed images",
+      "processId": "set-up-build-pipeline",
+      "description": "Only images built and signed by the pipeline can be deployed to production."
+    },
+    {
+      "title": "Monitoring and alerts for the service",
+      "processId": "set-up-service-monitoring",
+      "description": "You need a dashboard to watch the roll-out and alerts that page the on-call engineer."
+    },
+    {
+      "title": "The change is deployed and tested in staging",
+      "description": "The same image version you will release has passed the automated tests in staging."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The engineer who releases the change."
+    },
+    {
+      "id": "change-manager",
+      "name": "Change manager",
+      "description": "Approves change records for production."
+    },
+    {
+      "id": "sre",
+      "name": "Site Reliability team",
+      "description": "Slack #sre. Watches tier 0 releases with you.",
+      "teamId": "site-reliability-team"
+    },
+    {
+      "id": "pipeline",
+      "name": "Deployment pipeline",
+      "description": "GitHub Actions and Argo CD."
+    }
+  ],
+  "steps": [
+    {
+      "id": "check-freeze",
+      "title": "Check there is no change freeze",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Open the change freeze calendar.",
+        "Check that your release date is not inside a freeze period.",
+        "Check that no other release of a service you depend on is planned for the same hour."
+      ],
+      "duration": "5 min",
+      "next": [
+        {
+          "to": "write-release-notes"
+        }
+      ]
+    },
+    {
+      "id": "write-release-notes",
+      "title": "Write the release notes",
+      "actor": "me",
+      "type": "document",
+      "instructions": [
+        "List the merged pull requests since the last release.",
+        "Describe in one sentence each what changes for users.",
+        "Name the database changes and feature flags, if any.",
+        "Write how to roll back: the previous image version and any manual step."
+      ],
+      "duration": "30 min",
+      "outcome": "Release notes with a rollback plan",
+      "next": [
+        {
+          "to": "raise-change"
+        }
+      ]
+    },
+    {
+      "id": "raise-change",
+      "title": "Raise the change record",
+      "actor": "me",
+      "type": "form",
+      "instructions": [
+        "Catalogue item: Standard change - service release.",
+        "Paste the release notes and the rollback plan.",
+        "Enter the service id, the image version and the planned start and end time.",
+        "Name who watches the release with you."
+      ],
+      "tool": "servicenow",
+      "duration": "15 min",
+      "outcome": "Change number (CHGxxxxxxx)",
+      "next": [
+        {
+          "to": "approve-change"
+        }
+      ]
+    },
+    {
+      "id": "approve-change",
+      "title": "Approve the change",
+      "actor": "change-manager",
+      "type": "approval",
+      "tool": "servicenow",
+      "duration": "up to 1 working day",
+      "next": [
+        {
+          "to": "change-approved"
+        }
+      ]
+    },
+    {
+      "id": "change-approved",
+      "title": "Change approved?",
+      "actor": "change-manager",
+      "type": "decision",
+      "next": [
+        {
+          "to": "tier-zero",
+          "label": "Approved"
+        },
+        {
+          "to": "rework-change",
+          "label": "Rejected"
+        }
+      ]
+    },
+    {
+      "id": "rework-change",
+      "title": "Fix the change record",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Read the change manager's comment.",
+        "Add what is missing, usually the rollback plan or the test evidence.",
+        "Submit the change for approval again."
+      ],
+      "tool": "servicenow",
+      "next": [
+        {
+          "to": "approve-change"
+        }
+      ]
+    },
+    {
+      "id": "tier-zero",
+      "title": "Is it a tier 0 service?",
+      "actor": "me",
+      "type": "decision",
+      "next": [
+        {
+          "to": "book-sre",
+          "label": "Yes"
+        },
+        {
+          "to": "start-deployment",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "book-sre",
+      "title": "Book an SRE to watch the release",
+      "actor": "sre",
+      "type": "meeting",
+      "description": "For tier 0 services an SRE joins the release call and watches the error rate with you.",
+      "duration": "the release window",
+      "next": [
+        {
+          "to": "start-deployment"
+        }
+      ]
+    },
+    {
+      "id": "start-deployment",
+      "title": "Start the production deployment",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Open the release workflow of your repository.",
+        "Run 'Deploy to production' with the image version from the change record.",
+        "Put the change number in the run description."
+      ],
+      "tool": "github-actions",
+      "duration": "5 min",
+      "next": [
+        {
+          "to": "roll-out"
+        }
+      ]
+    },
+    {
+      "id": "roll-out",
+      "title": "Roll out to 10%, then to all",
+      "actor": "pipeline",
+      "type": "automation",
+      "description": "Argo CD sends 10% of the traffic to the new version for 15 minutes, then the rest when the error rate stays normal.",
+      "tool": "argo-cd",
+      "duration": "30 min",
+      "next": [
+        {
+          "to": "watch-release"
+        }
+      ]
+    },
+    {
+      "id": "watch-release",
+      "title": "Watch the dashboard during the roll-out",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Open the service dashboard in Grafana.",
+        "Compare error rate and response time with the hour before the release.",
+        "Run the smoke tests against production."
+      ],
+      "tool": "grafana",
+      "duration": "30 min",
+      "next": [
+        {
+          "to": "release-healthy"
+        }
+      ]
+    },
+    {
+      "id": "release-healthy",
+      "title": "Release healthy?",
+      "actor": "me",
+      "type": "decision",
+      "next": [
+        {
+          "to": "close-change",
+          "label": "Yes"
+        },
+        {
+          "to": "roll-back",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "roll-back",
+      "title": "Roll back to the previous version",
+      "actor": "me",
+      "type": "task",
+      "description": "Roll back first and investigate afterwards. If customers were affected, raise an incident.",
+      "instructions": [
+        "Run 'Deploy to production' with the previous image version.",
+        "Check the error rate returns to normal.",
+        "If customers noticed the problem, start the incident process.",
+        "Set the change record to 'Backed out' with what you saw."
+      ],
+      "tool": "github-actions",
+      "next": []
+    },
+    {
+      "id": "close-change",
+      "title": "Close the change record",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Set the change record to 'Implemented successfully'.",
+        "Post the release notes in the team channel."
+      ],
+      "tool": "servicenow",
+      "next": []
+    }
+  ]
+}

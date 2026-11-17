@@ -7,10 +7,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -31,11 +33,15 @@ import (
 	"github.com/kubek80/process-manager/server/internal/upgrade"
 )
 
+// stdout is where -migrate writes its account; tests read it.
+var stdout io.Writer = os.Stdout
+
 type options struct {
 	seed      bool   // add sample feedback when there is none
 	reset     bool   // delete all feedback, then exit
 	importDir string // load files into the database, then exit
 	exportDir string // write the database to files, then exit
+	migrate   bool   // upgrade the tables, convert older content, regenerate the skills, then exit
 }
 
 func main() {
@@ -43,6 +49,7 @@ func main() {
 	flag.BoolVar(&o.seed, "seed", false, "add sample feedback when the database has none (local development)")
 	flag.BoolVar(&o.reset, "reset", false, "delete all feedback, then exit (combine with -seed to refill; local development only)")
 	flag.StringVar(&o.importDir, "import", "", "load processes/, standards/ and catalog/ from this folder into the database, then exit")
+	flag.BoolVar(&o.migrate, "migrate", false, "upgrade the tables, convert content stored by an earlier version and regenerate the skills, print what was done, then exit")
 	flag.StringVar(&o.exportDir, "export", "", "write processes, standards, lists and generated skills to this folder, then exit")
 	flag.Parse()
 	// PM_LOG_FORMAT=json gives one JSON object per line, which log collectors prefer
@@ -105,14 +112,15 @@ func run(log *slog.Logger, o options) error {
 		return err
 	}
 	defer pool.Close()
-	// a database of an earlier version is converted under the same lock as the migrations
-	convert := func(ctx context.Context) error { return upgrade.Lists(ctx, pool, log) }
-	if err := db.Migrate(ctx, pool, convert); err != nil {
-		return fmt.Errorf("database setup: %w", err)
-	}
 	st := stores{
 		docs: &docs.Store{Pool: pool}, roles: &rbac.Store{Pool: pool, Bootstrap: cfg.Admins},
 		skills: &skills.Store{Pool: pool}, feedback: &feedback.Store{Pool: pool}, audit: &audit.Log{Pool: pool},
+	}
+	if o.migrate {
+		return migrateCommand(ctx, pool, st, log, stdout)
+	}
+	if _, _, err := upgradeDatabase(ctx, pool, log); err != nil {
+		return err
 	}
 
 	// the schemas are read when they are first needed: one-off commands that import nothing
@@ -216,6 +224,84 @@ func run(log *slog.Logger, o options) error {
 			hook.Wait()
 		}
 	}, "addr", cfg.Addr, "auth", cfg.Auth, "admins", len(cfg.Admins))
+}
+
+// upgradeDatabase creates or upgrades the tables and then converts content stored by an
+// earlier version, both under the lock of the migrations: the one way the database is upgraded,
+// on every start and by -migrate. It says which table migrations it applied and what the
+// conversion did.
+func upgradeDatabase(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) ([]string, upgrade.Report, error) {
+	var report upgrade.Report
+	convert := func(ctx context.Context) error {
+		var err error
+		report, err = upgrade.Convert(ctx, pool, log)
+		return err
+	}
+	applied, err := db.Upgrade(ctx, pool, convert)
+	if err != nil {
+		return applied, report, fmt.Errorf("database setup: %w", err)
+	}
+	if len(applied) > 0 {
+		log.Info("tables upgraded", "migrations", strings.Join(applied, ", "))
+	}
+	return applied, report, nil
+}
+
+// migrateCommand is -migrate: it upgrades the database as a start does, brings the skills up to
+// date and writes a short account of it to out. Unlike a start it neither fills an empty
+// database nor gives development roles, and it starts no web server.
+func migrateCommand(ctx context.Context, pool *pgxpool.Pool, st stores, log *slog.Logger, out io.Writer) error {
+	applied, report, err := upgradeDatabase(ctx, pool, log)
+	if err != nil {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+	before, err := st.skills.List(ctx)
+	if err != nil {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+	if err := st.skills.SyncAll(ctx, st.docs); err != nil {
+		return fmt.Errorf("migration failed: the tables and content are up to date, but the skills could not be regenerated: %w", err)
+	}
+	after, err := st.skills.List(ctx)
+	if err != nil {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+	was := map[string]skills.Skill{}
+	for _, sk := range before {
+		was[sk.ID] = sk
+	}
+	regenerated, withdrawn := 0, 0
+	for _, sk := range after {
+		old, had := was[sk.ID]
+		if sk.Version != old.Version || (sk.Active && had && !old.Active) {
+			regenerated++
+		}
+		if !sk.Active && had && old.Active {
+			withdrawn++
+		}
+	}
+
+	tables := "already up to date"
+	if len(applied) > 0 {
+		tables = fmt.Sprintf("%d applied: %s", len(applied), strings.Join(applied, ", "))
+	}
+	skillsLine := fmt.Sprintf("%d regenerated", regenerated)
+	if withdrawn > 0 {
+		skillsLine += fmt.Sprintf(", %d withdrawn", withdrawn)
+	}
+	if regenerated == 0 && withdrawn == 0 {
+		skillsLine = "already up to date"
+	}
+	fmt.Fprintln(out, "Database migration")
+	fmt.Fprintln(out, "  Tables:  "+tables)
+	fmt.Fprintln(out, "  Content: "+report.String())
+	fmt.Fprintln(out, "  Skills:  "+skillsLine)
+	if len(applied) == 0 && !report.Converted && regenerated == 0 && withdrawn == 0 {
+		fmt.Fprintln(out, "Nothing to do: the database was already up to date.")
+	} else {
+		fmt.Fprintln(out, "Done.")
+	}
+	return nil
 }
 
 // shutdownGrace is how long requests that are being answered get to finish when the server is

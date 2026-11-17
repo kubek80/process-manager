@@ -1,0 +1,159 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "request-application-access",
+  "title": "Request access to an application",
+  "summary": "Get added to the access group of an internal application or system, approved by its owner, so that you can sign in with your company account. Also used to create a new access group for a team.",
+  "owner": "identity-team",
+  "category": "access",
+  "practice": "security",
+  "platform": "identity",
+  "rigour": "mandatory",
+  "estimatedDuration": "1-3 working days",
+  "tags": [
+    "access",
+    "sso",
+    "entra",
+    "permissions"
+  ],
+  "updatedAt": "2026-03-20",
+  "status": "active",
+  "review": {
+    "intervalMonths": 6,
+    "lastReviewedAt": "2026-03-20",
+    "reviewedBy": "Process owner"
+  },
+  "resources": [
+    {
+      "title": "Which access group do I need?",
+      "url": "https://wiki.example.com/identity/access-groups",
+      "kind": "documentation",
+      "description": "The groups of every application, with what each one allows."
+    }
+  ],
+  "standards": [
+    "access-management"
+  ],
+  "prerequisites": [
+    {
+      "title": "Company account",
+      "description": "You can sign in to the company portal with single sign-on."
+    },
+    {
+      "title": "Name of the access group",
+      "description": "Look it up in the list of access groups, e.g. app-billing-readers."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The person who needs access."
+    },
+    {
+      "id": "app-owner",
+      "name": "Application owner",
+      "description": "Owner of the application in the service catalogue."
+    },
+    {
+      "id": "identity",
+      "name": "Identity & Access team",
+      "description": "Slack #identity",
+      "teamId": "identity-team"
+    }
+  ],
+  "steps": [
+    {
+      "id": "raise-access-request",
+      "title": "Raise the 'Access to an application' request",
+      "actor": "me",
+      "type": "subprocess",
+      "instructions": [
+        "Catalogue item: Access to an application.",
+        "Choose the access group and say in one sentence what you need it for.",
+        "Ask for read access unless you must change data."
+      ],
+      "tool": "servicenow",
+      "outcome": "Request number (RITMxxxxxxx)",
+      "subProcessId": "raise-servicenow-request",
+      "next": [
+        {
+          "to": "approve-access"
+        }
+      ]
+    },
+    {
+      "id": "approve-access",
+      "title": "Approve the access",
+      "actor": "app-owner",
+      "type": "approval",
+      "description": "The owner checks that the access fits the person's job and is not more than needed.",
+      "tool": "servicenow",
+      "duration": "up to 2 working days",
+      "next": [
+        {
+          "to": "access-approved"
+        }
+      ]
+    },
+    {
+      "id": "access-approved",
+      "title": "Access approved?",
+      "actor": "app-owner",
+      "type": "decision",
+      "next": [
+        {
+          "to": "add-to-group",
+          "label": "Approved"
+        },
+        {
+          "to": "narrow-request",
+          "label": "Too wide"
+        }
+      ]
+    },
+    {
+      "id": "narrow-request",
+      "title": "Ask for a smaller access group",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Read the owner's comment on the request.",
+        "Choose the group the owner suggests, usually a read-only one.",
+        "Resubmit the request."
+      ],
+      "tool": "servicenow",
+      "next": [
+        {
+          "to": "approve-access"
+        }
+      ]
+    },
+    {
+      "id": "add-to-group",
+      "title": "Add you to the access group",
+      "actor": "identity",
+      "type": "automation",
+      "description": "The approved request adds you to the group in Entra ID. Access is reviewed every six months and removed when you change team.",
+      "tool": "entra-id",
+      "duration": "within 1 hour",
+      "next": [
+        {
+          "to": "check-access"
+        }
+      ]
+    },
+    {
+      "id": "check-access",
+      "title": "Sign in to the application",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Sign out of the application and sign in again so the new group is picked up.",
+        "Check that you see what you asked for.",
+        "If not, reply on the request within 5 days."
+      ],
+      "next": []
+    }
+  ]
+}

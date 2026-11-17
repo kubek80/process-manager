@@ -1,0 +1,196 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "set-up-build-pipeline",
+  "title": "Set up a build pipeline for a repository",
+  "summary": "Add the shared build workflow to your repository so that every pull request is built, tested and scanned, and every merge produces a signed release image.",
+  "owner": "developer-experience-team",
+  "category": "release",
+  "practice": "engineering",
+  "platform": "ci-cd",
+  "rigour": "recommended",
+  "estimatedDuration": "half a day",
+  "tags": [
+    "ci",
+    "pipeline",
+    "github-actions",
+    "release"
+  ],
+  "updatedAt": "2026-08-20",
+  "status": "active",
+  "review": {
+    "intervalMonths": 12,
+    "lastReviewedAt": "2026-08-20",
+    "reviewedBy": "Process owner"
+  },
+  "resources": [
+    {
+      "title": "Shared workflows",
+      "url": "https://github.example.com/platform/shared-workflows",
+      "kind": "repository",
+      "description": "Build, test, scan and sign workflows for Go, Java, Node and Python."
+    },
+    {
+      "title": "Skill: add the build pipeline",
+      "url": "https://github.example.com/platform/shared-workflows/tree/main/.claude/skills/add-pipeline",
+      "kind": "skill",
+      "description": "Detects the language of your repository and adds the right workflow file."
+    }
+  ],
+  "standards": [
+    "ci-pipeline-baseline",
+    "code-review"
+  ],
+  "prerequisites": [
+    {
+      "title": "A repository on GitHub",
+      "processId": "request-github-repository",
+      "description": "You need admin rights on it to add the deploy secret and branch protection."
+    },
+    {
+      "title": "Project in SonarQube",
+      "description": "Created automatically for new repositories; check it exists under the repository name."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "An engineer of the team that owns the repository."
+    },
+    {
+      "id": "devex",
+      "name": "Developer Experience team",
+      "description": "Slack #devex",
+      "teamId": "developer-experience-team"
+    },
+    {
+      "id": "github-actions",
+      "name": "GitHub Actions",
+      "description": "Runs the workflows."
+    }
+  ],
+  "steps": [
+    {
+      "id": "add-workflow",
+      "title": "Add the shared workflow file",
+      "actor": "me",
+      "type": "code",
+      "instructions": [
+        "Create .github/workflows/build.yml.",
+        "Copy the example for your language from the shared-workflows README.",
+        "Set the service id and the image name.",
+        "Open a pull request."
+      ],
+      "tool": "github",
+      "url": "https://github.example.com/platform/shared-workflows",
+      "urlLabel": "Open shared-workflows",
+      "duration": "30 min",
+      "resources": [
+        {
+          "title": "Skill: add the build pipeline",
+          "url": "https://github.example.com/platform/shared-workflows/tree/main/.claude/skills/add-pipeline",
+          "kind": "skill"
+        }
+      ],
+      "next": [
+        {
+          "to": "connect-secrets"
+        }
+      ]
+    },
+    {
+      "id": "connect-secrets",
+      "title": "Connect the pipeline to Secret Manager",
+      "actor": "me",
+      "type": "task",
+      "description": "The pipeline reads the deploy secret from Secret Manager through workload identity. No secret is stored in GitHub.",
+      "instructions": [
+        "In repository settings, add the variable GCP_PROJECT with your project id.",
+        "Run 'make pipeline-identity' from the shared-workflows repository with your repository name.",
+        "Check that no secret value was added under Settings › Secrets."
+      ],
+      "tool": "secret-manager",
+      "duration": "20 min",
+      "next": [
+        {
+          "to": "first-run"
+        }
+      ]
+    },
+    {
+      "id": "first-run",
+      "title": "Build, test and scan the pull request",
+      "actor": "github-actions",
+      "type": "automation",
+      "description": "The workflow builds the code, runs the unit tests, runs SonarQube and the dependency scan, and builds an image.",
+      "tool": "github-actions",
+      "duration": "10 min",
+      "next": [
+        {
+          "to": "checks-green"
+        }
+      ]
+    },
+    {
+      "id": "checks-green",
+      "title": "All checks green?",
+      "actor": "me",
+      "type": "decision",
+      "next": [
+        {
+          "to": "protect-branch",
+          "label": "Yes"
+        },
+        {
+          "to": "ask-devex",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "ask-devex",
+      "title": "Ask Developer Experience for help",
+      "actor": "devex",
+      "type": "communication",
+      "description": "Post the link to the failed run in #devex. Most failures are a missing test command or a wrong image name.",
+      "next": [
+        {
+          "to": "first-run"
+        }
+      ]
+    },
+    {
+      "id": "protect-branch",
+      "title": "Require the checks before merging",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Open Settings › Branches › main.",
+        "Turn on 'Require status checks to pass' and select build, test and sonarqube.",
+        "Turn on 'Require a pull request before merging' with one approval."
+      ],
+      "tool": "github",
+      "duration": "5 min",
+      "next": [
+        {
+          "to": "check-release-image"
+        }
+      ]
+    },
+    {
+      "id": "check-release-image",
+      "title": "Check a signed release image is produced",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Merge the pull request.",
+        "Open the artifact registry of your project and find the new image.",
+        "Check that the image has a signature next to its version."
+      ],
+      "tool": "artifact-registry",
+      "outcome": "A signed image for every merge",
+      "next": []
+    }
+  ]
+}

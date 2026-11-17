@@ -1,0 +1,186 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "request-security-exception",
+  "title": "Request an exception to a security standard",
+  "summary": "Ask for time-limited permission not to meet a mandatory requirement of a security standard, with the risk written down and accepted by the person who answers for it.",
+  "owner": "security",
+  "category": "security",
+  "practice": "security",
+  "rigour": "mandatory",
+  "estimatedDuration": "1-2 weeks",
+  "tags": [
+    "exception",
+    "risk",
+    "waiver"
+  ],
+  "updatedAt": "2026-09-15",
+  "status": "active",
+  "review": {
+    "intervalMonths": 12,
+    "lastReviewedAt": "2026-09-15",
+    "reviewedBy": "Unit lead"
+  },
+  "resources": [
+    {
+      "title": "Exception request template",
+      "url": "https://wiki.example.com/security/exception-template",
+      "kind": "template",
+      "description": "The questions the risk review asks, with a filled-in example."
+    },
+    {
+      "title": "Register of open exceptions",
+      "url": "https://wiki.example.com/security/exceptions",
+      "kind": "documentation"
+    }
+  ],
+  "prerequisites": [
+    {
+      "title": "The requirement id",
+      "description": "The exact requirement you cannot meet, e.g. SEC-SCR-02."
+    },
+    {
+      "title": "A plan to meet it later",
+      "description": "Exceptions are given for at most 12 months; say what you will do by then."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The engineer or product owner who needs the exception."
+    },
+    {
+      "id": "security",
+      "name": "Cyber Security",
+      "description": "Slack #security",
+      "teamId": "security"
+    },
+    {
+      "id": "risk-owner",
+      "name": "Risk owner",
+      "description": "Head of the department that owns the application."
+    }
+  ],
+  "steps": [
+    {
+      "id": "describe-exception",
+      "title": "Describe the exception and the risk",
+      "actor": "me",
+      "type": "document",
+      "instructions": [
+        "Copy the exception request template.",
+        "Name the standard, the requirement id and the application.",
+        "Explain why the requirement cannot be met now.",
+        "Describe what you do instead to reduce the risk.",
+        "Give the date by which you will meet the requirement."
+      ],
+      "duration": "1 hour",
+      "next": [
+        {
+          "to": "submit-exception"
+        }
+      ]
+    },
+    {
+      "id": "submit-exception",
+      "title": "Submit the 'Security exception' request",
+      "actor": "me",
+      "type": "form",
+      "instructions": [
+        "Catalogue item: Security exception.",
+        "Attach the filled-in template.",
+        "Enter the risk owner of your department."
+      ],
+      "tool": "servicenow",
+      "duration": "10 min",
+      "outcome": "Request number (RITMxxxxxxx)",
+      "next": [
+        {
+          "to": "assess-risk"
+        }
+      ]
+    },
+    {
+      "id": "assess-risk",
+      "title": "Assess the risk",
+      "actor": "security",
+      "type": "review",
+      "duration": "up to 5 working days",
+      "next": [
+        {
+          "to": "security-advice"
+        }
+      ]
+    },
+    {
+      "id": "security-advice",
+      "title": "Security advice?",
+      "actor": "security",
+      "type": "decision",
+      "next": [
+        {
+          "to": "accept-risk",
+          "label": "Can be accepted"
+        },
+        {
+          "to": "answer-questions",
+          "label": "Questions"
+        },
+        {
+          "to": "exception-refused",
+          "label": "Too risky"
+        }
+      ]
+    },
+    {
+      "id": "answer-questions",
+      "title": "Answer Security's questions",
+      "actor": "me",
+      "type": "communication",
+      "instructions": [
+        "Read the questions on the request.",
+        "Update the template and reply on the request."
+      ],
+      "tool": "servicenow",
+      "next": [
+        {
+          "to": "assess-risk"
+        }
+      ]
+    },
+    {
+      "id": "exception-refused",
+      "title": "Plan how to meet the requirement",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Read why the exception was refused.",
+        "Plan the work to meet the requirement and agree a date with Security."
+      ],
+      "next": []
+    },
+    {
+      "id": "accept-risk",
+      "title": "Accept the risk",
+      "actor": "risk-owner",
+      "type": "approval",
+      "description": "The risk owner signs that the department accepts the risk until the end date.",
+      "tool": "servicenow",
+      "duration": "up to 5 working days",
+      "next": [
+        {
+          "to": "record-exception"
+        }
+      ]
+    },
+    {
+      "id": "record-exception",
+      "title": "Record the exception with its end date",
+      "actor": "security",
+      "type": "task",
+      "description": "Security adds the exception to the register and sets a reminder one month before it ends.",
+      "next": []
+    }
+  ]
+}

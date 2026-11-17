@@ -1,6 +1,6 @@
 // Package upgrade converts a database filled by an earlier version of the server to what this
-// version expects. Each conversion runs at start, under the lock of the migrations, and finds
-// nothing to do when it has run before.
+// version expects. Each conversion runs at start and by -migrate, under the lock of the
+// migrations, and finds nothing to do when it has run before.
 package upgrade
 
 import (
@@ -54,7 +54,49 @@ const (
 // category, platform or practice that is not in the lists is left as it is and reported. A
 // database that is already converted is left as it is.
 func Lists(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) error {
-	return pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error { return lists(ctx, tx, log) })
+	_, err := Convert(ctx, pool, log)
+	return err
+}
+
+// Convert is Lists that also says what it did. The report is empty when the transaction did
+// not commit.
+func Convert(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) (Report, error) {
+	var r Report
+	err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+		var err error
+		r, err = lists(ctx, tx, log)
+		return err
+	})
+	if err != nil {
+		return Report{}, err
+	}
+	return r, nil
+}
+
+// Report is what one conversion changed. The zero value means there was nothing to convert.
+type Report struct {
+	Converted      bool // something was written
+	Lists          bool // the lists were saved as a new version
+	Documents      int  // processes and standards saved as a new version
+	Versions       int  // older versions adjusted in place
+	Practices      int  // entries added to the lists
+	Platforms      int
+	Categories     int
+	RolesConverted int
+	RolesRemoved   int
+}
+
+// String says in one line what happened, in plain words.
+func (r Report) String() string {
+	if !r.Converted {
+		return "nothing to convert: the content already fits this version"
+	}
+	lists := "the lists were left as they were"
+	if r.Lists {
+		lists = "the lists were updated"
+	}
+	return fmt.Sprintf("%d documents moved to the new lists (%d older versions adjusted); added %d practices, %d platforms, %d categories; %d roles converted, %d removed; %s",
+		r.Documents, r.Versions, r.Practices, r.Platforms, r.Categories, r.RolesConverted, r.RolesRemoved, lists)
 }
 
 // a team as the earlier version knew it
@@ -120,16 +162,16 @@ func (n *named) value() json.RawMessage {
 	return b
 }
 
-func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
+func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) (Report, error) {
 	// no save of a server that is still running may come in between reading the documents and
 	// writing them back
 	if _, err := tx.Exec(ctx, `lock table documents in share row exclusive mode`); err != nil {
-		return err
+		return Report{}, err
 	}
 	var catBody []byte
 	err := tx.QueryRow(ctx, `select body from documents where kind = $1 and id = $2`, docs.Catalog, docs.CatalogID).Scan(&catBody)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
+		return Report{}, err
 	}
 	type doc struct {
 		kind, id string
@@ -138,22 +180,22 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 	var all []doc
 	rows, err := tx.Query(ctx, `select kind, id, body from documents where kind in ($1, $2) order by kind = $2, id`, docs.Process, docs.Standard)
 	if err != nil {
-		return err
+		return Report{}, err
 	}
 	for rows.Next() {
 		var d doc
 		if err := rows.Scan(&d.kind, &d.id, &d.body); err != nil {
 			rows.Close()
-			return err
+			return Report{}, err
 		}
 		all = append(all, d)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return err
+		return Report{}, err
 	}
 	if catBody == nil && len(all) == 0 {
-		return nil // an empty database is filled with content of this version
+		return Report{}, nil // an empty database is filled with content of this version
 	}
 
 	// ----- the lists
@@ -163,7 +205,7 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 	}
 	cat, err := parse(catBody)
 	if err != nil {
-		return fmt.Errorf("the lists: %w", err)
+		return Report{}, fmt.Errorf("the lists: %w", err)
 	}
 	// Before this version the lists had no categories: the categories of processes were free
 	// text. Only then are they turned into entries; later, an unknown one is only reported.
@@ -171,15 +213,15 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 	old := noCatalog || !hasCategories
 	practices, err := readList(cat, "practices")
 	if err != nil {
-		return err
+		return Report{}, err
 	}
 	platforms, err := readList(cat, "platforms")
 	if err != nil {
-		return err
+		return Report{}, err
 	}
 	categories, err := readList(cat, "categories")
 	if err != nil {
-		return err
+		return Report{}, err
 	}
 	kindOf := map[string]string{}   // team id -> "platform" or "practice"
 	teamName := map[string]string{} // team id -> name
@@ -187,19 +229,19 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 	if v, ok := cat.get("teams"); ok {
 		var teams []json.RawMessage
 		if err := json.Unmarshal(v, &teams); err != nil {
-			return fmt.Errorf("teams: %w", err)
+			return Report{}, fmt.Errorf("teams: %w", err)
 		}
 		for i, raw := range teams {
 			var t oldTeam
 			if err := json.Unmarshal(raw, &t); err != nil {
-				return fmt.Errorf("teams: %w", err)
+				return Report{}, fmt.Errorf("teams: %w", err)
 			}
 			if t.Name != "" {
 				teamName[t.ID] = t.Name
 			}
 			o, err := parse(raw)
 			if err != nil {
-				return fmt.Errorf("teams: %w", err)
+				return Report{}, fmt.Errorf("teams: %w", err)
 			}
 			if _, had := o.get("kind"); !had {
 				continue
@@ -369,23 +411,23 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 	var scoped []role
 	rows, err = tx.Query(ctx, `select email, scope, granted_by from role_assignments where role = $1 and scope <> '' order by email, scope`, rbac.StandardsEditor)
 	if err != nil {
-		return err
+		return Report{}, err
 	}
 	for rows.Next() {
 		var r role
 		if err := rows.Scan(&r.email, &r.scope, &r.by); err != nil {
 			rows.Close()
-			return err
+			return Report{}, err
 		}
 		scoped = append(scoped, r)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return err
+		return Report{}, err
 	}
 
 	if !catChanged && len(changes) == 0 && len(scoped) == 0 {
-		return nil
+		return Report{}, nil
 	}
 
 	// ----- the history: older versions are converted in place, without new versions, so
@@ -400,19 +442,19 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 		var list []version
 		rows, err := tx.Query(ctx, `select kind, id, version, body from document_versions where kind in ($1, $2) and body is not null order by kind, id, version`, docs.Process, docs.Standard)
 		if err != nil {
-			return err
+			return Report{}, err
 		}
 		for rows.Next() {
 			var v version
 			if err := rows.Scan(&v.kind, &v.id, &v.n, &v.body); err != nil {
 				rows.Close()
-				return err
+				return Report{}, err
 			}
 			list = append(list, v)
 		}
 		rows.Close()
 		if err := rows.Err(); err != nil {
-			return err
+			return Report{}, err
 		}
 		for _, v := range list {
 			o, err := parse(v.body)
@@ -429,7 +471,7 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 				continue
 			}
 			if _, err := tx.Exec(ctx, `update document_versions set body = $4 where kind = $1 and id = $2 and version = $3`, v.kind, v.id, v.n, string(pretty)); err != nil {
-				return err
+				return Report{}, err
 			}
 			versions++
 		}
@@ -437,7 +479,7 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 
 	if catChanged {
 		if _, _, err := docs.SaveIn(ctx, tx, docs.Change{Kind: docs.Catalog, ID: docs.CatalogID, Body: cat.bytes(), By: By, Note: Note}); err != nil {
-			return fmt.Errorf("the lists: %w", err)
+			return Report{}, fmt.Errorf("the lists: %w", err)
 		}
 	}
 	saved := 0
@@ -445,7 +487,7 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 		// one document that cannot be saved must not keep the server from starting
 		sp, err := tx.Begin(ctx)
 		if err != nil {
-			return err
+			return Report{}, err
 		}
 		if _, _, err := docs.SaveIn(ctx, sp, docs.Change{Kind: c.kind, ID: c.id, Body: c.body, By: By, Note: Note}); err != nil {
 			_ = sp.Rollback(ctx)
@@ -453,7 +495,7 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 			continue
 		}
 		if err := sp.Commit(ctx); err != nil {
-			return err
+			return Report{}, err
 		}
 		saved++
 	}
@@ -471,7 +513,7 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 			newRole = rbac.PracticeOwner
 		}
 		if _, err := tx.Exec(ctx, `delete from role_assignments where email = $1 and role = $2 and scope = $3`, r.email, rbac.StandardsEditor, r.scope); err != nil {
-			return err
+			return Report{}, err
 		}
 		scopeName := r.scope
 		if n := teamName[r.scope]; n != "" {
@@ -482,26 +524,28 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 			dropped++
 			log.Warn("role removed: it was limited to something that is neither a platform nor a practice", "email", r.email, "role", rbac.StandardsEditor, "scope", r.scope)
 			if err := audit.AddIn(ctx, tx, By, Name, "access.revoke", r.email, was+" removed: it is neither a platform nor a practice"); err != nil {
-				return err
+				return Report{}, err
 			}
 			continue
 		}
 		if _, err := tx.Exec(ctx, `insert into role_assignments (email, role, scope, granted_by) values ($1, $2, $3, $4) on conflict do nothing`,
 			r.email, newRole, r.scope, r.by); err != nil {
-			return err
+			return Report{}, err
 		}
 		converted++
 		detail := fmt.Sprintf("%s became %s for the %s %s", was, rbac.Label(newRole), rbac.ScopeNoun(newRole), scopeName)
 		log.Info("role converted", "email", r.email, "from", was, "to", rbac.Label(newRole)+" for "+r.scope)
 		if err := audit.AddIn(ctx, tx, By, Name, "access.grant", r.email, detail); err != nil {
-			return err
+			return Report{}, err
 		}
 	}
 	summary := fmt.Sprintf("%d documents moved to the new lists (%d older versions adjusted); added %d practices, %d platforms, %d categories; %d roles converted, %d removed",
 		saved, versions, len(practices.added), len(platforms.added), len(categories.added), converted, dropped)
 	log.Info("database converted to practices, platforms and categories", "documents", saved, "versions", versions, "practices", len(practices.added),
 		"platforms", len(platforms.added), "categories", len(categories.added), "rolesConverted", converted, "rolesRemoved", dropped)
-	return audit.AddIn(ctx, tx, By, Name, "content.convert", "lists", summary)
+	report := Report{Converted: true, Lists: catChanged, Documents: saved, Versions: versions, Practices: len(practices.added),
+		Platforms: len(platforms.added), Categories: len(categories.added), RolesConverted: converted, RolesRemoved: dropped}
+	return report, audit.AddIn(ctx, tx, By, Name, "content.convert", "lists", summary)
 }
 
 // fit makes a text fit a limit of the format: spaces collapsed, cut to n characters. A cut is

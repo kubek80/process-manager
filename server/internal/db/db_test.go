@@ -2,6 +2,8 @@ package db_test
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"sync"
 	"testing"
 
@@ -59,6 +61,37 @@ func TestMigrateOnAnEmptyDatabaseFromSeveralInstances(t *testing.T) {
 		if err := pool.QueryRow(ctx, `select count(*) from schema_migrations`).Scan(&n); err != nil || n != 4 {
 			t.Fatalf("round %d: migrations recorded: %d, %v", round, n, err)
 		}
+	}
+}
+
+// Upgrade says which migrations it applied: on an empty database, started several times at
+// once, each is reported by exactly one instance, and a later run reports none.
+func TestUpgradeReportsWhatItApplied(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewEmptyPool(t)
+	var mu sync.Mutex
+	var all []string
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			applied, err := db.Upgrade(ctx, pool)
+			if err != nil {
+				t.Error(err)
+			}
+			mu.Lock()
+			all = append(all, applied...)
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	sort.Strings(all)
+	if got := strings.Join(all, ","); got != "001_feedback.sql,002_content_roles_skills.sql,003_version_notes_sessions.sql,004_platform_practice_owners.sql" {
+		t.Fatalf("applied: %s", got)
+	}
+	if applied, err := db.Upgrade(ctx, pool); err != nil || len(applied) != 0 {
+		t.Fatalf("second run applied %v, %v", applied, err)
 	}
 }
 

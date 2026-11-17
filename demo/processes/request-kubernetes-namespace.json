@@ -1,0 +1,208 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "request-kubernetes-namespace",
+  "title": "Request a Kubernetes namespace",
+  "summary": "Get your own namespace on the shared Kubernetes clusters, with resource limits, access for your team and deployment through Argo CD. Use it for every new service that runs in containers.",
+  "owner": "cloud-platform-team",
+  "category": "cloud",
+  "platform": "kubernetes",
+  "rigour": "mandatory",
+  "estimatedDuration": "2-3 working days",
+  "tags": [
+    "kubernetes",
+    "containers",
+    "namespace",
+    "access"
+  ],
+  "updatedAt": "2026-10-02",
+  "status": "active",
+  "review": {
+    "intervalMonths": 6,
+    "lastReviewedAt": "2026-05-25",
+    "reviewedBy": "Process owner"
+  },
+  "resources": [
+    {
+      "title": "Skill: add a namespace",
+      "url": "https://github.example.com/platform/k8s-tenants/tree/main/.claude/skills/add-namespace",
+      "kind": "skill",
+      "description": "Lets an AI coding assistant write the namespace file and open the pull request for you."
+    },
+    {
+      "title": "k8s-tenants",
+      "url": "https://github.example.com/platform/k8s-tenants",
+      "kind": "repository",
+      "description": "One file per namespace: limits, access groups and the Argo CD project."
+    },
+    {
+      "title": "Kubernetes platform handbook",
+      "url": "https://wiki.example.com/platform/kubernetes",
+      "kind": "documentation"
+    }
+  ],
+  "standards": [
+    "kubernetes-workload-baseline",
+    "infrastructure-as-code"
+  ],
+  "prerequisites": [
+    {
+      "title": "A GCP project for your application",
+      "processId": "request-gcp-project",
+      "description": "Images are pulled from the artifact registry of your project, and cloud resources stay there."
+    },
+    {
+      "title": "Service registered in the service catalogue",
+      "processId": "register-service-in-catalogue",
+      "description": "The namespace is labelled with the service id, owner and tier from the catalogue."
+    },
+    {
+      "title": "Access group for your team",
+      "processId": "request-application-access",
+      "description": "The group gets edit access to the namespace, e.g. k8s-payments-editors."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The engineer who will deploy the service."
+    },
+    {
+      "id": "kubernetes-platform",
+      "name": "Kubernetes Platform team",
+      "description": "Slack #kubernetes",
+      "teamId": "kubernetes-platform-team"
+    },
+    {
+      "id": "argo-cd",
+      "name": "Argo CD",
+      "description": "Applies the tenant files to the clusters."
+    }
+  ],
+  "steps": [
+    {
+      "id": "size-namespace",
+      "title": "Work out the size of your namespace",
+      "actor": "me",
+      "type": "task",
+      "description": "The limits stop one service from taking the capacity of others. Ask for what you expect in the next six months; it can be raised later.",
+      "instructions": [
+        "Count the services you will run in the namespace.",
+        "Estimate CPU and memory per service from a load test or a similar service.",
+        "Add 30% headroom and round up to whole CPUs and GiB."
+      ],
+      "duration": "30 min",
+      "outcome": "CPU and memory limit for the namespace",
+      "next": [
+        {
+          "to": "add-tenant-file"
+        }
+      ]
+    },
+    {
+      "id": "add-tenant-file",
+      "title": "Add your namespace file to k8s-tenants",
+      "actor": "me",
+      "type": "code",
+      "instructions": [
+        "Create a branch named namespace-<service-id>.",
+        "Copy tenants/_template.yaml to tenants/<service-id>.yaml.",
+        "Fill in the service id, owner team, tier, CPU and memory limit and your access group.",
+        "Open a pull request and add the label 'new-namespace'."
+      ],
+      "tool": "github",
+      "url": "https://github.example.com/platform/k8s-tenants",
+      "urlLabel": "Open k8s-tenants",
+      "duration": "20 min",
+      "outcome": "Open pull request",
+      "resources": [
+        {
+          "title": "Skill: add a namespace",
+          "url": "https://github.example.com/platform/k8s-tenants/tree/main/.claude/skills/add-namespace",
+          "kind": "skill",
+          "description": "Writes the namespace file from your service id and opens the pull request."
+        }
+      ],
+      "next": [
+        {
+          "to": "review-tenant"
+        }
+      ]
+    },
+    {
+      "id": "review-tenant",
+      "title": "Check limits, labels and access group",
+      "actor": "kubernetes-platform",
+      "type": "review",
+      "tool": "github",
+      "duration": "1 working day",
+      "next": [
+        {
+          "to": "tenant-ok"
+        }
+      ]
+    },
+    {
+      "id": "tenant-ok",
+      "title": "Namespace file accepted?",
+      "actor": "kubernetes-platform",
+      "type": "decision",
+      "next": [
+        {
+          "to": "create-namespace",
+          "label": "Yes"
+        },
+        {
+          "to": "fix-tenant-file",
+          "label": "Changes asked"
+        }
+      ]
+    },
+    {
+      "id": "fix-tenant-file",
+      "title": "Make the changes the platform team asked for",
+      "actor": "me",
+      "type": "code",
+      "instructions": [
+        "Read the review comments on the pull request.",
+        "Change the namespace file and push to the same branch.",
+        "Reply to each comment and ask for a new review."
+      ],
+      "tool": "github",
+      "next": [
+        {
+          "to": "review-tenant"
+        }
+      ]
+    },
+    {
+      "id": "create-namespace",
+      "title": "Create the namespace on every cluster",
+      "actor": "argo-cd",
+      "type": "automation",
+      "description": "On merge, Argo CD creates the namespace, the limits, the network policy and the access bindings on the development, test, staging and production clusters.",
+      "tool": "argo-cd",
+      "duration": "10 min",
+      "next": [
+        {
+          "to": "check-namespace"
+        }
+      ]
+    },
+    {
+      "id": "check-namespace",
+      "title": "Check you can deploy to the namespace",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Open Argo CD and find the project named after your service id.",
+        "Check that the namespace shows as Healthy on every cluster.",
+        "Deploy the hello-world example from the handbook to the development cluster and delete it again."
+      ],
+      "tool": "argo-cd",
+      "outcome": "A working namespace on every cluster",
+      "next": []
+    }
+  ]
+}

@@ -1,0 +1,407 @@
+{
+  "$schema": "../../schema/catalog.schema.json",
+  "tiers": [
+    {
+      "id": "tier-0",
+      "name": "Tier 0",
+      "description": "Mission critical - outage stops the business."
+    },
+    {
+      "id": "tier-1",
+      "name": "Tier 1",
+      "description": "Business critical."
+    },
+    {
+      "id": "tier-2",
+      "name": "Tier 2",
+      "description": "Important, tolerates short outages."
+    },
+    {
+      "id": "tier-3",
+      "name": "Tier 3",
+      "description": "Internal tools and experiments."
+    }
+  ],
+  "environments": [
+    {
+      "id": "development",
+      "name": "Development"
+    },
+    {
+      "id": "test",
+      "name": "Test"
+    },
+    {
+      "id": "staging",
+      "name": "Staging",
+      "description": "Production-like, used for final checks."
+    },
+    {
+      "id": "production",
+      "name": "Production"
+    }
+  ],
+  "languages": [
+    {
+      "id": "go",
+      "name": "Go"
+    },
+    {
+      "id": "java",
+      "name": "Java"
+    },
+    {
+      "id": "javascript",
+      "name": "JavaScript / TypeScript"
+    },
+    {
+      "id": "python",
+      "name": "Python"
+    },
+    {
+      "id": "sql",
+      "name": "SQL"
+    }
+  ],
+  "teams": [
+    {
+      "id": "api-platform-team",
+      "name": "API Platform team",
+      "contact": "Slack #api-platform"
+    },
+    {
+      "id": "architecture-board",
+      "name": "Architecture Board",
+      "contact": "Slack #architecture",
+      "description": "Lead architects who review designs and keep the architecture decision records."
+    },
+    {
+      "id": "azure-platform-team",
+      "name": "Azure Platform team",
+      "contact": "Slack #azure-platform"
+    },
+    {
+      "id": "cloud-platform-team",
+      "name": "Cloud Platform team",
+      "contact": "Slack #cloud-platform"
+    },
+    {
+      "id": "security",
+      "name": "Cyber Security",
+      "contact": "Slack #security"
+    },
+    {
+      "id": "dns-team",
+      "name": "DNS team"
+    },
+    {
+      "id": "data-platform-team",
+      "name": "Data Platform team",
+      "contact": "Slack #data-platform",
+      "description": "Runs the data warehouse and the pipelines that load it."
+    },
+    {
+      "id": "developer-experience-team",
+      "name": "Developer Experience team",
+      "contact": "Slack #devex"
+    },
+    {
+      "id": "edge-cdn-team",
+      "name": "Edge & CDN team",
+      "contact": "Slack #edge-cdn"
+    },
+    {
+      "id": "fulfilment-team",
+      "name": "Fulfilment team"
+    },
+    {
+      "id": "identity-team",
+      "name": "Identity & Access team",
+      "contact": "Slack #identity",
+      "description": "Runs single sign-on, access requests and access reviews."
+    },
+    {
+      "id": "kubernetes-platform-team",
+      "name": "Kubernetes Platform team",
+      "contact": "Slack #kubernetes",
+      "description": "Runs the shared Kubernetes clusters."
+    },
+    {
+      "id": "network-team",
+      "name": "Network team",
+      "contact": "Slack #network"
+    },
+    {
+      "id": "observability-team",
+      "name": "Observability team",
+      "contact": "Slack #observability",
+      "description": "Runs dashboards, alerting and the central log platform."
+    },
+    {
+      "id": "quality-engineering-team",
+      "name": "Quality Engineering team",
+      "contact": "Slack #quality",
+      "description": "Helps teams test their software and runs the load test tooling."
+    },
+    {
+      "id": "service-management",
+      "name": "Service Management"
+    },
+    {
+      "id": "site-reliability-team",
+      "name": "Site Reliability team",
+      "contact": "Slack #sre",
+      "description": "Keeps production running: releases, on-call and incident handling."
+    }
+  ],
+  "practices": [
+    {
+      "id": "architecture",
+      "name": "Architecture",
+      "contact": "Slack #architecture",
+      "description": "Agrees how systems are designed and how design decisions are recorded."
+    },
+    {
+      "id": "security",
+      "name": "Cyber security",
+      "contact": "Slack #security",
+      "description": "Agrees how we keep systems and data safe."
+    },
+    {
+      "id": "data",
+      "name": "Data",
+      "contact": "Slack #data-practice",
+      "description": "Agrees how data is stored, classified, shared and deleted."
+    },
+    {
+      "id": "engineering",
+      "name": "Engineering",
+      "contact": "Slack #engineering-practice",
+      "description": "Guild that agrees how we write and review code."
+    },
+    {
+      "id": "operations",
+      "name": "Operations",
+      "contact": "Slack #sre",
+      "description": "Agrees how we release, monitor and run services in production."
+    },
+    {
+      "id": "quality",
+      "name": "Quality & testing",
+      "contact": "Slack #quality",
+      "description": "Agrees how software is tested before it reaches customers."
+    },
+    {
+      "id": "service-management",
+      "name": "Service management",
+      "description": "Agrees how requests, incidents and changes are handled."
+    }
+  ],
+  "platforms": [
+    {
+      "id": "google-cloud",
+      "name": "Google Cloud",
+      "contact": "Slack #cloud-platform"
+    },
+    {
+      "id": "azure",
+      "name": "Azure",
+      "contact": "Slack #azure-platform"
+    },
+    {
+      "id": "apigee",
+      "name": "Apigee",
+      "contact": "Slack #api-platform",
+      "description": "The API gateway."
+    },
+    {
+      "id": "akamai",
+      "name": "Akamai",
+      "contact": "Slack #edge-cdn",
+      "description": "Edge, CDN and web application firewall."
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "contact": "Slack #devex",
+      "description": "Source control, pull requests and packages."
+    },
+    {
+      "id": "servicenow",
+      "name": "ServiceNow",
+      "description": "Requests and approvals."
+    },
+    {
+      "id": "kubernetes",
+      "name": "Kubernetes",
+      "contact": "Slack #kubernetes",
+      "description": "The shared container clusters (GKE)."
+    },
+    {
+      "id": "ci-cd",
+      "name": "CI/CD pipeline",
+      "contact": "Slack #devex",
+      "description": "Builds, tests and deploys every change."
+    },
+    {
+      "id": "data-warehouse",
+      "name": "Data warehouse",
+      "contact": "Slack #data-platform",
+      "description": "BigQuery datasets for reporting and analytics."
+    },
+    {
+      "id": "identity",
+      "name": "Identity & SSO",
+      "contact": "Slack #identity",
+      "description": "Single sign-on and access groups (Entra ID)."
+    },
+    {
+      "id": "observability",
+      "name": "Observability",
+      "contact": "Slack #observability",
+      "description": "Dashboards, alerts, logs and on-call paging."
+    },
+    {
+      "id": "service-catalogue",
+      "name": "Service catalogue",
+      "contact": "Slack #devex",
+      "description": "The list of every service with its owner, tier and on-call."
+    }
+  ],
+  "categories": [
+    {
+      "id": "cloud",
+      "name": "Cloud"
+    },
+    {
+      "id": "api",
+      "name": "API"
+    },
+    {
+      "id": "network",
+      "name": "Network"
+    },
+    {
+      "id": "source-control",
+      "name": "Source control"
+    },
+    {
+      "id": "security",
+      "name": "Security"
+    },
+    {
+      "id": "code-quality",
+      "name": "Code quality"
+    },
+    {
+      "id": "general",
+      "name": "General"
+    },
+    {
+      "id": "access",
+      "name": "Access & identity"
+    },
+    {
+      "id": "data",
+      "name": "Data"
+    },
+    {
+      "id": "release",
+      "name": "Release & deployment"
+    },
+    {
+      "id": "operations",
+      "name": "Operations & incidents"
+    },
+    {
+      "id": "testing",
+      "name": "Testing"
+    },
+    {
+      "id": "architecture",
+      "name": "Architecture"
+    }
+  ],
+  "tools": [
+    {
+      "id": "akamai-control-center",
+      "name": "Akamai Control Center"
+    },
+    {
+      "id": "argo-cd",
+      "name": "Argo CD",
+      "description": "Deploys to the Kubernetes clusters from Git."
+    },
+    {
+      "id": "artifact-registry",
+      "name": "Artifact registry"
+    },
+    {
+      "id": "azure-portal",
+      "name": "Azure portal",
+      "url": "https://portal.azure.com"
+    },
+    {
+      "id": "bigquery",
+      "name": "BigQuery",
+      "url": "https://console.cloud.google.com/bigquery"
+    },
+    {
+      "id": "developer-portal",
+      "name": "Developer portal"
+    },
+    {
+      "id": "entra-id",
+      "name": "Entra ID",
+      "description": "Company sign-in and access groups."
+    },
+    {
+      "id": "gcp-console",
+      "name": "GCP console",
+      "url": "https://console.cloud.google.com"
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "url": "https://github.example.com"
+    },
+    {
+      "id": "github-actions",
+      "name": "GitHub Actions"
+    },
+    {
+      "id": "grafana",
+      "name": "Grafana",
+      "description": "Dashboards and alert rules."
+    },
+    {
+      "id": "jira",
+      "name": "Jira",
+      "url": "https://jira.example.com"
+    },
+    {
+      "id": "pagerduty",
+      "name": "PagerDuty",
+      "description": "On-call schedules and paging."
+    },
+    {
+      "id": "secret-manager",
+      "name": "Secret Manager",
+      "description": "Stores passwords, keys and tokens for applications."
+    },
+    {
+      "id": "servicenow",
+      "name": "ServiceNow",
+      "url": "https://servicenow.example.com"
+    },
+    {
+      "id": "sonarqube",
+      "name": "SonarQube",
+      "description": "Code quality and security scanning in the build pipeline."
+    },
+    {
+      "id": "terraform",
+      "name": "Terraform"
+    }
+  ]
+}
