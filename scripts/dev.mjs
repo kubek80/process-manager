@@ -53,7 +53,8 @@ fs.watch(serverDir, { recursive: true }, (_event, file) => {
   }, 250);
 });
 
-const vite = run("npx", ["vite"], { cwd: root, env: process.env });
+// Vite's own script under this Node: "npx" is npx.cmd on Windows, which spawn cannot start without a shell
+const vite = run(process.execPath, [path.join(root, "node_modules", "vite", "bin", "vite.js")], { cwd: root, env: process.env });
 
 const stop = () => { stopping = true; server?.kill(); vite.kill(); process.exit(0); };
 process.on("SIGINT", stop);

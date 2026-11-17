@@ -26,7 +26,8 @@ export function ensureDatabase() {
 }
 
 export function buildServer() {
-  const r = spawnSync("go", ["build", "-o", serverBin, "./cmd/server"], { cwd: serverDir, stdio: "inherit" });
+  // -trimpath: without it, Windows Defender's heuristics have flagged the binary as malware and deleted it
+  const r = spawnSync("go", ["build", "-trimpath", "-o", serverBin, "./cmd/server"], { cwd: serverDir, stdio: "inherit" });
   return r.status === 0;
 }
 
