@@ -9,6 +9,7 @@ import { search, type FilterKey, type Result } from "../lib/search";
 import { SearchBox } from "./SearchPage";
 import { DocCard } from "./DocCard";
 import { openCount } from "./Feedback";
+import { AskForIt } from "./Lists";
 import "../search.css";
 
 /** How many bookmarks Home shows before "Show all". */
@@ -63,6 +64,8 @@ export function HomePage({ processes, standards, feedback }: {
           <ArrowRight size={16} className="home-entry-go" aria-hidden="true" />
         </a>
       </div>
+
+      <AskForIt className="home-ask" />
 
       {marked.length > 0 && (
         <section className="home-bookmarks" aria-labelledby="home-bookmarks">

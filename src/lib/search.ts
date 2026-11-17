@@ -7,11 +7,8 @@ import { appliesTo, type Profile } from "./edit";
 // different filters: all of them). For every filter, each option says how many results it would
 // give, so that the page can show the counts and leave out what gives nothing.
 
-/**
- * The filters of the lists and the results page. The results page carries them in the address;
- * `owner` (the team that maintains it) is offered on the lists only.
- */
-export type Filters = Omit<SearchState, "q"> & { owner?: string[] };
+/** The filters of the lists and the results page; the results page carries them in the address. */
+export type Filters = Omit<SearchState, "q" | "pageNo" | "size">;
 export type FilterKey = keyof Filters;
 export const FILTER_KEYS: FilterKey[] = ["type", "category", "platform", "practice", "rigour", "owner"];
 export const FILTER_LABEL: Record<FilterKey, string> = { type: "Type", rigour: "Rigour", category: "Category", practice: "Practice", platform: "Platform", owner: "Owner" };

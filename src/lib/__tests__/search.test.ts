@@ -249,10 +249,21 @@ describe("addresses of home and search", () => {
       { page: "search", q: "a&b=c, d / é?#", type: ["process"], rigour: ["mandatory", "optional"] },
       { page: "search", category: ["cloud", "source-control"], practice: ["engineering"], platform: ["google-cloud", "azure"] },
       { page: "search", platform: ["odd,value"] },
+      { page: "search", owner: ["cloud-team", "security"] },
+      { page: "search", q: "gcp", category: ["-"], pageNo: 3, size: 48 },
+      { page: "search", size: 12 },
     ];
     for (const r of routes) expect(parseRoute(href(r))).toEqual(r);
     expect(href({ page: "search", q: "gcp project", platform: ["azure", "github"], type: ["standard"] }))
       .toBe("#/search?q=gcp%20project&type=standard&platform=azure,github");
+    expect(href({ page: "search", q: "x", owner: ["cloud-team"], pageNo: 2, size: 24 })).toBe("#/search?q=x&owner=cloud-team&page=2&size=24");
+  });
+  it("leaves the first page out of the address, and ignores a page or size it cannot use", () => {
+    expect(href({ page: "search", q: "x", pageNo: 1 })).toBe("#/search?q=x");
+    expect(href({ page: "search", pageNo: 2.5, size: 13 })).toBe("#/search");
+    for (const bad of ["page=0", "page=-2", "page=two", "page=1.5", "page=", "size=13", "size=24px", "size=0"])
+      expect(parseRoute(`#/search?q=x&${bad}`)).toEqual({ page: "search", q: "x" });
+    expect(parseRoute("#/search?page=7&size=12&owner=a,,a")).toEqual({ page: "search", pageNo: 7, size: 12, owner: ["a"] });
   });
   it("ignores what it does not know, and what is empty", () => {
     expect(parseRoute("#/search?q=&type=&foo=bar&rigour=often,mandatory&type=widget")).toEqual({ page: "search", rigour: ["mandatory"] });

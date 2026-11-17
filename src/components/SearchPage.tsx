@@ -7,24 +7,19 @@ import { useEditor } from "../lib/mode";
 import { pageOf, sizeOf, usePageSize } from "../lib/paging";
 import { useProfile, useRemembered } from "../lib/profile";
 import { canEdit, usePerms, useVisibleDrafts } from "../lib/session";
-import { go, href, type Route, type SearchState } from "../lib/store";
+import { go, href, type SearchState } from "../lib/store";
 import { FILTER_LABEL, filterCount, filtersOf, search, toggleFilter, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
 import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
 import { openCount } from "./Feedback";
 import { DocCard, Marked } from "./DocCard";
 import { needsReview } from "./DocList";
-import { ChosenFilters, FilterPanel, Pager, profileChosen, ResultsBar, toResults, usePaging, type Chosen, type FlagControl } from "./Lists";
+import { AskForIt, ChosenFilters, FilterPanel, Pager, profileChosen, ResultsBar, toResults, type Chosen, type FlagControl } from "./Lists";
 import "../search.css";
 
 export { Marked };
 
 const PLACEHOLDER = "Search processes and standards, e.g. GCP project or logging";
-const KEYS: FilterKey[] = ["type", "category", "platform", "practice", "rigour"];
-/**
- * The page of the results and its size, once the address carries them (`&page=2&size=48`). Until
- * then they are kept on the page only.
- */
-type Paged = SearchState & { pageNo?: number; size?: number };
+const KEYS: FilterKey[] = ["type", "category", "platform", "practice", "rigour", "owner"];
 
 /** The one search box, on Home and on the results page. */
 export function SearchBox({ value, onChange, onSubmit, big, autoFocus }: {
@@ -59,12 +54,13 @@ export function SearchPage({ route, processes, standards, feedback }: {
   const drafts = useVisibleDrafts(); // in editor mode, the drafts the person may edit
   const filters = useMemo(() => filtersOf(route), [route]);
   const q = route.q ?? "";
-  const addr = route as Paged;
   const [profile, setProfile] = useProfile();
   const [bookmarked, setBookmarked] = useRemembered("pm:search:bookmarked", false);
   const [due, setDue] = useState(false);
   const [mySize, setMySize] = usePageSize();
-  const size = addr.size ? sizeOf(addr.size) : mySize;
+  // a shared link shows the same page: the address carries the page and its size
+  const size = route.size ? sizeOf(route.size) : mySize;
+  const keep = route.size ? { size: route.size } : {};
   const mayEdit = (kind: "process" | "standard", d: Process | Standard) => editing && canEdit(perms, kind, d);
 
   // what is typed is in the address at once, without a new entry in the browser's history
@@ -74,11 +70,11 @@ export function SearchPage({ route, processes, standards, feedback }: {
   const type = (v: string) => {
     setText(v);
     pushed.current = v.trim() ? v : "";
-    go({ page: "search", ...filters, q: v }, { replace: true });
+    go({ page: "search", ...filters, q: v, ...keep }, { replace: true });
   };
   // a new search or filter starts again on the first page (the address leaves the page out)
-  const setFilters = (f: Filters) => go({ page: "search", q, ...f }, { replace: true });
-  const toFirst = () => { if (addr.pageNo) go({ page: "search", q, ...filters }, { replace: true }); };
+  const setFilters = (f: Filters) => go({ page: "search", q, ...f, ...keep }, { replace: true });
+  const toFirst = () => { if (route.pageNo) go({ page: "search", q, ...filters, ...keep }, { replace: true }); };
 
   const flags: Record<string, Flag> = {
     bookmarked: { on: bookmarked, test: (k, d) => eng.isBookmarked(k, d.id) },
@@ -91,18 +87,15 @@ export function SearchPage({ route, processes, standards, feedback }: {
 
   const [open, setOpen] = useState(false); // the filters on a narrow screen
   const results = useRef<HTMLElement>(null);
-  const [local, setLocal] = usePaging(JSON.stringify([q, filters, profile, bookmarked, due]));
   const n = out.results.length;
-  const page = pageOf(n, addr.pageNo ?? local, size);
+  const page = pageOf(n, route.pageNo ?? 1, size);
   const goTo = (p: number) => {
-    setLocal(p);
-    go({ page: "search", q, ...filters, pageNo: p, ...(addr.size ? { size } : {}) } as Paged as Route);
+    go({ page: "search", q, ...filters, pageNo: p, size });
     toResults(results.current);
   };
   const changeSize = (s: number) => {
     setMySize(s);
-    setLocal(1);
-    if (addr.pageNo || addr.size) go({ page: "search", q, ...filters } as Route, { replace: true });
+    go({ page: "search", q, ...filters, size: s }, { replace: true });
   };
 
   const ids = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds: standards.map((s) => s.id), catalog }), [processes, standards, catalog]);
@@ -135,6 +128,7 @@ export function SearchPage({ route, processes, standards, feedback }: {
           <ResultsBar page={page} noun={{ one: "result", many: "results" }} panelId="search-filters" open={open} onOpen={setOpen}
             chosen={chosen.length} size={size} onSize={changeSize} extra={summary} />
           <ChosenFilters chosen={chosen} onClear={clear} />
+          <Pager page={page} onPage={goTo} label="Pages of results" compact />
         </div>
         <FilterPanel id="search-filters" open={open} keys={KEYS} options={out.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}
           flags={flagControls} profile={profile} onProfile={changeProfile} />
@@ -161,6 +155,7 @@ export function SearchPage({ route, processes, standards, feedback }: {
                   <p className="muted small search-empty-browse">
                     Or browse <a href={href({ page: "library" })}>all processes</a> and <a href={href({ page: "standards" })}>all standards</a>.
                   </p>
+                  <AskForIt />
                 </>
               )}
             </div>
@@ -177,7 +172,7 @@ export function SearchPage({ route, processes, standards, feedback }: {
               })}
             </ol>
           )}
-          <Pager page={page} onPage={goTo} label="Pages of results" />
+          <Pager page={page} onPage={goTo} label="Pages of results, at the end" />
         </section>
       </div>
     </div>

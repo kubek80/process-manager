@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Search, SlidersHorizontal, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Lightbulb, Search, SlidersHorizontal, X } from "lucide-react";
+import { href } from "../lib/store";
 import type { Profile } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
 import { FILTER_LABEL, type FilterKey, type Option } from "../lib/search";
@@ -210,11 +211,24 @@ export function PageSize({ size, onSize }: { size: number; onSize: (n: number) =
   );
 }
 
+/** The way to the requests: what is missing can be asked for. */
+export function AskForIt({ className = "" }: { className?: string }) {
+  return (
+    <p className={`muted ask-for-it ${className}`.trim()}>
+      Missing a process or standard? <a href={href({ page: "requests" })}><Lightbulb size={14} aria-hidden="true" /> Ask for it, or vote for what others asked for</a>
+    </p>
+  );
+}
+
 /** The pages of a list: previous, the numbers (the current one marked), next. Nothing when it all fits on one. */
-export function Pager({ page, onPage, label }: { page: Page; onPage: (n: number) => void; label: string }) {
+export function Pager({ page, onPage, label, compact }: {
+  page: Page; onPage: (n: number) => void; label: string;
+  /** Above the results: smaller, at the right. */
+  compact?: boolean;
+}) {
   if (page.pages <= 1) return null;
   return (
-    <nav className="pager" aria-label={label}>
+    <nav className={`pager ${compact ? "compact" : ""}`.trim()} aria-label={label}>
       <button type="button" className="pager-step" disabled={page.page <= 1} onClick={() => onPage(page.page - 1)} aria-label="Previous page">
         <ChevronLeft size={16} aria-hidden="true" /><span className="pager-word">Previous</span>
       </button>

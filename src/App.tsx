@@ -486,8 +486,8 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       {!processes && !error && <Loading page />}
       <ErrorBoundary resetKey={href(route)}>
       <Suspense fallback={<Loading page />}>
-      {processes && route.page === "home" && <HomePage processes={all} standards={standards} />}
-      {processes && route.page === "search" && <SearchPage route={route} processes={all} standards={standards} />}
+      {processes && route.page === "home" && <HomePage processes={all} standards={standards} feedback={feedback} />}
+      {processes && route.page === "search" && <SearchPage route={route} processes={all} standards={standards} feedback={feedback} />}
       {processes && route.page === "library" && (
         <Library processes={all} standardIds={standards.map((s) => s.id)} feedback={feedback.process} onAi={() => setAi("process")}
           onNew={() => setNaming("process")} />

@@ -31,7 +31,7 @@ export function BookmarkButton({ kind, id, title = "", size = "card", className 
   const on = eng.isBookmarked(kind, id);
   const Icon = on ? BookmarkCheck : Bookmark;
   return (
-    <button type="button" className={`engage-btn bookmark-btn ${size} ${on ? "on" : ""} ${className}`.trim()} aria-pressed={on}
+    <button type="button" className={`engage-btn bookmark-btn engage-${size} ${on ? "on" : ""} ${className}`.trim()} aria-pressed={on}
       aria-label={bookmarkLabel(title || "this", on)} title={on ? "Bookmarked: click to remove" : "Bookmark: find it again under Bookmarks"}
       onClick={(e) => { stop(e); void eng.toggleBookmark(kind, id); }}>
       <Icon size={size === "page" ? 15 : 16} aria-hidden="true" fill={on ? "currentColor" : "none"} />
@@ -45,7 +45,7 @@ export function UpvoteButton({ kind, id, title = "", size = "card", className = 
   const on = eng.hasUpvoted(kind, id);
   const count = eng.countsOf(kind, id).upvotes;
   return (
-    <button type="button" className={`engage-btn upvote-btn ${size} ${on ? "on" : ""} ${className}`.trim()} aria-pressed={on}
+    <button type="button" className={`engage-btn upvote-btn engage-${size} ${on ? "on" : ""} ${className}`.trim()} aria-pressed={on}
       aria-label={upvoteLabel(title, on, count)} title={on ? "You found this useful: click to take it back" : "Upvote: this is useful"}
       onClick={(e) => { stop(e); void eng.toggleUpvote(kind, id); }}>
       <ThumbsUp size={15} aria-hidden="true" fill={on ? "currentColor" : "none"} />

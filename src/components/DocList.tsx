@@ -11,7 +11,7 @@ import { FILTER_LABEL, search, toggleFilter, wordsOf, type FilterKey, type Filte
 import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
 import { openCount } from "./Feedback";
 import { DocCard } from "./DocCard";
-import { ChosenFilters, FilterPanel, Pager, profileChosen, ResultsBar, toResults, usePaging, type Chosen, type FlagControl } from "./Lists";
+import { AskForIt, ChosenFilters, FilterPanel, Pager, profileChosen, ResultsBar, toResults, usePaging, type Chosen, type FlagControl } from "./Lists";
 
 const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "owner"];
 const NOUN: Record<TargetKind, { one: string; many: string }> = { process: { one: "process", many: "processes" }, standard: { one: "standard", many: "standards" } };
@@ -92,6 +92,7 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
       <div className="list-head">
         <ResultsBar page={page} noun={NOUN[kind]} panelId={panelId} open={open} onOpen={setOpen} chosen={chosen.length} size={size} onSize={setSize} />
         <ChosenFilters chosen={chosen} onClear={clear} />
+        <Pager page={page} onPage={goTo} label={`Pages of ${NOUN[kind].many}`} compact />
       </div>
       <FilterPanel id={panelId} open={open} keys={KEYS} options={out.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}
         text={{ value: q, onChange: setQ, placeholder: PLACEHOLDER[kind], label: kind === "process" ? "Search processes" : "Search standards" }}
@@ -101,6 +102,7 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
           <div className="list-empty">
             <p>{nothing ? empty : `No ${NOUN[kind].one} matches.`}</p>
             {!nothing && chosen.length > 0 && <button type="button" className="btn small" onClick={clear}>Clear all filters</button>}
+            <AskForIt />
           </div>
         ) : (
           <ol className="cards">
@@ -114,7 +116,7 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
             })}
           </ol>
         )}
-        <Pager page={page} onPage={goTo} label={`Pages of ${NOUN[kind].many}`} />
+        <Pager page={page} onPage={goTo} label={`Pages of ${NOUN[kind].many}, at the end`} />
       </section>
     </div>
   );

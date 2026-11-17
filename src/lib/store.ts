@@ -189,8 +189,15 @@ export interface SearchState {
   category?: string[];
   practice?: string[];
   platform?: string[];
+  /** The team that maintains it. */
+  owner?: string[];
+  /** The page of the results shown, from 1 (1 is left out of the address). */
+  pageNo?: number;
+  /** How many results a page shows: 12, 24 or 48; left out, the person's own choice. */
+  size?: number;
 }
-const SEARCH_LISTS = ["type", "rigour", "category", "practice", "platform"] as const;
+const SEARCH_LISTS = ["type", "rigour", "category", "practice", "platform", "owner"] as const;
+const SEARCH_SIZES = [12, 24, 48];
 const SEARCH_ALLOWED: Partial<Record<(typeof SEARCH_LISTS)[number], string[]>> = { type: ["process", "standard"], rigour: ["mandatory", "recommended", "optional"] };
 /**
  * A value from the address in plain text. A broken escape (a typed "100%") is kept as it was
@@ -210,6 +217,8 @@ function parseSearch(query: string): Route {
     if (eq <= 0) continue;
     const key = part.slice(0, eq), raw = part.slice(eq + 1);
     if (key === "q") { const q = decode(raw); if (q.trim()) r.q = q; continue; }
+    if (key === "page") { if (/^[1-9]\d{0,5}$/.test(raw)) r.pageNo = Number(raw); continue; }
+    if (key === "size") { if (SEARCH_SIZES.includes(Number(raw)) && /^\d+$/.test(raw)) r.size = Number(raw); continue; }
     if (!(SEARCH_LISTS as readonly string[]).includes(key)) continue;
     const k = key as (typeof SEARCH_LISTS)[number];
     const values = [...new Set(raw.split(",").map((v) => decode(v).trim()).filter((v) => v && (!SEARCH_ALLOWED[k] || SEARCH_ALLOWED[k]!.includes(v))))];
@@ -221,6 +230,8 @@ function searchHref(r: SearchState): string {
   const parts: string[] = [];
   if (r.q?.trim()) parts.push(`q=${encodeURIComponent(r.q)}`);
   for (const k of SEARCH_LISTS) if (r[k]?.length) parts.push(`${k}=${(r[k] as string[]).map(encodeURIComponent).join(",")}`);
+  if (r.pageNo && Number.isInteger(r.pageNo) && r.pageNo > 1) parts.push(`page=${r.pageNo}`);
+  if (r.size && SEARCH_SIZES.includes(r.size)) parts.push(`size=${r.size}`);
   return `#/search${parts.length ? `?${parts.join("&")}` : ""}`;
 }
 
