@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://process-manager.local/schema/catalog.schema.json",
   "title": "Catalog",
-  "description": "Shared lists that processes and standards pick from: application tiers, environments, programming languages, teams and tools.",
+  "description": "Shared lists that processes and standards pick from: application tiers, environments, programming languages, teams, practices, platforms, categories and tools.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -39,9 +39,30 @@
     },
     "teams": {
       "type": "array",
-      "description": "Teams that own processes or take part in them.",
+      "description": "Teams: groups of people that own processes and standards or take part in processes.",
       "items": {
         "$ref": "#/$defs/team"
+      }
+    },
+    "practices": {
+      "type": "array",
+      "description": "Practices: disciplines such as cyber security or engineering that agree how work is done. Processes and standards can belong to one. Managed separately from teams.",
+      "items": {
+        "$ref": "#/$defs/practice"
+      }
+    },
+    "platforms": {
+      "type": "array",
+      "description": "Platforms: the things teams build on, such as a cloud, an API gateway or the source control system. Processes and standards can belong to one. Managed separately from teams and practices.",
+      "items": {
+        "$ref": "#/$defs/platform"
+      }
+    },
+    "categories": {
+      "type": "array",
+      "description": "Categories that group processes and standards in the libraries and in search.",
+      "items": {
+        "$ref": "#/$defs/category"
       }
     },
     "tools": {
@@ -96,19 +117,86 @@
           "minLength": 1,
           "maxLength": 60
         },
-        "kind": {
-          "enum": [
-            "team",
-            "security",
-            "platform",
-            "practice"
-          ],
-          "description": "What kind of unit this is. \"team\" (default) delivers and takes part in processes. \"security\", \"platform\" and \"practice\" are units that can also issue standards."
-        },
         "contact": {
           "type": "string",
           "maxLength": 120,
           "description": "How to reach the team: channel, mailbox, queue."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "practice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "contact": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "How to reach the people behind the practice: channel, mailbox."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "contact": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "How to reach the people behind the platform: channel, mailbox, queue."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
         },
         "description": {
           "type": "string",

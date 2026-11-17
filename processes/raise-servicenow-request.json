@@ -4,8 +4,11 @@
   "id": "raise-servicenow-request",
   "title": "Raise a ServiceNow request",
   "summary": "Generic way to order something from the ServiceNow catalogue and get it approved. Other processes use this as a sub-process.",
-  "category": "General",
   "owner": "service-management",
+  "category": "general",
+  "practice": "service-management",
+  "platform": "servicenow",
+  "rigour": "recommended",
   "estimatedDuration": "1-3 working days",
   "tags": [
     "servicenow",

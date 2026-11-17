@@ -4,8 +4,10 @@
   "id": "onboard-api-to-apigee",
   "title": "Onboard an API to Apigee",
   "summary": "Publish a backend API through the Apigee gateway: design review, proxy configuration, test deployment and production approval.",
-  "category": "API",
   "owner": "api-platform-team",
+  "category": "api",
+  "platform": "apigee",
+  "rigour": "mandatory",
   "tiers": [
     "tier-0",
     "tier-1",

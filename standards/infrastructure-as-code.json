@@ -5,6 +5,9 @@
   "title": "Infrastructure as code",
   "summary": "How cloud resources are created and changed, so that every environment can be rebuilt and every change is reviewed.",
   "owner": "cloud-platform-team",
+  "category": "cloud",
+  "practice": "engineering",
+  "platform": "google-cloud",
   "scope": "Everything created in GCP or Azure for an application. Sandboxes for experiments are out of scope.",
   "tags": [
     "terraform",

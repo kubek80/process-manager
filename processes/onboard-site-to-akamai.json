@@ -4,8 +4,10 @@
   "id": "onboard-site-to-akamai",
   "title": "Onboard a site to Akamai",
   "summary": "Put a public website or API behind Akamai (CDN and WAF): configuration on staging, testing, production activation and DNS switch.",
-  "category": "Network",
   "owner": "edge-cdn-team",
+  "category": "network",
+  "platform": "akamai",
+  "rigour": "mandatory",
   "tiers": [
     "tier-0",
     "tier-1"

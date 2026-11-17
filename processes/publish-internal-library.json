@@ -4,8 +4,11 @@
   "id": "publish-internal-library",
   "title": "Publish an internal library",
   "summary": "Release a shared Go module or npm package to the internal artifact registry so other teams can depend on it.",
-  "category": "Source control",
   "owner": "developer-experience-team",
+  "category": "source-control",
+  "practice": "engineering",
+  "platform": "github",
+  "rigour": "recommended",
   "languages": [
     "go",
     "javascript"

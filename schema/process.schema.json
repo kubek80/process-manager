@@ -38,14 +38,29 @@
       "maxLength": 400,
       "description": "One or two sentences: what the reader gets at the end and when to use this process."
     },
-    "category": {
-      "type": "string",
-      "maxLength": 40,
-      "description": "Grouping shown in the library, e.g. \"Cloud\", \"API\", \"Network\", \"Source control\", \"General\"."
-    },
     "owner": {
       "$ref": "#/$defs/slug",
       "description": "Id of the team (from the teams list) that owns and maintains this process."
+    },
+    "category": {
+      "$ref": "#/$defs/slug",
+      "description": "Id of the category (from the categories list) this is grouped under in the libraries and in search, e.g. \"cloud\"."
+    },
+    "practice": {
+      "$ref": "#/$defs/slug",
+      "description": "Id of the practice (from the practices list) this belongs to, e.g. \"security\". The owners of that practice may change it. Leave out when it belongs to no practice."
+    },
+    "platform": {
+      "$ref": "#/$defs/slug",
+      "description": "Id of the platform (from the platforms list) this belongs to, e.g. \"google-cloud\". The owners of that platform may change it. Leave out when it belongs to no platform."
+    },
+    "rigour": {
+      "enum": [
+        "mandatory",
+        "recommended",
+        "optional"
+      ],
+      "description": "How binding the process is. \"mandatory\" = the only allowed way to get this done. \"recommended\" = the expected way; another way needs a good reason. \"optional\" = a help that may be used. Leave out when it is not stated."
     },
     "tiers": {
       "type": "array",

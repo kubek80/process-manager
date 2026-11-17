@@ -5,6 +5,8 @@
   "title": "Secure logging",
   "summary": "What services must and must not write to their logs, so that incidents can be investigated without logs becoming a leak.",
   "owner": "security",
+  "category": "security",
+  "practice": "security",
   "scope": "All services and jobs that run in a company cloud project or subscription. Developer laptops are out of scope.",
   "tags": [
     "logging",

@@ -4,8 +4,10 @@
   "id": "request-github-repository",
   "title": "Request a repository",
   "summary": "Get a new GitHub repository created from a standard template with the right team permissions and branch protection.",
-  "category": "Source control",
   "owner": "developer-experience-team",
+  "category": "source-control",
+  "platform": "github",
+  "rigour": "mandatory",
   "estimatedDuration": "1 working day",
   "tags": [
     "github",

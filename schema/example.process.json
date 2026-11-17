@@ -3,8 +3,9 @@
   "id": "request-vpn-access",
   "title": "Request VPN access",
   "summary": "Get remote access to the company network through the VPN client.",
-  "category": "General",
   "owner": "network-team",
+  "category": "network",
+  "rigour": "mandatory",
   "estimatedDuration": "1-2 working days",
   "tags": [
     "vpn"

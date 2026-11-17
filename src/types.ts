@@ -27,14 +27,24 @@ export interface Step {
   next: NextLink[];
 }
 
-/** What processes and standards have in common: who owns them, where they apply, their life-cycle. */
+/** How binding a process is. For a standard it follows from the levels of its requirements. */
+export type Rigour = "mandatory" | "recommended" | "optional";
+
+/** What processes and standards have in common: who owns them, what they belong to, where they apply, their life-cycle. */
 export interface Governed {
   $schema?: string;
   schemaVersion: "1.0";
   id: string;
   title: string;
   summary: string;
+  /** The team that maintains it: asked to review it and to answer feedback. */
   owner?: string;
+  /** Id of a category from the lists. */
+  category?: string;
+  /** Id of the practice it belongs to. The owners of the practice may change it. */
+  practice?: string;
+  /** Id of the platform it belongs to. The owners of the platform may change it. */
+  platform?: string;
   tiers?: string[];
   languages?: string[];
   environments?: string[];
@@ -47,7 +57,7 @@ export interface Governed {
 }
 
 export interface Process extends Governed {
-  category?: string;
+  rigour?: Rigour;
   estimatedDuration?: string;
   standards?: string[];
   prerequisites: Prerequisite[];
@@ -87,10 +97,18 @@ export interface Issue { level: "error" | "warning"; path: string; message: stri
 export interface Tier { id: string; name: string; description?: string }
 export interface Environment { id: string; name: string; description?: string }
 export interface Language { id: string; name: string; description?: string }
-export type TeamKind = "team" | "security" | "platform" | "practice";
-export interface Team { id: string; name: string; kind?: TeamKind; contact?: string; description?: string }
+export interface Team { id: string; name: string; contact?: string; description?: string }
+export interface Practice { id: string; name: string; contact?: string; description?: string }
+export interface Platform { id: string; name: string; contact?: string; description?: string }
+export interface Category { id: string; name: string; description?: string }
 export interface Tool { id: string; name: string; url?: string; description?: string }
-export interface Catalog { $schema?: string; tiers: Tier[]; environments: Environment[]; languages: Language[]; teams: Team[]; tools: Tool[] }
+/** The lists. `practices`, `platforms` and `categories` are always present in the app (the loader fills in empty ones). */
+export interface Catalog {
+  $schema?: string;
+  tiers: Tier[]; environments: Environment[]; languages: Language[];
+  teams: Team[]; practices: Practice[]; platforms: Platform[]; categories: Category[];
+  tools: Tool[];
+}
 
 export type TargetKind = "process" | "standard";
 export type FeedbackKind = "broken" | "outdated" | "unclear" | "idea";
@@ -121,8 +139,12 @@ export interface Perms {
   catalog: boolean;
   processes: boolean;
   standards: boolean;
-  standardUnits: string[];
+  /** Teams this person is Owner for: confirms reviews and answers feedback on what the team owns. */
   owns: string[];
+  /** Platforms this person is owner of: may change the processes and standards that belong to them. */
+  platforms: string[];
+  /** Practices this person is owner of: may change the processes and standards that belong to them. */
+  practices: string[];
 }
 
 export interface Me {
@@ -133,7 +155,9 @@ export interface Me {
   devUsers?: { email: string; name: string; about: string }[];
 }
 
-export type Role = "admin" | "catalog-manager" | "process-editor" | "standards-editor" | "owner";
+export type Role = "admin" | "catalog-manager" | "process-editor" | "standards-editor" | "owner" | "platform-owner" | "practice-owner";
+/** A person in one of the groups people belong to. Readable by everyone who is signed in. */
+export interface Membership { email: string; role: "owner" | "platform-owner" | "practice-owner"; scope: string }
 export interface Assignment { email: string; role: Role; scope: string; grantedBy: string; grantedAt: string }
 export interface AuditEntry { id: number; at: string; email: string; name: string; action: string; target: string; detail: string }
 export interface DocVersion { version: number; savedAt: string; savedBy: string; note: string; deleted: boolean }

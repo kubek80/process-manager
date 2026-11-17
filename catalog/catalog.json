@@ -63,25 +63,21 @@
     {
       "id": "api-platform-team",
       "name": "API Platform team",
-      "kind": "platform",
       "contact": "Slack #api-platform"
     },
     {
       "id": "azure-platform-team",
       "name": "Azure Platform team",
-      "kind": "platform",
       "contact": "Slack #azure-platform"
     },
     {
       "id": "cloud-platform-team",
       "name": "Cloud Platform team",
-      "kind": "platform",
       "contact": "Slack #cloud-platform"
     },
     {
       "id": "security",
       "name": "Cyber Security",
-      "kind": "security",
       "contact": "Slack #security"
     },
     {
@@ -91,21 +87,12 @@
     {
       "id": "developer-experience-team",
       "name": "Developer Experience team",
-      "kind": "platform",
       "contact": "Slack #devex"
     },
     {
       "id": "edge-cdn-team",
       "name": "Edge & CDN team",
-      "kind": "platform",
       "contact": "Slack #edge-cdn"
-    },
-    {
-      "id": "engineering-practice",
-      "name": "Engineering practice",
-      "kind": "practice",
-      "contact": "Slack #engineering-practice",
-      "description": "Guild that agrees how we write and review code."
     },
     {
       "id": "fulfilment-team",
@@ -119,6 +106,90 @@
     {
       "id": "service-management",
       "name": "Service Management"
+    }
+  ],
+  "practices": [
+    {
+      "id": "security",
+      "name": "Cyber security",
+      "contact": "Slack #security",
+      "description": "Agrees how we keep systems and data safe."
+    },
+    {
+      "id": "engineering",
+      "name": "Engineering",
+      "contact": "Slack #engineering-practice",
+      "description": "Guild that agrees how we write and review code."
+    },
+    {
+      "id": "service-management",
+      "name": "Service management",
+      "description": "Agrees how requests, incidents and changes are handled."
+    }
+  ],
+  "platforms": [
+    {
+      "id": "google-cloud",
+      "name": "Google Cloud",
+      "contact": "Slack #cloud-platform"
+    },
+    {
+      "id": "azure",
+      "name": "Azure",
+      "contact": "Slack #azure-platform"
+    },
+    {
+      "id": "apigee",
+      "name": "Apigee",
+      "contact": "Slack #api-platform",
+      "description": "The API gateway."
+    },
+    {
+      "id": "akamai",
+      "name": "Akamai",
+      "contact": "Slack #edge-cdn",
+      "description": "Edge, CDN and web application firewall."
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "contact": "Slack #devex",
+      "description": "Source control, pull requests and packages."
+    },
+    {
+      "id": "servicenow",
+      "name": "ServiceNow",
+      "description": "Requests and approvals."
+    }
+  ],
+  "categories": [
+    {
+      "id": "cloud",
+      "name": "Cloud"
+    },
+    {
+      "id": "api",
+      "name": "API"
+    },
+    {
+      "id": "network",
+      "name": "Network"
+    },
+    {
+      "id": "source-control",
+      "name": "Source control"
+    },
+    {
+      "id": "security",
+      "name": "Security"
+    },
+    {
+      "id": "code-quality",
+      "name": "Code quality"
+    },
+    {
+      "id": "general",
+      "name": "General"
     }
   ],
   "tools": [

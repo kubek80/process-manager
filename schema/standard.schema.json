@@ -39,7 +39,19 @@
     },
     "owner": {
       "$ref": "#/$defs/slug",
-      "description": "Id of the unit (from the teams list) that issues and maintains this standard."
+      "description": "Id of the team (from the teams list) that issues and maintains this standard."
+    },
+    "category": {
+      "$ref": "#/$defs/slug",
+      "description": "Id of the category (from the categories list) this is grouped under in the libraries and in search, e.g. \"cloud\"."
+    },
+    "practice": {
+      "$ref": "#/$defs/slug",
+      "description": "Id of the practice (from the practices list) this belongs to, e.g. \"security\". The owners of that practice may change it. Leave out when it belongs to no practice."
+    },
+    "platform": {
+      "$ref": "#/$defs/slug",
+      "description": "Id of the platform (from the platforms list) this belongs to, e.g. \"google-cloud\". The owners of that platform may change it. Leave out when it belongs to no platform."
     },
     "scope": {
       "type": "string",

@@ -4,8 +4,10 @@
   "id": "request-azure-landing-zone",
   "title": "Request an Azure landing zone",
   "summary": "Get an Azure subscription set up as a landing zone: governance approval, policies, networking and access for your team.",
-  "category": "Cloud",
   "owner": "azure-platform-team",
+  "category": "cloud",
+  "platform": "azure",
+  "rigour": "mandatory",
   "estimatedDuration": "2-3 weeks",
   "tags": [
     "azure",

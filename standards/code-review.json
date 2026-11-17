@@ -4,7 +4,9 @@
   "id": "code-review",
   "title": "Code review",
   "summary": "How changes are reviewed before they are merged, so that every change has a second pair of eyes and a record of why it was made.",
-  "owner": "engineering-practice",
+  "owner": "developer-experience-team",
+  "category": "code-quality",
+  "practice": "engineering",
   "scope": "Every repository that holds code or configuration that reaches a shared environment.",
   "tags": [
     "pull-request",
