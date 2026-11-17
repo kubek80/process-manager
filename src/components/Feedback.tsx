@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, CircleCheck, Flag, History, RotateCcw, ThumbsUp, Trash2 } from "lucide-react";
 import type { Feedback, FeedbackKind, Process, Standard, TargetKind } from "../types";
 import { useFeedbackActions } from "../lib/session";
@@ -32,9 +32,13 @@ export const standardTarget = (s: Standard): FeedbackTarget => ({
 });
 
 /** Three clicks: what kind, a sentence, send. Who you are comes from your sign-in. */
-export function FeedbackForm({ target, itemId, pickItem, onDone }: {
+export function FeedbackForm({ target, itemId, pickItem, onDone, autoFocus }: {
   target: FeedbackTarget; itemId?: string; pickItem?: boolean; onDone?: () => void;
+  /** Puts the cursor in the text field when the form appears. */
+  autoFocus?: boolean;
 }) {
+  const field = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { if (autoFocus) field.current?.focus(); }, [autoFocus]);
   const actions = useFeedbackActions();
   const [kind, setKind] = useState<FeedbackKind>("broken");
   const [text, setText] = useState("");
@@ -65,7 +69,7 @@ export function FeedbackForm({ target, itemId, pickItem, onDone }: {
           {target.items.map((it) => <option key={it.id} value={it.id}>{it.label}</option>)}
         </select>
       )}
-      <textarea rows={3} value={text} maxLength={2000} onChange={(e) => setText(e.target.value)} aria-label="Your feedback"
+      <textarea ref={field} rows={3} value={text} maxLength={2000} onChange={(e) => setText(e.target.value)} aria-label="Your feedback"
         placeholder={target.kind === "process" ? "What happened? e.g. “The catalogue item is now called ‘Cloud project (GCP)’.”" : "What is wrong or unclear? e.g. “Does this also apply to one-off migration scripts?”"}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send(); }} />
       <div className="fb-send">
@@ -122,21 +126,29 @@ export function FeedbackItem({ item, target, onSelect, hideItem }: {
   );
 }
 
-export function FeedbackTab({ target, feedback, onSelect }: {
+export function FeedbackTab({ target, feedback, onSelect, focus, onFocused }: {
   target: FeedbackTarget; feedback: Feedback[]; onSelect: (id: string) => void;
+  /** Arrived to give feedback: the form is brought into view and the cursor put in it. */
+  focus?: boolean; onFocused?: () => void;
 }) {
+  const form = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!focus) return;
+    form.current?.scrollIntoView({ block: "nearest" });
+    onFocused?.();
+  }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
   // open first, most reported first, then newest
   const sorted = [...feedback].sort((a, b) =>
     Number(a.resolved) - Number(b.resolved) || b.alsoHit - a.alsoHit || b.createdAt.localeCompare(a.createdAt));
   return (
     <div className="fb-tab">
-      <section className="fb-new">
-        <h2>{target.kind === "process" ? "Something not working?" : "Something wrong or unclear?"}</h2>
-        <p className="muted">Tell the owner in a sentence. No ticket needed.</p>
-        <FeedbackForm target={target} pickItem />
+      <section className="fb-new" ref={form} id="give-feedback" aria-labelledby="give-feedback-title">
+        <h2 id="give-feedback-title">Give feedback</h2>
+        <p className="muted">{target.kind === "process" ? "Something not working, out of date or unclear? Or an idea to make it easier?" : "Something wrong or unclear? Or an idea to make it better?"} Tell the owner in a sentence. No ticket needed.</p>
+        <FeedbackForm target={target} pickItem autoFocus={focus} />
       </section>
       <section>
-        <h2>{openCount(feedback)} open <span className="muted">· {feedback.length - openCount(feedback)} fixed</span></h2>
+        <h2>{openCount(feedback)} open <span className="muted">· {feedback.length - openCount(feedback)} handled</span></h2>
         {feedback.length === 0 && <p className="muted">No feedback yet.</p>}
         <ul className="fb-list">
           {sorted.map((f) => <FeedbackItem key={f.id} item={f} target={target} onSelect={onSelect} />)}

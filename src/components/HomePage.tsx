@@ -1,12 +1,18 @@
 import { useMemo, useState } from "react";
 import { ArrowRight, LayoutGrid, ShieldCheck } from "lucide-react";
-import type { Process, Standard } from "../types";
+import type { FeedbackByTarget, Process, Standard } from "../types";
 import { useCatalog } from "../lib/catalog";
+import { sortBookmarks, useEngagement } from "../lib/engagement";
 import { useVisibleDrafts } from "../lib/session";
 import { go, href } from "../lib/store";
-import { search, type FilterKey } from "../lib/search";
+import { search, type FilterKey, type Result } from "../lib/search";
 import { SearchBox } from "./SearchPage";
+import { DocCard } from "./DocCard";
+import { openCount } from "./Feedback";
 import "../search.css";
+
+/** How many bookmarks Home shows before "Show all". */
+const FEW = 6;
 
 const WAYS: { key: Extract<FilterKey, "platform" | "practice" | "category">; title: string; hint: string }[] = [
   { key: "platform", title: "By platform", hint: "Everything about one platform" },
@@ -15,7 +21,11 @@ const WAYS: { key: Extract<FilterKey, "platform" | "practice" | "category">; tit
 ];
 
 /** The start: one search over processes and standards, and ways to browse them. */
-export function HomePage({ processes, standards }: { processes: Process[]; standards: Standard[] }) {
+export function HomePage({ processes, standards, feedback }: {
+  processes: Process[]; standards: Standard[];
+  /** Open feedback per process and standard, for the bookmarked cards. */
+  feedback?: FeedbackByTarget;
+}) {
   const { catalog } = useCatalog();
   const drafts = useVisibleDrafts(); // drafts only count for those who may edit them, as they are only shown to them
   const [text, setText] = useState("");
@@ -23,6 +33,13 @@ export function HomePage({ processes, standards }: { processes: Process[]; stand
   const count = (kind: string) => out.options.type.find((o) => o.value === kind)?.count ?? 0;
   const nProcesses = count("process");
   const nStandards = count("standard");
+  const eng = useEngagement();
+  // the bookmarks, newest first; only what this person can see (a draft only for who may edit it)
+  const marked = useMemo(() => {
+    const byKey = new Map<string, Result>(out.results.map((r) => [`${r.kind}:${r.doc.id}`, r]));
+    return sortBookmarks(eng.bookmarks).map((b) => byKey.get(`${b.kind}:${b.id}`)).filter((r): r is Result => !!r);
+  }, [eng.bookmarks, out]);
+  const [allMarked, setAllMarked] = useState(false);
 
   return (
     <div className="page home-page">
@@ -46,6 +63,23 @@ export function HomePage({ processes, standards }: { processes: Process[]; stand
           <ArrowRight size={16} className="home-entry-go" aria-hidden="true" />
         </a>
       </div>
+
+      {marked.length > 0 && (
+        <section className="home-bookmarks" aria-labelledby="home-bookmarks">
+          <h2 id="home-bookmarks">Your bookmarks</h2>
+          <ol className="cards">
+            {(allMarked ? marked : marked.slice(0, FEW)).map((r) => (
+              <DocCard key={`${r.kind}:${r.doc.id}`} kind={r.kind} doc={r.doc} rigour={r.rigour} rules={r.rules} level={3}
+                openFeedback={openCount(feedback?.[r.kind]?.[r.doc.id] ?? [])} mayEdit={false} />
+            ))}
+          </ol>
+          {marked.length > FEW && (
+            <button type="button" className="btn small home-bookmarks-more" aria-expanded={allMarked} onClick={() => setAllMarked(!allMarked)}>
+              {allMarked ? "Show fewer" : `Show all ${marked.length} bookmarks`}
+            </button>
+          )}
+        </section>
+      )}
 
       <div className="home-browse">
         {WAYS.map(({ key, title, hint }) => {

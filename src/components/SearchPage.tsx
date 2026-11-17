@@ -1,19 +1,30 @@
-import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
-import { Search, ShieldCheck, SlidersHorizontal, Workflow, X } from "lucide-react";
-import type { Process, Standard, TargetKind } from "../types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Search, X } from "lucide-react";
+import type { FeedbackByTarget, Process, Standard } from "../types";
 import { useCatalog } from "../lib/catalog";
-import { useVisibleDrafts } from "../lib/session";
-import { go, href, type SearchState } from "../lib/store";
-import {
-  FILTER_KEYS, FILTER_LABEL, filterCount, filtersOf, matchRanges, rigourText, search, toggleFilter, wordsOf,
-  type FilterKey, type Filters, type Hit, type Option, type Result,
-} from "../lib/search";
+import { useEngagement } from "../lib/engagement";
+import { useEditor } from "../lib/mode";
+import { pageOf, sizeOf, usePageSize } from "../lib/paging";
+import { useProfile, useRemembered } from "../lib/profile";
+import { canEdit, usePerms, useVisibleDrafts } from "../lib/session";
+import { go, href, type Route, type SearchState } from "../lib/store";
+import { FILTER_LABEL, filterCount, filtersOf, search, toggleFilter, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
+import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
+import { openCount } from "./Feedback";
+import { DocCard, Marked } from "./DocCard";
+import { needsReview } from "./DocList";
+import { ChosenFilters, FilterPanel, Pager, profileChosen, ResultsBar, toResults, usePaging, type Chosen, type FlagControl } from "./Lists";
 import "../search.css";
 
+export { Marked };
+
 const PLACEHOLDER = "Search processes and standards, e.g. GCP project or logging";
-/** Lists that can be long: options that give nothing are left out. Type and rigour show them greyed. */
-const HIDE_EMPTY: FilterKey[] = ["category", "practice", "platform"];
-const PAGE = 30;
+const KEYS: FilterKey[] = ["type", "category", "platform", "practice", "rigour"];
+/**
+ * The page of the results and its size, once the address carries them (`&page=2&size=48`). Until
+ * then they are kept on the page only.
+ */
+type Paged = SearchState & { pageNo?: number; size?: number };
 
 /** The one search box, on Home and on the results page. */
 export function SearchBox({ value, onChange, onSubmit, big, autoFocus }: {
@@ -34,40 +45,27 @@ export function SearchBox({ value, onChange, onSubmit, big, autoFocus }: {
   );
 }
 
-/** The text with the searched words marked; built as elements, never as HTML. */
-export function Marked({ text, words }: { text: string; words: string[] }) {
-  const ranges = matchRanges(text, words);
-  if (!ranges.length) return <>{text}</>;
-  const out: React.ReactNode[] = [];
-  let at = 0;
-  ranges.forEach(([a, b], i) => {
-    if (a > at) out.push(<Fragment key={`t${i}`}>{text.slice(at, a)}</Fragment>);
-    out.push(<mark key={`m${i}`} className="search-mark">{text.slice(a, b)}</mark>);
-    at = b;
-  });
-  if (at < text.length) out.push(<Fragment key="end">{text.slice(at)}</Fragment>);
-  return <>{out}</>;
-}
-
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-const KIND: Record<TargetKind, { word: string; Icon: typeof Workflow }> = {
-  process: { word: "Process", Icon: Workflow },
-  standard: { word: "Standard", Icon: ShieldCheck },
-};
 
-/** Where a place inside a document opens. */
-function hitHref(r: Result, h: Hit): string {
-  if (r.kind === "process") return href({ page: "process", id: r.doc.id, tab: "flow", ...(h.where === "step" && h.item ? { item: h.item } : {}) });
-  return href({ page: "standard", id: r.doc.id, tab: "doc", ...(h.where === "requirement" && h.item ? { item: h.item } : {}) });
-}
-const HIT_WORD: Record<Hit["where"], string> = { step: "Step", requirement: "Requirement", prerequisite: "Before you start", scope: "Scope" };
-
-export function SearchPage({ route, processes, standards }: { route: SearchState; processes: Process[]; standards: Standard[] }) {
+export function SearchPage({ route, processes, standards, feedback }: {
+  route: SearchState; processes: Process[]; standards: Standard[];
+  /** Open feedback per process and standard, for the cards. */
+  feedback?: FeedbackByTarget;
+}) {
   const { catalog } = useCatalog();
+  const perms = usePerms();
+  const editing = useEditor();
+  const eng = useEngagement();
   const drafts = useVisibleDrafts(); // in editor mode, the drafts the person may edit
   const filters = useMemo(() => filtersOf(route), [route]);
-  const chosen = filterCount(filters);
   const q = route.q ?? "";
+  const addr = route as Paged;
+  const [profile, setProfile] = useProfile();
+  const [bookmarked, setBookmarked] = useRemembered("pm:search:bookmarked", false);
+  const [due, setDue] = useState(false);
+  const [mySize, setMySize] = usePageSize();
+  const size = addr.size ? sizeOf(addr.size) : mySize;
+  const mayEdit = (kind: "process" | "standard", d: Process | Standard) => editing && canEdit(perms, kind, d);
 
   // what is typed is in the address at once, without a new entry in the browser's history
   const [text, setText] = useState(q);
@@ -78,73 +76,86 @@ export function SearchPage({ route, processes, standards }: { route: SearchState
     pushed.current = v.trim() ? v : "";
     go({ page: "search", ...filters, q: v }, { replace: true });
   };
+  // a new search or filter starts again on the first page (the address leaves the page out)
   const setFilters = (f: Filters) => go({ page: "search", q, ...f }, { replace: true });
+  const toFirst = () => { if (addr.pageNo) go({ page: "search", q, ...filters }, { replace: true }); };
 
+  const flags: Record<string, Flag> = {
+    bookmarked: { on: bookmarked, test: (k, d) => eng.isBookmarked(k, d.id) },
+    ...(editing ? { review: { on: due, test: (k: "process" | "standard", d: Process | Standard) => mayEdit(k, d) && needsReview(d) } } : {}),
+  };
   const words = useMemo(() => wordsOf(q), [q]);
-  const out = useMemo(() => search({ processes, standards, catalog, q, filters, drafts }), [processes, standards, catalog, q, filters, drafts]);
-  const withoutFilters = useMemo(() => (chosen && !out.results.length ? search({ processes, standards, catalog, q, drafts }).results.length : 0),
-    [chosen, out, processes, standards, catalog, q, drafts]);
+  const out = search({ processes, standards, catalog, q, filters, drafts, profile, flags });
+  const anyChosen = filterCount(filters) > 0 || bookmarked || due || !!(profile.tier || profile.environment || profile.language);
+  const withoutFilters = anyChosen && !out.results.length ? search({ processes, standards, catalog, q, drafts }).results.length : 0;
 
   const [open, setOpen] = useState(false); // the filters on a narrow screen
-  const [shown, setShown] = useState(PAGE);
-  useEffect(() => setShown(PAGE), [q, filters]);
-
-  // the chosen filters, with their names
-  const chips = FILTER_KEYS.flatMap((k) => out.options[k].filter((o) => o.chosen).map((o) => ({ key: k, option: o })));
+  const results = useRef<HTMLElement>(null);
+  const [local, setLocal] = usePaging(JSON.stringify([q, filters, profile, bookmarked, due]));
   const n = out.results.length;
+  const page = pageOf(n, addr.pageNo ?? local, size);
+  const goTo = (p: number) => {
+    setLocal(p);
+    go({ page: "search", q, ...filters, pageNo: p, ...(addr.size ? { size } : {}) } as Paged as Route);
+    toResults(results.current);
+  };
+  const changeSize = (s: number) => {
+    setMySize(s);
+    setLocal(1);
+    if (addr.pageNo || addr.size) go({ page: "search", q, ...filters } as Route, { replace: true });
+  };
+
+  const ids = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds: standards.map((s) => s.id), catalog }), [processes, standards, catalog]);
+  const usedBy = (id: string) => processes.filter((p) => Array.isArray(p.steps) && p.steps.some((s) => s && s.subProcessId === id)).length;
+
+  const flagControls: FlagControl[] = [
+    { key: "bookmarked", label: "Only my bookmarks", count: out.flags.bookmarked ?? 0, on: bookmarked, onChange: (v) => { setBookmarked(v); toFirst(); } },
+  ];
+  if (editing && ((out.flags.review ?? 0) > 0 || due)) flagControls.push({ key: "review", label: "Only what needs a review", count: out.flags.review ?? 0, on: due, onChange: (v) => { setDue(v); toFirst(); } });
+  const changeProfile = (p: typeof profile) => { setProfile(p); toFirst(); };
+
+  const chosen: Chosen[] = [
+    ...(bookmarked ? [{ key: "bookmarked", name: "Bookmarks", value: "only mine", remove: () => { setBookmarked(false); toFirst(); } }] : []),
+    ...(due ? [{ key: "review", name: "Review", value: "due or overdue", remove: () => { setDue(false); toFirst(); } }] : []),
+    ...KEYS.flatMap((k) => out.options[k].filter((o) => o.chosen).map((o) => ({
+      key: `${k}:${o.value}`, name: FILTER_LABEL[k], value: o.label, remove: () => setFilters(toggleFilter(filters, k, o.value)),
+    }))),
+    ...profileChosen(profile, changeProfile, catalog),
+  ];
+  const clear = () => { setBookmarked(false); setDue(false); setProfile({}); setFilters({}); };
+  const summary = <>{q.trim() ? <> for “{q.trim()}”</> : null}{chosen.length ? <> with {plural(chosen.length, "filter")}</> : null}</>;
 
   return (
     <div className="page search-page">
-      <h1 className="search-sr">Search processes and standards</h1>
-      <SearchBox value={text} onChange={type} onSubmit={() => type(text)} autoFocus={!q && !chosen} />
+      <h1 className="sr-only">Search processes and standards</h1>
+      <SearchBox value={text} onChange={type} onSubmit={() => type(text)} autoFocus={!q && !chosen.length} />
 
-      <div className="search-bar">
-        <p className="search-count" role="status" aria-live="polite" aria-atomic="true">
-          <b>{plural(n, "result")}</b>{q.trim() ? <> for “{q.trim()}”</> : null}{chosen ? <> with {plural(chosen, "filter")}</> : null}
-        </p>
-        <button type="button" className="btn small search-filter-toggle" aria-expanded={open} aria-controls="search-filters" onClick={() => setOpen(!open)}>
-          <SlidersHorizontal size={14} />Filters{chosen ? ` (${chosen})` : ""}
-        </button>
-      </div>
-      {chips.length > 0 && (
-        <div className="search-chosen" role="group" aria-label="Chosen filters">
-          {chips.map(({ key, option }) => (
-            <button key={`${key}:${option.value}`} type="button" className="chip on" aria-label={`Remove filter ${FILTER_LABEL[key]}: ${option.label}`}
-              onClick={() => setFilters(toggleFilter(filters, key, option.value))}>
-              <span className="search-chip-key">{FILTER_LABEL[key]}:</span>{option.label}<X size={13} aria-hidden="true" />
-            </button>
-          ))}
-          <button type="button" className="btn ghost small search-clear" onClick={() => setFilters({})}>Clear all filters</button>
+      <div className="list-layout">
+        <div className="list-head">
+          <ResultsBar page={page} noun={{ one: "result", many: "results" }} panelId="search-filters" open={open} onOpen={setOpen}
+            chosen={chosen.length} size={size} onSize={changeSize} extra={summary} />
+          <ChosenFilters chosen={chosen} onClear={clear} />
         </div>
-      )}
-
-      <div className="search-layout">
-        <aside id="search-filters" className={`search-filters ${open ? "open" : ""}`} aria-label="Filters">
-          {FILTER_KEYS.map((k) => (
-            <FilterGroup key={k} name={k} options={out.options[k]} onToggle={(v) => setFilters(toggleFilter(filters, k, v))} />
-          ))}
-        </aside>
-
-        <section className="search-results" aria-label="Results">
+        <FilterPanel id="search-filters" open={open} keys={KEYS} options={out.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}
+          flags={flagControls} profile={profile} onProfile={changeProfile} />
+        <section className="list-results" aria-label="Results" ref={results} tabIndex={-1}>
           {n === 0 ? (
-            <div className="search-empty">
+            <div className="list-empty search-empty">
               <h2>Nothing found</h2>
               {processes.length + standards.length === 0 ? <p className="muted">There are no processes or standards yet.</p> : (
                 <>
                   <p className="muted">
-                    {chosen ? (q.trim() ? `Nothing matches “${q.trim()}” with these filters.` : "Nothing matches these filters.") : `Nothing matches “${q.trim()}”.`}
-                    {chosen > 0 && withoutFilters > 0 && ` Without the filters there ${withoutFilters === 1 ? "is 1 result" : `are ${withoutFilters} results`}.`}
-                    {!chosen && words.length > 1 && " Every word must be found, so try fewer words."}
-                    {!chosen && words.length <= 1 && " Check the spelling, or try another word."}
+                    {chosen.length ? (q.trim() ? `Nothing matches “${q.trim()}” with these filters.` : "Nothing matches these filters.") : `Nothing matches “${q.trim()}”.`}
+                    {chosen.length > 0 && withoutFilters > 0 && ` Without the filters there ${withoutFilters === 1 ? "is 1 result" : `are ${withoutFilters} results`}.`}
+                    {!chosen.length && words.length > 1 && " Every word must be found, so try fewer words."}
+                    {!chosen.length && words.length <= 1 && " Check the spelling, or try another word."}
                   </p>
-                  {chosen > 0 && (
+                  {chosen.length > 0 && (
                     <div className="btn-row">
-                      {chips.map(({ key, option }) => (
-                        <button key={`${key}:${option.value}`} type="button" className="btn small" onClick={() => setFilters(toggleFilter(filters, key, option.value))}>
-                          <X size={13} />Without {FILTER_LABEL[key]}: {option.label}
-                        </button>
+                      {chosen.map((c) => (
+                        <button key={c.key} type="button" className="btn small" onClick={c.remove}><X size={13} />Without {c.name}: {c.value}</button>
                       ))}
-                      <button type="button" className="btn small primary" onClick={() => setFilters({})}>Clear all filters</button>
+                      <button type="button" className="btn small primary" onClick={clear}>Clear all filters</button>
                     </div>
                   )}
                   <p className="muted small search-empty-browse">
@@ -154,85 +165,21 @@ export function SearchPage({ route, processes, standards }: { route: SearchState
               )}
             </div>
           ) : (
-            <>
-              <ol className="search-list">
-                {out.results.slice(0, shown).map((r) => <ResultRow key={`${r.kind}:${r.doc.id}`} r={r} words={words} />)}
-              </ol>
-              {n > shown && (
-                <button type="button" className="btn search-more" onClick={() => setShown(shown + PAGE)}>
-                  Show more ({n - shown} left)
-                </button>
-              )}
-            </>
+            <ol className="cards">
+              {out.results.slice(page.start, page.end).map((r) => {
+                const mine = mayEdit(r.kind, r.doc);
+                const broken = mine && hasErrors(r.kind === "process" ? validateProcess(r.doc, ids) : validateStandard(r.doc, ids));
+                return (
+                  <DocCard key={`${r.kind}:${r.doc.id}`} kind={r.kind} doc={r.doc} rigour={r.rigour} rules={r.rules} hits={r.hits} words={words}
+                    openFeedback={openCount(feedback?.[r.kind]?.[r.doc.id] ?? [])} mayEdit={mine} broken={broken}
+                    usedBy={r.kind === "process" ? usedBy(r.doc.id) : undefined} />
+                );
+              })}
+            </ol>
           )}
+          <Pager page={page} onPage={goTo} label="Pages of results" />
         </section>
       </div>
     </div>
-  );
-}
-
-function FilterGroup({ name, options, onToggle }: { name: FilterKey; options: Option[]; onToggle: (value: string) => void }) {
-  const id = useId();
-  const shown = HIDE_EMPTY.includes(name) ? options.filter((o) => o.count > 0 || o.chosen) : options;
-  if (!shown.length) return null;
-  return (
-    <fieldset className="search-facet" data-filter={name}>
-      <legend id={id}>{FILTER_LABEL[name]}</legend>
-      {shown.map((o) => {
-        const off = o.count === 0 && !o.chosen;
-        return (
-          <label key={o.value} className={`search-option ${o.chosen ? "on" : ""} ${off ? "off" : ""}`}>
-            <input type="checkbox" checked={o.chosen} disabled={off} onChange={() => onToggle(o.value)}
-              aria-label={`${o.label}, ${o.count} ${o.count === 1 ? "result" : "results"}`} />
-            <span className="search-option-name">{o.label}</span>
-            <span className="search-option-count"><span className="search-sr">, </span>{o.count}<span className="search-sr">{o.count === 1 ? " result" : " results"}</span></span>
-          </label>
-        );
-      })}
-    </fieldset>
-  );
-}
-
-function ResultRow({ r, words }: { r: Result; words: string[] }) {
-  const { catalog } = useCatalog();
-  const { word, Icon } = KIND[r.kind];
-  const d = r.doc;
-  const name = (l: { id: string; name: string }[] | undefined, id?: string) => (id ? (l ?? []).find((x) => x.id === id)?.name ?? id : "");
-  const labels: [string, string][] = [
-    ["Category", name(catalog.categories, d.category)],
-    ["Platform", name(catalog.platforms, d.platform)],
-    ["Practice", name(catalog.practices, d.practice)],
-  ];
-  const rigour = rigourText(r);
-  const top = (["mandatory", "recommended", "optional"] as const).find((x) => r.rigour[x]);
-  const link = href(r.kind === "process" ? { page: "process", id: d.id, tab: "flow" } : { page: "standard", id: d.id, tab: "doc" });
-  return (
-    <li className={`search-result ${r.kind}`} data-kind={r.kind} data-id={d.id}>
-      <span className="search-kind"><Icon size={14} aria-hidden="true" />{word}</span>
-      <h2 className="search-result-title"><a href={link}><Marked text={d.title} words={words} /></a></h2>
-      {d.summary && <p className="search-summary"><Marked text={d.summary} words={words} /></p>}
-      <div className="card-tags search-tags">
-        {d.status === "draft" && <span className="tier-tag status-draft">Draft</span>}
-        {d.status === "deprecated" && <span className="tier-tag status-deprecated">Retired</span>}
-        {rigour && <span className={`tier-tag search-rigour rigour-${top}`} title="Rigour">{rigour}</span>}
-        {labels.filter(([, v]) => v).map(([k, v]) => (
-          <span key={k} className="tier-tag"><span className="search-tag-key">{k}</span>{v}</span>
-        ))}
-        {d.owner && <span className="tier-tag"><span className="search-tag-key">Owner</span>{name(catalog.teams, d.owner)}</span>}
-      </div>
-      {r.hits.length > 0 && (
-        <ul className="search-hits" aria-label={`Found in ${d.title}`}>
-          {r.hits.map((h, i) => (
-            <li key={`${h.where}:${h.item ?? i}`}>
-              <a href={hitHref(r, h)}>
-                <span className="search-hit-where">{HIT_WORD[h.where]}{h.where === "requirement" && h.item ? ` ${h.item}` : ""}</span>
-                {h.where !== "scope" && <span className="search-hit-label"><Marked text={h.label} words={words} /></span>}
-              </a>
-              {h.snippet && <span className="search-hit-snippet"><Marked text={h.snippet} words={words} /></span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </li>
   );
 }

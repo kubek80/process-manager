@@ -16,8 +16,10 @@ import (
 	"github.com/kubek80/process-manager/server/internal/config"
 	"github.com/kubek80/process-manager/server/internal/db/dbtest"
 	"github.com/kubek80/process-manager/server/internal/docs"
+	"github.com/kubek80/process-manager/server/internal/engagement"
 	"github.com/kubek80/process-manager/server/internal/feedback"
 	"github.com/kubek80/process-manager/server/internal/rbac"
+	"github.com/kubek80/process-manager/server/internal/requests"
 	"github.com/kubek80/process-manager/server/internal/schema"
 	"github.com/kubek80/process-manager/server/internal/skills"
 )
@@ -32,7 +34,8 @@ const repo = "../.." // the server folder; the sample content is one level furth
 func newStores(t *testing.T) stores {
 	pool := dbtest.NewPool(t)
 	return stores{docs: &docs.Store{Pool: pool}, roles: &rbac.Store{Pool: pool}, skills: &skills.Store{Pool: pool},
-		feedback: &feedback.Store{Pool: pool}, audit: &audit.Log{Pool: pool}}
+		feedback: &feedback.Store{Pool: pool}, audit: &audit.Log{Pool: pool},
+		engagement: &engagement.Store{Pool: pool}, requests: &requests.Store{Pool: pool}}
 }
 
 func TestPrepareFillsAnEmptyDatabaseOnce(t *testing.T) {

@@ -24,10 +24,12 @@ import (
 	"github.com/kubek80/process-manager/server/internal/config"
 	"github.com/kubek80/process-manager/server/internal/db"
 	"github.com/kubek80/process-manager/server/internal/docs"
+	"github.com/kubek80/process-manager/server/internal/engagement"
 	"github.com/kubek80/process-manager/server/internal/feedback"
 	"github.com/kubek80/process-manager/server/internal/httpapi"
 	"github.com/kubek80/process-manager/server/internal/notify"
 	"github.com/kubek80/process-manager/server/internal/rbac"
+	"github.com/kubek80/process-manager/server/internal/requests"
 	"github.com/kubek80/process-manager/server/internal/schema"
 	"github.com/kubek80/process-manager/server/internal/skills"
 	"github.com/kubek80/process-manager/server/internal/upgrade"
@@ -37,7 +39,7 @@ import (
 var stdout io.Writer = os.Stdout
 
 type options struct {
-	seed      bool   // add sample feedback when there is none
+	seed      bool   // add sample feedback (and in development, sample engagement) when there is none
 	reset     bool   // delete all feedback, then exit
 	importDir string // load files into the database, then exit
 	exportDir string // write the database to files, then exit
@@ -46,7 +48,7 @@ type options struct {
 
 func main() {
 	var o options
-	flag.BoolVar(&o.seed, "seed", false, "add sample feedback when the database has none (local development)")
+	flag.BoolVar(&o.seed, "seed", false, "add sample feedback when the database has none, and with PM_AUTH=dev sample views, upvotes, bookmarks, downloads and requests when there are none (local development)")
 	flag.BoolVar(&o.reset, "reset", false, "delete all feedback, then exit (combine with -seed to refill; local development only)")
 	flag.StringVar(&o.importDir, "import", "", "load processes/, standards/ and catalog/ from this folder into the database, then exit")
 	flag.BoolVar(&o.migrate, "migrate", false, "upgrade the tables, convert content stored by an earlier version and regenerate the skills, print what was done, then exit")
@@ -96,7 +98,10 @@ type stores struct {
 	skills   *skills.Store
 	feedback *feedback.Store
 	audit    *audit.Log
-	validate func(kind string, body []byte) error // the format check for imported files
+	// views, bookmarks, upvotes, downloads; requests
+	engagement *engagement.Store
+	requests   *requests.Store
+	validate   func(kind string, body []byte) error // the format check for imported files
 }
 
 func run(log *slog.Logger, o options) error {
@@ -115,6 +120,7 @@ func run(log *slog.Logger, o options) error {
 	st := stores{
 		docs: &docs.Store{Pool: pool}, roles: &rbac.Store{Pool: pool, Bootstrap: cfg.Admins},
 		skills: &skills.Store{Pool: pool}, feedback: &feedback.Store{Pool: pool}, audit: &audit.Log{Pool: pool},
+		engagement: &engagement.Store{Pool: pool}, requests: &requests.Store{Pool: pool},
 	}
 	if o.migrate {
 		return migrateCommand(ctx, pool, st, log, stdout)
@@ -184,6 +190,11 @@ func run(log *slog.Logger, o options) error {
 		if err := seedFeedback(ctx, st, log); err != nil {
 			return err
 		}
+		if cfg.Auth == config.AuthDev {
+			if err := seedEngagement(ctx, st, log, time.Now()); err != nil {
+				return err
+			}
+		}
 	}
 	if o.reset {
 		return nil
@@ -195,7 +206,7 @@ func run(log *slog.Logger, o options) error {
 	sessions := auth.NewSessions(cfg.SessionSecret, cfg.Secure())
 	var background sync.WaitGroup
 	deps := httpapi.Deps{Background: &background, Cfg: cfg, Sessions: sessions, SignOuts: &auth.SignOuts{Pool: pool}, Ready: pool.Ping, Docs: st.docs, Schemas: schemas, Roles: st.roles, Audit: st.audit,
-		Skills: st.skills, Feedback: st.feedback, Log: log, Notifier: notify.Log{Logger: log}}
+		Skills: st.skills, Feedback: st.feedback, Engagement: st.engagement, Requests: st.requests, Log: log, Notifier: notify.Log{Logger: log}}
 	var hook *notify.Webhook
 	if cfg.Notify == "webhook" {
 		hook = notify.NewWebhook(cfg.WebhookURL, log)
@@ -429,9 +440,19 @@ func exportFiles(ctx context.Context, st stores, dir string, log *slog.Logger) e
 	if err := st.skills.SyncAll(ctx, st.docs); err != nil {
 		return err
 	}
-	k, err := st.skills.ExportDir(ctx, dir)
+	// every skill written counts as one download of the process or standard it comes from
+	var counted error
+	k, err := st.skills.ExportDir(ctx, dir, func(sk skills.Skill) {
+		if st.engagement == nil || counted != nil {
+			return
+		}
+		counted = st.engagement.CountDownload(ctx, sk.ID, sk.SourceKind, sk.SourceID, engagement.ViaExport, time.Now())
+	})
 	if err != nil {
 		return err
+	}
+	if counted != nil {
+		log.Warn("the export was not counted as downloads", "error", counted)
 	}
 	log.Info("exported", "to", dir, "documents", n, "skills", k)
 	return nil

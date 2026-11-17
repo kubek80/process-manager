@@ -315,8 +315,9 @@ func (s *Store) SetExtra(ctx context.Context, id, extra string) error {
 
 // ExportDir writes the latest version of every active skill into dir, laid out the way a
 // repository that uses Claude Code expects. Files of skills that were withdrawn are removed,
-// but only when they carry the footer of a generated file.
-func (s *Store) ExportDir(ctx context.Context, dir string) (int, error) {
+// but only when they carry the footer of a generated file. Each written skill is passed to
+// written, if given (an export counts as a download of every skill it writes).
+func (s *Store) ExportDir(ctx context.Context, dir string, written ...func(Skill)) (int, error) {
 	list, err := s.List(ctx)
 	if err != nil {
 		return 0, err
@@ -344,6 +345,9 @@ func (s *Store) ExportDir(ctx context.Context, dir string) (int, error) {
 		}
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			return n, err
+		}
+		for _, fn := range written {
+			fn(sk)
 		}
 		n++
 	}

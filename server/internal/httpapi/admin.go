@@ -1,11 +1,14 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kubek80/process-manager/server/internal/docs"
+	"github.com/kubek80/process-manager/server/internal/engagement"
 	"github.com/kubek80/process-manager/server/internal/rbac"
 	"github.com/kubek80/process-manager/server/internal/skills"
 )
@@ -233,6 +236,12 @@ func (a *api) downloadSkill(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte(content))
+	// Counted for the process or standard it comes from (a skill and a review agent alike). Only
+	// this, the latest text as a file, is a download; reading an older version in the app is not.
+	// A failure to count never fails the download.
+	if err := a.Engagement.CountDownload(context.WithoutCancel(r.Context()), sk.ID, sk.SourceKind, sk.SourceID, engagement.ViaDownload, time.Now()); err != nil {
+		a.Log.Warn("download not counted", "skill", sk.ID, "error", err)
+	}
 }
 
 // canEditSkill: whoever may edit the process or standard the skill is generated from.

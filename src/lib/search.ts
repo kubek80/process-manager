@@ -1,16 +1,23 @@
 import type { Catalog, Level, Process, Rigour, Standard, TargetKind } from "../types";
 import type { SearchState } from "./store";
+import { appliesTo, type Profile } from "./edit";
 
 // One search over processes and standards: every word of the query must be found somewhere in a
 // document; the filters narrow the results down (several values of one filter: any of them;
 // different filters: all of them). For every filter, each option says how many results it would
 // give, so that the page can show the counts and leave out what gives nothing.
 
-/** The filters of the results page, as the address carries them. */
-export type Filters = Omit<SearchState, "q">;
+/**
+ * The filters of the lists and the results page. The results page carries them in the address;
+ * `owner` (the team that maintains it) is offered on the lists only.
+ */
+export type Filters = Omit<SearchState, "q"> & { owner?: string[] };
 export type FilterKey = keyof Filters;
-export const FILTER_KEYS: FilterKey[] = ["type", "rigour", "category", "practice", "platform"];
-export const FILTER_LABEL: Record<FilterKey, string> = { type: "Type", rigour: "Rigour", category: "Category", practice: "Practice", platform: "Platform" };
+export const FILTER_KEYS: FilterKey[] = ["type", "category", "platform", "practice", "rigour", "owner"];
+export const FILTER_LABEL: Record<FilterKey, string> = { type: "Type", rigour: "Rigour", category: "Category", practice: "Practice", platform: "Platform", owner: "Owner" };
+/** The category value of what has no category: not a valid id, so it cannot clash with one. */
+export const NO_CATEGORY = "-";
+export const NO_CATEGORY_LABEL = "Other";
 export const KINDS: TargetKind[] = ["process", "standard"];
 export const KIND_LABEL: Record<TargetKind, string> = { process: "Processes", standard: "Standards" };
 export const RIGOURS: Rigour[] = ["mandatory", "recommended", "optional"];
@@ -36,7 +43,15 @@ export interface Result {
   rigour: Partial<Record<Rigour, number>>;
   /** Up to three places inside where the query was found. Empty without a query. */
   hits: Hit[];
+  /** For a standard: how many of its requirements apply (to the application chosen in `profile`). */
+  rules: number;
 }
+
+/**
+ * A yes/no filter worked out by the page, e.g. "only my bookmarks". When `on`, only what it says
+ * yes to is shown; the output says for each how many results it would give.
+ */
+export interface Flag { on: boolean; test: (kind: TargetKind, doc: Process | Standard) => boolean }
 
 export interface Option { value: string; label: string; count: number; chosen: boolean }
 
@@ -51,12 +66,17 @@ export interface SearchInput {
    * mode, the drafts the person may edit, as in the libraries.
    */
   drafts: boolean | ((kind: "process" | "standard", doc: Process | Standard) => boolean);
+  /** "My application": only what applies to it, and of a standard only the requirements that do. */
+  profile?: Profile;
+  flags?: Record<string, Flag>;
 }
 
 export interface SearchOutput {
   results: Result[];
   /** Every option of every filter, with the number of results it would give together with the other filters. */
   options: Record<FilterKey, Option[]>;
+  /** For every flag, how many results there are with it on (and everything else as chosen). */
+  flags: Record<string, number>;
 }
 
 /** Lower case, without accents: "Résumé" and "resume" are the same word. */
@@ -76,6 +96,8 @@ interface Doc {
   items: Item[];
   values: Record<FilterKey, string[]>;
   rigour: Partial<Record<Rigour, number>>;
+  rules: number;
+  flags: Record<string, boolean>;
 }
 
 const str = (x: unknown) => (typeof x === "string" ? x : "");
@@ -87,7 +109,7 @@ function item(hit: Hit, texts: unknown[]): Item {
   return { hit, texts: t, norms: t.map(fold) };
 }
 
-function index(kind: TargetKind, d: Process | Standard, c: SearchInput["catalog"]): Doc {
+function index(kind: TargetKind, d: Process | Standard, c: SearchInput["catalog"], profile: Profile, flags: Record<string, Flag>): Doc {
   const fields: Field[] = [
     { norm: fold(str(d.title)), weight: WEIGHT.title },
     { norm: fold(str(d.id)), weight: WEIGHT.id },
@@ -97,6 +119,7 @@ function index(kind: TargetKind, d: Process | Standard, c: SearchInput["catalog"
   ];
   const items: Item[] = [];
   const rigour: Partial<Record<Rigour, number>> = {};
+  let rules = 0;
   if (kind === "process") {
     const p = d as Process;
     for (const s of list(p.steps)) items.push(item({ where: "step", item: str(s.id), label: str(s.title) || str(s.id) }, [s.title, s.description, nameIn(c.tools, s.tool)]));
@@ -106,6 +129,8 @@ function index(kind: TargetKind, d: Process | Standard, c: SearchInput["catalog"
     const s = d as Standard;
     for (const r of list(s.requirements)) {
       items.push(item({ where: "requirement", item: str(r.id), label: str(r.title) || str(r.id) }, [r.title, r.id, r.statement]));
+      if (!appliesTo(r, profile)) continue;
+      rules++;
       const rg = LEVEL_RIGOUR[r.level];
       if (rg) rigour[rg] = (rigour[rg] ?? 0) + 1;
     }
@@ -113,8 +138,12 @@ function index(kind: TargetKind, d: Process | Standard, c: SearchInput["catalog"
   }
   const one = (x?: string) => (x ? [x] : []);
   return {
-    kind, doc: d, fields, items, rigour,
-    values: { type: [kind], rigour: RIGOURS.filter((r) => rigour[r]), category: one(d.category), practice: one(d.practice), platform: one(d.platform) },
+    kind, doc: d, fields, items, rigour, rules,
+    values: {
+      type: [kind], rigour: RIGOURS.filter((r) => rigour[r]), category: [str(d.category) || NO_CATEGORY],
+      practice: one(str(d.practice)), platform: one(str(d.platform)), owner: one(str(d.owner)),
+    },
+    flags: Object.fromEntries(Object.entries(flags).map(([k, f]) => [k, f.test(kind, d)])),
   };
 }
 
@@ -154,35 +183,37 @@ function hitsOf(d: Doc, words: string[]): Hit[] {
   return found.sort((a, b) => b.n - a.n || a.at - b.at).slice(0, MAX_HITS).map((f) => f.hit);
 }
 
-const passes = (d: Doc, filters: Filters, skip?: FilterKey) =>
+const passes = (d: Doc, filters: Filters, flags: Record<string, Flag>, skip?: string) =>
   FILTER_KEYS.every((k) => {
     const chosen = filters[k];
     return k === skip || !chosen?.length || d.values[k].some((v) => (chosen as string[]).includes(v));
-  });
+  }) && Object.entries(flags).every(([k, f]) => k === skip || !f.on || d.flags[k]);
 
 const byTitle = (a: Result, b: Result) => str(a.doc.title).localeCompare(str(b.doc.title)) || str(a.doc.id).localeCompare(str(b.doc.id));
 
 export function search(input: SearchInput): SearchOutput {
   const { catalog: c, drafts } = input;
   const filters = input.filters ?? {};
+  const profile = input.profile ?? {};
+  const flags = input.flags ?? {};
   const words = wordsOf(input.q);
   const visible = (kind: "process" | "standard") => (d: Process | Standard) =>
-    d.status !== "draft" || (typeof drafts === "function" ? drafts(kind, d) : drafts);
+    (d.status !== "draft" || (typeof drafts === "function" ? drafts(kind, d) : drafts)) && appliesTo(d, profile);
   const docs = [
-    ...input.processes.filter(visible("process")).map((p) => index("process", p, c)),
-    ...input.standards.filter(visible("standard")).map((s) => index("standard", s, c)),
+    ...input.processes.filter(visible("process")).map((p) => index("process", p, c, profile, flags)),
+    ...input.standards.filter(visible("standard")).map((s) => index("standard", s, c, profile, flags)),
   ];
   // what the query finds, before the filters
   const found = docs.map((d) => ({ d, score: words.length ? scoreOf(d, words) : 1 })).filter((x) => x.score > 0);
 
   const results = found
-    .filter(({ d }) => passes(d, filters))
-    .map(({ d, score }): Result => ({ kind: d.kind, doc: d.doc, score, rigour: d.rigour, hits: hitsOf(d, words) }))
+    .filter(({ d }) => passes(d, filters, flags))
+    .map(({ d, score }): Result => ({ kind: d.kind, doc: d.doc, score, rigour: d.rigour, rules: d.rules, hits: hitsOf(d, words) }))
     .sort((a, b) => b.score - a.score || byTitle(a, b));
 
   const counts = (k: FilterKey) => {
     const n = new Map<string, number>();
-    for (const { d } of found) if (passes(d, filters, k)) for (const v of d.values[k]) n.set(v, (n.get(v) ?? 0) + 1);
+    for (const { d } of found) if (passes(d, filters, flags, k)) for (const v of d.values[k]) n.set(v, (n.get(v) ?? 0) + 1);
     return n;
   };
   const optionsFor = (k: FilterKey, known: { value: string; label: string }[]): Option[] => {
@@ -191,7 +222,9 @@ export function search(input: SearchInput): SearchOutput {
     const all = [...known];
     // a value that is used, or asked for, but not in the list still shows (under its id), so that it can be removed
     const extra = new Set<string>([...docs.flatMap((d) => d.values[k]), ...chosen].filter((v) => !all.some((o) => o.value === v)));
-    for (const v of [...extra].sort()) all.push({ value: v, label: v });
+    for (const v of [...extra].sort()) if (v !== NO_CATEGORY) all.push({ value: v, label: v });
+    // what has no category comes last
+    if (extra.has(NO_CATEGORY)) all.push({ value: NO_CATEGORY, label: NO_CATEGORY_LABEL });
     return all.map((o) => ({ ...o, count: n.get(o.value) ?? 0, chosen: chosen.includes(o.value) }));
   };
   const named = (l?: { id: string; name: string }[]) =>
@@ -205,7 +238,9 @@ export function search(input: SearchInput): SearchOutput {
       category: optionsFor("category", named(c.categories)),
       practice: optionsFor("practice", named(c.practices)),
       platform: optionsFor("platform", named(c.platforms)),
+      owner: optionsFor("owner", named(c.teams)),
     },
+    flags: Object.fromEntries(Object.keys(flags).map((k) => [k, found.filter(({ d }) => d.flags[k] && passes(d, filters, flags, k)).length])),
   };
 }
 
@@ -231,10 +266,11 @@ export function filtersOf(r: Filters): Filters {
 }
 
 /** "3 mandatory, 2 recommended" for a standard; "Mandatory" for a process. */
-export function rigourText(r: Result): string {
-  if (r.kind === "process") return RIGOURS.filter((x) => r.rigour[x]).map((x) => RIGOUR_LABEL[x]).join(", ");
-  return RIGOURS.filter((x) => r.rigour[x]).map((x) => `${r.rigour[x]} ${RIGOUR_LABEL[x].toLowerCase()}`).join(", ");
+export function rigourLine(kind: TargetKind, rigour: Partial<Record<Rigour, number>>): string {
+  if (kind === "process") return RIGOURS.filter((x) => rigour[x]).map((x) => RIGOUR_LABEL[x]).join(", ");
+  return RIGOURS.filter((x) => rigour[x]).map((x) => `${rigour[x]} ${RIGOUR_LABEL[x].toLowerCase()}`).join(", ");
 }
+export const rigourText = (r: Result) => rigourLine(r.kind, r.rigour);
 
 // ---------- showing the matches
 

@@ -22,9 +22,11 @@ import (
 	"github.com/kubek80/process-manager/server/internal/config"
 	"github.com/kubek80/process-manager/server/internal/db/dbtest"
 	"github.com/kubek80/process-manager/server/internal/docs"
+	"github.com/kubek80/process-manager/server/internal/engagement"
 	"github.com/kubek80/process-manager/server/internal/feedback"
 	"github.com/kubek80/process-manager/server/internal/notify"
 	"github.com/kubek80/process-manager/server/internal/rbac"
+	"github.com/kubek80/process-manager/server/internal/requests"
 	"github.com/kubek80/process-manager/server/internal/schema"
 	"github.com/kubek80/process-manager/server/internal/skills"
 )
@@ -90,6 +92,7 @@ func setup(t *testing.T, mutate func(*Deps)) *env {
 		Sessions: auth.NewSessions([]byte("test-secret"), false), SignOuts: &auth.SignOuts{Pool: pool}, Ready: pool.Ping,
 		Docs: &docs.Store{Pool: pool}, Schemas: schemas, Roles: &rbac.Store{Pool: pool, Bootstrap: []string{dana}},
 		Audit: &audit.Log{Pool: pool}, Skills: &skills.Store{Pool: pool}, Feedback: &feedback.Store{Pool: pool},
+		Engagement: &engagement.Store{Pool: pool}, Requests: &requests.Store{Pool: pool},
 		Notifier: e.notes, Log: slog.New(slog.NewTextHandler(e.logged, nil)),
 	}
 	_, problems, err := e.deps.Docs.ImportDir(bg, repoRoot, "import", nil)
@@ -273,6 +276,10 @@ func TestEverythingNeedsASession(t *testing.T) {
 		{"POST", "/api/feedback/x/also-hit"}, {"DELETE", "/api/feedback/x/also-hit"},
 		{"GET", "/api/skills"}, {"GET", "/api/skills/x"}, {"GET", "/api/skills/x/versions/1"}, {"GET", "/api/skills/x/download"}, {"PUT", "/api/skills/x/extra"},
 		{"GET", "/api/admin/access"}, {"POST", "/api/admin/access"}, {"DELETE", "/api/admin/access"}, {"GET", "/api/admin/audit"}, {"GET", "/api/admin/system"},
+		{"GET", "/api/engagement"}, {"POST", "/api/views/process/x"}, {"PUT", "/api/bookmarks/process/x"}, {"DELETE", "/api/bookmarks/process/x"},
+		{"PUT", "/api/upvotes/process/x"}, {"DELETE", "/api/upvotes/process/x"}, {"GET", "/api/requests"}, {"POST", "/api/requests"},
+		{"PUT", "/api/requests/1/vote"}, {"DELETE", "/api/requests/1/vote"}, {"PUT", "/api/requests/1/state"}, {"DELETE", "/api/requests/1"},
+		{"GET", "/api/admin/statistics"}, {"GET", "/api/admin/statistics.csv"},
 	} {
 		if status, body := c.do(req[0], req[1], map[string]string{}); status != 401 {
 			t.Errorf("%s %s: %d %v", req[0], req[1], status, body)

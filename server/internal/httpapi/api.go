@@ -21,9 +21,11 @@ import (
 	"github.com/kubek80/process-manager/server/internal/auth"
 	"github.com/kubek80/process-manager/server/internal/config"
 	"github.com/kubek80/process-manager/server/internal/docs"
+	"github.com/kubek80/process-manager/server/internal/engagement"
 	"github.com/kubek80/process-manager/server/internal/feedback"
 	"github.com/kubek80/process-manager/server/internal/notify"
 	"github.com/kubek80/process-manager/server/internal/rbac"
+	"github.com/kubek80/process-manager/server/internal/requests"
 	"github.com/kubek80/process-manager/server/internal/schema"
 	"github.com/kubek80/process-manager/server/internal/skills"
 )
@@ -62,6 +64,8 @@ type Deps struct {
 	Audit      *audit.Log
 	Skills     *skills.Store
 	Feedback   *feedback.Store
+	Engagement *engagement.Store
+	Requests   *requests.Store
 	Notifier   notify.Notifier
 	Log        *slog.Logger
 }
@@ -136,6 +140,22 @@ func New(d Deps) http.Handler {
 	mux.Handle("POST /api/feedback/{id}/also-hit", user(a.alsoHit(true)))
 	mux.Handle("DELETE /api/feedback/{id}/also-hit", user(a.alsoHit(false)))
 
+	// views, bookmarks and upvotes
+	mux.Handle("GET /api/engagement", user(a.getEngagement))
+	mux.Handle("POST /api/views/{kind}/{id}", user(a.recordView))
+	mux.Handle("PUT /api/bookmarks/{kind}/{id}", user(a.bookmark(true)))
+	mux.Handle("DELETE /api/bookmarks/{kind}/{id}", user(a.bookmark(false)))
+	mux.Handle("PUT /api/upvotes/{kind}/{id}", user(a.upvote(true)))
+	mux.Handle("DELETE /api/upvotes/{kind}/{id}", user(a.upvote(false)))
+
+	// requests for a process or standard that does not exist yet
+	mux.Handle("GET /api/requests", user(a.listRequests))
+	mux.Handle("POST /api/requests", user(a.createRequest))
+	mux.Handle("PUT /api/requests/{id}/vote", user(a.voteRequest(true)))
+	mux.Handle("DELETE /api/requests/{id}/vote", user(a.voteRequest(false)))
+	mux.Handle("PUT /api/requests/{id}/state", user(a.setRequestState))
+	mux.Handle("DELETE /api/requests/{id}", user(a.deleteRequest))
+
 	// skills and review agents
 	mux.Handle("GET /api/skills", user(a.listSkills))
 	mux.Handle("GET /api/skills/{id}", user(a.getSkill))
@@ -152,6 +172,8 @@ func New(d Deps) http.Handler {
 	mux.Handle("DELETE /api/admin/access", admin(a.revokeAccess))
 	mux.Handle("GET /api/admin/audit", admin(a.listAudit))
 	mux.Handle("GET /api/admin/system", admin(a.system))
+	mux.Handle("GET /api/admin/statistics", admin(a.statistics))
+	mux.Handle("GET /api/admin/statistics.csv", admin(a.statisticsCSV))
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) { writeError(w, 404, "no such API endpoint") })
 	if d.Cfg.StaticDir != "" {
@@ -178,6 +200,8 @@ func (a *api) fail(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, feedback.ErrNotFound):
 		writeError(w, 404, "That feedback no longer exists.")
+	case errors.Is(err, requests.ErrNotFound):
+		writeError(w, 404, "That request does not exist.")
 	case errors.Is(err, docs.ErrNotFound), errors.Is(err, skills.ErrNotFound):
 		writeError(w, 404, "That does not exist.")
 	case errors.Is(err, docs.ErrInvalid), errors.Is(err, rbac.ErrInvalid):

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Catalog, Process, Standard } from "../../types";
-import { excerpt, filterCount, matchRanges, rigourText, search, toggleFilter, wordsOf, type Filters, type SearchInput } from "../search";
+import { excerpt, filterCount, matchRanges, NO_CATEGORY, rigourText, search, toggleFilter, wordsOf, type Filters, type SearchInput } from "../search";
 import { href, pageTitle, parseRoute, type Route } from "../store";
 import { catalog as sampleCatalog, processes as sampleProcesses, standards as sampleStandards } from "./fixtures";
 
@@ -149,6 +149,37 @@ describe("search: filters", () => {
     expect(filterCount(f)).toBe(3);
     f = toggleFilter(f, "type", "process");
     expect(f).toEqual({ platform: ["azure", "github"] });
+  });
+});
+
+describe("search: what the lists add", () => {
+  it("filters by the owning team, and offers only the teams of the results", () => {
+    expect(ids("", { owner: ["cloud-team"] })).toEqual(["infrastructure-as-code", "request-gcp-project"]);
+    expect(search(input("")).options.owner.map((o) => [o.value, o.count])).toEqual([["cloud-team", 2], ["security", 1]]);
+  });
+  it("puts what has no category under Other, last, and can filter by it", () => {
+    const cats = search(input("")).options.category;
+    expect(cats[cats.length - 1]).toEqual({ value: NO_CATEGORY, label: "Other", count: 1, chosen: false });
+    expect(ids("", { category: [NO_CATEGORY] })).toEqual(["infrastructure-as-code"]);
+    expect(ids("", { category: [NO_CATEGORY, "network"] })).toEqual(["infrastructure-as-code", "publish-library", "secure-logging"]);
+  });
+  it("leaves out what does not apply to my application, and the requirements that do not", () => {
+    const tiered = std("tiered", "Tiered rules", { requirements: [
+      { id: "T-01", title: "Everywhere", level: "must", statement: "x", verification: { method: "review" } },
+      { id: "T-02", title: "Only in production", level: "should", statement: "x", environments: ["prod"], verification: { method: "review" } },
+    ] });
+    const onlyProd = proc("only-prod", "Only production", { environments: ["prod"] });
+    const run = (environment?: string) => search({ processes: [onlyProd], standards: [tiered], catalog, drafts: false, profile: environment ? { environment } : {} });
+    expect(run().results.map((r) => [r.doc.id, r.rules, r.rigour])).toEqual([["only-prod", 0, {}], ["tiered", 2, { mandatory: 1, recommended: 1 }]]);
+    expect(run("dev").results.map((r) => [r.doc.id, r.rules, r.rigour])).toEqual([["tiered", 1, { mandatory: 1 }]]);
+  });
+  it("applies yes/no filters of the page, and counts what each would give", () => {
+    const marked = new Set(["secure-logging", "publish-library"]);
+    const run = (on: boolean, filters: Filters = {}) => search({ ...input("", filters), flags: { bookmarked: { on, test: (_k, d) => marked.has(d.id) } } });
+    expect(run(false).flags.bookmarked).toBe(2);
+    expect(run(true).results.map((r) => r.doc.id)).toEqual(["publish-library", "secure-logging"]);
+    expect(run(true).options.type.map((o) => o.count)).toEqual([1, 1]);
+    expect(run(false, { type: ["standard"] }).flags.bookmarked).toBe(1);
   });
 });
 

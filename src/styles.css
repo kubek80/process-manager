@@ -49,13 +49,13 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
 /* Narrower screens, in this order: the names next to the logo and the avatar go, then the words of the
    mode switch, then the words of the navigation (the links keep their name for screen readers), then the spacing,
    and on the smallest phones the logo (Home is the first link). The widths fit the longest top bar: an admin who
-   also answers for something, with seven links. */
+   also answers for something, with eight links. */
 @media (max-width: 1440px) { .brand-name, .user-name { display: none; } .user-btn { padding: 0 3px; } }
-@media (max-width: 1200px) { .mode-switch button span { display: none; } .mode-switch button { padding: 0 9px; } .topbar { gap: 10px; } .nav-link { padding: 0 8px; } }
-@media (max-width: 1000px) { .nav-link span { display: none; } .nav-link { padding: 0 10px; } }
+@media (max-width: 1320px) { .mode-switch button span { display: none; } .mode-switch button { padding: 0 9px; } .topbar { gap: 10px; } .nav-link { padding: 0 8px; } }
+@media (max-width: 1120px) { .nav-link span { display: none; } .nav-link { padding: 0 10px; } }
 @media (max-width: 520px) { .topbar { gap: 6px; padding: 0 10px; } .nav { margin-left: 0; gap: 0; } .nav-link { padding: 0 7px; } .mode-switch button { padding: 0 7px; } }
-@media (max-width: 440px) { .brand { display: none; } }
-@media (max-width: 400px) { .topbar { gap: 4px; padding: 0 8px; } .nav-link { padding: 0 6px; } }
+@media (max-width: 440px) { .brand { display: none; } .topbar { gap: 4px; padding: 0 8px; } .nav-link { padding: 0 6px; } }
+@media (max-width: 390px) { .topbar { gap: 3px; padding: 0 6px; } .nav-link { padding: 0 4px; min-width: 24px; justify-content: center; } .mode-switch button { padding: 0 5px; } }
 
 /* ---------- buttons ---------- */
 .btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 13px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--surface); font-weight: 550; font-size: 13.5px; white-space: nowrap; box-shadow: var(--shadow-1); transition: background .12s, border-color .12s, transform .05s; }
@@ -88,7 +88,6 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
 .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; padding: 20px 0 26px; }
 .hero h1 { font-size: 38px; }
 .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.filters { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
 .search { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; flex: 1 1 280px; max-width: 420px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; color: var(--text-3); }
 .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .search input { flex: 1; border: 0; outline: 0; background: none; color: var(--text); min-width: 0; }
@@ -98,25 +97,7 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
 .chip:hover { border-color: var(--text-3); }
 .chip.on { background: var(--text); border-color: var(--text); color: var(--bg); }
 .chip.on span { color: inherit; opacity: .7; }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
-.card { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 18px 18px 14px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow-1); overflow: hidden; transition: box-shadow .15s, transform .15s, border-color .15s; }
-.card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--c); }
-.card:hover { box-shadow: var(--shadow-2); transform: translateY(-2px); border-color: var(--line-strong); }
-.card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 22px; }
-.card-cat { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: color-mix(in srgb, var(--c) 72%, #000); }
-:root[data-theme="dark"] .card-cat { color: color-mix(in srgb, var(--c) 60%, #fff); }
-.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2); }
-.badge.bad { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
-.card h3 { font-size: 18px; letter-spacing: -.01em; line-height: 1.25; }
-.card p { color: var(--text-2); font-size: 13.5px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.card-strip { display: flex; align-items: center; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
-.card-strip > span { display: grid; opacity: .45; }
-.card-strip > span.mine { opacity: 1; }
-.card-strip em { font-style: normal; font-size: 12px; color: var(--text-3); margin-left: 4px; }
-.card-foot { display: flex; align-items: center; gap: 14px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); color: var(--text-3); font-size: 12.5px; }
-.card-foot span { display: inline-flex; align-items: center; gap: 5px; }
-.card-go { margin-left: auto; color: var(--text-3); transition: transform .15s, color .15s; }
-.card:hover .card-go { transform: translateX(3px); color: var(--accent); }
+/* the cards of the lists and of the search results are in lists.css */
 .empty { grid-column: 1 / -1; padding: 40px 0; text-align: center; }
 
 /* ---------- process page ---------- */
@@ -629,7 +610,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .profile-filter { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; font-size: 13px; font-weight: 550; color: var(--text-2); }
 .profile-filter > span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .profile-filter select { width: auto; height: 32px; padding: 0 8px; border-radius: 999px; font-weight: 600; font-size: 12.5px; }
-.card-cat { display: inline-flex; align-items: center; gap: 5px; }
 .levels { display: inline-flex; gap: 6px; }
 .level { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
 .level.must { background: var(--bad-bg); color: var(--bad); }
@@ -776,7 +756,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .card:hover, .block:hover, .btn:active:not(:disabled) { transform: none; }
-  .card:hover .card-go { transform: none; }
 }
 
 /* ---------- questions, notices, loading ---------- */

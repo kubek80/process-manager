@@ -3,6 +3,8 @@ import type { Assignment, AuditEntry, Catalog, DocMeta, DocVersion, Feedback, Fe
 import type { Conflict } from "./draftState";
 import { completeCatalog } from "./catalog";
 import { completePerms } from "./rights";
+import { parseRequestsQuery, requestsQuery, type DocRequest, type NewRequest, type RequestState, type RequestsView } from "./requests";
+import type { Period, Statistics } from "./statistics";
 
 export class ApiError extends Error {
   /** Set when a save was refused because somebody else saved (or deleted) first. */
@@ -135,6 +137,16 @@ export const loadAudit = (limit = 100, before = 0) => call<{ entries: AuditEntry
 export interface SystemInfo { provider: string; baseUrl: string; notify: string; processes: number; standards: number; skills: number; assignments: number; openFeedback: number }
 export const loadSystem = () => call<SystemInfo>("GET", "/api/admin/system");
 
+// requests for a process or standard that does not exist yet
+export const loadRequests = async () => (await call<{ requests?: DocRequest[] }>("GET", "/api/requests")).requests ?? [];
+export const createRequest = (r: NewRequest) => call<DocRequest>("POST", "/api/requests", r);
+/** Votes for a request (or takes the vote back); the new number of votes. */
+export const voteRequest = async (id: number, on: boolean) => (await call<{ votes: number }>(on ? "PUT" : "DELETE", `/api/requests/${id}/vote`)).votes;
+export const setRequestState = (id: number, s: { state: RequestState; note?: string; linkedId?: string }) => call<DocRequest>("PUT", `/api/requests/${id}/state`, s);
+export const withdrawRequest = (id: number) => call<void>("DELETE", `/api/requests/${id}`);
+/** Use of processes and standards over a period, for admins. */
+export const loadStatistics = (period: Period) => call<Statistics>("GET", `/api/admin/statistics?period=${period}`);
+
 /** Personal "done" ticks, kept in the browser only - they are not part of the process definition. */
 export function useProgress(processId: string) {
   const key = `pm:progress:${processId}`;
@@ -156,11 +168,12 @@ export function useProgress(processId: string) {
 
 export type Tab = "flow" | "list" | "feedback" | "skills" | "json";
 export type StandardTab = "doc" | "feedback" | "skills" | "json";
-export type AdminSection = "access" | "lists" | "skills" | "health" | "activity" | "system";
+export type AdminSection = "access" | "lists" | "skills" | "health" | "activity" | "statistics" | "system";
 /** `item` is the step or the requirement that is open, so that a link can point at one. */
 export type Route =
   | { page: "home" } | ({ page: "search" } & SearchState)
   | { page: "library" } | { page: "standards" } | { page: "catalog" } | { page: "guide" } | { page: "mine" }
+  | ({ page: "requests" } & RequestsView)
   | { page: "admin"; section: AdminSection }
   | { page: "process"; id: string; tab: Tab; item?: string }
   | { page: "standard"; id: string; tab: StandardTab; item?: string };
@@ -219,7 +232,9 @@ const parse = (h: string = location.hash): Route => {
   if (h.startsWith("#/guide")) return { page: "guide" };
   if (h.startsWith("#/mine")) return { page: "mine" };
   if (h.startsWith("#/standards")) return { page: "standards" };
-  const admin = h.match(/^#\/admin(?:\/(access|lists|skills|health|activity|system))?/);
+  const requests = h.match(/^#\/requests(?:\?(.*))?$/);
+  if (requests) return { page: "requests", ...parseRequestsQuery(requests[1] ?? "") };
+  const admin = h.match(/^#\/admin(?:\/(access|lists|skills|health|activity|statistics|system))?/);
   if (admin) return { page: "admin", section: (admin[1] as AdminSection) ?? "access" };
   const s = h.match(/^#\/s\/([a-z0-9-]+)(?:\/(doc|feedback|skills|json)(?:\/([A-Z][A-Z0-9-]*))?)?/);
   if (s) return { page: "standard", id: s[1], tab: (s[2] as StandardTab) ?? "doc", ...(s[3] ? { item: s[3] } : {}) };
@@ -359,6 +374,7 @@ export const href = (r: Route): string => {
     case "catalog": return "#/catalog";
     case "guide": return "#/guide";
     case "mine": return "#/mine";
+    case "requests": return `#/requests${requestsQuery(r)}`;
     case "admin": return `#/admin/${r.section}`;
     case "standard": return `#/s/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
     case "process": return `#/p/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
@@ -384,6 +400,7 @@ export function pageTitle(r: Route, names: { process?: string; standard?: string
     case "catalog": here = "Teams & tools"; break;
     case "guide": here = "Guide"; break;
     case "mine": here = "My responsibilities"; break;
+    case "requests": here = "Requests"; break;
     case "admin": here = `${r.section.slice(0, 1).toUpperCase()}${r.section.slice(1)} · Admin`; break;
     case "process": here = of(names.process, "Process not found"); break;
     case "standard": here = of(names.standard, "Standard not found"); break;

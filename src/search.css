@@ -42,73 +42,9 @@
 .home-links { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .home-links .chip { max-width: 100%; }
 
-/* ---------- results ---------- */
-.search-page { max-width: 1180px; }
-.search-page > .search-box { max-width: none; }
-.search-bar { display: flex; align-items: center; gap: 12px; margin: 16px 0 8px; min-height: 30px; }
-.search-count { flex: 1; color: var(--text-2); min-width: 0; overflow-wrap: anywhere; }
-.search-count b { color: var(--text); }
-.search-filter-toggle { display: none; }
-.search-chosen { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 12px; }
-.search-chosen .chip { height: 30px; gap: 5px; max-width: 100%; }
-.search-chosen .chip svg { flex: none; }
-.search-chip-key { opacity: .7; font-weight: 500; }
-
-.search-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 28px; align-items: start; margin-top: 8px; }
-.search-filters { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 18px; max-height: calc(100vh - 96px); overflow: auto; padding-right: 4px; }
-.search-facet { margin: 0; padding: 0; border: 0; min-width: 0; }
-.search-facet legend { padding: 0; margin-bottom: 6px; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
-.search-option { display: flex; align-items: center; gap: 9px; min-height: 32px; padding: 3px 8px; border-radius: 8px; cursor: pointer; color: var(--text-2); font-size: 13.5px; }
-.search-option:hover { background: var(--surface-2); color: var(--text); }
-.search-option.on { color: var(--text); font-weight: 600; }
-.search-option.off { opacity: .45; cursor: default; }
-.search-option.off:hover { background: none; }
-.search-option input { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: inherit; }
-.search-option:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; }
-.search-option input:focus-visible { outline: none; }
-.search-option-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.search-option-count { flex: none; color: var(--text-3); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
-
-.search-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
-.search-result { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow-1); }
-.search-result:hover { border-color: var(--line-strong); }
-.search-kind { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); }
-.search-result.standard .search-kind { color: var(--bad); }
-.search-result-title { font-size: 17px; line-height: 1.3; letter-spacing: -.01em; overflow-wrap: anywhere; }
-.search-result-title a { color: var(--text); }
-.search-result-title a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
-.search-summary { color: var(--text-2); font-size: 13.5px; overflow-wrap: anywhere; }
-.search-tags { margin-top: 2px; }
-.search-tags .tier-tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.search-tag-key { color: var(--text-3); font-weight: 500; }
-.tier-tag.rigour-mandatory { background: var(--bad-bg); border-color: transparent; color: var(--bad); }
-.tier-tag.rigour-recommended { background: var(--warn-bg); border-color: transparent; color: var(--warn); }
-.tier-tag.rigour-optional { background: var(--surface-2); color: var(--text-2); }
-
-.search-hits { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line); list-style: none; font-size: 13px; }
-.search-hits li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
-.search-hits a { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
-.search-hits a:hover .search-hit-label { text-decoration: underline; text-underline-offset: 3px; }
-.search-hit-where { flex: none; font-size: 11.5px; font-weight: 600; color: var(--text-3); white-space: nowrap; }
-.search-hit-label { font-weight: 550; }
-.search-hit-snippet { color: var(--text-2); min-width: 0; overflow-wrap: anywhere; flex-basis: 100%; }
-.search-mark { background: color-mix(in srgb, var(--warn) 24%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
-
-.search-more { margin: 16px auto 0; display: flex; }
-.search-empty { padding: 28px 20px; background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--r); }
+/* ---------- results (the panel, the cards and the pages are in lists.css) ---------- */
+.search-page > .search-box { max-width: none; margin-bottom: 18px; }
 .search-empty h2 { font-size: 17px; margin-bottom: 6px; }
 .search-empty .btn-row { margin-top: 14px; }
-.search-empty .btn { max-width: 100%; white-space: normal; height: auto; min-height: 30px; padding-top: 4px; padding-bottom: 4px; }
+.search-empty .btn { max-width: 100%; white-space: normal; height: auto; min-height: 30px; padding-top: 4px; padding-bottom: 4px; margin-top: 0; }
 .search-empty-browse { margin-top: 14px; }
-
-/* narrow screens: the filters fold away behind "Filters (n)", the results stay on the first screen */
-@media (max-width: 860px) {
-  .search-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .search-filter-toggle { display: inline-flex; flex: none; }
-  .search-filters { display: none; position: static; max-height: none; overflow: visible; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
-  .search-filters.open { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px 18px; }
-}
-@media (max-width: 520px) {
-  .search-result { padding: 12px; }
-  .search-bar { margin-top: 12px; }
-}

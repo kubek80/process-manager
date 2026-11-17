@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { L, L_COMPACT, labelWidth, layoutProcess } from "../layout";
+import { diamondPoints, L, L_COMPACT, labelWidth, layoutProcess } from "../layout";
 import * as guideFlows from "../../guide/flows";
 import type { Process, Step } from "../../types";
 import { base, processes } from "./fixtures";
@@ -198,3 +198,44 @@ describe("labels on the map", () => {
   });
 });
 
+
+describe("a decision drawn as a diamond", () => {
+  const ends = (d: string) => {
+    const nums = [...d.matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
+    return { start: nums[0], end: nums[nums.length - 1] };
+  };
+  const all: [string, Process][] = [...processes.map((p): [string, Process] => [p.id, p]), ...Object.entries(guideFlows as Record<string, Process>), ["base", base()]];
+
+  it("has its corners in the middle of each side of its box", () => {
+    expect(diamondPoints(200, 100)).toBe("100,0 200,50 100,100 0,50");
+    // moved in: the sides move by the inset, so the corners move further along their axis
+    const [top, right] = diamondPoints(200, 100, 2).split(" ").map((p) => p.split(",").map(Number));
+    expect(top[0]).toBe(100); expect(top[1]).toBeGreaterThan(2);
+    expect(right[1]).toBe(50); expect(right[0]).toBeLessThan(198);
+    const [outTop] = diamondPoints(200, 100, -3).split(" ").map((p) => p.split(",").map(Number));
+    expect(outTop[1]).toBeLessThan(0);
+  });
+
+  it("is met by every arrow at a corner, in every sample process and guide chart, in both sizes", () => {
+    let checked = 0;
+    for (const [name, p] of all) for (const dims of [L, L_COMPACT]) {
+      const l = layoutProcess(p, dims);
+      const at = Object.fromEntries(l.nodes.map((n) => [n.step.id, n]));
+      for (const e of l.edges) {
+        const { start, end } = ends(e.d);
+        const from = at[e.from], to = at[e.to];
+        if (from.step.type === "decision") {
+          checked++;
+          const right = start[0] === from.x + dims.W && start[1] === from.y + dims.H / 2;
+          const bottom = start[0] === from.x + dims.W / 2 && start[1] === from.y + dims.H;
+          expect(right || bottom, `${name}: ${e.from} > ${e.to} leaves ${from.step.id} at ${start}`).toBe(true);
+        }
+        if (to.step.type === "decision") {
+          checked++;
+          expect(end, `${name}: ${e.from} > ${e.to} enters ${to.step.id} at ${end}`).toEqual([to.x, to.y + dims.H / 2]);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(10);
+  });
+});

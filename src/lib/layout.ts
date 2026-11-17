@@ -10,6 +10,20 @@ export interface LaneBox { actorIndex: number; y: number; h: number }
 export interface EdgePath { from: string; to: string; label?: string; d: string; back: boolean; lx: number; ly: number; lw: number; px: number; py: number }
 export interface Layout { nodes: NodeBox[]; lanes: LaneBox[]; edges: EdgePath[]; width: number; height: number }
 
+/**
+ * The corners of the diamond a decision is drawn as, in a box of `w` by `h`: top, right, bottom,
+ * left. The arrows already meet a block in the middle of its left side (coming in), its right side
+ * and the middle of its bottom (going out): exactly the diamond's corners. `inset` moves the
+ * corners in (positive) or out (negative), for the outline and the selection ring.
+ */
+export function diamondPoints(w: number, h: number, inset = 0): string {
+  // moving each side by `inset` along its normal moves a corner by inset / sin(angle) along its axis
+  const len = Math.hypot(w / 2, h / 2);
+  const dx = (inset * len) / (h / 2), dy = (inset * len) / (w / 2);
+  const r = (n: number) => Math.round(n * 10) / 10;
+  return [[w / 2, dy], [w - dx, h / 2], [w / 2, h - dy], [dx, h / 2]].map(([x, y]) => `${r(x)},${r(y)}`).join(" ");
+}
+
 type Pt = [number, number];
 type Dims = typeof L;
 const DEFAULT = L;

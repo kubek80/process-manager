@@ -10,7 +10,8 @@ import { belongsRefused, canEdit, canManage } from "../lib/rights";
 import { categoryName, teamName, useCatalog } from "../lib/catalog";
 import { reviewer, reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
 import { Resources } from "./Resources";
-import { FeedbackTab, openCount, processTarget } from "./Feedback";
+import { FeedbackForm, FeedbackTab, openCount, processTarget } from "./Feedback";
+import { DocEngagement } from "./Engage";
 import { useEditor } from "../lib/mode";
 import { useMe, usePerms } from "../lib/session";
 import { href } from "../lib/store";
@@ -19,7 +20,7 @@ import { ListView } from "./ListView";
 import { StepDrawer } from "./StepDrawer";
 import { ProcessSettings } from "./ProcessSettings";
 import type { AiSpec } from "./AiDialog";
-import { confirmDialog, IssueList, Loading, notify, scrollBehavior } from "./ui";
+import { confirmDialog, IssueList, Loading, Modal, notify, scrollBehavior } from "./ui";
 import { BelongsTags, DimTags, ReviewTag, useBelongsWarning } from "./Governance";
 import { BehindBanner, ConflictDialog, HistoryDialog, SaveBar, VersionTag } from "./Editing";
 import { SourceSkills } from "./SkillPanel";
@@ -32,6 +33,7 @@ const JsonView = lazy(() => import("./JsonView").then((m) => ({ default: m.JsonV
 const AiDialog = lazy(() => import("./AiDialog").then((m) => ({ default: m.AiDialog }))) as typeof import("./AiDialog").AiDialog;
 
 const stamp = (p: Process): Process => ({ ...p, updatedAt: today() });
+const BEFORE_KEY = "pm:map-before";
 
 export function ProcessPage({ process, meta, all, standards, tab, item, onSave, onReload, onDelete, onReviewed, feedback }: {
   process: Process; meta?: DocMeta; all: Process[]; standards: Standard[]; tab: Tab; feedback: Feedback[];
@@ -50,7 +52,11 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
   const [showIssues, setShowIssues] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [jsonPending, setJsonPending] = useState(false);
-  const [extras, setExtras] = useState(() => { try { return localStorage.getItem("pm:map-extras") === "open"; } catch { return false; } });
+  // "Before you start" is open on the map unless the person closed it; the choice is remembered
+  const [extras, setExtras] = useState(() => { try { return localStorage.getItem(BEFORE_KEY) !== "closed"; } catch { return true; } });
+  const [flagging, setFlagging] = useState<string | null>(null); // the step reported from the map
+  // arriving at the feedback tab (from a card's "Give feedback" or the button) puts the cursor in the form
+  const [focusFeedback, setFocusFeedback] = useState(tab === "feedback");
   const { catalog } = useCatalog();
   const perms = usePerms();
   // a process editor may change every process; a platform or practice owner what belongs to theirs
@@ -82,7 +88,9 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
     (id) => !renderable || draft.steps.some((s) => s.id === id));
   const step = renderable ? draft.steps.find((s) => s.id === selected) : undefined;
 
-  const select = (id: string) => { setSelected(id); setReporting(false); };
+  const select = (id: string) => { setSelected(id); setReporting(false); if (view === "flow") hint.seen(); };
+  const hint = useMapHint(me.user?.email ?? "");
+  const flagged = flagging ? draft.steps.find((s) => s.id === flagging) : undefined;
   useEffect(() => { if (!selected) setEditing(false); }, [selected]); // a step opened later starts as it is read
   // in the checklist the open step is brought into view, also when the page was opened by a link to it
   useEffect(() => {
@@ -116,10 +124,41 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
 
   const mine = renderable ? draft.steps.filter((s) => s.actor === "me").length : 0;
   const blocked = belongsRefused(perms, "process", d.saved, draft).length ? "Put the platform or practice back as it was (in Details)." : losing ? "Keep it with a platform or practice of yours (in Details)." : errors ? "Fix the problems first." : jsonPending ? "The JSON tab has changes with problems. Fix them there first." : undefined;
-  // On the map the map comes first: what to prepare is one line that opens. The checklist, where
-  // the work is done, shows it in full.
   const hasExtras = renderable && (draft.prerequisites.length > 0 || !!draft.resources?.length || !!draft.standards?.length);
-  const showExtras = renderable && (view === "list" || (view === "flow" && extras));
+  // on the map "Before you start" is a panel of its own (open unless closed); the checklist shows it in full
+  const showExtras = renderable && view === "list";
+  const readyCount = renderable ? draft.prerequisites.filter((_, i) => hasPre(i)).length : 0;
+  const prereqGrid = (compact: boolean) => (
+    <div className={`prereq-grid ${compact ? "compact" : ""}`}>
+      {draft.prerequisites.map((q, i) => {
+        const src = q.processId ? all.find((p) => p.id === q.processId) : undefined;
+        const on = hasPre(i);
+        return (
+          <div key={preKeys[i]} className={`prereq ${on ? "on" : ""}`}>
+            <button className={`tick ${on ? "on" : ""}`} onClick={() => tickPre(i)} aria-pressed={on} aria-label={`I have this: ${q.title}`}><Check size={14} strokeWidth={3} /></button>
+            <div>
+              <strong>{q.title}</strong>
+              {q.description && <p>{q.description}</p>}
+              {q.url && <a href={q.url} target="_blank" rel="noreferrer">More information<ArrowUpRight size={13} /></a>}
+              {q.processId && (
+                <button className="prereq-link" onClick={() => src && go({ page: "process", id: src.id, tab: "flow" })} disabled={!src}>
+                  <Workflow size={13} />{src ? <>Don’t have it? {src.title}</> : <>Process “{q.processId}” not described yet</>}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+  const standardLinks = (
+    <ul className="link-list row">
+      {(draft.standards ?? []).map((sid) => {
+        const s = standards.find((x) => x.id === sid);
+        return <li key={sid}>{s ? <a href={href({ page: "standard", id: s.id, tab: "doc" })}><ShieldCheck size={13} />{s.title}</a> : <span className="muted">“{sid}” is not described yet</span>}</li>;
+      })}
+    </ul>
+  );
 
   return (
     <div className={`page process-page ${step ? "with-drawer" : ""}`}>
@@ -153,9 +192,11 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
               <button className="btn" onClick={() => setDialog("settings")} disabled={!renderable}><Settings2 size={16} />Details</button>
               <button className="btn" onClick={() => addAfter(selected)} disabled={!renderable}><Plus size={16} />Add step</button>
             </>}
-            <button className="btn report-btn" onClick={() => go({ page: "process", id: process.id, tab: "feedback" })} disabled={!renderable}><Flag size={16} />Report a problem</button>
           </div>
         </div>
+        {renderable && <DocEngagement kind="process" id={process.id} title={draft.title} summary={draft.summary}
+          open={openCount(feedback)} handled={feedback.length - openCount(feedback)}
+          onFeedback={() => { setFocusFeedback(true); go({ page: "process", id: process.id, tab: "feedback" }); }} />}
       </div>
 
       <div className="tabs-row">
@@ -190,14 +231,29 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
       )}
 
       {view === "flow" && renderable && hasExtras && (
-        <button className="extras-toggle" aria-expanded={extras} onClick={() => { const next = !extras; setExtras(next); try { localStorage.setItem("pm:map-extras", next ? "open" : "closed"); } catch { /* ignore */ } }}>
-          {extras ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-          <b>Before you start</b>
-          {draft.prerequisites.length > 0 && <span>{draft.prerequisites.filter((_, i) => hasPre(i)).length}/{draft.prerequisites.length} ready</span>}
-          {!!draft.resources?.length && <span>{draft.resources.length} useful link{draft.resources.length > 1 ? "s" : ""}</span>}
-          {!!draft.standards?.length && <span>{draft.standards.length} standard{draft.standards.length > 1 ? "s" : ""}</span>}
-          <em>{extras ? "Hide" : "Show"}</em>
-        </button>
+        <section className={`before-panel ${extras ? "open" : ""}`} aria-label="Before you start">
+          <button className="before-toggle" aria-expanded={extras} aria-controls="before-body"
+            onClick={() => { const next = !extras; setExtras(next); try { localStorage.setItem(BEFORE_KEY, next ? "open" : "closed"); } catch { /* ignore */ } }}>
+            {extras ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <b>Before you start</b>
+            {draft.prerequisites.length > 0 && <span className={readyCount === draft.prerequisites.length ? "all-ready" : ""}>{readyCount}/{draft.prerequisites.length} ready</span>}
+            {!!draft.resources?.length && <span>{draft.resources.length} useful link{draft.resources.length > 1 ? "s" : ""}</span>}
+            {!!draft.standards?.length && <span>{draft.standards.length} standard{draft.standards.length > 1 ? "s" : ""}</span>}
+            <em>{extras ? "Hide" : "Show"}</em>
+          </button>
+          {extras && (
+            <div id="before-body" className={`before-body ${draft.prerequisites.length ? "" : "no-pre"}`}>
+              {draft.prerequisites.length > 0 && <div className="before-main">
+                <p className="before-intro">Have these ready, then start with step 1. Tick what you have.</p>
+                {prereqGrid(true)}
+              </div>}
+              {(!!draft.resources?.length || !!draft.standards?.length) && <div className="before-side">
+                {!!draft.resources?.length && <><h3>Do it faster</h3><Resources list={draft.resources} compact /></>}
+                {!!draft.standards?.length && <><h3>Standards this helps to meet</h3>{standardLinks}</>}
+              </div>}
+            </div>
+          )}
+        </section>
       )}
 
       {showExtras && !!draft.resources?.length && (
@@ -210,49 +266,24 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
       {showExtras && !!draft.standards?.length && (
         <section className="prereqs">
           <h2>Standards this helps to meet</h2>
-          <ul className="link-list row">
-            {draft.standards.map((sid) => {
-              const s = standards.find((x) => x.id === sid);
-              return <li key={sid}>{s ? <a href={href({ page: "standard", id: s.id, tab: "doc" })}><ShieldCheck size={13} />{s.title}</a> : <span className="muted">“{sid}” is not described yet</span>}</li>;
-            })}
-          </ul>
+          {standardLinks}
         </section>
       )}
 
       {showExtras && draft.prerequisites.length > 0 && (
         <section className="prereqs">
-          <h2>Before you start <span>{draft.prerequisites.filter((_, i) => hasPre(i)).length}/{draft.prerequisites.length} ready</span></h2>
-          <div className="prereq-grid">
-            {draft.prerequisites.map((q, i) => {
-              const src = q.processId ? all.find((p) => p.id === q.processId) : undefined;
-              const on = hasPre(i);
-              return (
-                <div key={preKeys[i]} className={`prereq ${on ? "on" : ""}`}>
-                  <button className={`tick ${on ? "on" : ""}`} onClick={() => tickPre(i)} aria-pressed={on} aria-label={`I have this: ${q.title}`}><Check size={14} strokeWidth={3} /></button>
-                  <div>
-                    <strong>{q.title}</strong>
-                    {q.description && <p>{q.description}</p>}
-                    {q.url && <a href={q.url} target="_blank" rel="noreferrer">More information<ArrowUpRight size={13} /></a>}
-                    {q.processId && (
-                      <button className="prereq-link" onClick={() => src && go({ page: "process", id: src.id, tab: "flow" })} disabled={!src}>
-                        <Workflow size={13} />{src ? <>Don’t have it? {src.title}</> : <>Process “{q.processId}” not described yet</>}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <h2>Before you start <span>{readyCount}/{draft.prerequisites.length} ready</span></h2>
+          {prereqGrid(false)}
         </section>
       )}
-
       {view === "flow" && renderable && <FlowView editable={editor} process={draft} selectedId={selected} done={done} feedback={feedback} onSelect={select}
+        onReport={setFlagging} hint={hint.show}
         onInsert={(at, spec) => { const r = insertStep(draft, at, spec); setDraft(r.process); setSelected(r.id); setEditing(true); }}
         onMoveToLane={(id, actor) => setDraft(updateStep(draft, id, { actor }))} />}
       {view === "list" && renderable && <ListView process={draft} all={all} done={done} toggle={toggle} reset={reset} selectedId={selected} onSelect={select}
         editable={editor} onInsert={(at, spec) => { const r = insertStep(draft, at, spec); setDraft(r.process); setSelected(r.id); setEditing(true); }}
         feedback={feedback} onReport={(id) => { setSelected(id); setEditing(false); setReporting(true); }} />}
-      {view === "feedback" && renderable && <FeedbackTab target={processTarget(draft)} feedback={feedback} onSelect={select} />}
+      {view === "feedback" && renderable && <FeedbackTab target={processTarget(draft)} feedback={feedback} onSelect={select} focus={focusFeedback} onFocused={() => setFocusFeedback(false)} />}
       {view === "skills" && renderable && <SourceSkills kind="process" id={process.id} revision={process} />}
       {view === "json" && <Suspense fallback={<Loading />}><JsonView doc={clean} noun="process" validate={(v) => validateProcess(v, ctx)} schema={processSchema} schemaFile="schema/process.schema.json" onChange={setDraft} onPending={setJsonPending} /></Suspense>}
 
@@ -274,6 +305,15 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
           onAddAfter={() => addAfter(step.id)} />
       )}
 
+      {flagged && (
+        <Modal title="Report a problem with this step" subtitle={`Step ${draft.steps.indexOf(flagged) + 1}: ${flagged.title}`} onClose={() => setFlagging(null)}>
+          <div className="step-report">
+            <p className="muted">Tell the owner in a sentence. No ticket needed.</p>
+            <FeedbackForm target={processTarget(draft)} itemId={flagged.id} autoFocus onDone={() => setTimeout(() => setFlagging(null), 1200)} />
+          </div>
+        </Modal>
+      )}
+
       {dialog === "settings" && (
         <ProcessSettings process={draft} saved={d.saved} all={all} standards={standards} onChange={setDraft} onClose={() => setDialog(null)}
           onDelete={async () => {
@@ -291,6 +331,19 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
       <ConflictDialog d={d} kind="process" id={process.id} noun="this process" blocked={blocked} />
     </div>
   );
+}
+
+/**
+ * The hint on the map that a step can be opened. It goes once the person has opened a step on a
+ * map, remembered for that person in this browser.
+ */
+function useMapHint(who: string) {
+  const key = `pm:map-hint-seen:${who}`;
+  const [show, setShow] = useState(() => { try { return localStorage.getItem(key) !== "1"; } catch { return true; } });
+  return {
+    show,
+    seen: () => { if (!show) return; setShow(false); try { localStorage.setItem(key, "1"); } catch { /* private mode */ } },
+  };
 }
 
 /** Builds what the AI dialog needs for processes. */

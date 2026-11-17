@@ -1,11 +1,13 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, ClipboardCheck, Eye, LayoutGrid, LogOut, Moon, Pencil, Search, Settings2, ShieldCheck, Sun, Users } from "lucide-react";
+import { Lightbulb } from "lucide-react";
 import type { Catalog, DocMeta, Feedback, FeedbackByTarget, Me, Process, Standard, TargetKind } from "./types";
 import {
   ApiError, confirmReview, createFeedback, deleteFeedback, go, href, loadCatalog, loadFeedback, loadMe, loadProcesses, loadStandards, logout, pageTitle, putCatalog, putProcess, putStandard,
   removeProcess, removeStandard, setAlsoHit, setResolved, SIGNED_OUT, forgetUnsaved, hasUnsaved, unsavedWork, useRoute, type MetaById,
 } from "./lib/store";
 import { CatalogContext, EMPTY_CATALOG, useCatalog } from "./lib/catalog";
+import { EngagementProvider } from "./lib/engagement";
 import { canEditSomething, canOpenAdmin, FeedbackContext, MeContext, roleLabel, usePerms, type FeedbackActions } from "./lib/session";
 import { belongsRefused, canEdit, editsAll } from "./lib/rights";
 import { ModeContext, type Mode } from "./lib/mode";
@@ -26,6 +28,7 @@ const AdminPage = lazy(() => import("./components/AdminPage").then((m) => ({ def
 const GuidePage = lazy(() => import("./components/GuidePage").then((m) => ({ default: m.GuidePage })));
 const HomePage = lazy(() => import("./components/HomePage").then((m) => ({ default: m.HomePage })));
 const SearchPage = lazy(() => import("./components/SearchPage").then((m) => ({ default: m.SearchPage })));
+const RequestsPage = lazy(() => import("./components/RequestsPage").then((m) => ({ default: m.RequestsPage })));
 const AiDialog = lazy(() => import("./components/AiDialog").then((m) => ({ default: m.AiDialog }))) as typeof import("./components/AiDialog").AiDialog;
 
 function useTheme() {
@@ -53,7 +56,7 @@ export default function App() {
   if (error) body = <main className="login"><div className="login-card"><h1>Process Manager</h1><LoadError what="The portal could not be opened." error={error} onRetry={refresh} /></div></main>;
   else if (!me) body = null;
   else if (!me.authenticated) body = <Login me={me} onSignedIn={refresh} />;
-  else body = <MeContext.Provider value={me}><Shell key={me.user!.email} me={me} onSignedOut={refresh} /></MeContext.Provider>;
+  else body = <MeContext.Provider value={me}><EngagementProvider key={me.user!.email}><Shell key={me.user!.email} me={me} onSignedOut={refresh} /></EngagementProvider></MeContext.Provider>;
   return <>{body}<Notices /></>;
 }
 
@@ -457,6 +460,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
           <a className={`nav-link ${on("home", "search")}`} aria-current={current("home", "search")} href={href({ page: "home" })} aria-label="Home" title="Home: search processes and standards"><Search size={15} /><span>Home</span></a>
           <a className={`nav-link ${on("library", "process")}`} aria-current={current("library", "process")} href={href({ page: "library" })} aria-label="Processes" title="Processes"><LayoutGrid size={15} /><span>Processes</span></a>
           <a className={`nav-link ${on("standards", "standard")}`} aria-current={current("standards", "standard")} href={href({ page: "standards" })} aria-label="Standards" title="Standards"><ShieldCheck size={15} /><span>Standards</span></a>
+          <a className={`nav-link ${on("requests")}`} aria-current={current("requests")} href={href({ page: "requests" })} aria-label="Requests" title="Requests: ask for a process or standard that is missing, vote for what others asked for"><Lightbulb size={15} /><span>Requests</span></a>
           {mine.length > 0 && (
             <a className={`nav-link ${on("mine")}`} aria-current={current("mine")} href={href({ page: "mine" })}
               aria-label={waiting ? `My responsibilities, ${waiting} waiting` : "My responsibilities"} title="What you answer for: reviews to do, feedback to handle">
@@ -492,6 +496,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         <StandardsLibrary standards={standards} processes={all} feedback={feedback.standard} onAi={() => setAi("standard")} onNew={newStandard} />
       )}
       {processes && route.page === "catalog" && <CatalogPage processes={all} standards={standards} editable={false} />}
+      {processes && route.page === "requests" && <RequestsPage state={route.state} kind={route.kind} processes={all} standards={standards} />}
       {processes && route.page === "mine" && (
         <MinePage processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }}
           onReviewed={(kind, id) => reviewed(kind, id, (kind === "process" ? processMeta : standardMeta)[id]?.version ?? 0)} />

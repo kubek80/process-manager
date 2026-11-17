@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, CalendarCheck, Flag, KeyRound, List, Plus, Search, Server, ShieldCheck, Sparkles, Trash2, Workflow } from "lucide-react";
+import { Activity, CalendarCheck, ChartColumn, Flag, KeyRound, List, Plus, Search, Server, ShieldCheck, Sparkles, Trash2, Workflow } from "lucide-react";
 import type { Assignment, AuditEntry, FeedbackByTarget, Process, Role, Skill, Standard } from "../types";
 import { groupName, teamName, useCatalog } from "../lib/catalog";
 import { groupKindOf } from "../lib/members";
@@ -9,6 +9,7 @@ import { go, grantAccess, href, loadAccess, loadAudit, loadSkills, loadSystem, r
 import { CatalogPage } from "./CatalogPage";
 import { openCount } from "./Feedback";
 import { SKILL_KIND, SkillPanel } from "./SkillPanel";
+import { StatisticsSection } from "./StatisticsPage";
 import { confirmDialog, Field, LoadError, Loading, notify } from "./ui";
 
 /** The roles, what they allow in plain words, and for the three that are limited to a group: which list it is picked from. */
@@ -31,6 +32,7 @@ const SECTIONS: { id: AdminSection; label: string; icon: typeof List; admin?: bo
   { id: "skills", label: "Skills", icon: Sparkles, hint: "Generated skills and review agents" },
   { id: "health", label: "Health", icon: CalendarCheck, hint: "Reviews due and open feedback" },
   { id: "activity", label: "Activity", icon: Activity, admin: true, hint: "Who changed what" },
+  { id: "statistics", label: "Statistics", icon: ChartColumn, admin: true, hint: "How much each process and standard is used" },
   { id: "system", label: "System", icon: Server, admin: true, hint: "How this installation is set up" },
 ];
 
@@ -337,6 +339,7 @@ export function AdminPage({ section, processes, standards, feedback }: {
         {current.id === "skills" && <SkillsSection />}
         {current.id === "health" && <HealthSection processes={processes} standards={standards} feedback={feedback} />}
         {current.id === "activity" && <ActivitySection />}
+        {current.id === "statistics" && <StatisticsSection />}
         {current.id === "system" && <SystemSection />}
       </main>
     </div>

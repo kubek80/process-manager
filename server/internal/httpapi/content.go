@@ -16,6 +16,7 @@ import (
 
 	"github.com/kubek80/process-manager/server/internal/audit"
 	"github.com/kubek80/process-manager/server/internal/docs"
+	"github.com/kubek80/process-manager/server/internal/engagement"
 	"github.com/kubek80/process-manager/server/internal/feedback"
 	"github.com/kubek80/process-manager/server/internal/rbac"
 )
@@ -499,7 +500,8 @@ func (a *api) deleteDoc(kind string) http.HandlerFunc {
 			return
 		}
 		s := who(r)
-		// the document, its feedback and the entry in the activity log go together or not at all
+		// the document, its feedback, bookmarks and upvotes and the entry in the activity log go
+		// together or not at all
 		err := a.Docs.Remove(r.Context(), docs.Removal{
 			Kind: kind, ID: id, By: s.Email, Base: base,
 			Check: func(current *docs.Doc) error {
@@ -513,6 +515,10 @@ func (a *api) deleteDoc(kind string) http.HandlerFunc {
 			},
 			After: func(ctx context.Context, tx pgx.Tx) error {
 				if err := feedback.DeleteByTargetIn(ctx, tx, kind, id); err != nil {
+					return err
+				}
+				// bookmarks and upvotes go with it; its views and downloads stay in the statistics
+				if err := engagement.DeleteByTargetIn(ctx, tx, kind, id); err != nil {
 					return err
 				}
 				return audit.AddIn(ctx, tx, s.Email, s.Name, noun[kind]+".delete", id, "")

@@ -1,19 +1,29 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, Clock, Flag, Maximize2, Minus, Plus, User, Workflow, Wrench } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Check, Clock, Flag, Hand, Maximize2, Minus, MousePointerClick, Plus, User, Workflow, Wrench } from "lucide-react";
 import type { Feedback, Process, StepType } from "../types";
-import { L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
+import { diamondPoints, L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import { toolName, useCatalog } from "../lib/catalog";
 import { openCount } from "./Feedback";
 import { TypeIcon } from "./ui";
 
 import { QuickAdd, type InsertAt } from "./QuickAdd";
+import "../detail.css";
 
 export type { InsertAt };
 interface Adding extends InsertAt { x: number; y: number }
 
-export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, editable = true, bare }: {
+/** Where a press on the map does not start moving it: controls, and blocks that can be dragged to another lane. */
+const NO_PAN = "button:not(.block-main), a, input, select, textarea, label, .quick-add, [draggable='true']";
+/** How far the pointer moves before a press becomes a drag of the map (and no longer a click). */
+const PAN_START = 5;
+
+export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, hint, editable = true, bare }: {
   editable?: boolean; bare?: boolean;
+  /** Opens the report form for one step, without opening the step. */
+  onReport?: (stepId: string) => void;
+  /** Shows the line that says a step can be opened. */
+  hint?: boolean;
   process: Process; selectedId: string | null; done: Set<string>; feedback: Feedback[];
   onSelect: (id: string) => void;
   onInsert?: (at: InsertAt, spec: { title: string; type: StepType; actor: string }) => void;
@@ -28,6 +38,57 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const [drag, setDrag] = useState<string | null>(null);
   const [dropLane, setDropLane] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  const [panning, setPanning] = useState(false);
+  // Dragging the map with the mouse moves it around. Touch screens scroll it natively, in both
+  // directions. A press that moved is a drag, not a click: the click that follows is swallowed.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || bare) return;
+    let start: { x: number; y: number; left: number; top: number; id: number } | null = null;
+    let moved = false;
+    const down = (e: PointerEvent) => {
+      if (e.pointerType !== "mouse" || e.button !== 0) return;
+      const t = e.target as Element;
+      if (t.closest(NO_PAN)) return;
+      start = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop, id: e.pointerId };
+      moved = false;
+    };
+    const move = (e: PointerEvent) => {
+      if (!start || e.pointerId !== start.id) return;
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (!moved && Math.hypot(dx, dy) < PAN_START) return;
+      if (!moved) {
+        moved = true;
+        setPanning(true);
+        try { el.setPointerCapture(e.pointerId); } catch { /* gone */ }
+        window.getSelection()?.removeAllRanges();
+      }
+      el.scrollLeft = start.left - dx;
+      el.scrollTop = start.top - dy;
+      e.preventDefault();
+    };
+    const up = (e: PointerEvent) => {
+      if (!start || e.pointerId !== start.id) return;
+      start = null;
+      if (!moved) return;
+      setPanning(false);
+      try { el.releasePointerCapture(e.pointerId); } catch { /* gone */ }
+      // the click that ends a drag opens nothing
+      const swallow = (c: MouseEvent) => { c.stopPropagation(); c.preventDefault(); };
+      window.addEventListener("click", swallow, { capture: true, once: true });
+      setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
+    };
+    el.addEventListener("pointerdown", down);
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+    return () => {
+      el.removeEventListener("pointerdown", down);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+    };
+  }, [bare]);
   const fit = () => {
     const w = scroller.current?.clientWidth ?? 0;
     if (w) setZoom(Math.max(bare ? 0.6 : 0.75, Math.min(1, Math.floor((w / layout.width) * 20) / 20)));
@@ -49,7 +110,11 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
 
   return (
     <div className={`flow-wrap ${bare ? "bare" : ""}`}>
-      <div className="flow-scroll" ref={scroller}>
+      {!bare && hint && (
+        <p className="map-hint"><MousePointerClick size={15} aria-hidden="true" /><span><b>Select a step</b> to see what to do, who does it and with which tool.</span>
+          <span className="map-hint-pan"><Hand size={14} aria-hidden="true" />Drag the map to move around.</span></p>
+      )}
+      <div className={`flow-scroll ${bare ? "" : "pannable"} ${panning ? "panning" : ""}`} ref={scroller}>
         <div className={`flow-canvas ${drag ? "dragging" : ""}`} style={{ width: layout.width, height, zoom }} onMouseDown={() => setAdding(null)}>
           {layout.lanes.map((lane) => {
             const actor = process.actors[lane.actorIndex];
@@ -105,6 +170,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
             const s = n.step;
             const meta = STEP_META[s.type];
             const flags = openCount(feedback, s.id);
+            const decision = s.type === "decision";
             return (
               <div key={s.id} draggable={editable}
                 onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", s.id); setDrag(s.id); setAdding(null); }}
@@ -112,9 +178,16 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                 className={`block ${n.lane === 0 ? "mine" : ""} ${selectedId === s.id ? "selected" : ""} ${done.has(s.id) ? "done" : ""} ${s.type === "decision" ? "decision" : ""} ${drag === s.id ? "dragged" : ""}`}
                 style={{ left: n.x, top: n.y, width: L.W, height: L.H, "--c": meta.color } as React.CSSProperties}
                 onMouseEnter={() => setHover(s.id)} onMouseLeave={() => setHover(null)}>
+                {/* a decision is a diamond whose corners are where the arrows meet it */}
+                {decision && (
+                  <svg className="diamond" width={L.W} height={L.H} viewBox={`0 0 ${L.W} ${L.H}`} aria-hidden="true">
+                    <polygon className="diamond-ring" points={diamondPoints(L.W, L.H, -3)} />
+                    <polygon className="diamond-shape" points={diamondPoints(L.W, L.H, 1)} />
+                  </svg>
+                )}
                 {/* in the guide a chart is a picture: nothing to open, so nothing to tab through */}
                 <Main className="block-main" {...(bare ? {} : { onClick: () => onSelect(s.id) })}>
-                  <TypeIcon type={s.type} size={bare ? 30 : 34} />
+                  {!decision && <TypeIcon type={s.type} size={bare ? 30 : 34} />}
                   <span className="block-text">
                     <span className="block-type">{meta.label}</span>
                     <span className="block-title">{s.title}</span>
@@ -126,7 +199,17 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                   </span>
                 </Main>
                 <span className="block-num">{done.has(s.id) ? <Check size={12} strokeWidth={3} /> : n.index + 1}</span>
-                {flags > 0 && <span className="block-flag" title={`${flags} open feedback`}><Flag size={10} strokeWidth={3} />{flags}</span>}
+                {(flags > 0 || (!bare && onReport)) && (
+                  <span className="block-corner">
+                    {!bare && onReport && (
+                      <button type="button" className="block-report" draggable={false} title="Report a problem with this step"
+                        aria-label={`Report a problem with step ${n.index + 1}: ${s.title}`}
+                        onMouseDown={(ev) => ev.stopPropagation()} onDragStart={(ev) => { ev.preventDefault(); ev.stopPropagation(); }}
+                        onClick={(ev) => { ev.stopPropagation(); onReport(s.id); }}><Flag size={12} strokeWidth={2.5} /></button>
+                    )}
+                    {flags > 0 && <span className="block-flag" title={`${flags} open feedback`}><Flag size={10} strokeWidth={3} />{flags}</span>}
+                  </span>
+                )}
                 {editable && <button className="block-add" title={s.type === "decision" ? "Add a branch" : "Add a step after this one"}
                   aria-label={s.type === "decision" ? `Add a branch to “${s.title}”` : `Add a step after “${s.title}”`}
                   onMouseDown={(ev) => ev.stopPropagation()} onClick={() => openAdd({ afterId: s.id }, n.x + L.W, n.y + L.H / 2)}><Plus size={14} /></button>}

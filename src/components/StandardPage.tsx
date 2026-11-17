@@ -18,6 +18,7 @@ import { go, guardLeaving, href, type StandardTab } from "../lib/store";
 import { isDrawableStandard, standardSchema, validateStandard } from "../lib/validate";
 import type { AiSpec } from "./AiDialog";
 import { FeedbackForm, FeedbackItem, FeedbackTab, openCount, standardTarget } from "./Feedback";
+import { DocEngagement } from "./Engage";
 import { BelongsEditor, BelongsTags, DimsEditor, DimTags, LifecycleEditor, ProfileFilter, ReviewTag, useBelongsWarning } from "./Governance";
 import { BehindBanner, ConflictDialog, HistoryDialog, SaveBar, VersionTag } from "./Editing";
 import { ResourceEditor, Resources } from "./Resources";
@@ -342,6 +343,8 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   const [dialog, setDialog] = useState<null | "settings" | "ai" | "history">(null);
   const [showIssues, setShowIssues] = useState(false);
   const [jsonPending, setJsonPending] = useState(false);
+  // arriving at the feedback tab (from a card's "Give feedback" or the button) puts the cursor in the form
+  const [focusFeedback, setFocusFeedback] = useState(tab === "feedback");
   const [profile, setProfile] = useProfile();
   const [level, setLevel] = useState<Level | null>(null);
 
@@ -420,9 +423,11 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
               <button className="btn" onClick={() => setDialog("settings")} disabled={!renderable}><Settings2 size={16} />Details</button>
               <button className="btn" onClick={add} disabled={!renderable}><Plus size={16} />Add requirement</button>
             </>}
-            <button className="btn report-btn" onClick={() => go({ page: "standard", id: standard.id, tab: "feedback" })} disabled={!renderable}><Flag size={16} />Report a problem</button>
           </div>
         </div>
+        {renderable && <DocEngagement kind="standard" id={standard.id} title={draft.title} summary={draft.summary}
+          open={openCount(feedback)} handled={feedback.length - openCount(feedback)}
+          onFeedback={() => { setFocusFeedback(true); go({ page: "standard", id: standard.id, tab: "feedback" }); }} />}
       </div>
 
       <div className="tabs-row">
@@ -493,7 +498,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
           </ol>
         </div>
       )}
-      {view === "feedback" && renderable && <FeedbackTab target={target} feedback={feedback} onSelect={select} />}
+      {view === "feedback" && renderable && <FeedbackTab target={target} feedback={feedback} onSelect={select} focus={focusFeedback} onFocused={() => setFocusFeedback(false)} />}
       {view === "skills" && renderable && <SourceSkills kind="standard" id={standard.id} revision={standard} />}
       {view === "json" && <Suspense fallback={<Loading />}><JsonView doc={clean} noun="standard" validate={(v) => validateStandard(v, ctx)} schema={standardSchema} schemaFile="schema/standard.schema.json" onChange={setDraft} onPending={setJsonPending} /></Suspense>}
 
