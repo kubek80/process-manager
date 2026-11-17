@@ -182,7 +182,8 @@ function FilterGroup({ name, options, onToggle }: { name: FilterKey; options: Op
         const off = o.count === 0 && !o.chosen;
         return (
           <label key={o.value} className={`search-option ${o.chosen ? "on" : ""} ${off ? "off" : ""}`}>
-            <input type="checkbox" checked={o.chosen} disabled={off} onChange={() => onToggle(o.value)} />
+            <input type="checkbox" checked={o.chosen} disabled={off} onChange={() => onToggle(o.value)}
+              aria-label={`${o.label}, ${o.count} ${o.count === 1 ? "result" : "results"}`} />
             <span className="search-option-name">{o.label}</span>
             <span className="search-option-count"><span className="search-sr">, </span>{o.count}<span className="search-sr">{o.count === 1 ? " result" : " results"}</span></span>
           </label>

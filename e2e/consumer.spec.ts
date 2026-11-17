@@ -140,7 +140,7 @@ test("the guide explains the app with flow charts that fit the page", async ({ p
   await expect(toc.locator(".eyebrow")).toHaveText(["Using it", "Editing", "For AI assistants", "Administration", "Running it"]);
   for (const id of ["what", "find", "modes", "belong", "read", "follow", "blocks", "standards", "feedback", "mine", "edit", "editstandard", "versions", "ai", "lifecycle", "skills", "agents", "roadmap", "admin", "catalog", "architecture", "local", "tests", "deploy", "files", "docs"])
     await expect(page.locator(`#guide-${id} h2`)).toBeVisible();
-  await expect(page.locator("#guide-modes .guide-table.roles tbody tr")).toHaveCount(5);
+  await expect(page.locator("#guide-modes .guide-table.roles tbody tr")).toHaveCount(7); // Owner, Platform owner, Practice owner, Process editor, Standards editor, Lists manager, Admin
   await expect(page.locator("#guide-architecture .arch-box")).toHaveCount(8);
   await expect(page.locator("#guide-local")).toContainText("npm run dev");
   await expect(page.locator("#guide-local")).toContainText("Dana Admin");

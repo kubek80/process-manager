@@ -47,12 +47,15 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
 .mode-switch button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-1); }
 .mode-switch button.on.editor { background: var(--accent); color: var(--accent-ink); }
 /* Narrower screens, in this order: the names next to the logo and the avatar go, then the words of the
-   mode switch, then the words of the navigation (the links keep their name for screen readers), then the spacing. */
-@media (max-width: 1180px) { .brand-name, .user-name { display: none; } .user-btn { padding: 0 3px; } }
-@media (max-width: 960px) { .mode-switch button span { display: none; } .mode-switch button { padding: 0 9px; } }
-@media (max-width: 840px) { .nav-link span { display: none; } .nav-link { padding: 0 10px; } }
-@media (max-width: 520px) { .topbar { gap: 6px; padding: 0 10px; } .nav { margin-left: 0; gap: 0; } .nav-link { padding: 0 8px; } .mode-switch button { padding: 0 7px; } }
-@media (max-width: 400px) { .topbar { gap: 4px; padding: 0 8px; } .nav-link { padding: 0 7px; } }
+   mode switch, then the words of the navigation (the links keep their name for screen readers), then the spacing,
+   and on the smallest phones the logo (Home is the first link). The widths fit the longest top bar: an admin who
+   also answers for something, with seven links. */
+@media (max-width: 1440px) { .brand-name, .user-name { display: none; } .user-btn { padding: 0 3px; } }
+@media (max-width: 1200px) { .mode-switch button span { display: none; } .mode-switch button { padding: 0 9px; } .topbar { gap: 10px; } .nav-link { padding: 0 8px; } }
+@media (max-width: 1000px) { .nav-link span { display: none; } .nav-link { padding: 0 10px; } }
+@media (max-width: 520px) { .topbar { gap: 6px; padding: 0 10px; } .nav { margin-left: 0; gap: 0; } .nav-link { padding: 0 7px; } .mode-switch button { padding: 0 7px; } }
+@media (max-width: 440px) { .brand { display: none; } }
+@media (max-width: 400px) { .topbar { gap: 4px; padding: 0 8px; } .nav-link { padding: 0 6px; } }
 
 /* ---------- buttons ---------- */
 .btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 13px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--surface); font-weight: 550; font-size: 13.5px; white-space: nowrap; box-shadow: var(--shadow-1); transition: background .12s, border-color .12s, transform .05s; }

@@ -5,6 +5,14 @@ const CSRF = { "X-Requested-With": "process-manager" };
 
 // Casey is Owner of the Cloud Platform team; Riley is Practice owner of Cyber security and Owner of the team Cyber Security.
 
+// the processes made here are removed again: other tests count what there is
+test.afterAll(async ({ playwright }) => {
+  const request = await playwright.request.newContext({ baseURL: "http://127.0.0.1:8090" });
+  await request.post("/auth/dev/login", { data: { email: ALEX }, headers: CSRF });
+  for (const id of ["mine-demo", "mine-stale"]) await request.delete(`/api/processes/${id}`, { headers: CSRF });
+  await request.dispose();
+});
+
 /** A process of the Cloud Platform team whose review is long overdue. */
 async function overdueProcess(page: Page, id: string, title: string) {
   await page.request.post("/auth/dev/login", { data: { email: ALEX }, headers: CSRF });

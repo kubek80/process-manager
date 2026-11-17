@@ -216,7 +216,7 @@ test("create a standard from a policy text with AI; it is a draft without skills
   await modal.locator("textarea").nth(0).fill("Dependencies with critical vulnerabilities must be updated within 7 days.");
   await modal.getByRole("button", { name: "Copy prompt" }).click();
   const prompt = await page.evaluate(() => navigator.clipboard.readText());
-  for (const part of ["# TEAMS", '"security" - Cyber Security', '"production" - Production', "# JSON SCHEMA", '"id": "dependency-updates"', "must be updated within 7 days"]) expect(prompt).toContain(part);
+  for (const part of ["# TEAMS", "# PRACTICES", "# PLATFORMS", "# CATEGORIES", '"engineering" - Engineering', '"google-cloud" - Google Cloud', '"security" - Cyber Security', '"production" - Production', "# JSON SCHEMA", '"id": "dependency-updates"', "must be updated within 7 days"]) expect(prompt).toContain(part);
 
   const wrong = JSON.parse(JSON.stringify(example));
   wrong.requirements[0].level = "always";

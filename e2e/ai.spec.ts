@@ -19,7 +19,7 @@ test("create a process from text with any chat assistant", async ({ page }) => {
   await description.fill("To get VPN access you fill in the VPN form, your manager approves, the network team enables it.");
   await modal.getByRole("button", { name: "Copy prompt" }).click();
   const prompt = await page.evaluate(() => navigator.clipboard.readText());
-  for (const part of ["# JSON SCHEMA", '"servicenow" - ServiceNow', '"production" - Production', '"secure-logging" - Secure logging', '"cloud-platform-team" - Cloud Platform team', '"request-gcp-project" - Request a GCP project', "To get VPN access you fill in the VPN form"])
+  for (const part of ["# JSON SCHEMA", "# PLATFORMS", '"google-cloud" - Google Cloud', '"source-control" - Source control', '"servicenow" - ServiceNow', '"production" - Production', '"secure-logging" - Secure logging', '"cloud-platform-team" - Cloud Platform team', '"request-gcp-project" - Request a GCP project', "To get VPN access you fill in the VPN form"])
     expect(prompt).toContain(part);
 
   // 3: whatever comes back is checked
