@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { compare, compareProcesses, compareStandards, describeChange, summarize } from "../diff";
-import { base, baseStandard } from "./fixtures";
+import { base, baseStandard, catalog } from "./fixtures";
 
 describe("what changed between two versions of a process", () => {
   it("finds nothing in two equal versions, and ignores the date of the save", () => {
@@ -102,5 +102,30 @@ describe("comparing versions does not mislead", () => {
     expect(compare("standard", baseStandard(), "broken")).toEqual([]);
     const holes = { ...base(), steps: [null, base().steps[0]] } as unknown as ReturnType<typeof base>;
     expect(() => compareProcesses(holes, base())).not.toThrow();
+  });
+});
+
+describe("what a process or standard belongs to", () => {
+  it("says from what to what, by name", () => {
+    const before = { ...base(), category: "cloud", platform: "azure", rigour: "recommended" as const };
+    const after = { ...before, category: "network", platform: "google-cloud", practice: "engineering", rigour: "mandatory" as const, summary: "Another summary." };
+    expect(compareProcesses(before, after, catalog).map(describeChange)).toEqual([
+      "Summary changed",
+      "Category changed from “Cloud” to “Network”",
+      "Practice set to “Engineering”",
+      "Platform changed from “Azure” to “Google Cloud”",
+      "Rigour changed from “Recommended” to “Mandatory”",
+    ]);
+    expect(compareProcesses(after, { ...after, platform: undefined, rigour: undefined }, catalog).map(describeChange)).toEqual([
+      "Platform no longer set (was “Google Cloud”)",
+      "Rigour no longer set (was “Mandatory”)",
+    ]);
+  });
+
+  it("says the id where the lists are not known or the id is not in them", () => {
+    expect(compareProcesses(base(), { ...base(), platform: "azure" }).map(describeChange)).toEqual(["Platform set to “azure”"]);
+    expect(compareStandards(baseStandard(), { ...baseStandard(), practice: "gone" }, catalog).map(describeChange)).toEqual(["Practice set to “gone”"]);
+    expect(compare("standard", baseStandard(), { ...baseStandard(), category: "security" }, catalog).map(describeChange)).toEqual(["Category set to “Security”"]);
+    expect(summarize(compareProcesses(base(), { ...base(), category: "cloud" }, catalog))).toBe("details changed");
   });
 });

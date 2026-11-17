@@ -5,7 +5,7 @@ import {
 } from "../edit";
 import { hasErrors, isDrawableProcess, isDrawableStandard, validateProcess, validateStandard } from "../validate";
 import type { Process, Standard } from "../../types";
-import { base, baseStandard } from "./fixtures";
+import { base, baseStandard, catalog } from "./fixtures";
 
 const flow = (p: ReturnType<typeof base>) => p.steps.map((s) => `${s.id}>${s.next.map((n) => (n.label ? `${n.to}(${n.label})` : n.to)).join(",")}`).join(" ");
 const spec = { title: "Check the budget", type: "review" as const, actor: "boss" };
@@ -220,7 +220,21 @@ describe("blankProcess", () => {
     const p = blankProcess(["new-process"]);
     expect(p.id).toBe("new-process-2");
     expect(p.status).toBe("draft");
+    expect(p).not.toHaveProperty("category"); // a category is an id from the list: none until one is picked
     expect(hasErrors(validateProcess(p))).toBe(false);
+  });
+  it("belongs to the platform or practice its maker chose", () => {
+    const p = blankProcess([], "Request a bucket", { platform: "google-cloud" });
+    expect(p).toMatchObject({ id: "request-a-bucket", platform: "google-cloud" });
+    expect(p).not.toHaveProperty("practice");
+    expect(hasErrors(validateProcess(p, { catalog }))).toBe(false);
+  });
+  it("tidy drops a category, practice, platform or rigour that was cleared", () => {
+    const t = tidy({ ...base(), category: "", practice: " ", platform: undefined, rigour: undefined });
+    for (const f of ["category", "practice", "platform", "rigour"]) expect(t).not.toHaveProperty(f);
+    expect(tidy({ ...base(), category: "cloud", rigour: "optional" })).toMatchObject({ category: "cloud", rigour: "optional" });
+    expect(tidyStandard({ ...baseStandard(), practice: "", platform: "github" })).toMatchObject({ platform: "github" });
+    expect(tidyStandard({ ...baseStandard(), practice: "" })).not.toHaveProperty("practice");
   });
 });
 
@@ -280,10 +294,11 @@ describe("standards", () => {
     expect(deleteRequirement(one, "DEMO-01")).toBe(one); // a standard keeps at least one
   });
 
-  it("blankStandard is a valid draft for the given unit", () => {
+  it("blankStandard is a valid draft issued by the given team", () => {
     const s = blankStandard(["new-standard"], "security");
     expect(s).toMatchObject({ id: "new-standard-2", status: "draft", owner: "security" });
     expect(hasErrors(validateStandard(s))).toBe(false);
+    expect(blankStandard([], "dns-team", "DNS names", { practice: "engineering" })).toMatchObject({ id: "dns-names", owner: "dns-team", practice: "engineering" });
   });
 });
 

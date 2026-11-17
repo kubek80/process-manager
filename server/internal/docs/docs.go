@@ -465,15 +465,15 @@ func (s *Store) ExportDir(ctx context.Context, dir string) (int, error) {
 
 // Target is what feedback and permissions need to know about a process or a standard.
 type Target struct {
-	Kind   string
-	ID     string
-	Title  string
+	Kind     string
+	ID       string
+	Title    string
 	Owner    string            // team id
 	Platform string            // platform id
 	Practice string            // practice id
 	Status   string            // "" counts as active
-	Items  map[string]string // step or requirement id -> fingerprint of its content
-	Titles map[string]string // step or requirement id -> title
+	Items    map[string]string // step or requirement id -> fingerprint of its content
+	Titles   map[string]string // step or requirement id -> title
 }
 
 // TargetOf reads a process or standard. ok is false for anything else or unparsable bodies.

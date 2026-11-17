@@ -5,7 +5,7 @@ import {
   ApiError, confirmReview, createFeedback, deleteFeedback, go, href, loadCatalog, loadFeedback, loadMe, loadProcesses, loadStandards, logout, pageTitle, putCatalog, putProcess, putStandard,
   removeProcess, removeStandard, setAlsoHit, setResolved, SIGNED_OUT, forgetUnsaved, hasUnsaved, unsavedWork, useRoute, type MetaById,
 } from "./lib/store";
-import { CatalogContext, EMPTY_CATALOG } from "./lib/catalog";
+import { CatalogContext, EMPTY_CATALOG, useCatalog } from "./lib/catalog";
 import { canEditSomething, canOpenAdmin, FeedbackContext, MeContext, roleLabel, usePerms, type FeedbackActions } from "./lib/session";
 import { canEdit, editsAll } from "./lib/rights";
 import { ModeContext, type Mode } from "./lib/mode";
@@ -122,23 +122,63 @@ function whyNotCreated(e: unknown, noun: string): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** A new process or standard starts with its name: the name gives it its address, which never changes. */
-function NameDialog({ noun, onCreate, onClose }: { noun: "process" | "standard"; onCreate: (title: string) => Promise<void>; onClose: () => void }) {
-  const [title, setTitle] = useState("");
+/** What the person chose when creating something: what it belongs to and, for a standard, the team that issues it. */
+interface NewChoice { belongs: BelongsTo; owner?: string }
+
+/**
+ * A new process or standard starts with its name: the name gives it its address, which never
+ * changes. Somebody who may only change what belongs to their platforms and practices also says
+ * which of these it belongs to - otherwise it would not be theirs to save. A standard also needs
+ * the team that issues it. `from` is something made with AI: its name is suggested.
+ */
+function NameDialog({ noun, from, onCreate, onClose }: {
+  noun: "process" | "standard"; from?: Process | Standard;
+  onCreate: (title: string, choice: NewChoice) => Promise<void>; onClose: () => void;
+}) {
+  const perms = usePerms();
+  const { catalog } = useCatalog();
+  const [title, setTitle] = useState(from?.title ?? "");
   const [busy, setBusy] = useState(false);
-  const ok = slugify(title).length >= 3;
+  // the platforms and practices this person owns, for somebody who may not change everything
+  const yours = editsAll(perms, noun) ? [] : [
+    ...perms.platforms.map((id) => ({ value: `platform:${id}`, label: `Platform: ${platformName(catalog, id)}` })),
+    ...perms.practices.map((id) => ({ value: `practice:${id}`, label: `Practice: ${practiceName(catalog, id)}` })),
+  ];
+  const [belongs, setBelongs] = useState(yours[0]?.value ?? "");
+  const teams = catalog.teams;
+  const [owner, setOwner] = useState(() => {
+    const given = from && "requirements" in from ? from.owner : undefined;
+    return teams.find((t) => t.id === given)?.id ?? teams.find((t) => perms.owns.includes(t.id))?.id ?? teams[0]?.id ?? "";
+  });
+  const ok = slugify(title).length >= 3 && (!yours.length || !!belongs) && (noun === "process" || !!owner);
   const create = async () => {
     if (!ok || busy) return;
     setBusy(true);
-    try { await onCreate(title.trim()); } catch { setBusy(false); }
+    const [kind, id] = belongs.split(":");
+    const choice: NewChoice = { belongs: !yours.length ? {} : kind === "platform" ? { platform: id } : { practice: id }, ...(noun === "standard" ? { owner } : {}) };
+    try { await onCreate(title.trim(), choice); } catch { setBusy(false); }
   };
   return (
     <Modal title={`New ${noun}`} subtitle={`It starts as a draft that only editors see. You can change everything later, except its address.`} onClose={onClose}
       footer={<><span className="spacer" /><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!ok || busy} onClick={create}>Create {noun}</button></>}>
-      <form onSubmit={(e) => { e.preventDefault(); create(); }}>
-        <Field label={`Name of the ${noun}`} hint={ok ? `Address: …/${slugify(title)}` : noun === "process" ? "For example: Request a database" : "For example: Secure logging"}>
+      <form className="form" onSubmit={(e) => { e.preventDefault(); create(); }}>
+        <Field label={`Name of the ${noun}`} hint={slugify(title).length >= 3 ? `Address: …/${from?.id ?? slugify(title)}` : noun === "process" ? "For example: Request a database" : "For example: Secure logging"}>
           <input autoFocus value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} />
         </Field>
+        {yours.length > 0 && (
+          <Field label="It belongs to" hint={`you may change what belongs to your platforms and practices`}>
+            <select value={belongs} onChange={(e) => setBelongs(e.target.value)}>
+              {yours.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </Field>
+        )}
+        {noun === "standard" && (
+          <Field label="Issued by" hint="the team that reviews it and answers feedback">
+            <select value={owner} onChange={(e) => setOwner(e.target.value)}>
+              {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </Field>
+        )}
       </form>
     </Modal>
   );
@@ -186,6 +226,8 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const [standardMeta, setStandardMeta] = useState<MetaById>({});
   const [catalogVersion, setCatalogVersion] = useState(0);
   const [naming, setNaming] = useState<null | "process" | "standard">(null);
+  // something made with AI that is not yet the person's to save: they first say what it belongs to
+  const [pending, setPending] = useState<Process | Standard | null>(null);
   const [signedOut, setSignedOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ai, setAi] = useState<null | "process" | "standard">(null);
@@ -330,17 +372,20 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   // Something new always starts as a draft with an id of its own: it is never published by
   // accident and never lands on top of something that exists.
   const createProcess = async (p: Process) => {
+    // somebody who may only change what belongs to their platforms and practices first says which
+    if (!canEdit(perms, "process", p)) { setPending(p); setAi(null); setNaming("process"); return; }
     const id = uniqueId(p.id, all.map((x) => x.id));
     const doc = tidy({ ...p, id, status: "draft", $schema: "../schema/process.schema.json", updatedAt: today() });
     try { await saveProcess(doc, 0, "Created"); } catch (e) { notify.error("The process could not be created.", whyNotCreated(e, "process")); if ((e as ApiError).conflict) load(); throw e; }
-    setAi(null); setNaming(null);
+    setAi(null); setNaming(null); setPending(null);
     go({ page: "process", id, tab: "flow" });
   };
   const createStandard = async (s: Standard) => {
+    if (!canEdit(perms, "standard", s)) { setPending(s); setAi(null); setNaming("standard"); return; }
     const id = uniqueId(s.id, standards.map((x) => x.id));
     const doc = tidyStandard({ ...s, id, status: "draft", $schema: "../schema/standard.schema.json", updatedAt: today() });
     try { await saveStandard(doc, 0, "Created"); } catch (e) { notify.error("The standard could not be created.", whyNotCreated(e, "standard")); if ((e as ApiError).conflict) load(); throw e; }
-    setAi(null); setNaming(null);
+    setAi(null); setNaming(null); setPending(null);
     go({ page: "standard", id, tab: "doc" });
   };
   // Deleting: the version the person is looking at. If somebody changed it since, it is not
@@ -363,21 +408,28 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       setStandards((list) => list.filter((x) => x.id !== id)); go({ page: "standards" });
     } catch (e) { notify.error("The standard could not be deleted.", whyNot(e, "standard")); if ((e as ApiError).conflict) load(); }
   };
-  // a new standard belongs to a unit the person may edit for
-  const myUnit = unitsOf(catalog).find((u) => canEditStandard(perms, u.id))?.id ?? "";
+  // a new standard is issued by a team: there has to be one
   const newStandard = () => {
-    if (!myUnit) {
-      notify.error("A standard needs a unit that issues it.", unitsOf(catalog).length
-        ? "You may not edit for any of the units in the list. Ask an admin for the Standards editor role for your unit."
-        : "The list of teams and units has no unit yet. Ask someone who manages the lists to add one (Admin, Lists) with the kind Cyber security, Platform owner or Practice.");
+    if (!catalog.teams.length) {
+      notify.error("A standard needs a team that issues it.", "The list of teams is empty. Ask someone who manages the lists to add one (Admin, Lists).");
       return;
     }
     setNaming("standard");
   };
+  // what the name dialog creates: something blank, or what was made with AI, with what the person chose
+  const createNamed = (noun: "process" | "standard", title: string, choice: NewChoice) => {
+    if (noun === "process") {
+      const from = pending && !("requirements" in pending) ? pending : null;
+      return createProcess(from ? { ...from, title, ...choice.belongs } : blankProcess(all.map((p) => p.id), title, choice.belongs));
+    }
+    const from = pending && "requirements" in pending ? pending : null;
+    const owner = choice.owner ?? from?.owner ?? "";
+    return createStandard(from ? { ...from, title, owner, ...choice.belongs } : blankStandard(standards.map((s) => s.id), owner, title, choice.belongs));
+  };
 
   const all = processes ?? [];
   // what needs the signed-in person as an owner: shown as a count next to "My responsibilities"
-  const mine = useMemo(() => myTeams(perms), [perms]);
+  const mine = useMemo(() => myGroups(perms), [perms]);
   const waiting = useMemo(() => {
     // the top bar is on every page: whatever is wrong with one document, it must not take all of them down
     try { return mine.length ? urgent(responsibilities(perms, null, all, standards, feedback).tasks) : 0; } catch { return 0; }
@@ -462,10 +514,8 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         {ai === "process" && <AiDialog spec={processAiSpec(undefined, all, standards, catalog)} onClose={() => setAi(null)} onImport={(p) => { createProcess(p).catch(() => {}); }} />}
         {ai === "standard" && <AiDialog spec={standardAiSpec(undefined, standards, all, catalog)} onClose={() => setAi(null)} onImport={(s) => { createStandard(s).catch(() => {}); }} />}
       </Suspense>
-      {naming && <NameDialog noun={naming} onClose={() => setNaming(null)}
-        onCreate={(title) => (naming === "process"
-          ? createProcess(blankProcess(all.map((p) => p.id), title))
-          : createStandard(blankStandard(standards.map((s) => s.id), myUnit, title)))} />}
+      {naming && <NameDialog noun={naming} from={pending ?? undefined} onClose={() => { setNaming(null); setPending(null); }}
+        onCreate={(title, choice) => createNamed(naming, title, choice)} />}
       {signedOut && <SignedOutDialog me={me} onBack={() => setSignedOut(false)} onOther={onSignedOut} />}
     </FeedbackContext.Provider>
     </CatalogContext.Provider>

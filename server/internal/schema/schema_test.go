@@ -51,7 +51,8 @@ func TestRejectsWrongShapes(t *testing.T) {
 		{docs.Standard, `{"schemaVersion":"1.0","id":"s","title":"Standard","summary":"Long enough summary.","owner":"security","requirements":[{"id":"lower-case","title":"Rule","level":"must","statement":"A rule that is long enough.","verification":{"method":"review"}}]}`, "/requirements/0/id"},
 		{docs.Standard, `{"schemaVersion":"1.0","id":"s","title":"Standard","summary":"Long enough summary.","owner":"security","requirements":[{"id":"SEC-01","title":"Rule","level":"always","statement":"A rule that is long enough.","verification":{"method":"review"}}]}`, "/requirements/0/level"},
 		{docs.Catalog, `{"tiers":[],"languages":[],"teams":[],"tools":[]}`, "does not match the format"},
-		{docs.Catalog, `{"tiers":[],"environments":[],"languages":[],"tools":[],"teams":[{"id":"a","name":"A","kind":"cabal"}]}`, "/teams/0/kind"},
+		{docs.Catalog, `{"tiers":[],"environments":[],"languages":[],"tools":[],"teams":[{"id":"a","name":"A","kind":"platform"}]}`, "additional properties 'kind' not allowed"}, // teams have no kind any more
+		{docs.Catalog, `{"tiers":[],"environments":[],"languages":[],"tools":[],"teams":[],"platforms":[{"id":"Google Cloud","name":"Google Cloud"}]}`, "/platforms/0/id"},
 		{"skill", `{}`, "unknown kind"},
 	}
 	for _, c := range cases {

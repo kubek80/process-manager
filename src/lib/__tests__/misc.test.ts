@@ -2,11 +2,10 @@ import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { json } from "@codemirror/lang-json";
-import { environmentLabel, isUnit, languageLabel, teamName, tierLabel, toolName } from "../catalog";
+import { categoryName, completeCatalog, environmentLabel, groupName, languageLabel, platformName, practiceName, teamName, tierLabel, toolName } from "../catalog";
 import { reviewInfo, statusOf } from "../lifecycle";
 import { locate } from "../jsonLocate";
 import { basePrompt, createPrompt, createStandardPrompt, fixPrompt, modifyPrompt, modifyStandardPrompt } from "../prompt";
-import { canEditAnyStandard, canEditSomething, canEditStandard, canOpenAdmin, roleLabel } from "../session";
 import standardSchema from "../../../schema/standard.schema.json";
 import { STEP_META, STEP_TYPES } from "../stepMeta";
 import { openCount } from "../../components/Feedback";
@@ -53,12 +52,23 @@ describe("catalog names", () => {
     expect(environmentLabel(catalog)).toBe("All environments");
     expect(environmentLabel(catalog, ["staging", "production"])).toBe("Staging, Production");
   });
-  it("tells units from plain teams", () => {
-    expect(isUnit(catalog, "security")).toBe(true);
-    expect(isUnit(catalog, "cloud-platform-team")).toBe(true);
-    expect(isUnit(catalog, "dns-team")).toBe(false);
-    expect(isUnit(catalog, "ghost")).toBe(false);
-    expect(isUnit(catalog)).toBe(false);
+  it("names practices, platforms and categories, and each kind of group from its own list", () => {
+    expect(practiceName(catalog, "engineering")).toBe("Engineering");
+    expect(platformName(catalog, "google-cloud")).toBe("Google Cloud");
+    expect(categoryName(catalog, "source-control")).toBe("Source control");
+    expect(platformName(catalog, "ghost")).toBe("ghost");
+    expect(categoryName(catalog)).toBe("");
+    // a team and a practice may share an id: the kind says which list
+    expect(groupName(catalog, "team", "security")).toBe("Cyber Security");
+    expect(groupName(catalog, "practice", "security")).toBe("Cyber security");
+    expect(groupName(catalog, "platform", "azure")).toBe("Azure");
+  });
+  it("always has every list, also when lists are missing", () => {
+    const c = completeCatalog({ teams: [{ id: "a", name: "A" }] });
+    expect(c.teams).toHaveLength(1);
+    for (const key of ["practices", "platforms", "categories", "tiers", "environments", "languages", "tools"] as const) expect(c[key]).toEqual([]);
+    expect(completeCatalog(null).practices).toEqual([]);
+    expect(platformName({ ...catalog, platforms: undefined } as never, "azure")).toBe("azure"); // stored without the list: no crash
   });
 });
 
@@ -77,6 +87,14 @@ describe("the prompt for chat assistants", () => {
     expect(p).toContain('"go" - Go');
     expect(p).toContain('"id": "request-vpn-access"');
     expect(p).toContain("To get VPN access you fill in a form.");
+    // what it belongs to and how binding it is
+    expect(p).toContain("# CATEGORIES (usable in \"category\")");
+    expect(p).toContain('"cloud" - Cloud');
+    expect(p).toContain("# PLATFORMS (usable in \"platform\")");
+    expect(p).toContain('"google-cloud" - Google Cloud');
+    expect(p).toContain("# PRACTICES (usable in \"practice\")");
+    expect(p).toContain('"engineering" - Engineering');
+    expect(p).toContain('"rigour": how binding the process is');
     for (const t of STEP_TYPES) expect(p).toContain(`"${t}" (${STEP_META[t].label})`);
     expect(p).toMatch(/"updatedAt" is "\d{4}-\d{2}-\d{2}"/);
   });
@@ -146,11 +164,16 @@ describe("open feedback count", () => {
 
 describe("the prompt for standards", () => {
   const known = [{ id: "raise-servicenow-request", title: "Raise a ServiceNow request" }];
-  it("carries the rules, the schema, the units and an example", () => {
+  it("carries the rules, the schema, the lists and an example", () => {
     const p = createStandardPrompt("Passwords must never be logged.", catalog, known);
     expect(p).toContain(JSON.stringify(standardSchema));
-    expect(p).toContain('"security" - Cyber Security');
-    expect(p).not.toContain('"dns-team" - DNS team'); // a plain team cannot issue a standard
+    expect(p).toContain('"security" - Cyber Security'); // any team can issue a standard
+    expect(p).toContain('"dns-team" - DNS team');
+    expect(p).toContain("# PRACTICES");
+    expect(p).toContain('"security" - Cyber security');
+    expect(p).toContain('"google-cloud" - Google Cloud');
+    expect(p).toContain('"code-quality" - Code quality');
+    expect(p).toContain('A standard has no "rigour" field');
     expect(p).toContain('"production" - Production');
     expect(p).toContain('"raise-servicenow-request" - Raise a ServiceNow request');
     expect(p).toContain('"id": "dependency-updates"');
@@ -164,34 +187,6 @@ describe("the prompt for standards", () => {
     expect(p).toContain('"id": "DEMO-01"');
     expect(p).toContain("Add a rule about audit logs.");
     expect(modifyStandardPrompt(baseStandard(), "")).toContain("(describe the change here)");
-  });
-});
-
-describe("rights helpers", () => {
-  const none = { admin: false, catalog: false, processes: false, standards: false, standardUnits: [] as string[], owns: [] as string[] };
-  it("a consumer can do nothing extra", () => {
-    expect(canEditSomething(none)).toBe(false);
-    expect(canOpenAdmin(none)).toBe(false);
-    expect(canEditStandard(none, "security")).toBe(false);
-    expect(roleLabel(none)).toBe("Consumer");
-  });
-  it("a unit's standards editor edits that unit only", () => {
-    const p = { ...none, standardUnits: ["security"], owns: ["security"] };
-    expect(canEditStandard(p, "security")).toBe(true);
-    expect(canEditStandard(p, "engineering-practice")).toBe(false);
-    expect(canEditStandard(p)).toBe(false);
-    expect(canEditAnyStandard(p)).toBe(true);
-    expect(canEditSomething(p)).toBe(true);
-    expect(canOpenAdmin(p)).toBe(false);
-    expect(roleLabel(p)).toBe("Standards editor · Owner");
-  });
-  it("the lists manager and the admin get the Admin panel", () => {
-    expect(canOpenAdmin({ ...none, catalog: true })).toBe(true);
-    expect(roleLabel({ ...none, catalog: true, processes: true })).toBe("Process editor · Manages the lists");
-    const admin = { admin: true, catalog: true, processes: true, standards: true, standardUnits: [], owns: [] };
-    expect(canOpenAdmin(admin)).toBe(true);
-    expect(canEditStandard(admin, "anything")).toBe(true);
-    expect(roleLabel(admin)).toBe("Admin");
   });
 });
 

@@ -28,15 +28,15 @@ export function StandardsLibrary({ standards: all, processes, feedback, onNew, o
   const mayEdit = (s: Standard) => editing && canEdit(perms, "standard", s);
   // what somebody searched and filtered for is still there when they come back from a standard
   const [q, setQ] = useRemembered("pm:standards:q", "");
-  const [unit, setUnit] = useRemembered<string | null>("pm:standards:unit", null);
+  const [team, setTeam] = useRemembered<string | null>("pm:standards:unit", null);
   const [profile, setProfile] = useProfile();
   // drafts are work in progress: only the people who may change them see them here
   const standards = useMemo(() => all.filter((s) => statusOf(s) !== "draft" || (editing && canEdit(perms, "standard", s))), [all, editing, perms]);
   const categories = useMemo(() => [...new Set(standards.map((s) => s.category ?? ""))].sort(), [standards]);
   const ctx = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds: all.map((s) => s.id), catalog }), [processes, all, catalog]);
-  const units = useMemo(() => [...new Set(standards.map((s) => s.owner))].sort((a, b) => teamName(catalog, a).localeCompare(teamName(catalog, b))), [standards, catalog]);
+  const teams = useMemo(() => [...new Set(standards.map((s) => s.owner))].sort((a, b) => teamName(catalog, a).localeCompare(teamName(catalog, b))), [standards, catalog]);
   // a remembered team that no standard has any more filters nothing
-  const picked = unit && units.includes(unit) ? unit : null;
+  const picked = team && teams.includes(team) ? team : null;
 
   const shown = standards.filter((s) => {
     if (picked && s.owner !== picked) return false;
@@ -63,9 +63,9 @@ export function StandardsLibrary({ standards: all, processes, feedback, onNew, o
       <div className="filters">
         <div className="search"><Search size={16} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search: logging, Terraform, SEC-LOG-01…" aria-label="Search standards" /></div>
         <div className="chips" role="group" aria-label="Issued by">
-          <button className={`chip ${picked === null ? "on" : ""}`} aria-pressed={picked === null} onClick={() => setUnit(null)}>All<span>{standards.length}</span></button>
-          {units.map((u) => (
-            <button key={u} className={`chip ${picked === u ? "on" : ""}`} aria-pressed={picked === u} onClick={() => setUnit(u)}>
+          <button className={`chip ${picked === null ? "on" : ""}`} aria-pressed={picked === null} onClick={() => setTeam(null)}>All<span>{standards.length}</span></button>
+          {teams.map((u) => (
+            <button key={u} className={`chip ${picked === u ? "on" : ""}`} aria-pressed={picked === u} onClick={() => setTeam(u)}>
               {teamName(catalog, u)}<span>{standards.filter((s) => s.owner === u).length}</span>
             </button>
           ))}

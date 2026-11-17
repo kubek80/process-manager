@@ -73,7 +73,7 @@ export const removeStandard = (id: string, base: number) => call<void>("DELETE",
 
 /**
  * Records that a process or standard was reviewed and is still correct: today and the person's
- * name, as a version of its own. For the team or unit that owns it and for whoever may edit it.
+ * name, as a version of its own. For the team that owns it and for whoever may edit it.
  */
 export const confirmReview = <T extends Process | Standard>(kind: TargetKind, id: string, base: number) =>
   call<DocMeta & { document: T }>("POST", `/api/${kind === "process" ? "processes" : "standards"}/${id}/review?base=${base}`);

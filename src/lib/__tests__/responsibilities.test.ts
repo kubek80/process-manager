@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { answersFor, myTeams, responsibilities, urgent } from "../responsibilities";
+import { groupsOf, myGroups, responsibilities, urgent } from "../responsibilities";
 import type { Feedback, FeedbackByTarget, Perms } from "../../types";
 import { base, baseStandard } from "./fixtures";
 
-const perms = (p: Partial<Perms>): Perms => ({ admin: false, catalog: false, processes: false, standards: false, standardUnits: [], owns: [], ...p });
+const perms = (p: Partial<Perms>): Perms => ({ admin: false, catalog: false, processes: false, standards: false, owns: [], platforms: [], practices: [], ...p });
 const fb = (id: string, targetId: string, createdAt: string, resolved = false): Feedback => ({
   id, targetKind: "process", targetId, kind: "broken", text: `Problem ${id}`, author: { name: "Sam", email: "sam@example.com" }, createdAt,
   resolved, alsoHit: 0, alsoHitByMe: false, stale: false, mine: false, canManage: true,
@@ -11,18 +11,17 @@ const fb = (id: string, targetId: string, createdAt: string, resolved = false): 
 const TODAY = "2026-11-16";
 
 describe("whose it is", () => {
-  it("is what the teams own that somebody is owner of, and the units they edit standards for", () => {
-    expect(myTeams(perms({ owns: ["cloud-platform-team"], standardUnits: ["security", "cloud-platform-team"] }))).toEqual(["cloud-platform-team", "security"]);
-    expect(myTeams(perms({ processes: true, admin: true }))).toEqual([]); // editing everything is not owning anything
-    const casey = perms({ owns: ["cloud-platform-team"] });
-    expect(answersFor(casey, "process", "cloud-platform-team")).toBe(true);
-    expect(answersFor(casey, "standard", "cloud-platform-team")).toBe(true);
-    expect(answersFor(casey, "process", "security")).toBe(false);
-    expect(answersFor(casey, "process", undefined)).toBe(false);
-    // editing a unit's standards makes its standards yours, not the processes it happens to own
-    const editor = perms({ standardUnits: ["security"] });
-    expect(answersFor(editor, "standard", "security")).toBe(true);
-    expect(answersFor(editor, "process", "security")).toBe(false);
+  it("is what the person's teams maintain and what belongs to their platforms and practices", () => {
+    const jordan = perms({ owns: ["cloud-platform-team"], platforms: ["google-cloud"], practices: ["engineering", "security"] });
+    expect(myGroups(jordan)).toEqual([
+      { kind: "team", id: "cloud-platform-team" }, { kind: "platform", id: "google-cloud" },
+      { kind: "practice", id: "engineering" }, { kind: "practice", id: "security" },
+    ]);
+    expect(myGroups(perms({ processes: true, admin: true }))).toEqual([]); // editing everything is not owning anything
+    expect(groupsOf(jordan, { owner: "cloud-platform-team", platform: "google-cloud", practice: "engineering" }).map((g) => g.kind)).toEqual(["team", "platform", "practice"]);
+    expect(groupsOf(jordan, { owner: "security", platform: "azure" })).toEqual([]); // a team with the id of a practice is not the practice
+    expect(groupsOf(jordan, { practice: "security" })).toEqual([{ kind: "practice", id: "security" }]);
+    expect(groupsOf(jordan, {})).toEqual([]);
   });
 });
 
@@ -56,13 +55,20 @@ describe("what needs doing", () => {
     expect(responsibilities(perms({ processes: true }), null, [mine], [std], feedback, TODAY)).toEqual({ owned: [], tasks: [] });
   });
 
-  it("can be narrowed to one team, and follows what each role covers", () => {
-    const both = perms({ owns: ["cloud-platform-team"], standardUnits: ["security"] });
-    const secStd = { ...baseStandard(), id: "sec-std", owner: "security" };
-    const all = responsibilities(both, null, [mine, theirs], [std, secStd], feedback, TODAY);
-    // "theirs" is a process of security: a standards editor of that unit does not answer for it
-    expect(all.owned.map((o) => o.doc.id).sort()).toEqual(["demo-standard", "mine", "sec-std"]);
-    expect(responsibilities(both, "security", [mine, theirs], [std, secStd], feedback, TODAY).owned.map((o) => o.doc.id)).toEqual(["sec-std"]);
+  it("can be narrowed to one team, platform or practice, and says through which it is yours", () => {
+    const both = perms({ owns: ["cloud-platform-team"], practices: ["security"], platforms: ["google-cloud"] });
+    const secStd = { ...baseStandard(), id: "sec-std", owner: "security", practice: "security" };
+    const gcp = { ...base(), id: "gcp", title: "GCP", owner: "security", platform: "google-cloud" };
+    const all = responsibilities(both, null, [mine, theirs, gcp], [std, secStd], feedback, TODAY);
+    // "theirs" is maintained by the team security, which this person is not Owner of
+    expect(all.owned.map((o) => o.doc.id).sort()).toEqual(["demo-standard", "gcp", "mine", "sec-std"]);
+    // teams first, then platforms, then practices
+    expect(all.owned.map((o) => `${o.groups[0].kind}:${o.doc.id}`)).toEqual(["team:demo-standard", "team:mine", "platform:gcp", "practice:sec-std"]);
+    expect(responsibilities(both, "practice:security", [mine, theirs, gcp], [std, secStd], feedback, TODAY).owned.map((o) => o.doc.id)).toEqual(["sec-std"]);
+    expect(responsibilities(both, "team:security", [mine, theirs, gcp], [std, secStd], feedback, TODAY).owned).toEqual([]);
+    expect(responsibilities(both, "platform:google-cloud", [mine, theirs, gcp], [std, secStd], feedback, TODAY).owned.map((o) => o.doc.id)).toEqual(["gcp"]);
+    const twice = responsibilities(perms({ owns: ["cloud-platform-team"], platforms: ["google-cloud"] }), null, [{ ...mine, platform: "google-cloud" }], [], feedback, TODAY);
+    expect(twice.owned[0].groups).toEqual([{ kind: "team", id: "cloud-platform-team" }, { kind: "platform", id: "google-cloud" }]);
   });
 });
 

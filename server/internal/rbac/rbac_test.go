@@ -12,49 +12,84 @@ import (
 
 var ctx = context.Background()
 
+type B = rbac.Belongs
+
 func TestPermsFrom(t *testing.T) {
 	none := rbac.PermsFrom(nil, false)
-	if none.Admin || none.Catalog || none.Processes || none.Standards || none.StandardUnits == nil || none.Owns == nil || none.AnyStandards() {
+	if none.Admin || none.Catalog || none.Processes || none.Standards || none.Owns == nil || none.Platforms == nil || none.Practices == nil || none.EditsSome() {
 		t.Fatalf("no roles: %+v", none)
 	}
-	if none.CanEdit("process", "x") || none.CanEdit("standard", "security") || none.CanEdit("catalog", "") || none.CanManageFeedback("process", "x") {
+	everything := B{Owner: "x", Platform: "google-cloud", Practice: "security"}
+	if none.CanEdit("process", everything) || none.CanEdit("standard", everything) || none.CanEdit("catalog", B{}) || none.CanManageFeedback("process", everything) {
 		t.Fatal("no roles must grant nothing")
 	}
 
 	admin := rbac.PermsFrom(nil, true) // bootstrap admin
 	for _, kind := range []string{"process", "standard", "catalog"} {
-		if !admin.CanEdit(kind, "anything") || (kind != "catalog" && !admin.CanManageFeedback(kind, "anything")) {
+		if !admin.CanEdit(kind, B{}) || (kind != "catalog" && !admin.CanManageFeedback(kind, B{Owner: "anything"})) {
 			t.Fatalf("admin cannot edit %s", kind)
 		}
 	}
-	if admin.CanEdit("skill", "") {
+	if admin.CanEdit("skill", B{}) {
 		t.Fatal("unknown kind must be refused")
 	}
 
 	p := rbac.PermsFrom([]rbac.Assignment{
-		{Role: rbac.StandardsEditor, Scope: "security"}, {Role: rbac.Owner, Scope: "cloud-platform-team"},
-		{Role: rbac.Owner, Scope: "api-platform-team"}, {Role: rbac.CatalogManager},
+		{Role: rbac.Owner, Scope: "cloud-platform-team"}, {Role: rbac.Owner, Scope: "api-platform-team"}, {Role: rbac.CatalogManager},
 	}, false)
-	if p.Admin || p.Processes || p.Standards || !p.Catalog || strings.Join(p.Owns, ",") != "api-platform-team,cloud-platform-team" {
-		t.Fatalf("scoped: %+v", p)
+	if p.Admin || p.Processes || p.Standards || !p.Catalog || strings.Join(p.Owns, ",") != "api-platform-team,cloud-platform-team" || p.EditsSome() {
+		t.Fatalf("owner: %+v", p)
 	}
-	if !p.CanEditStandard("security") || p.CanEditStandard("engineering-practice") || p.CanEditStandard("") || !p.AnyStandards() {
-		t.Fatal("standards editor must be limited to its unit")
+	// a team owner manages feedback and reviews of what the team owns, and edits nothing
+	if !p.CanManageFeedback("process", B{Owner: "cloud-platform-team"}) || !p.CanManageFeedback("standard", B{Owner: "api-platform-team"}) ||
+		p.CanManageFeedback("process", B{Owner: "devex"}) || p.CanManageFeedback("process", B{}) ||
+		p.CanEdit("process", B{Owner: "cloud-platform-team"}) || p.CanEdit("standard", B{Owner: "cloud-platform-team"}) {
+		t.Fatal("owner rights are wrong")
 	}
-	if !p.CanManageFeedback("standard", "security") || !p.CanManageFeedback("process", "cloud-platform-team") ||
-		p.CanManageFeedback("process", "devex") || p.CanManageFeedback("process", "") || p.CanEdit("process", "cloud-platform-team") {
-		t.Fatal("feedback rights are wrong")
+	// the same id as a platform or practice does not count: a team is not a platform
+	if p.CanManageFeedback("process", B{Platform: "cloud-platform-team", Practice: "cloud-platform-team"}) {
+		t.Fatal("a team owner must not get rights through a platform of the same id")
 	}
+
+	// platform and practice owners edit processes and standards of theirs, and nothing else
+	o := rbac.PermsFrom([]rbac.Assignment{
+		{Role: rbac.PlatformOwner, Scope: "google-cloud"}, {Role: rbac.PracticeOwner, Scope: "security"}, {Role: rbac.PlatformOwner, Scope: "azure"},
+	}, false)
+	if strings.Join(o.Platforms, ",") != "azure,google-cloud" || strings.Join(o.Practices, ",") != "security" || !o.EditsSome() || o.Processes || o.Standards {
+		t.Fatalf("platform and practice owner: %+v", o)
+	}
+	for _, kind := range []string{"process", "standard"} {
+		for _, b := range []B{{Platform: "google-cloud"}, {Platform: "azure", Owner: "x"}, {Practice: "security"}, {Platform: "github", Practice: "security"}} {
+			if !o.CanEdit(kind, b) || !o.CanManageFeedback(kind, b) {
+				t.Errorf("%s %+v: must be editable", kind, b)
+			}
+		}
+		for _, b := range []B{{}, {Platform: "github"}, {Practice: "engineering"}, {Owner: "security"}, {Owner: "google-cloud"}} {
+			if o.CanEdit(kind, b) || o.CanManageFeedback(kind, b) {
+				t.Errorf("%s %+v: must not be editable", kind, b)
+			}
+		}
+	}
+	if o.CanEdit("catalog", B{Platform: "google-cloud"}) {
+		t.Fatal("platform owners do not manage the lists")
+	}
+
 	all := rbac.PermsFrom([]rbac.Assignment{{Role: rbac.StandardsEditor}, {Role: rbac.ProcessEditor}}, false)
-	if !all.CanEditStandard("any-unit") || !all.CanEdit("process", "") || all.Catalog || all.Admin {
-		t.Fatalf("unscoped editors: %+v", all)
+	if !all.CanEdit("standard", B{Owner: "any"}) || !all.CanEdit("process", B{}) || all.Catalog || all.Admin {
+		t.Fatalf("editors: %+v", all)
+	}
+	procs := rbac.PermsFrom([]rbac.Assignment{{Role: rbac.ProcessEditor}}, false)
+	if procs.CanEdit("standard", B{}) || !procs.CanManageFeedback("process", B{}) {
+		t.Fatalf("a process editor edits processes only: %+v", procs)
 	}
 }
 
 func TestCheck(t *testing.T) {
 	ok := []rbac.Assignment{
-		{Email: "a@b.co", Role: rbac.Admin}, {Email: "a@b.co", Role: rbac.StandardsEditor}, {Email: "a@b.co", Role: rbac.StandardsEditor, Scope: "security"},
+		{Email: "a@b.co", Role: rbac.Admin}, {Email: "a@b.co", Role: rbac.StandardsEditor},
 		{Email: "a@b.co", Role: rbac.Owner, Scope: "cloud-platform-team"},
+		{Email: "a@b.co", Role: rbac.PlatformOwner, Scope: "google-cloud"},
+		{Email: "a@b.co", Role: rbac.PracticeOwner, Scope: "security"},
 	}
 	for _, a := range ok {
 		if err := rbac.Check(a); err != nil {
@@ -62,38 +97,44 @@ func TestCheck(t *testing.T) {
 		}
 	}
 	bad := map[string]rbac.Assignment{
-		"not an email":     {Email: "nobody", Role: rbac.Admin},
-		"cannot be limite": {Email: "a@b.co", Role: rbac.ProcessEditor, Scope: "x"},
-		"not a unit id":    {Email: "a@b.co", Role: rbac.StandardsEditor, Scope: "Bad Scope"},
-		"owner needs":      {Email: "a@b.co", Role: rbac.Owner},
-		"unknown role":     {Email: "a@b.co", Role: "god"},
+		"not an email":                       {Email: "nobody", Role: rbac.Admin},
+		"process-editor cannot be limited":   {Email: "a@b.co", Role: rbac.ProcessEditor, Scope: "x"},
+		"standards-editor cannot be limited": {Email: "a@b.co", Role: rbac.StandardsEditor, Scope: "security"},
+		"owner needs the team":               {Email: "a@b.co", Role: rbac.Owner},
+		"platform-owner needs the platform":  {Email: "a@b.co", Role: rbac.PlatformOwner},
+		"practice-owner needs the practice":  {Email: "a@b.co", Role: rbac.PracticeOwner},
+		`"Bad Scope" is not a platform id`:   {Email: "a@b.co", Role: rbac.PlatformOwner, Scope: "Bad Scope"},
+		"unknown role":                       {Email: "a@b.co", Role: "god"},
 	}
 	for want, a := range bad {
 		if err := rbac.Check(a); !errors.Is(err, rbac.ErrInvalid) || !strings.Contains(err.Error(), want) {
 			t.Errorf("want %q, got %v", want, err)
 		}
 	}
+	if rbac.ScopeList(rbac.Owner) != "teams" || rbac.ScopeList(rbac.PlatformOwner) != "platforms" || rbac.ScopeList(rbac.PracticeOwner) != "practices" || rbac.ScopeList(rbac.StandardsEditor) != "" {
+		t.Fatal("scope lists")
+	}
 }
 
 func TestStoreGrantRevokeAndPerms(t *testing.T) {
 	s := &rbac.Store{Pool: dbtest.NewPool(t), Bootstrap: []string{"Root@Example.com"}}
-	if err := s.Grant(ctx, rbac.Assignment{Email: " Riley@Example.com ", Role: rbac.StandardsEditor, Scope: "security", GrantedBy: "root@example.com"}); err != nil {
+	if err := s.Grant(ctx, rbac.Assignment{Email: " Riley@Example.com ", Role: rbac.PracticeOwner, Scope: "security", GrantedBy: "root@example.com"}); err != nil {
 		t.Fatal(err)
 	}
-	s.Grant(ctx, rbac.Assignment{Email: "riley@example.com", Role: rbac.StandardsEditor, Scope: "security", GrantedBy: "someone-else"}) // twice
+	s.Grant(ctx, rbac.Assignment{Email: "riley@example.com", Role: rbac.PracticeOwner, Scope: "security", GrantedBy: "someone-else"}) // twice
 	s.Grant(ctx, rbac.Assignment{Email: "riley@example.com", Role: rbac.Owner, Scope: "security", GrantedBy: "root@example.com"})
 	if err := s.Grant(ctx, rbac.Assignment{Email: "x", Role: rbac.Admin}); !errors.Is(err, rbac.ErrInvalid) {
 		t.Fatalf("invalid grant: %v", err)
 	}
 	all, err := s.All(ctx)
-	if err != nil || len(all) != 2 || all[0].Email != "riley@example.com" || all[1].GrantedBy != "root@example.com" || all[0].GrantedAt.IsZero() {
+	if err != nil || len(all) != 2 || all[0].Email != "riley@example.com" || all[0].GrantedBy != "root@example.com" || all[1].GrantedBy != "root@example.com" || all[0].GrantedAt.IsZero() {
 		t.Fatalf("all: %+v %v", all, err)
 	}
 	if n, _ := s.Count(ctx); n != 2 {
 		t.Fatalf("count %d", n)
 	}
 	p, err := s.Perms(ctx, "RILEY@example.com")
-	if err != nil || !p.CanEditStandard("security") || p.Admin || len(p.Owns) != 1 {
+	if err != nil || !p.CanEdit("standard", B{Practice: "security"}) || p.Admin || len(p.Owns) != 1 {
 		t.Fatalf("riley: %+v %v", p, err)
 	}
 	root, _ := s.Perms(ctx, "root@example.com")
@@ -104,8 +145,43 @@ func TestStoreGrantRevokeAndPerms(t *testing.T) {
 		t.Fatal(err)
 	}
 	p, _ = s.Perms(ctx, "riley@example.com")
-	if len(p.Owns) != 0 || !p.CanEditStandard("security") {
+	if len(p.Owns) != 0 || !p.CanEdit("process", B{Practice: "security"}) {
 		t.Fatalf("after revoke: %+v", p)
+	}
+}
+
+func TestMembersAreTheScopedRolesInOrder(t *testing.T) {
+	s := &rbac.Store{Pool: dbtest.NewPool(t)}
+	for _, a := range []rbac.Assignment{
+		{Email: "zoe@example.com", Role: rbac.PracticeOwner, Scope: "security"},
+		{Email: "amy@example.com", Role: rbac.PracticeOwner, Scope: "security"},
+		{Email: "amy@example.com", Role: rbac.PlatformOwner, Scope: "google-cloud"},
+		{Email: "bob@example.com", Role: rbac.Owner, Scope: "security"},
+		{Email: "bob@example.com", Role: rbac.Owner, Scope: "cloud-platform-team"},
+		{Email: "bob@example.com", Role: rbac.Admin},
+		{Email: "cat@example.com", Role: rbac.ProcessEditor},
+	} {
+		a.GrantedBy = "root@example.com"
+		if err := s.Grant(ctx, a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	members, err := s.Members(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, m := range members {
+		got = append(got, m.Role+"/"+m.Scope+"/"+m.Email)
+	}
+	want := "owner/cloud-platform-team/bob@example.com,owner/security/bob@example.com,platform-owner/google-cloud/amy@example.com," +
+		"practice-owner/security/amy@example.com,practice-owner/security/zoe@example.com"
+	if strings.Join(got, ",") != want {
+		t.Fatalf("members: %v", got)
+	}
+	empty, err := (&rbac.Store{Pool: dbtest.NewPool(t)}).Members(ctx)
+	if err != nil || empty == nil || len(empty) != 0 {
+		t.Fatalf("no members must be an empty list: %v %v", empty, err)
 	}
 }
 

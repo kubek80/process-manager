@@ -14,8 +14,9 @@ describe("addresses", () => {
     for (const r of routes) expect(parseRoute(href(r))).toEqual(r);
   });
   it("fall back to something sensible", () => {
-    expect(parseRoute("")).toEqual({ page: "library" });
-    expect(parseRoute("#/nonsense")).toEqual({ page: "library" });
+    expect(parseRoute("")).toEqual({ page: "home" });
+    expect(parseRoute("#/nonsense")).toEqual({ page: "home" });
+    expect(parseRoute("#/processes")).toEqual({ page: "library" });
     expect(parseRoute("#/p/some-process")).toEqual({ page: "process", id: "some-process", tab: "flow" });
     expect(parseRoute("#/s/some-standard")).toEqual({ page: "standard", id: "some-standard", tab: "doc" });
     expect(parseRoute("#/admin")).toEqual({ page: "admin", section: "access" });

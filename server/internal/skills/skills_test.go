@@ -62,8 +62,8 @@ func TestProcessSkill(t *testing.T) {
 	wantAll(t, g.Body,
 		"---\nname: process-request-gcp-project\ndescription: \"Follow the company process “Request a GCP project”",
 		"# Process: Request a GCP project",
-		"- Owner: Cloud Platform team (Slack #cloud-platform)",
-		"- Applies to: all tiers; any language; all environments",
+		"- Owner: Cloud Platform team (Slack #cloud-platform)\n- Category: Cloud\n- Platform: Google Cloud\n"+
+			"- Rigour: Mandatory - this is the only allowed way to get this done.\n- Applies to: all tiers; any language; all environments\n",
 		"Never perform a step of another participant, and never approve anything.",
 		"## Before you start",
 		"If missing: follow the process “Request a repository” (skill `process-request-github-repository`).",
@@ -87,6 +87,31 @@ func TestProcessSkill(t *testing.T) {
 	// the front matter must stay one line each, whatever the summary contains
 	if head := strings.SplitN(g.Body, "---\n\n", 2)[0]; strings.Count(head, "\n") != 3 {
 		t.Errorf("front matter:\n%s", head)
+	}
+}
+
+func TestPlacementIsOnlyWhatIsSet(t *testing.T) {
+	_, c := sampleContext(t)
+	// both a practice and a platform, rigour recommended
+	out, _ := skills.ForProcess(read(t, "processes/publish-internal-library.json"), c, nil)
+	wantAll(t, out[0].Body, "- Category: Source control\n- Practice: Engineering\n- Platform: GitHub\n- Rigour: Recommended - this is the expected way; another way needs a good reason.\n")
+	// nothing set: no lines; an id that is not in the lists (yet) is shown as it is
+	body := strings.NewReplacer(`"category": "cloud",`, "", `"platform": "google-cloud",`, `"practice": "not-listed",`, `"rigour": "mandatory",`, "").
+		Replace(string(read(t, "processes/request-gcp-project.json")))
+	out, _ = skills.ForProcess([]byte(body), c, nil)
+	if strings.Contains(out[0].Body, "- Category:") || strings.Contains(out[0].Body, "- Platform:") || strings.Contains(out[0].Body, "- Rigour:") ||
+		!strings.Contains(out[0].Body, "- Practice: not-listed\n") {
+		t.Fatalf("placement:\n%s", out[0].Body[:600])
+	}
+	// the same source gives the same text
+	again, _ := skills.ForProcess([]byte(body), c, nil)
+	if again[0].Body != out[0].Body {
+		t.Fatal("generation must be repeatable")
+	}
+	std, _ := skills.ForStandard(read(t, "standards/infrastructure-as-code.json"), c, nil)
+	wantAll(t, std[0].Body, "- Category: Cloud\n- Practice: Engineering\n- Platform: Google Cloud\n")
+	if strings.Contains(std[0].Body, "- Rigour:") {
+		t.Fatal("a standard has no rigour of its own")
 	}
 }
 
@@ -137,7 +162,7 @@ func TestStandardSkillAndReviewAgent(t *testing.T) {
 	wantAll(t, skill.Body,
 		"name: standard-secure-logging\n",
 		"# Standard: Secure logging",
-		"- Issued by: Cyber Security (Slack #security)",
+		"- Issued by: Cyber Security (Slack #security)\n- Category: Security\n- Practice: Cyber security\n- Applies to: ",
 		"- Scope: All services and jobs",
 		"- Meet every **MUST**. If you cannot, stop and tell the person",
 		"### SEC-LOG-01 · No secrets in logs · MUST",
@@ -150,7 +175,7 @@ func TestStandardSkillAndReviewAgent(t *testing.T) {
 		"Applies only to: tiers Tier 0, Tier 1.",
 		"Applies only to: environments Production.",
 		"### SEC-LOG-05 · Structured logs · SHOULD",
-		"## Exceptions\n\nA MUST can only be waived by the unit that issued the standard. Ask Cyber Security (Slack #security).",
+		"## Exceptions\n\nA MUST can only be waived by the team that issued the standard. Ask Cyber Security (Slack #security).",
 		"## Background\n\n- Link: Information security policy <https://wiki.example.com/security/policy>",
 	)
 	if strings.Contains(skill.Body, "Ignore test fixtures.") {
@@ -158,6 +183,7 @@ func TestStandardSkillAndReviewAgent(t *testing.T) {
 	}
 	wantAll(t, agent.Body,
 		"name: review-secure-logging\n", "tools: Read, Grep, Glob, Bash\n",
+		"- Issued by: Cyber Security (Slack #security)\n- Category: Security\n- Practice: Cyber security\n",
 		"You review changes against the standard **Secure logging**. You only read; you never change files.",
 		"### SEC-LOG-01 · No secrets in logs · MUST · report as blocker",
 		"- A variable named like password, secret, token, apiKey or authorization passed to a log call",

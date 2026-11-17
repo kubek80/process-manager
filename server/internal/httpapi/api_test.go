@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -30,18 +31,21 @@ import (
 
 // The built-in development users, with the roles the development setup gives them.
 const (
-	sam   = "sam@example.com"   // consumer
-	alex  = "alex@example.com"  // process editor + manages the lists
-	casey = "casey@example.com" // owner for cloud-platform-team, which owns request-gcp-project
-	riley = "riley@example.com" // standards editor + owner for the unit "security"
-	dana  = "dana@example.com"  // admin through the server settings
+	sam    = "sam@example.com"    // consumer
+	alex   = "alex@example.com"   // process editor + manages the lists
+	casey  = "casey@example.com"  // owner for cloud-platform-team, which owns request-gcp-project
+	riley  = "riley@example.com"  // owner of the practice "security" + owner for the team "security"
+	jordan = "jordan@example.com" // owner of the platform google-cloud and the practice engineering, owner for cloud-platform-team
+	dana   = "dana@example.com"   // admin through the server settings
 )
 
 const (
-	gcp     = "request-gcp-project"       // process owned by cloud-platform-team
-	repoP   = "request-github-repository" // process owned by developer-experience-team
-	logging = "secure-logging"            // standard owned by security
-	review  = "code-review"               // standard owned by engineering-practice
+	gcp     = "request-gcp-project"       // process owned by cloud-platform-team, platform google-cloud
+	repoP   = "request-github-repository" // process owned by developer-experience-team, platform github
+	library = "publish-internal-library"  // process of the practice engineering, platform github
+	logging = "secure-logging"            // standard owned by security, practice security
+	review  = "code-review"               // standard owned by developer-experience-team, practice engineering
+	iac     = "infrastructure-as-code"    // standard owned by cloud-platform-team, practice engineering, platform google-cloud
 )
 
 const repoRoot = "../../.." // sample content and schemas
@@ -215,7 +219,7 @@ func TestMeShowsRights(t *testing.T) {
 	e := setup(t, nil)
 	c := e.anonymous()
 	_, me := c.do("GET", "/api/me", nil)
-	if me["authenticated"] != false || me["provider"] != "dev" || len(me["devUsers"].([]any)) != 5 || me["user"] != nil || me["perms"] != nil {
+	if me["authenticated"] != false || me["provider"] != "dev" || len(me["devUsers"].([]any)) != 6 || me["user"] != nil || me["perms"] != nil {
 		t.Fatalf("anonymous me: %v", me)
 	}
 	status, body := c.do("POST", "/auth/dev/login", map[string]string{"email": "mallory@example.com"})
@@ -236,8 +240,11 @@ func TestMeShowsRights(t *testing.T) {
 	if p := perms(casey); p["owns"].([]any)[0] != "cloud-platform-team" || p["processes"] != false {
 		t.Fatalf("casey: %v", p)
 	}
-	if p := perms(riley); p["standardUnits"].([]any)[0] != "security" || p["standards"] != false {
+	if p := perms(riley); p["practices"].([]any)[0] != "security" || len(p["platforms"].([]any)) != 0 || p["owns"].([]any)[0] != "security" || p["standards"] != false {
 		t.Fatalf("riley: %v", p)
+	}
+	if p := perms(jordan); fmt.Sprint(p) != "map[admin:false catalog:false owns:[cloud-platform-team] platforms:[google-cloud] practices:[engineering] processes:false standards:false]" {
+		t.Fatalf("jordan: %v", p)
 	}
 	if p := perms(dana); p["admin"] != true || p["processes"] != true || p["standards"] != true || p["catalog"] != true {
 		t.Fatalf("dana: %v", p)
@@ -386,9 +393,9 @@ func TestReadContent(t *testing.T) {
 func TestProcessEditorsSaveProcesses(t *testing.T) {
 	e := setup(t, nil)
 	changed := e.body(docs.Process, repoP, "Request a repository", "Request a repo")
-	for _, who := range []string{sam, casey, riley} {
+	for _, who := range []string{sam, casey, riley, jordan} {
 		status, body := e.as(who).do("PUT", "/api/processes/"+repoP, changed)
-		if status != 403 || !strings.Contains(body["error"].(string), "process editors") {
+		if status != 403 || body["error"] == "" {
 			t.Fatalf("%s: %d %v", who, status, body)
 		}
 		status, _ = e.as(who).do("DELETE", "/api/processes/"+repoP, nil)
@@ -458,42 +465,51 @@ func TestDeletingAProcessRemovesItsFeedbackAndWithdrawsItsSkill(t *testing.T) {
 	}
 }
 
-func TestStandardsAreEditedByTheirUnit(t *testing.T) {
+func TestStandardsAreEditedByTheirEditorsAndPracticeOwners(t *testing.T) {
 	e := setup(t, nil)
 	changedLogging := e.body(docs.Standard, logging, "never written to logs", "never ever written to logs")
 	changedReview := e.body(docs.Standard, review, "about 400", "about 300")
 
-	// process editors and consumers cannot touch standards
+	// process editors, team owners and consumers cannot touch standards
 	for _, who := range []string{sam, alex, casey} {
 		status, body := e.as(who).do("PUT", "/api/standards/"+logging, changedLogging)
-		if status != 403 || !strings.Contains(body["error"].(string), "that unit's standards") {
+		if status != 403 || body["error"] != "Only standards editors and the owners of its platform or practice can change this standard." {
 			t.Fatalf("%s: %d %v", who, status, body)
 		}
 	}
-	sec := e.as(riley)
+	sec := e.as(riley) // owner of the practice "security"
 	status, body := sec.do("PUT", "/api/standards/"+logging, changedLogging)
 	wantStatus(t, status, 200, body)
-	// ...but not another unit's standard,
+	// ...but not a standard of another practice,
 	status, body = sec.do("PUT", "/api/standards/"+review, changedReview)
-	wantStatus(t, status, 403, body)
+	if status != 403 || body["error"] != "You can only save a standard that belongs to a platform or practice you own." {
+		t.Fatalf("other practice: %d %v", status, body)
+	}
 	status, body = sec.do("DELETE", "/api/standards/"+review, nil)
 	wantStatus(t, status, 403, body)
-	// not by claiming it for their own unit,
-	status, body = sec.do("PUT", "/api/standards/"+review, strings.Replace(changedReview, `"owner": "engineering-practice"`, `"owner": "security"`, 1))
+	// not by claiming it for their own practice,
+	status, body = sec.do("PUT", "/api/standards/"+review, strings.Replace(changedReview, `"practice": "engineering"`, `"practice": "security"`, 1))
+	if status != 403 || body["error"] != "Only standards editors and the owners of its platform or practice can change this standard." {
+		t.Fatalf("take-over: %d %v", status, body)
+	}
+	// and they cannot hand theirs to a practice they do not own, or to none
+	status, body = sec.do("PUT", "/api/standards/"+logging, strings.Replace(changedLogging, `"practice": "security"`, `"practice": "engineering"`, 1))
 	wantStatus(t, status, 403, body)
-	// and they cannot hand their standard to a unit they do not edit for
-	status, body = sec.do("PUT", "/api/standards/"+logging, strings.Replace(changedLogging, `"owner": "security"`, `"owner": "engineering-practice"`, 1))
+	status, body = sec.do("PUT", "/api/standards/"+logging, strings.Replace(changedLogging, `"practice": "security",`, ``, 1))
 	wantStatus(t, status, 403, body)
 
-	// a new standard for their own unit is fine, and gets a skill and a review agent
+	// a new standard of their own practice is fine, and gets a skill and a review agent
 	fresh := strings.NewReplacer(`"id": "secure-logging"`, `"id": "secret-storage"`, "Secure logging", "Secret storage").Replace(changedLogging)
-	status, body = sec.do("PUT", "/api/standards/secret-storage", fresh)
+	status, body = sec.do("PUT", "/api/standards/secret-storage?base=0", fresh)
 	wantStatus(t, status, 200, body)
 	for _, id := range []string{"standard-secret-storage", "review-secret-storage"} {
 		if sk, err := e.deps.Skills.Get(bg, id); err != nil || !sk.Active || sk.Version != 1 {
 			t.Errorf("%s: %+v %v", id, sk, err)
 		}
 	}
+	// one of no practice is not
+	status, body = sec.do("PUT", "/api/standards/secret-keeping?base=0", strings.NewReplacer(`"id": "secret-storage"`, `"id": "secret-keeping"`, `"practice": "security",`, ``).Replace(fresh))
+	wantStatus(t, status, 403, body)
 	if sk, _ := e.deps.Skills.Get(bg, "review-"+logging); sk.Version != 2 {
 		t.Fatalf("the review agent must follow the standard: v%d", sk.Version)
 	}
@@ -504,7 +520,7 @@ func TestStandardsAreEditedByTheirUnit(t *testing.T) {
 	status, body = sec.do("DELETE", "/api/standards/secret-storage", nil)
 	wantStatus(t, status, 200, body)
 
-	// an admin edits any unit's standards
+	// an admin edits every standard
 	status, body = e.as(dana).do("PUT", "/api/standards/"+review, changedReview)
 	wantStatus(t, status, 200, body)
 }
@@ -520,14 +536,14 @@ func TestListsAreManagedByTheirManagersAndRegenerateSkills(t *testing.T) {
 	}
 	status, body := e.as(alex).do("PUT", "/api/catalog", renamed)
 	wantStatus(t, status, 200, body)
-	// the unit's new name reaches the generated text
+	// the team's new name reaches the generated text
 	content, _ := e.deps.Skills.Content(bg, "standard-"+logging, 0)
 	sk, _ := e.deps.Skills.Get(bg, "standard-"+logging)
 	if sk.Version != 2 || !strings.Contains(content, "Issued by: Information Security") {
 		t.Fatalf("skill v%d not regenerated", sk.Version)
 	}
 	if other, _ := e.deps.Skills.Get(bg, "process-"+gcp); other.Version != 1 {
-		t.Fatalf("a skill that does not mention the unit must not change: v%d", other.Version)
+		t.Fatalf("a skill that does not mention the team must not change: v%d", other.Version)
 	}
 	status, body = e.as(alex).do("PUT", "/api/catalog", `{"tiers":[],"languages":[],"teams":[],"tools":[]}`)
 	if status != 400 || !strings.Contains(body["error"].(string), "does not match the format") {
@@ -680,7 +696,7 @@ func TestWhoMayMarkAsFixed(t *testing.T) {
 		sam:   {false, false, false, false}, // not even their own reports
 		casey: {true, false, false, false},  // owner for the team that owns the GCP process
 		alex:  {true, true, false, false},   // edits every process
-		riley: {false, false, true, false},  // edits and owns for the unit "security"
+		riley: {false, false, true, false},  // owns the practice and the team "security"
 		dana:  {true, true, true, true},     // admin
 	}
 	for who, row := range want {
@@ -835,7 +851,8 @@ func TestAccessIsManagedByAdminsAndTakesEffectAtOnce(t *testing.T) {
 	}
 	admin := e.as(dana)
 	status, body := admin.do("GET", "/api/admin/access", nil)
-	if status != 200 || len(body["assignments"].([]any)) != 5 || body["bootstrapAdmins"].([]any)[0] != dana || len(body["roles"].([]any)) != 5 {
+	if status != 200 || len(body["assignments"].([]any)) != 8 || body["bootstrapAdmins"].([]any)[0] != dana ||
+		fmt.Sprint(body["roles"]) != "[admin catalog-manager process-editor standards-editor owner platform-owner practice-owner]" {
 		t.Fatalf("access: %d %v", status, body)
 	}
 
@@ -844,25 +861,29 @@ func TestAccessIsManagedByAdminsAndTakesEffectAtOnce(t *testing.T) {
 	samClient := e.as(sam)
 	status, _ = samClient.do("PUT", "/api/standards/"+review, changed)
 	wantStatus(t, status, 403, nil)
-	status, body = admin.do("POST", "/api/admin/access", map[string]string{"email": " Sam@Example.com ", "role": "standards-editor", "scope": "engineering-practice"})
-	if status != 200 || len(body["assignments"].([]any)) != 6 {
+	status, body = admin.do("POST", "/api/admin/access", map[string]string{"email": " Sam@Example.com ", "role": "practice-owner", "scope": "engineering"})
+	if status != 200 || len(body["assignments"].([]any)) != 9 {
 		t.Fatalf("grant: %d %v", status, body)
 	}
 	status, body = samClient.do("PUT", "/api/standards/"+review, changed) // same session, no new sign-in
 	wantStatus(t, status, 200, body)
-	status, body = admin.do("DELETE", "/api/admin/access", map[string]string{"email": sam, "role": "standards-editor", "scope": "engineering-practice"})
-	if status != 200 || len(body["assignments"].([]any)) != 5 {
+	status, body = admin.do("DELETE", "/api/admin/access", map[string]string{"email": sam, "role": "practice-owner", "scope": "engineering"})
+	if status != 200 || len(body["assignments"].([]any)) != 8 {
 		t.Fatalf("revoke: %d %v", status, body)
 	}
 	status, _ = samClient.do("PUT", "/api/standards/"+review, e.body(docs.Standard, review, "about 300", "about 200"))
 	wantStatus(t, status, 403, nil)
 
 	for want, in := range map[string]map[string]string{
-		"not an email address":     {"email": "nobody", "role": "admin"},
-		"unknown role":             {"email": "x@example.com", "role": "god"},
-		"cannot be limited":        {"email": "x@example.com", "role": "process-editor", "scope": "security"},
-		"owner needs":              {"email": "x@example.com", "role": "owner"},
-		"no team or unit “ghosts”": {"email": "x@example.com", "role": "owner", "scope": "ghosts"},
+		"not an email address":                         {"email": "nobody", "role": "admin"},
+		"unknown role":                                 {"email": "x@example.com", "role": "god"},
+		"cannot be limited":                            {"email": "x@example.com", "role": "process-editor", "scope": "security"},
+		"owner needs the team":                         {"email": "x@example.com", "role": "owner"},
+		"platform-owner needs the platform":            {"email": "x@example.com", "role": "platform-owner"},
+		"standards-editor cannot be limited":           {"email": "x@example.com", "role": "standards-editor", "scope": "security"},
+		"There is no team “ghosts” in the lists":       {"email": "x@example.com", "role": "owner", "scope": "ghosts"},
+		"There is no platform “security” in the lists": {"email": "x@example.com", "role": "platform-owner", "scope": "security"}, // a practice and a team, not a platform
+		"There is no practice “azure” in the lists":    {"email": "x@example.com", "role": "practice-owner", "scope": "azure"},
 	} {
 		if status, body := admin.do("POST", "/api/admin/access", in); status != 400 || !strings.Contains(body["error"].(string), want) {
 			t.Errorf("want 400 with %q, got %d %v", want, status, body)
@@ -875,7 +896,7 @@ func TestAccessIsManagedByAdminsAndTakesEffectAtOnce(t *testing.T) {
 	status, body = admin.do("GET", "/api/admin/audit?limit=3", nil)
 	entries := body["entries"].([]any)
 	first, second := entries[0].(map[string]any), entries[2].(map[string]any)
-	if status != 200 || len(entries) != 3 || first["action"] != "access.revoke" || first["target"] != sam || first["detail"] != "standards-editor for engineering-practice" ||
+	if status != 200 || len(entries) != 3 || first["action"] != "access.revoke" || first["target"] != sam || first["detail"] != "practice-owner for practice Engineering (engineering)" ||
 		first["name"] != "Dana Admin" || second["action"] != "access.grant" {
 		t.Fatalf("audit: %d %v", status, entries)
 	}
@@ -906,7 +927,7 @@ func TestSystemOverview(t *testing.T) {
 	e.as(sam).report(docs.Process, gcp, "", "One open item.")
 	status, body := e.as(dana).do("GET", "/api/admin/system", nil)
 	if status != 200 || body["provider"] != "dev" || body["processes"] != float64(7) || body["standards"] != float64(3) || body["skills"] != float64(13) ||
-		body["assignments"] != float64(5) || body["openFeedback"] != float64(1) || body["baseUrl"] != "http://pm.test" {
+		body["assignments"] != float64(8) || body["openFeedback"] != float64(1) || body["baseUrl"] != "http://pm.test" {
 		t.Fatalf("%d %v", status, body)
 	}
 }

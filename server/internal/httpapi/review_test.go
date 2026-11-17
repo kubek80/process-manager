@@ -66,11 +66,11 @@ func TestWhoMayConfirmAReview(t *testing.T) {
 	}{
 		{sam, "/api/processes/" + gcp + "/review", 403},       // a reader
 		{casey, "/api/processes/" + repoP + "/review", 403},   // owner of another team
-		{casey, "/api/standards/" + logging + "/review", 403}, // not her unit
+		{casey, "/api/standards/" + logging + "/review", 403}, // not her team
 		{riley, "/api/processes/" + gcp + "/review", 403},     // a standards editor is no process owner
 		{alex, "/api/processes/" + gcp + "/review", 200},      // edits every process
-		{riley, "/api/standards/" + logging + "/review", 200}, // owns and edits the standards of her unit
-		{riley, "/api/standards/" + review + "/review", 403},  // another unit's standard
+		{riley, "/api/standards/" + logging + "/review", 200}, // owns its practice and its team
+		{riley, "/api/standards/" + review + "/review", 403},  // a standard of another practice and team
 		{dana, "/api/standards/" + review + "/review", 200},   // admin
 		{dana, "/api/processes/does-not-exist/review", 404},
 	}

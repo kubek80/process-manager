@@ -111,6 +111,30 @@ describe("rules the schema cannot express", () => {
     expect(hasErrors(check((p) => { p.status = "deprecated"; p.replacedBy = "demo"; }))).toBe(true);
     expect(find(check((p) => { p.status = "deprecated"; p.replacedBy = "gone"; }), "replacedBy")[0].level).toBe("warning");
   });
+
+  it("category, practice and platform must be in their lists, and the message names the known ones", () => {
+    for (const [field, list] of [["category", "categories"], ["practice", "practices"], ["platform", "platforms"]] as const) {
+      const [issue] = find(check((p) => (p[field] = "nowhere")), field);
+      expect(issue.level).toBe("error");
+      expect(issue.message).toContain(`"nowhere" is not a known ${field}`);
+      expect(issue.message).toContain(`Known ${list}: ${catalog[list].map((x) => x.id).join(", ")}`);
+    }
+    expect(check((p) => { p.category = "cloud"; p.practice = "engineering"; p.platform = "google-cloud"; p.rigour = "recommended"; })).toEqual([]);
+    // a team id is not a practice: the lists are separate
+    expect(find(check((p) => (p.practice = "cloud-platform-team")), "practice")[0].level).toBe("error");
+    expect(find(check((p) => (p.category = "x"), { ...ctx, catalog: { ...catalog, categories: [] } }), "category")[0].message).toContain("Known categories: (none)");
+  });
+
+  it("rigour is one of three words", () => {
+    expect(hasErrors(check((p) => (p.rigour = "must")))).toBe(true);
+    for (const r of ["mandatory", "recommended", "optional"]) expect(check((p) => (p.rigour = r))).toEqual([]);
+  });
+
+  it("works with lists from an older file that has no practices, platforms or categories", () => {
+    const old = { ...catalog, practices: undefined, platforms: undefined, categories: undefined } as never;
+    expect(find(check((p) => (p.platform = "azure"), { ...ctx, catalog: old }), "platform")[0].message).toContain("Known platforms: (none)");
+    expect(validateCatalog({ ...catalog, practices: undefined, platforms: undefined, categories: undefined })).toEqual([]);
+  });
 });
 
 describe("catalog checks", () => {
@@ -118,6 +142,17 @@ describe("catalog checks", () => {
   it("rejects duplicate ids", () => {
     const issues = validateCatalog({ ...catalog, tools: [...catalog.tools, catalog.tools[0]] });
     expect(issues[0].message).toContain("duplicate id");
+    for (const key of ["practices", "platforms", "categories"] as const) {
+      const [issue] = validateCatalog({ ...catalog, [key]: [...catalog[key], catalog[key][0]] });
+      expect(issue).toMatchObject({ level: "error", path: `${key}[${catalog[key].length}].id` });
+    }
+  });
+  it("lets a team, a practice and a platform share an id", () => {
+    expect(catalog.teams.some((t) => t.id === "security") && catalog.practices.some((t) => t.id === "security")).toBe(true);
+    expect(validateCatalog({ ...catalog, platforms: [...catalog.platforms, { id: "security", name: "Security platform" }] })).toEqual([]);
+  });
+  it("teams have no kind any more", () => {
+    expect(hasErrors(validateCatalog({ ...catalog, teams: [{ id: "x", name: "X", kind: "platform" }] }))).toBe(true);
   });
 });
 
@@ -181,10 +216,17 @@ describe("standards", () => {
     expect(hasErrors(validateStandard("nope"))).toBe(true);
   });
   it("requirement ids are unique", () => expect(check((s) => (s.requirements[1].id = "DEMO-01")).some((i) => i.message.includes('duplicate requirement id "DEMO-01"'))).toBe(true));
-  it("the owner must be a unit, not a plain team", () => {
+  it("the owner is any team from the list", () => {
     expect(find(check((s) => (s.owner = "ghost")), "owner")[0].message).toContain("not in the teams list");
-    expect(find(check((s) => (s.owner = "dns-team")), "owner")[0].message).toContain("is a team, not a unit");
-    expect(check((s) => (s.owner = "engineering-practice"))).toEqual([]);
+    expect(find(check((s) => (s.owner = "ghost")), "owner")[0].level).toBe("warning");
+    expect(check((s) => (s.owner = "dns-team"))).toEqual([]);
+  });
+  it("category, practice and platform must be in their lists", () => {
+    expect(find(check((s) => (s.platform = "moon")), "platform")[0]).toMatchObject({ level: "error" });
+    expect(find(check((s) => (s.practice = "moon")), "practice")[0].message).toContain("Known practices: security, engineering");
+    expect(find(check((s) => (s.category = "moon")), "category")[0].level).toBe("error");
+    expect(check((s) => { s.category = "security"; s.practice = "security"; s.platform = "github"; })).toEqual([]);
+    expect(hasErrors(check((s) => (s.rigour = "mandatory")))).toBe(true); // a standard's rigour follows from its requirements
   });
   it("tiers, languages and environments must exist, on the standard and on a requirement", () => {
     expect(find(check((s) => (s.tiers = ["tier-9"])), "tiers[0]")[0].level).toBe("error");

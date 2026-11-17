@@ -46,12 +46,17 @@ func TestPrepareFillsAnEmptyDatabaseOnce(t *testing.T) {
 	if len(processes) != 7 || len(standards) != 3 {
 		t.Fatalf("imported %d processes, %d standards", len(processes), len(standards))
 	}
-	if roles, _ := st.roles.Count(ctx); roles != 5 {
+	if roles, _ := st.roles.Count(ctx); roles != 8 {
 		t.Fatalf("development roles: %d", roles)
 	}
 	riley, _ := st.roles.Perms(ctx, "riley@example.com")
-	if !riley.CanEditStandard("security") || riley.Processes {
+	if !riley.CanEdit(docs.Standard, rbac.Belongs{Practice: "security"}) || riley.Standards || riley.Processes || strings.Join(riley.Owns, ",") != "security" {
 		t.Fatalf("riley: %+v", riley)
+	}
+	jordan, _ := st.roles.Perms(ctx, "jordan@example.com")
+	if strings.Join(jordan.Platforms, ",") != "google-cloud" || strings.Join(jordan.Practices, ",") != "engineering" ||
+		strings.Join(jordan.Owns, ",") != "cloud-platform-team" || jordan.Processes || jordan.Standards || jordan.Catalog {
+		t.Fatalf("jordan: %+v", jordan)
 	}
 	list, _ := st.skills.List(ctx)
 	if len(list) != 13 {
@@ -71,8 +76,21 @@ func TestPrepareFillsAnEmptyDatabaseOnce(t *testing.T) {
 	if processes, _ := st.docs.List(ctx, docs.Process); len(processes) != 6 {
 		t.Fatalf("the seed was imported again: %d processes", len(processes))
 	}
-	if roles, _ := st.roles.Count(ctx); roles != 4 {
+	if roles, _ := st.roles.Count(ctx); roles != 7 {
 		t.Fatalf("roles were re-added: %d", roles)
+	}
+	// a built-in user without any role (one added to a database that already had roles) gets theirs
+	for _, r := range []string{rbac.PlatformOwner + " google-cloud", rbac.PracticeOwner + " engineering", rbac.Owner + " cloud-platform-team"} {
+		role, scope, _ := strings.Cut(r, " ")
+		if err := st.roles.Revoke(ctx, "jordan@example.com", role, scope); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := prepare(ctx, cfg, st, quiet); err != nil {
+		t.Fatal(err)
+	}
+	if roles, _ := st.roles.Count(ctx); roles != 7 {
+		t.Fatalf("roles after a built-in user had none: %d", roles)
 	}
 	if sk, _ := st.skills.Get(ctx, "process-request-gcp-project"); sk.Active {
 		t.Fatal("the skill of the deleted process must be withdrawn on start")
