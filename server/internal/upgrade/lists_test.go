@@ -38,13 +38,13 @@ const oldCatalog = `{"tiers":[{"id":"tier-0","name":"Tier 0"}],"environments":[{
 "tools":[{"id":"github","name":"GitHub"}]}`
 
 func process(id, owner, category, more string) string {
-	return `{"schemaVersion":"1.0","id":"` + id + `","title":"` + id + `","summary":"Something to do.","owner":"` + owner + `","category":"` + category + `",` + more +
-		`"actors":[{"id":"me","name":"You"}],"steps":[{"id":"do","title":"Do it","actor":"me","type":"task","next":[]}]}`
+	return `{"schemaVersion":"1.0","id":"` + id + `","title":"` + id + `","summary":"Something people need to get done.","owner":"` + owner + `","category":"` + category + `",` + more +
+		`"prerequisites":[],"actors":[{"id":"me","name":"You"}],"steps":[{"id":"do","title":"Do it","actor":"me","type":"task","next":[]}]}`
 }
 
 func standard(id, owner string) string {
-	return `{"schemaVersion":"1.0","id":"` + id + `","title":"` + id + `","summary":"A rule.","owner":"` + owner + `","scope":"Everything.","status":"active",` +
-		`"requirements":[{"id":"R-01","title":"Rule","level":"must","statement":"Do it.","verification":{"method":"review"}}]}`
+	return `{"schemaVersion":"1.0","id":"` + id + `","title":"` + id + `","summary":"A rule that everyone follows.","owner":"` + owner + `","scope":"Everything.","status":"active",` +
+		`"requirements":[{"id":"R-01","title":"Rule","level":"must","statement":"Everyone does it this way.","verification":{"method":"review"}}]}`
 }
 
 type fixture struct {
@@ -143,7 +143,7 @@ func TestAnOlderDatabaseIsConvertedOnce(t *testing.T) {
 	if gcp["category"] != "cloud" || gcp["platform"] != "cloud-platform-team" || gcp["practice"] != nil || d.Version != 2 || d.UpdatedBy != upgrade.By {
 		t.Fatalf("gcp: %v", gcp)
 	}
-	if !strings.Contains(string(d.Body), "\"category\": \"cloud\",\n  \"platform\": \"cloud-platform-team\",\n  \"actors\"") {
+	if !strings.Contains(string(d.Body), "\"category\": \"cloud\",\n  \"platform\": \"cloud-platform-team\",\n  \"prerequisites\"") {
 		t.Fatalf("the platform goes next to the category:\n%s", d.Body)
 	}
 	if folder, _ := f.body(t, docs.Process, "request-gcp-folder"); folder["category"] != "cloud" {

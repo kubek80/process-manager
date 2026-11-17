@@ -26,7 +26,7 @@ func TestMigrateIsRepeatableAndConcurrent(t *testing.T) {
 		}
 	}
 	var n int
-	if err := pool.QueryRow(ctx, `select count(*) from schema_migrations`).Scan(&n); err != nil || n != 3 {
+	if err := pool.QueryRow(ctx, `select count(*) from schema_migrations`).Scan(&n); err != nil || n != 4 {
 		t.Fatalf("migrations recorded: %d, %v", n, err)
 	}
 	for _, table := range []string{"feedback", "feedback_also_hit", "documents", "document_versions", "role_assignments", "audit_log", "skills", "skill_versions", "signed_out"} {
@@ -56,7 +56,7 @@ func TestMigrateOnAnEmptyDatabaseFromSeveralInstances(t *testing.T) {
 			}
 		}
 		var n int
-		if err := pool.QueryRow(ctx, `select count(*) from schema_migrations`).Scan(&n); err != nil || n != 3 {
+		if err := pool.QueryRow(ctx, `select count(*) from schema_migrations`).Scan(&n); err != nil || n != 4 {
 			t.Fatalf("round %d: migrations recorded: %d, %v", round, n, err)
 		}
 	}

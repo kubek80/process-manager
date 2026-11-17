@@ -247,7 +247,7 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) error {
 			continue
 		}
 		changed := false
-		if id, ok := categoryOf[o.str("category")]; ok {
+		if id, ok := categoryOf[o.str("category")]; ok && id != o.str("category") {
 			o = o.with("category", raw(id))
 			changed = true
 		}

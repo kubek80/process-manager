@@ -6,9 +6,10 @@ import {
   removeProcess, removeStandard, setAlsoHit, setResolved, SIGNED_OUT, forgetUnsaved, hasUnsaved, unsavedWork, useRoute, type MetaById,
 } from "./lib/store";
 import { CatalogContext, EMPTY_CATALOG } from "./lib/catalog";
-import { canEditSomething, canOpenAdmin, canEditStandard, FeedbackContext, MeContext, roleLabel, usePerms, type FeedbackActions } from "./lib/session";
+import { canEditSomething, canOpenAdmin, FeedbackContext, MeContext, roleLabel, usePerms, type FeedbackActions } from "./lib/session";
+import { canEdit, editsAll } from "./lib/rights";
 import { ModeContext, type Mode } from "./lib/mode";
-import { blankProcess, blankStandard, slugify, tidy, tidyStandard, today, uniqueId } from "./lib/edit";
+import { blankProcess, blankStandard, slugify, tidy, tidyStandard, today, uniqueId, type BelongsTo } from "./lib/edit";
 import { CatalogPage } from "./components/CatalogPage";
 import { Library } from "./components/Library";
 import { Login } from "./components/Login";
@@ -16,8 +17,8 @@ import { ProcessPage, processAiSpec } from "./components/ProcessPage";
 import { StandardPage, standardAiSpec } from "./components/StandardPage";
 import { StandardsLibrary } from "./components/StandardsLibrary";
 import { MinePage } from "./components/MinePage";
-import { myTeams, responsibilities, urgent } from "./lib/responsibilities";
-import { unitsOf } from "./components/Governance";
+import { myGroups, responsibilities, urgent } from "./lib/responsibilities";
+import { platformName, practiceName } from "./lib/catalog";
 import { confirmDialog, ErrorBoundary, Field, LoadError, Loading, Modal, Notices, notify, useLayer } from "./components/ui";
 
 // loaded when first opened: most visits never need them
