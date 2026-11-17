@@ -217,7 +217,7 @@ test("Details: an editor says what a process belongs to and its rigour; readers 
     const modal = page.locator(".modal");
     await expect(modal.getByRole("heading", { name: /What it belongs to/ })).toBeVisible();
     const binding = modal.getByRole("group", { name: "Rigour" });
-    await expect(modal.locator(".field", { has: binding })).toContainText("Rigourhow binding it is");
+    await expect(modal.locator(".field", { has: page.getByRole("group", { name: "Rigour" }) }).locator(".field-label")).toHaveText(/^Rigourhow binding it is/);
     await expect(binding.getByRole("button")).toHaveText(["Not stated", "Mandatory", "Recommended", "Optional"]);
     await expect(binding.getByRole("button", { name: "Not stated" })).toHaveAttribute("aria-pressed", "true");
     await modal.getByLabel(/^Category/).selectOption({ label: "Network" });

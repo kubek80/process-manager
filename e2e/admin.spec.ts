@@ -91,7 +91,7 @@ test("an admin gives someone a role and it takes effect at once", async ({ page,
   await expect(log.nth(0)).toContainText("Dana Admin removed a role from sam@example.com");
   await expect(log.nth(1)).toContainText("Sam Consumer saved the standard code-review");
   await expect(log.nth(2)).toContainText("Dana Admin gave a role to sam@example.com");
-  await expect(log.nth(2)).toContainText("practice-owner for practice Engineering (engineering)");
+  await expect(log.nth(2)).toContainText("Practice owner for the practice Engineering");
 });
 
 test("mistakes when giving a role are explained", async ({ page }) => {

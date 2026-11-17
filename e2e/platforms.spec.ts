@@ -108,7 +108,7 @@ test("a platform that is not his stays as it is on a document of his practice", 
   const platform = modal.getByLabel(/^Platform/);
   await expect(platform).toBeDisabled();
   await expect(platform).toHaveValue("github");
-  await expect(modal.locator(".field", { has: platform })).toContainText("Only its owners or an editor can change this");
+  await expect(modal.locator("label.field", { has: page.locator("select:disabled") })).toContainText("PlatformOnly its owners or an editor can change this");
   // the practice is his: he may keep or clear it, but only pick his own
   await expect(modal.getByLabel(/^Practice/)).toBeEnabled();
   await expect(modal.getByLabel(/^Practice/).locator("option")).toHaveText(["None", "Engineering"]);

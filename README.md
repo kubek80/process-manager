@@ -9,6 +9,10 @@ The home page is one search over both, with filters by type, rigour, category, p
 
 From both, the portal generates **skills for AI coding assistants** and, for standards, **pull request review agents**, and keeps them up to date as the content changes.
 
+![Home](docs/home.png)
+
+![Search results with filters](docs/search.png)
+
 ![Map view](docs/map.png)
 
 ## Run it locally
@@ -96,6 +100,8 @@ The members of a team, platform or practice are the people with Owner, Platform 
 The first admins are named in the server setting `PM_ADMINS`.
 
 ![Admin panel](docs/admin.png)
+
+![A platform and its members](docs/platforms.png)
 
 ## Tests
 
