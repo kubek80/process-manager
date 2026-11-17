@@ -43,6 +43,12 @@ Read-only except for feedback. Content follows `schema/process.schema.json`, `sc
 
 It needs something the server does not have yet: access for machines (tokens tied to a person or a repository). Today every API call needs a browser session.
 
+## Measuring use by agents
+
+Today the portal counts **skill downloads** as the use by AI assistants: every download of a skill or review agent from the portal, and every skill written by `npm run export`, counts one for its process or standard. The count is shown on each process and standard and in Admin › Statistics. It says how often a skill was fetched, not how often an assistant followed it afterwards.
+
+With the MCP server (planned, not built) every tool call names the process or standard it is about, so the portal could count what agents actually look up and follow, next to the views of people. Nothing of this is counted yet.
+
 ## Rules an agent must be able to rely on
 
 - `actors[0]` of a process is always `me`: the party the agent acts for.

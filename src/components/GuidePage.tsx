@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bot, Boxes, CalendarCheck, Check, Compass, Eye, Flag, History, KeyRound, List, Search, ShieldCheck, GripVertical, Layers, ListChecks, MousePointerClick, Pencil, Plus, Sparkles, Tag, Users, Workflow } from "lucide-react";
+import { Bookmark, Bot, Boxes, CalendarCheck, ChartColumn, Check, Compass, Eye, Flag, Hand, History, KeyRound, Lightbulb, List, Search, Share2, ShieldCheck, GripVertical, Layers, ListChecks, MousePointerClick, Pencil, Plus, Sparkles, Tag, ThumbsUp, Users, Workflow } from "lucide-react";
 import type { Process } from "../types";
 import { STEP_META, STEP_TYPES } from "../lib/stepMeta";
-import { aiFlow, automationFlow, feedbackFlow, followFlow, reviewFlow, rightsFlow, signInFlow, standardFlow, versionFlow } from "../guide/flows";
+import { aiFlow, automationFlow, feedbackFlow, followFlow, requestFlow, reviewFlow, rightsFlow, signInFlow, standardFlow, versionFlow } from "../guide/flows";
 import { FlowView } from "./FlowView";
 import { scrollBehavior, TypeIcon } from "./ui";
 
@@ -17,6 +17,8 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
     ["blocks", "The building blocks"],
     ["standards", "Reading a standard"],
     ["feedback", "Feedback"],
+    ["bookmarks", "Bookmarks, upvotes and sharing"],
+    ["requests", "Asking for what is missing"],
     ["mine", "Your responsibilities"],
   ] },
   { title: "Editing", items: [
@@ -107,32 +109,37 @@ export function GuidePage() {
 
         <Section id="find" title="Finding a process or standard">
           <p><b>Home</b>, the first page and the first link in the top bar, is one search over processes and standards together. Type what you need, such as “GCP project” or “logging”, and press <b>Search</b>. Every word you type must be found somewhere in a process or standard; capitals and accents do not matter.</p>
-          <p>Below the search box are the ways in without typing: <b>All processes</b>, <b>All standards</b>, and <b>By platform</b>, <b>By practice</b> and <b>By category</b>, each with the number of processes and standards it leads to.</p>
+          <p>Below the search box are the ways in without typing: <b>All processes</b> and <b>All standards</b>; <b>Your bookmarks</b>, once you have some (the newest six, and <b>Show all</b> for the rest); a link to <b>Requests</b> for what is missing; and <b>By platform</b>, <b>By practice</b> and <b>By category</b>, each with the number of processes and standards it leads to.</p>
+          <p>The search results, <b>Processes</b> and <b>Standards</b> in the top bar all look the same: the filters on the left, the results as cards on the right, in pages. All three search inside as well, in the steps, requirements, prerequisites and scope.</p>
           <dl className="guide-dl">
-            <div><dt><Search size={14} />The results</dt><dd>Each result says whether it is a process or a standard, and shows its summary, how binding it is, its category, platform, practice and owning team. The best matches come first: a word in the name counts more than a word deep inside. When the words were found inside, in a step, a requirement, a prerequisite or the scope, up to three of those places are listed, and each opens the process or standard right at that step or requirement.</dd></div>
-            <div><dt>Filters</dt><dd><b>Type</b> (processes or standards), <b>Rigour</b> (Mandatory, Recommended, Optional), <b>Category</b>, <b>Practice</b> and <b>Platform</b>. Tick several values of one filter to see what matches any of them; filters of different kinds must all match. Every value shows how many results it would give; values that give nothing are greyed out or left out. The chosen filters are listed above the results, each with a cross to remove it, and <b>Clear all filters</b> removes them all. On a narrow screen the <b>Filters</b> button opens them.</dd></div>
-            <div><dt>Rigour</dt><dd>A process says itself how binding it is. A standard is as binding as its requirements: <b>must</b> counts as mandatory, <b>should</b> as recommended, <b>may</b> as optional. A standard is found under every rigour it has at least one requirement of, and its result says how many of each it has, such as “3 mandatory, 1 recommended”.</dd></div>
-            <div><dt>Share a search</dt><dd>The address in your browser holds the whole search: the words and every filter. Copy it to send a colleague exactly these results. Open a result and press Back to return to the same results.</dd></div>
-            <div><dt>Nothing found</dt><dd>The page says so and why. With filters, it tells you how many results there would be without them and offers to remove them one at a time.</dd></div>
-            <div><dt>Drafts and retired ones</dt><dd>Drafts are only found in Editor mode, and are marked as drafts. Retired processes and standards are found and marked as retired.</dd></div>
+            <div><dt><Search size={14} />The order</dt><dd>The best matches come first: a word in the name counts more than a word deep inside. Without words to search for, the list is in alphabetical order.</dd></div>
+            <div><dt>Filters</dt><dd>On the left. <b>Category</b>, <b>Platform</b>, <b>Practice</b>, <b>Rigour</b> and <b>Owner</b> (the owning team) are lists that open when you press them; the search results also have <b>Type</b> (processes or standards). Tick several values of one filter to see what matches any of them; filters of different kinds must all match. Every value shows how many results it would give; values that give nothing are greyed out or left out. Processes and standards without a category are under <b>Other</b>, at the end.</dd></div>
+            <div><dt>More filters</dt><dd><b>Only my bookmarks</b> shows what you bookmarked. <b>My application</b> (tier, environment, language) hides what does not apply to your application; your choice is remembered for every list and every standard. In Editor mode, when something you may change is due for a review, <b>Only what needs a review</b> shows just that. The Processes and Standards lists also have a search box of their own at the top of the filters.</dd></div>
+            <div><dt>The chosen filters</dt><dd>Listed above the results, each with a cross to remove it; <b>Clear all filters</b> removes them all. On a narrow screen the filters are folded away: the <b>Filters</b> button opens them and says how many are chosen.</dd></div>
+            <div><dt>Pages</dt><dd>The line above the results says how many there are and which are shown, such as “Showing 13–24 of 57 processes”. Choose 12, 24 or 48 per page; the choice is remembered in your browser for every list. The page numbers are above and below the results. A new search or filter starts again on the first page.</dd></div>
+            <div><dt>Rigour</dt><dd>A process says itself how binding it is. A standard is as binding as its requirements: <b>must</b> counts as mandatory, <b>should</b> as recommended, <b>may</b> as optional. A standard is found under every rigour it has at least one requirement of, and its card says how many of each it has, such as “3 mandatory, 1 recommended”.</dd></div>
+            <div><dt>Share a search</dt><dd>The address in your browser holds the whole search: the words, every filter, the page and how many are on it. Copy it to send a colleague exactly these results. Open a result and press Back to return to the same results. The Processes and Standards lists keep your search and filters while you look at one and come back.</dd></div>
+            <div><dt>Nothing found</dt><dd>The page says so and why. With filters, it tells you how many results there would be without them and offers to remove them one at a time. It also points to <b>Requests</b>, to ask for what is missing.</dd></div>
+            <div><dt>Drafts and retired ones</dt><dd>Drafts are only found in Editor mode, by the people who may change them, and are marked as drafts. Retired processes and standards are found and marked as retired.</dd></div>
           </dl>
-          <p><b>Processes</b> and <b>Standards</b> in the top bar list everything of one kind, with a quick search of their own, the categories of processes or the teams that issue standards, and <b>My application</b> to hide what does not apply to you.</p>
+          <p>A <b>card</b> shows one process or standard. At the top: whether it is a process or a standard, its category, and in the right-hand corner the application tiers it applies to (“All tiers” when it is not limited). Then its name, which opens it, and its summary. Below, one fact per line: the owner (the owning team), platform, practice and rigour; the environments and languages, when it is limited to some; for a process its lead time, how many of its steps are yours and how many processes use it as a sub-process; for a standard how many requirements it has, or how many of them apply to your application when you chose one. People who may change it also see when its review is due, and “Needs fixing” when it has problems.</p>
+          <p>When your words were found inside, up to three places are listed under “Found in”, each opening the process or standard right at that step or requirement. Open feedback has a line of its own, such as “2 open feedback”. At the bottom: <b>Give feedback</b>, the upvote with how many people found it useful, and the bookmark; see <b>Bookmarks, upvotes and sharing</b>.</p>
         </Section>
 
         <Section id="modes" title="Signing in and your rights">
           <p>You sign in with your company account, through Entra ID or Google depending on how the app was set up. The app never sees your password; it only learns your name and email.</p>
           <Chart process={signInFlow} caption="Signing in. Your rights are looked up on every request, so a change to them applies at once." />
-          <p>Everyone who can sign in can read everything that is published, tick steps, and give feedback. A <b>role</b> adds more. Roles are given by an admin in the Admin panel; open your account menu (top right) to see yours.</p>
+          <p>Everyone who can sign in can read everything that is published, tick steps, give feedback, bookmark, upvote and share, and ask for a process or standard that is missing. A <b>role</b> adds more. Roles are given by an admin in the Admin panel; open your account menu (top right) to see yours.</p>
           <table className="guide-table roles">
             <thead><tr><th>Role</th><th>Adds</th><th>Limited to</th></tr></thead>
             <tbody>
               <tr><td><b>Owner</b></td><td>Confirm reviews; mark feedback as fixed, reopen or delete it; see drafts. Does not change the content.</td><td>What one team maintains</td></tr>
-              <tr><td><b>Platform owner</b></td><td>Create, change and delete processes and standards; confirm their reviews; close their feedback; see drafts. Sets a platform or practice only from one of their own to another</td><td>What belongs to one platform</td></tr>
-              <tr><td><b>Practice owner</b></td><td>Create, change and delete processes and standards; confirm their reviews; close their feedback; see drafts. Sets a platform or practice only from one of their own to another</td><td>What belongs to one practice</td></tr>
-              <tr><td><b>Process editor</b></td><td>Create and change processes; close their feedback</td><td>All processes</td></tr>
-              <tr><td><b>Standards editor</b></td><td>Create and change standards; close their feedback</td><td>All standards</td></tr>
+              <tr><td><b>Platform owner</b></td><td>Create, change and delete processes and standards; confirm their reviews; close their feedback; see drafts; plan, answer or decline the requests that name the platform. Sets a platform or practice only from one of their own to another</td><td>What belongs to one platform</td></tr>
+              <tr><td><b>Practice owner</b></td><td>Create, change and delete processes and standards; confirm their reviews; close their feedback; see drafts; plan, answer or decline the requests that name the practice. Sets a platform or practice only from one of their own to another</td><td>What belongs to one practice</td></tr>
+              <tr><td><b>Process editor</b></td><td>Create and change processes; close their feedback; plan, answer or decline requests for processes</td><td>All processes</td></tr>
+              <tr><td><b>Standards editor</b></td><td>Create and change standards; close their feedback; plan, answer or decline requests for standards</td><td>All standards</td></tr>
               <tr><td><b>Lists manager</b></td><td>Teams, practices, platforms, categories, tools, tiers, environments and languages</td><td>—</td></tr>
-              <tr><td><b>Admin</b></td><td>Everything, including who has which role</td><td>—</td></tr>
+              <tr><td><b>Admin</b></td><td>Everything, including who has which role, the activity log and the statistics</td><td>—</td></tr>
             </tbody>
           </table>
           <p>One person can have several roles at once, for example be an ordinary reader everywhere and Platform owner of one platform. Owner, Platform owner and Practice owner make you a <b>member</b> of a team, platform or practice; <b>Teams, platforms and practices</b> below explains what that means and how to see who the members are.</p>
@@ -143,10 +150,11 @@ export function GuidePage() {
               <h3><Eye size={18} />Consumer</h3>
               <p>For people who need something done or need to know the rules.</p>
               <ul>
-                <li><Check size={14} />Search processes and standards together; filter by rigour, category, practice and platform</li>
+                <li><Check size={14} />Search processes and standards together; filter by category, platform, practice, rigour and owner</li>
                 <li><Check size={14} />Read the map, follow the checklist, read the requirements</li>
                 <li><Check size={14} />Tick prerequisites and steps (kept in your browser)</li>
                 <li><Check size={14} />Flag what does not work, or say “I hit this too”</li>
+                <li><Check size={14} />Bookmark, upvote and share; ask for what is missing</li>
                 <li><Check size={14} />See every earlier version and what changed</li>
                 <li><Check size={14} />Read and download the generated skills</li>
               </ul>
@@ -185,13 +193,16 @@ export function GuidePage() {
         </Section>
 
         <Section id="read" title="Reading a process">
-          <p>Open a process from a search or from <b>Processes</b> in the top bar. The header tells you its category and owning team, how binding it is, the platform and practice it belongs to, which <b>application tiers</b>, <b>environments</b> and <b>programming languages</b> it applies to, how long it usually takes and when it was last reviewed. Use “My application” in the list of processes to hide what does not apply to you; your choice is remembered. The header also shows the <b>version</b>: press it to see who changed what and when. Below the header:</p>
+          <p>Open a process from a search, from <b>Processes</b> in the top bar or from a bookmark. The header tells you its category and owning team, how binding it is, the platform and practice it belongs to, which <b>application tiers</b>, <b>environments</b> and <b>programming languages</b> it applies to, how long it usually takes and when it was last reviewed. Use “My application” in the filters of the list to hide what does not apply to you; your choice is remembered. The header also shows the <b>version</b>: press it to see who changed what and when.</p>
+          <p>Under the header a line says how much the process is used: how many times it was viewed and by how many people, how often its skill was downloaded, and how much feedback is open and how much was handled. Next to it are <b>Give feedback</b>, the upvote, the bookmark and <b>Share</b> (see <b>Bookmarks, upvotes and sharing</b>). Below:</p>
           <dl className="guide-dl">
             <div><dt>Rigour</dt><dd><b>Mandatory</b>: the only allowed way to get this done. <b>Recommended</b>: the expected way; another way needs a good reason. <b>Optional</b>: a help that may be used, or not. Some processes do not say.</dd></div>
-            <div><dt>Before you start</dt><dd>The prerequisites, useful links and the standards the process helps to meet. On the map this is one line that opens when you press it, so the map itself is on the first screen; the checklist shows it in full. Tick what you already have. If a prerequisite is itself a process, a link takes you there.</dd></div>
-            <div><dt>Map</dt><dd>Time runs left to right, each lane is one participant. Dashed arrows loop back, for example after a rejection. Click a block to open its details on the right.</dd></div>
+            <div><dt>Before you start</dt><dd>The prerequisites, useful links and the standards the process helps to meet. On the map it is a panel above the map, open when you arrive; press its heading to fold it away, and it stays folded the next time in this browser. The checklist shows it in full. Tick what you already have. If a prerequisite is itself a process, a link takes you there.</dd></div>
+            <div><dt>Map</dt><dd>Time runs left to right, each lane is one participant. A <b>decision</b> is drawn as a diamond, with a name on each path out of it. Dashed arrows loop back, for example after a rejection. <b>Select a step</b> to open on the right what to do, who does it and with which tool; a hint above the map says so until you have opened a step once.</dd></div>
+            <div><dt><Hand size={14} />Moving around</dt><dd>A map is often bigger than the screen. Drag it with the mouse to move around; a short click still opens a step. On a touch screen, swipe. In Editor mode dragging a step moves it to another lane, so drag the map by an empty spot.</dd></div>
+            <div><dt><Flag size={14} />Report a problem with a step</dt><dd>Point at a step, or move to it with the Tab key, and a small flag appears in its corner (on a touch screen it is always there). Press it to tell the owner what is wrong with that step, without opening the step first. A red flag with a number shows how much feedback on the step is still open.</dd></div>
             <div><dt>Checklist</dt><dd>Steps in order. Yours show the exact actions, the link to open and what you get at the end. Steps of others are collapsed so you know what you are waiting for. “Only my steps” hides them.</dd></div>
-            <div><dt>A link to one step</dt><dd>Opening a step changes the address in your browser. Copy it to send someone straight to that step. The Back button closes the step again.</dd></div>
+            <div><dt>A link to one step</dt><dd>Opening a step changes the address in your browser. Copy it to send someone straight to that step. The Back button closes the step again. <b>Share</b> always gives the address of the whole process.</dd></div>
             <div><dt>Sub-processes</dt><dd>A step can hand over to another process, such as “Raise a ServiceNow request”. Expand it in place or open it.</dd></div>
           </dl>
         </Section>
@@ -202,7 +213,7 @@ export function GuidePage() {
         </Section>
 
         <Section id="blocks" title="The building blocks">
-          <p>Every step has a kind. The kind sets the icon and colour, so the map can be read without reading every title.</p>
+          <p>Every step has a kind. The kind sets the icon and colour, so the map can be read without reading every title. A decision has no icon on the map: it is the diamond.</p>
           <div className="guide-blocks">
             {STEP_TYPES.map((t) => (
               <div key={t}><TypeIcon type={t} size={34} /><div><strong>{STEP_META[t].label}</strong><span>{STEP_META[t].when}</span></div></div>
@@ -211,7 +222,7 @@ export function GuidePage() {
         </Section>
 
         <Section id="standards" title="Reading a standard">
-          <p>A standard is a list of requirements, such as the rules of cyber security, of a platform or of a practice. It is issued by a team, which reviews it and answers its feedback. Open one from a search or from <b>Standards</b> in the top bar. The header shows its category, platform and practice, and how many of its requirements are mandatory.</p>
+          <p>A standard is a list of requirements, such as the rules of cyber security, of a platform or of a practice. It is issued by a team, which reviews it and answers its feedback. Open one from a search, from <b>Standards</b> in the top bar or from a bookmark. The header shows its category, platform and practice, and how many of its requirements are mandatory. Under it, the same line as on a process: views and people, skill downloads, open and handled feedback, with <b>Give feedback</b>, the upvote, the bookmark and <b>Share</b>.</p>
           <dl className="guide-dl">
             <div><dt>Must, should, may</dt><dd><b>Must</b> is mandatory; deviating needs an exception from the team that issues the standard. <b>Should</b> is expected unless you have a good reason. <b>May</b> is optional good practice. A standard has no rigour of its own: in search it counts as mandatory, recommended or optional for each level its requirements have.</dd></div>
             <div><dt>Each requirement</dt><dd>An id people and tools cite (such as SEC-LOG-01), the rule in a sentence, why it exists, how to comply, good and bad examples, and how it is checked: automatically, in code review, or by a person.</dd></div>
@@ -223,13 +234,39 @@ export function GuidePage() {
         </Section>
 
         <Section id="feedback" title="Feedback">
-          <p>When a step does not work or a requirement is wrong or unclear, say so where you are: <Flag size={13} /> on the step or the requirement, or “Report a problem” for the whole process or standard. Pick a kind, write a sentence, send. Your name comes from your sign-in.</p>
+          <p>When a step does not work or a requirement is wrong or unclear, say so where you are: the <Flag size={13} /> flag on the step on the map, in the checklist or on the requirement, or <b>Give feedback</b> for the whole process or standard, on its page or on its card in a list. Pick a kind (doesn’t work, out of date, unclear, suggestion), write a sentence, send. Your name comes from your sign-in.</p>
+          <p><b>Give feedback</b> opens the <b>Feedback</b> tab with the cursor in the form; there you can also choose the step or requirement it is about. Under the form is all feedback given so far, with how much is open and how much was handled: the open items first, the ones most people hit first.</p>
           <Chart process={feedbackFlow} caption="A reported problem stays visible on the step until the owner marks it as fixed. Standards work the same way, per requirement." />
           <dl className="guide-dl">
+            <div><dt>Open and handled</dt><dd>Feedback is open until somebody who looks after the process or standard marks it as fixed; then it counts as handled. Both numbers are shown under the header of every process and standard, so you can see whether feedback there gets answered. A card in a list shows the open feedback on a line of its own.</dd></div>
             <div><dt>I hit this too</dt><dd>If someone already reported your problem, add yourself with one click. The count tells the owner what to fix first.</dd></div>
-            <div><dt>Who can close it</dt><dd>Whoever may change the process or standard, and the members of the team that owns it. The reporter is told when it is marked as fixed.</dd></div>
+            <div><dt>Who can close it</dt><dd>Whoever may change the process or standard, and the members of the team that owns it. The reporter is told when it is marked as fixed. Marked as fixed by mistake? <b>Reopen</b> it.</dd></div>
             <div><dt>May already be fixed</dt><dd>When a step or requirement is changed after feedback was written about it, the feedback says so. Owners can then close old items quickly.</dd></div>
           </dl>
+        </Section>
+
+        <Section id="bookmarks" title="Bookmarks, upvotes and sharing">
+          <p>The bookmark and the upvote are on every card and under the header of every process and standard; <b>Share</b> is under the header. The same line also says how much it is used.</p>
+          <dl className="guide-dl">
+            <div><dt><Bookmark size={14} />Bookmark</dt><dd>Keeps a process or standard at hand. Your bookmarks are on <b>Home</b> under <b>Your bookmarks</b>, the newest first, and <b>Only my bookmarks</b> in the filters narrows any list to them. They are kept with your account, so they follow you to another computer or your phone. Nobody else sees them.</dd></div>
+            <div><dt><ThumbsUp size={14} />Upvote</dt><dd>Says “this is useful”. Everyone sees how many upvotes a process or standard has; one per person, and pressing it again takes yours back. It tells owners what people rely on.</dd></div>
+            <div><dt><Share2 size={14} />Share</dt><dd>On the page of a process or standard. <b>Copy link</b> copies its address. <b>Copy message for Slack</b> and <b>Copy message for Google Chat</b> copy its name in bold, its summary and the link, ready to paste into a chat. <b>Email</b> opens your mail program with the subject and text filled in. Nothing is sent for you, and the link always leads to the whole process or standard. If your browser does not allow copying, the text is shown to copy by hand.</dd></div>
+            <div><dt><Eye size={14} />Views</dt><dd>Opening a process or standard counts as a view, once per person per day however often you open it. The portal counts views and different people; nobody, admins included, can see who viewed what.</dd></div>
+            <div><dt>Skill downloads</dt><dd>How often the skill or review agent of a process or standard was downloaded from the portal or written to files by an export. It stands for how much AI assistants use it; what they do with it afterwards is not counted.</dd></div>
+          </dl>
+          <p>Drafts stay hidden here too: what you may not see is not counted for you, not listed in your bookmarks and cannot be upvoted.</p>
+        </Section>
+
+        <Section id="requests" title="Asking for what is missing">
+          <p>Missing a process or a standard? <b>Requests</b> in the top bar is where to ask for it, and where everybody sees what others asked for. Lists and searches that find nothing point there too.</p>
+          <dl className="guide-dl">
+            <div><dt><Lightbulb size={14} />Ask</dt><dd>Press <b>Ask for a process or standard</b>. Say which one is missing, give it a name, and describe what is needed and why. Add the platform and practice it would belong to if you know them: their owners can then take it up. While you type the name, processes, standards and requests with similar names are shown, so you can open what exists or vote for an earlier request instead of asking twice.</dd></div>
+            <div><dt>Vote</dt><dd>Everyone can vote for a request, one vote per person, and take it back. The most wanted come first.</dd></div>
+            <div><dt>States</dt><dd><b>Open</b> when it is asked; <b>Planned</b> when somebody takes it up, with a note such as when to expect it; <b>Done</b>, with a link to the process or standard that answers it; or <b>Declined</b>, always with the reason. A request can be set back to open. The buttons at the top show the requests of one state, or all, and of processes, standards or both.</dd></div>
+            <div><dt>Who moves it along</dt><dd>Whoever could create what is asked for: admins; process editors for a process, standards editors for a standard; and the owners of the platform or practice the request names. The members of a team do not.</dd></div>
+            <div><dt>Withdraw</dt><dd>Your own requests are marked “Yours”. While one is still open you can withdraw it; it is removed for everyone, with its votes.</dd></div>
+          </dl>
+          <Chart process={requestFlow} caption="The life of a request. Everyone sees each state, the note that comes with it, and in the end what answers the request or why not." />
         </Section>
 
         <Section id="mine" title="Your responsibilities">
@@ -293,7 +330,7 @@ export function GuidePage() {
             <div><dt>Retired</dt><dd>No longer the way to do it. It stays for reference, greyed out, and can point to what replaces it. Its skills are withdrawn.</dd></div>
           </dl>
           <Chart process={reviewFlow} caption="The review cycle of an active process or standard. “Mark as reviewed” records the date and who confirmed it." />
-          <p><CalendarCheck size={13} /> Owners find what is due under <b>My responsibilities</b>. In Editor mode the list of processes shows what needs a review, and <b>Admin › Health</b> lists everything that is due, for all teams.</p>
+          <p><CalendarCheck size={13} /> Owners find what is due under <b>My responsibilities</b>. In Editor mode the lists and the search results offer <b>Only what needs a review</b>, and cards show when the review is due; <b>Admin › Health</b> lists everything that is due, for all teams.</p>
           <p>“Mark as reviewed” on something without other changes is saved at once, as a version of its own with the note “Reviewed: confirmed as still correct” and the date of the day. The members of its owning team can do this as well as the people who may change it; see <b>Your responsibilities</b>.</p>
         </Section>
 
@@ -307,7 +344,7 @@ export function GuidePage() {
           <Chart process={standardFlow} caption="A rule written once reaches the code twice: as guidance while writing, and as a check when reviewing." />
           <dl className="guide-dl">
             <div><dt>Always current</dt><dd>Saving a process or standard produces a new version of its skills. Each version is numbered and names the version of the process or standard it was made from, so a repository holding an old copy can tell. Skills that mention another process or standard follow it too: when that one is renamed they get the new name, and when it is retired or deleted they stop pointing at its skill.</dd></div>
-            <div><dt>Where to find them</dt><dd>The <b>Skill</b> or <b>Skills</b> tab of a process or standard, and <b>Admin › Skills</b> for all of them. Copy or download; the page shows where the file belongs in a repository.</dd></div>
+            <div><dt>Where to find them</dt><dd>The <b>Skill</b> or <b>Skills</b> tab of a process or standard, and <b>Admin › Skills</b> for all of them. Copy or download; the page shows where the file belongs in a repository. Each download is counted and shown on the process or standard as its skill downloads.</dd></div>
             <div><dt>Extra guidance</dt><dd>Editors can add hand-written notes to a skill, for example an exemption. They are added to every new version and survive changes of the source.</dd></div>
             <div><dt>Links to other skills</dt><dd>A process or a step can also link to skills kept elsewhere, such as one that updates an infrastructure repository. Those are shown under “Do it faster”.</dd></div>
           </dl>
@@ -342,7 +379,8 @@ export function GuidePage() {
             <div><dt><List size={14} />Lists</dt><dd>Teams, practices, platforms, categories, tools, tiers, environments and languages. Each team, practice and platform shows its <b>members</b>, and an admin adds and removes them there.</dd></div>
             <div><dt><Bot size={14} />Skills</dt><dd>Every generated skill and review agent, with its versions and extra guidance.</dd></div>
             <div><dt><CalendarCheck size={14} />Health</dt><dd>Reviews that are due, open feedback, drafts that were never published, and active documents without an owner or a review rhythm.</dd></div>
-            <div><dt>Activity</dt><dd>Who changed what and when: content with the version and its note, lists, roles, skills, and feedback that was closed, reopened or deleted by someone other than its author. The newest entries come first; “Show older” goes back as far as the log does.</dd></div>
+            <div><dt>Activity</dt><dd>Who changed what and when: content with the version and its note, lists, roles, skills, feedback that was closed, reopened or deleted by someone other than its author, and requests that were made, moved to another state or withdrawn. Views, bookmarks, upvotes and votes are not in it. The newest entries come first; “Show older” goes back as far as the log does.</dd></div>
+            <div><dt><ChartColumn size={14} />Statistics</dt><dd>How much each process and standard is used, for reporting. Choose a period: 7, 30 or 90 days, a year, or all time. At the top the totals of the period: views, different people, skill downloads, upvotes, feedback given and handled, requests. Then the views per week; a table of every process and standard with its views, people, skill downloads, upvotes, open feedback and feedback handled, which can be sorted by any column and narrowed to processes or standards; and the same totals grouped by platform, by practice or by owning team. Open feedback is as it is now; everything else is counted in the period. <b>Download as CSV</b> gives the table as a file for a spreadsheet. A view counts once per person per day, and nobody, admins included, can see who viewed what. Skill downloads stand for the use by AI assistants. Drafts are included and marked as such.</dd></div>
             <div><dt>System</dt><dd>How this installation signs people in and where it sends notifications. These are set where the server runs, not here.</dd></div>
           </dl>
           <p>The people named as admins in the server settings always have access and cannot be removed in the panel, so nobody can lock everyone out. Among the others, the last admin cannot be removed.</p>
@@ -365,7 +403,7 @@ export function GuidePage() {
         </Section>
 
         <Section id="architecture" title="How it is built">
-          <p>Everything people change in the portal lives in a database: processes, standards, the lists, roles, feedback and the generated skills. A small server signs people in, decides what they may do, keeps every version, and regenerates the skills when their source changes.</p>
+          <p>Everything people change in the portal lives in a database: processes, standards, the lists, roles, feedback, requests and the generated skills, and how much each process and standard is used. A small server signs people in, decides what they may do, keeps every version, and regenerates the skills when their source changes.</p>
           <figure className="guide-fig">
             <div className="arch">
               <div className="arch-col">
@@ -377,12 +415,12 @@ export function GuidePage() {
                 <div className="arch-group">
                   <em>One container</em>
                   <div className="arch-box core"><strong>The app</strong><span>built, static files</span></div>
-                  <div className="arch-box core"><strong>Go server</strong><span>sign-in, roles, content, skills, feedback</span></div>
+                  <div className="arch-box core"><strong>Go server</strong><span>sign-in, roles, content, skills, feedback, requests</span></div>
                 </div>
               </div>
               <div className="arch-arrow" aria-hidden="true">→</div>
               <div className="arch-col">
-                <div className="arch-box ext"><strong>Postgres</strong><span>content with every version, roles, feedback, skills, activity</span></div>
+                <div className="arch-box ext"><strong>Postgres</strong><span>content with every version, roles, feedback, skills, activity, requests, views and votes</span></div>
                 <div className="arch-box ext"><strong>Entra ID or Google</strong><span>sign-in</span></div>
                 <div className="arch-box ext"><strong>Team channel</strong><span>notifications, optional</span></div>
                 <div className="arch-box ext planned"><strong>Files in git</strong><span>first fill, import, export and backup</span></div>
@@ -391,7 +429,7 @@ export function GuidePage() {
             <figcaption>What runs where. A change saved in the portal is live at once; no deployment is involved.</figcaption>
           </figure>
           <dl className="guide-dl">
-            <div><dt>In the database</dt><dd>All content and its history, roles, feedback, generated skills and the activity log.</dd></div>
+            <div><dt>In the database</dt><dd>All content and its history, roles, feedback, requests, generated skills and the activity log; and the views, bookmarks, upvotes and skill downloads. A view is stored as who viewed what on which day, only to count views and people; it is never shown.</dd></div>
             <div><dt>In the repository</dt><dd>The code, the formats (<code>schema/</code>), and sample content that fills an empty database on its first start.</dd></div>
             <div><dt>Import and export</dt><dd><code>npm run export -- &lt;folder&gt;</code> writes the content and the skills to files, as a backup or to commit. <code>npm run db:import</code> loads the files of the repository over what is stored; files that do not match the format are reported and skipped. <code>npm run db:demo</code> loads the larger demo set from the folder <code>demo/</code> in the same way. An export also removes the files of skills that were withdrawn.</dd></div>
             <div><dt>Two checks</dt><dd>The app checks a document fully before it lets you save. The server checks again: the rights, the format, that the parts of the document fit together (every step leads to a step that exists, every tier is in the lists), and that the save was made from the newest version. Nothing invalid, unauthorised or outdated is stored.</dd></div>
@@ -400,7 +438,7 @@ export function GuidePage() {
         </Section>
 
         <Section id="local" title="Running it locally">
-          <p>You need Node 22, Go 1.26 and Docker. One command starts everything: a Postgres container, the server (rebuilt when you change its code) and the app with live reload. An empty database is filled with the sample content of the repository.</p>
+          <p>You need Node 22, Go 1.26 and Docker. One command starts everything: a Postgres container, the server (rebuilt when you change its code) and the app with live reload. An empty database is filled with the sample content of the repository, and with twelve weeks of made-up use - views, upvotes, bookmarks, skill downloads and a few requests in every state - so that the numbers, Your bookmarks, Requests and Admin › Statistics have something to show. That use is added only while there is none at all, and never on a real installation.</p>
           <pre className="guide-code">npm install{"\n"}npm run dev</pre>
           <p>Open <code>http://localhost:5173</code>. Instead of a company sign-in you choose who to be, so you can try each set of rights:</p>
           <dl className="guide-dl">
@@ -412,20 +450,20 @@ export function GuidePage() {
             <div><dt>Dana Admin</dt><dd>Admin: everything, including who has which role.</dd></div>
           </dl>
           <p>Choosing who to be only works on your own machine: the server refuses to start this way on an address that others can reach.</p>
-          <p><code>npm run db:reset</code> empties the feedback and adds the samples again. <code>npm run db:demo</code> adds a larger demo set - more processes and standards, teams, platforms and practices, with reviews due and overdue - to try the search, its filters and My responsibilities; its lists replace the stored ones, and <code>npm run db:import</code> puts the smaller sample lists back. <code>npm run db:migrate</code> upgrades the database to the current version and says what it did. To use a Postgres you already run instead of Docker, set <code>PM_PG</code>, for example <code>PM_PG=postgres://pm:pm@localhost:5432</code>.</p>
+          <p><code>npm run db:reset</code> empties the feedback and adds the sample feedback again; views, bookmarks, upvotes, downloads and requests stay. <code>npm run db:demo</code> adds a larger demo set - more processes and standards, teams, platforms and practices, with reviews due and overdue - to try the search, its filters and My responsibilities; its lists replace the stored ones, and <code>npm run db:import</code> puts the smaller sample lists back. <code>npm run db:migrate</code> upgrades the database to the current version and says what it did. To use a Postgres you already run instead of Docker, set <code>PM_PG</code>, for example <code>PM_PG=postgres://pm:pm@localhost:5432</code>.</p>
         </Section>
 
         <Section id="tests" title="Tests">
           <p>Every level is tested, and <code>npm run test:all</code> runs all of it. The same runs on every pull request.</p>
           <table className="guide-table">
             <tbody>
-              <tr><td><code>npm test</code></td><td>The logic of the app: both checkers, editing, undo and the rules for saving, comparing versions, map layout, review dates, search and its filters, the AI prompts, rights and members, and that every sample file in the repository and the demo set are valid.</td></tr>
-              <tr><td><code>npm run test:server</code></td><td>The server against a real Postgres: sign-in (with a stand-in for Entra and Google that signs real tokens), roles, content with versions and saves at the same time, the skill generators, feedback, the Admin endpoints, starting and stopping.</td></tr>
+              <tr><td><code>npm test</code></td><td>The logic of the app: both checkers, editing, undo and the rules for saving, comparing versions, map layout, review dates, search and its filters, pages and cards, sharing messages, requests and statistics, the AI prompts, rights and members, and that every sample file in the repository and the demo set are valid.</td></tr>
+              <tr><td><code>npm run test:server</code></td><td>The server against a real Postgres: sign-in (with a stand-in for Entra and Google that signs real tokens), roles, content with versions and saves at the same time, the skill generators, feedback, views, bookmarks, upvotes, requests and statistics, the Admin endpoints, starting and stopping.</td></tr>
               <tr><td><code>npm run test:e2e</code></td><td>A real browser against the real server and database: signing in, following a process, reading a standard, editing both, versions and two people editing at once, feedback, the Admin panel, skills, AI import.</td></tr>
               <tr><td><code>npm run validate</code></td><td>The sample files, or a folder written by <code>npm run export</code>, against the schemas and the rules. <code>npm run validate demo</code> checks the demo set as it is loaded: over the sample.</td></tr>
             </tbody>
           </table>
-          <p>The browser tests run on their own database, emptied and refilled at the start of every run.</p>
+          <p>The browser tests run on their own database, emptied and refilled at the start of every run, without the made-up use of <code>npm run dev</code>.</p>
         </Section>
 
         <Section id="deploy" title="Deploying">

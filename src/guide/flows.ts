@@ -115,10 +115,22 @@ export const rightsFlow = flow("guide-rights", "Who may change a process or stan
   [["app", "Process Manager"]],
   [
     s("open", "Open a process or standard", "me", "task", ["editor"]),
-    s("editor", "Admin, or editor of all of them?", "app", "decision", [["change", "Yes"], ["owns", "No"]], "process or standards editor"),
+    s("editor", "Admin, process or standards editor?", "app", "decision", [["change", "Yes"], ["owns", "No"]]),
     s("owns", "Owner of its platform or practice?", "app", "decision", [["change", "Yes"], ["team", "No"]]),
     s("team", "Member of its owning team?", "app", "decision", [["manage", "Yes"], ["read", "No"]]),
     s("change", "Change, create or delete it", "me", "document", [], "also reviews, feedback"),
     s("manage", "Confirm reviews, answer feedback", "me", "review", [], "and see drafts"),
     s("read", "Read it and give feedback", "me", "task", []),
+  ]);
+
+export const requestFlow = flow("guide-request", "Ask for a missing process or standard", "How a request for something missing becomes a process or standard, or is declined with a reason.",
+  [["others", "Colleagues"], ["maker", "Whoever could create it"]],
+  [
+    s("ask", "Ask for what is missing", "me", "form", ["vote"], "name, what and why"),
+    s("vote", "Vote for it", "others", "task", ["decide"], "one vote each"),
+    s("decide", "Will it be made?", "maker", "decision", [["plan", "Yes"], ["decline", "No"]]),
+    s("plan", "Mark it as planned", "maker", "task", ["make"], "with a note"),
+    s("decline", "Decline it with the reason", "maker", "communication", []),
+    s("make", "Write it, then mark as done", "maker", "document", ["open"], "linked to the request"),
+    s("open", "Open what answers it", "me", "task", []),
   ]);
