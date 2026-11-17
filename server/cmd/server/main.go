@@ -274,10 +274,31 @@ func prepare(ctx context.Context, cfg config.Config, st stores, log *slog.Logger
 
 // devRoles gives each built-in development user who has no role at all the roles of
 // auth.DevRoles: a new local database gets all of them, an older one the users added since.
+// A role for a team, platform or practice that this database does not have is left out, so
+// that content which differs from the samples gets no role that points at nothing.
 func devRoles(ctx context.Context, st stores, log *slog.Logger) error {
 	all, err := st.roles.All(ctx)
 	if err != nil {
 		return err
+	}
+	lists, err := st.docs.Lists(ctx)
+	if err != nil {
+		return err
+	}
+	known := func(role, scope string) bool {
+		list := lists.Teams
+		switch role {
+		case rbac.PlatformOwner:
+			list = lists.Platforms
+		case rbac.PracticeOwner:
+			list = lists.Practices
+		}
+		for _, n := range list {
+			if n.ID == scope {
+				return true
+			}
+		}
+		return scope == ""
 	}
 	has := map[string]bool{}
 	for _, a := range all {
@@ -285,7 +306,7 @@ func devRoles(ctx context.Context, st stores, log *slog.Logger) error {
 	}
 	added := 0
 	for _, r := range auth.DevRoles {
-		if has[r.Email] {
+		if has[r.Email] || !known(r.Role, r.Scope) {
 			continue
 		}
 		if err := st.roles.Grant(ctx, rbac.Assignment{Email: r.Email, Role: r.Role, Scope: r.Scope, GrantedBy: "development setup"}); err != nil {

@@ -1,6 +1,6 @@
 ---
 name: edit-standard
-description: Create or change a sample standard in standards/*.json (requirements, levels, review hints, where it applies) or turn a policy text into a standard. Use when asked to add, update or review a standard in this repository.
+description: Create or change a sample standard in standards/*.json (requirements, levels, review hints, owner, category, platform, practice, where it applies) or turn a policy text into a standard. Use when asked to add, update or review a standard in this repository.
 ---
 
 # Create or edit a sample standard
@@ -12,14 +12,14 @@ These files are **sample content**: they fill an empty database on its first sta
 ## Before writing
 
 1. Read `schema/standard.schema.json` (the format) and `schema/example.standard.json` (a correct small example).
-2. Read `catalog/catalog.json`. `owner` must be a team whose `kind` is `security`, `platform` or `practice` (a unit). `tiers`, `languages` and `environments` may only use ids from it.
+2. Read `catalog/catalog.json`. `owner` is the team that issues the standard (any team in `teams`). `category`, `practice` and `platform` are ids from `categories`, `practices` and `platforms`; the owners of that platform or practice may change the standard, so set them only when the source says what it belongs to. `tiers`, `languages` and `environments` may only use ids from it. If a needed entry is missing, add it with the `manage-catalog` skill first.
 3. List `processes/` so you can link `exceptionProcessId` and a requirement's `processId`.
 
 The full modelling rules are in `src/lib/prompt.ts` (`standardBasePrompt`) and, rendered, in `docs/llm-prompt-standards.md`. The essentials:
 
 - One requirement = one rule that can be checked on its own.
 - `id` is upper case with dashes (`SEC-LOG-01`), unique, and **never reused or renumbered**: people, skills and review findings cite it.
-- `level`: `must` (mandatory), `should` (expected), `may` (optional). Do not invent a stricter level than the source gives.
+- `level`: `must` (mandatory), `should` (expected), `may` (optional). Do not invent a stricter level than the source gives. A standard has no `rigour` field: in search it counts as mandatory, recommended or optional for each level its requirements have.
 - `statement` is the rule, testable, one or two sentences. Reasons go in `rationale`, actions in `guidance`.
 - `verification.method`: `automated`, `review` or `manual`.
 - `review.lookFor` lists concrete signs of a violation that can be seen in a pull request. It feeds the generated review agent; a requirement without it is not checked by the agent. Leave `review` out for rules that cannot be seen in a change.

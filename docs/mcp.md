@@ -32,13 +32,13 @@ Read-only except for feedback. Content follows `schema/process.schema.json`, `sc
 
 | Tool | Input | Returns |
 | --- | --- | --- |
-| `search_processes` | `query?`, `tier?`, `environment?`, `language?` | Matching **active** processes: `id`, `title`, `summary`, `owner`, where they apply, review state. A process without `tiers` / `environments` / `languages` matches every one. |
-| `search_standards` | `query?`, `unit?`, `tier?`, `environment?`, `language?` | Matching **active** standards, with the requirements that apply to that profile. |
-| `get_process` | `id` | The complete process with its version number, with team and tool ids resolved to names, contacts and links. |
+| `search_processes` | `query?`, `category?`, `practice?`, `platform?`, `rigour?`, `tier?`, `environment?`, `language?` | Matching **active** processes: `id`, `title`, `summary`, `owner`, `category`, `practice`, `platform`, `rigour`, where they apply, review state. A process without `tiers` / `environments` / `languages` matches every one. |
+| `search_standards` | `query?`, `owner?`, `category?`, `practice?`, `platform?`, `rigour?`, `tier?`, `environment?`, `language?` | Matching **active** standards, with the requirements that apply to that profile. A standard matches a `rigour` when at least one of its requirements has that level (`must` = mandatory, `should` = recommended, `may` = optional). |
+| `get_process` | `id` | The complete process with its version number, with team, category, practice, platform and tool ids resolved to names, contacts and links. |
 | `get_standard` | `id`, profile? | The complete standard with its version number; with a profile, only the requirements that apply. |
 | `get_my_steps` | `id`, `actor?` (default `me`) | Only that participant's steps in flow order, with `instructions`, `tool`, `url`, `outcome`, `resources`, and what it waits for before and after. |
 | `get_skill` | `id`, `version?` | The text of a generated skill or review agent, latest by default, with its version. |
-| `get_catalog` | – | Teams and units (with contact), tools (with link), tiers, environments, languages. |
+| `get_catalog` | – | Teams, practices and platforms (with contact and members), categories, tools (with link), tiers, environments, languages. |
 | `report_problem` | `targetKind`, `targetId`, `itemId?`, `kind`, `text` | Files feedback on behalf of the person the agent acts for, the same as the flag in the app. |
 
 It needs something the server does not have yet: access for machines (tokens tied to a person or a repository). Today every API call needs a browser session.
@@ -48,6 +48,7 @@ It needs something the server does not have yet: access for machines (tokens tie
 - `actors[0]` of a process is always `me`: the party the agent acts for.
 - A step with `subProcessId` is described by another process.
 - Steps of type `approval`, and anything done by an actor other than `me`, are **not** for the agent to perform. It waits and reports.
+- A process with `rigour: "mandatory"` is the only allowed way to get its result; the agent does not look for another.
 - A requirement of level `must` cannot be waived by the agent. If it cannot be met, the agent stops and tells the person; exceptions go through `exceptionProcessId`.
 - A requirement with `tiers`, `environments` or `languages` applies only there.
 - `status: "deprecated"` means do not follow it; use `replacedBy` when present. Drafts are never returned.

@@ -1,15 +1,17 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bot, Braces, CalendarCheck, Check, Eye, Flag, History, KeyRound, List, ShieldCheck, GripVertical, Layers, ListChecks, MousePointerClick, Pencil, Plus, Sparkles, Workflow } from "lucide-react";
+import { Bot, Boxes, CalendarCheck, Check, Compass, Eye, Flag, History, KeyRound, List, Search, ShieldCheck, GripVertical, Layers, ListChecks, MousePointerClick, Pencil, Plus, Sparkles, Tag, Users, Workflow } from "lucide-react";
 import type { Process } from "../types";
 import { STEP_META, STEP_TYPES } from "../lib/stepMeta";
-import { aiFlow, automationFlow, feedbackFlow, followFlow, reviewFlow, signInFlow, standardFlow, versionFlow } from "../guide/flows";
+import { aiFlow, automationFlow, feedbackFlow, followFlow, reviewFlow, rightsFlow, signInFlow, standardFlow, versionFlow } from "../guide/flows";
 import { FlowView } from "./FlowView";
 import { scrollBehavior, TypeIcon } from "./ui";
 
 const GROUPS: { title: string; items: [string, string][] }[] = [
   { title: "Using it", items: [
     ["what", "What it is"],
+    ["find", "Finding a process or standard"],
     ["modes", "Signing in and your rights"],
+    ["belong", "Teams, platforms and practices"],
     ["read", "Reading a process"],
     ["follow", "Following a process"],
     ["blocks", "The building blocks"],
@@ -100,7 +102,21 @@ export function GuidePage() {
             <div><ShieldCheck size={20} /><h3>Standards</h3><p>Rules set by cyber security, platform owners and practices. Each requirement says what must be true, why, how to comply and how it is checked.</p></div>
             <div><Bot size={20} /><h3>Skills for AI assistants</h3><p>From every process and standard the portal generates instructions an AI coding assistant can follow, and for standards a reviewer for pull requests.</p></div>
           </div>
-          <p>Processes and standards share the same ground: an owner, a life-cycle with regular reviews, feedback from readers, and the tiers, environments and languages they apply to.</p>
+          <p>Processes and standards share the same ground: an owning team, a category, a platform and a practice they can belong to, a life-cycle with regular reviews, feedback from readers, and the tiers, environments and languages they apply to.</p>
+        </Section>
+
+        <Section id="find" title="Finding a process or standard">
+          <p><b>Home</b>, the first page and the first link in the top bar, is one search over processes and standards together. Type what you need, such as “GCP project” or “logging”, and press <b>Search</b>. Every word you type must be found somewhere in a process or standard; capitals and accents do not matter.</p>
+          <p>Below the search box are the ways in without typing: <b>All processes</b>, <b>All standards</b>, and <b>By platform</b>, <b>By practice</b> and <b>By category</b>, each with the number of processes and standards it leads to.</p>
+          <dl className="guide-dl">
+            <div><dt><Search size={14} />The results</dt><dd>Each result says whether it is a process or a standard, and shows its summary, how binding it is, its category, platform, practice and owning team. The best matches come first: a word in the name counts more than a word deep inside. When the words were found inside, in a step, a requirement, a prerequisite or the scope, up to three of those places are listed, and each opens the process or standard right at that step or requirement.</dd></div>
+            <div><dt>Filters</dt><dd><b>Type</b> (processes or standards), <b>Rigour</b> (Mandatory, Recommended, Optional), <b>Category</b>, <b>Practice</b> and <b>Platform</b>. Tick several values of one filter to see what matches any of them; filters of different kinds must all match. Every value shows how many results it would give; values that give nothing are greyed out or left out. The chosen filters are listed above the results, each with a cross to remove it, and <b>Clear all filters</b> removes them all. On a narrow screen the <b>Filters</b> button opens them.</dd></div>
+            <div><dt>Rigour</dt><dd>A process says itself how binding it is. A standard is as binding as its requirements: <b>must</b> counts as mandatory, <b>should</b> as recommended, <b>may</b> as optional. A standard is found under every rigour it has at least one requirement of, and its result says how many of each it has, such as “3 mandatory, 1 recommended”.</dd></div>
+            <div><dt>Share a search</dt><dd>The address in your browser holds the whole search: the words and every filter. Copy it to send a colleague exactly these results. Open a result and press Back to return to the same results.</dd></div>
+            <div><dt>Nothing found</dt><dd>The page says so and why. With filters, it tells you how many results there would be without them and offers to remove them one at a time.</dd></div>
+            <div><dt>Drafts and retired ones</dt><dd>Drafts are only found in Editor mode, and are marked as drafts. Retired processes and standards are found and marked as retired.</dd></div>
+          </dl>
+          <p><b>Processes</b> and <b>Standards</b> in the top bar list everything of one kind, with a quick search of their own, the categories of processes or the teams that issue standards, and <b>My application</b> to hide what does not apply to you.</p>
         </Section>
 
         <Section id="modes" title="Signing in and your rights">
@@ -110,21 +126,24 @@ export function GuidePage() {
           <table className="guide-table roles">
             <thead><tr><th>Role</th><th>Adds</th><th>Limited to</th></tr></thead>
             <tbody>
-              <tr><td><b>Owner</b></td><td>Confirm reviews; mark feedback as fixed, reopen or delete it; see drafts</td><td>What one team or unit owns</td></tr>
+              <tr><td><b>Owner</b></td><td>Confirm reviews; mark feedback as fixed, reopen or delete it; see drafts. Does not change the content.</td><td>What one team maintains</td></tr>
+              <tr><td><b>Platform owner</b></td><td>Create, change and delete processes and standards; confirm their reviews; close their feedback; see drafts</td><td>What belongs to one platform</td></tr>
+              <tr><td><b>Practice owner</b></td><td>Create, change and delete processes and standards; confirm their reviews; close their feedback; see drafts</td><td>What belongs to one practice</td></tr>
               <tr><td><b>Process editor</b></td><td>Create and change processes; close their feedback</td><td>All processes</td></tr>
-              <tr><td><b>Standards editor</b></td><td>Create and change standards; close their feedback</td><td>One unit, or all units</td></tr>
-              <tr><td><b>Lists manager</b></td><td>Teams, tools, tiers, environments and languages</td><td>—</td></tr>
+              <tr><td><b>Standards editor</b></td><td>Create and change standards; close their feedback</td><td>All standards</td></tr>
+              <tr><td><b>Lists manager</b></td><td>Teams, practices, platforms, categories, tools, tiers, environments and languages</td><td>—</td></tr>
               <tr><td><b>Admin</b></td><td>Everything, including who has which role</td><td>—</td></tr>
             </tbody>
           </table>
+          <p>One person can have several roles at once, for example be an ordinary reader everywhere and Platform owner of one platform. Owner, Platform owner and Practice owner make you a <b>member</b> of a team, platform or practice; <b>Teams, platforms and practices</b> below explains what that means and how to see who the members are.</p>
           <p><b>Signing out</b> ends your session everywhere, not only in this browser. A session also ends by itself after some hours. If that happens while a page is open, the page stays as it is, with anything you were editing, and asks you to sign in again in another tab.</p>
-          <p>People who can edit get a switch in the top bar, <b>Consumer</b> and <b>Editor</b>, to turn the editing controls on and off. The server checks the same rights on every change, so a hidden button is never the only protection.</p>
+          <p>People who may change some process or standard get a switch in the top bar, <b>Consumer</b> and <b>Editor</b>, to turn the editing controls on and off. The server checks the same rights on every change, so a hidden button is never the only protection.</p>
           <div className="guide-cards two">
             <div className="mode-card">
               <h3><Eye size={18} />Consumer</h3>
               <p>For people who need something done or need to know the rules.</p>
               <ul>
-                <li><Check size={14} />Find processes and standards, filtered to your application</li>
+                <li><Check size={14} />Search processes and standards together; filter by rigour, category, practice and platform</li>
                 <li><Check size={14} />Read the map, follow the checklist, read the requirements</li>
                 <li><Check size={14} />Tick prerequisites and steps (kept in your browser)</li>
                 <li><Check size={14} />Flag what does not work, or say “I hit this too”</li>
@@ -134,11 +153,11 @@ export function GuidePage() {
             </div>
             <div className="mode-card editor">
               <h3><Pencil size={18} />Editor</h3>
-              <p>For process owners, business analysts and the units that issue standards. Everything a consumer has, plus, for what your role covers:</p>
+              <p>For editors, business analysts and the owners of platforms and practices. Everything a consumer has, plus, for what your role covers:</p>
               <ul>
                 <li><Check size={14} />Create processes and standards, blank or from text with AI</li>
                 <li><Check size={14} />Change steps on the map and in the checklist; change requirements</li>
-                <li><Check size={14} />Details: owner, where it applies, life-cycle, links</li>
+                <li><Check size={14} />Details: owning team, category, platform, practice, where it applies, life-cycle, links</li>
                 <li><Check size={14} />Undo, and bring back any earlier version</li>
                 <li><Check size={14} />The raw JSON in a code editor</li>
                 <li><Check size={14} />Extra guidance for the generated skills</li>
@@ -147,9 +166,27 @@ export function GuidePage() {
           </div>
         </Section>
 
-        <Section id="read" title="Reading a process">
-          <p>Open a process from the library. The header tells you which <b>application tiers</b>, <b>environments</b> and <b>programming languages</b> it applies to, who owns it, how long it usually takes and when it was last reviewed. Use “My application” in the library to hide what does not apply to you; your choice is remembered. The header also shows the <b>version</b>: press it to see who changed what and when. Below the header:</p>
+        <Section id="belong" title="Teams, platforms and practices">
+          <p>Every process and standard has an <b>owning team</b>, and can also belong to a <b>platform</b> and a <b>practice</b> and be filed under a <b>category</b>. Each answers a different question:</p>
           <dl className="guide-dl">
+            <div><dt><Users size={14} />Owning team</dt><dd>Who maintains it. The members of the team confirm its reviews and answer its feedback; they do not change the content themselves. Any team can own a process or issue a standard.</dd></div>
+            <div><dt><Boxes size={14} />Platform</dt><dd>What it is about: something people build on or get access to, such as Google Cloud, Apigee or GitHub. The owners of the platform may change it.</dd></div>
+            <div><dt><Compass size={14} />Practice</dt><dd>The discipline that looks after it, such as cyber security or engineering. The owners of the practice may change it.</dd></div>
+            <div><dt><Tag size={14} />Category</dt><dd>The subject it is filed under, such as Cloud or Network. It helps readers find it and gives nobody any rights.</dd></div>
+          </dl>
+          <p><b>Members.</b> A person can be a member of a team, a platform and a practice at the same time, and of several of each. Being a member is a role an admin gives: Owner of a team, Platform owner of a platform, Practice owner of a practice. Everyone can see who the members are: open <b>Teams &amp; tools</b> in the top bar, choose Teams, Platforms or Practices, and pick one. That is how you find out who may change what belongs to a platform or practice, or whom to ask about a review.</p>
+          <Chart process={rightsFlow} caption="Who may do what with one process or standard. Everybody who can sign in may read it and give feedback." />
+          <dl className="guide-dl">
+            <div><dt>May change it</dt><dd>Change, delete, bring back an earlier version, and create new ones: admins, process editors for every process, standards editors for every standard, and the owners of the platform or the practice it belongs to.</dd></div>
+            <div><dt>May look after it</dt><dd>Confirm reviews, answer feedback and see it while it is a draft: everyone who may change it, and the members of its owning team.</dd></div>
+            <div><dt>Staying within your own</dt><dd>A platform or practice owner changes only what belongs to their platforms and practices. They cannot take over a process or standard of another platform, nor move one of theirs to a platform and practice that are not theirs: Details warns about it, and the save is refused. When they create something new, they choose which of their platforms or practices it belongs to.</dd></div>
+          </dl>
+        </Section>
+
+        <Section id="read" title="Reading a process">
+          <p>Open a process from a search or from <b>Processes</b> in the top bar. The header tells you its category and owning team, how binding it is, the platform and practice it belongs to, which <b>application tiers</b>, <b>environments</b> and <b>programming languages</b> it applies to, how long it usually takes and when it was last reviewed. Use “My application” in the list of processes to hide what does not apply to you; your choice is remembered. The header also shows the <b>version</b>: press it to see who changed what and when. Below the header:</p>
+          <dl className="guide-dl">
+            <div><dt>How binding</dt><dd><b>Mandatory</b>: the only allowed way to get this done. <b>Recommended</b>: the expected way; another way needs a good reason. <b>Optional</b>: a help that may be used, or not. Some processes do not say.</dd></div>
             <div><dt>Before you start</dt><dd>The prerequisites, useful links and the standards the process helps to meet. On the map this is one line that opens when you press it, so the map itself is on the first screen; the checklist shows it in full. Tick what you already have. If a prerequisite is itself a process, a link takes you there.</dd></div>
             <div><dt>Map</dt><dd>Time runs left to right, each lane is one participant. Dashed arrows loop back, for example after a rejection. Click a block to open its details on the right.</dd></div>
             <div><dt>Checklist</dt><dd>Steps in order. Yours show the exact actions, the link to open and what you get at the end. Steps of others are collapsed so you know what you are waiting for. “Only my steps” hides them.</dd></div>
@@ -173,9 +210,9 @@ export function GuidePage() {
         </Section>
 
         <Section id="standards" title="Reading a standard">
-          <p>A standard is a list of requirements issued by a unit: cyber security, a platform owner or a practice. Open one from <b>Standards</b> in the top bar.</p>
+          <p>A standard is a list of requirements, such as the rules of cyber security, of a platform or of a practice. It is issued by a team, which reviews it and answers its feedback. Open one from a search or from <b>Standards</b> in the top bar. The header shows its category, platform and practice, and how many of its requirements are mandatory.</p>
           <dl className="guide-dl">
-            <div><dt>Must, should, may</dt><dd><b>Must</b> is mandatory; deviating needs an exception from the unit. <b>Should</b> is expected unless you have a good reason. <b>May</b> is optional good practice.</dd></div>
+            <div><dt>Must, should, may</dt><dd><b>Must</b> is mandatory; deviating needs an exception from the team that issues the standard. <b>Should</b> is expected unless you have a good reason. <b>May</b> is optional good practice. A standard has no rigour of its own: in search it counts as mandatory, recommended or optional for each level its requirements have.</dd></div>
             <div><dt>Each requirement</dt><dd>An id people and tools cite (such as SEC-LOG-01), the rule in a sentence, why it exists, how to comply, good and bad examples, and how it is checked: automatically, in code review, or by a person.</dd></div>
             <div><dt>My application</dt><dd>Choose your tier, environment and language. Requirements that do not apply to you are folded away, and the counts follow. The choice is remembered for every list and every standard.</dd></div>
             <div><dt>A link to one requirement</dt><dd>Opening a requirement changes the address in your browser. Copy it to point someone at exactly that rule.</dd></div>
@@ -189,40 +226,40 @@ export function GuidePage() {
           <Chart process={feedbackFlow} caption="A reported problem stays visible on the step until the owner marks it as fixed. Standards work the same way, per requirement." />
           <dl className="guide-dl">
             <div><dt>I hit this too</dt><dd>If someone already reported your problem, add yourself with one click. The count tells the owner what to fix first.</dd></div>
-            <div><dt>Who can close it</dt><dd>Whoever may edit the process or standard, and people with the Owner role for the team or unit that owns it. The reporter is told when it is marked as fixed.</dd></div>
+            <div><dt>Who can close it</dt><dd>Whoever may change the process or standard, and the members of the team that owns it. The reporter is told when it is marked as fixed.</dd></div>
             <div><dt>May already be fixed</dt><dd>When a step or requirement is changed after feedback was written about it, the feedback says so. Owners can then close old items quickly.</dd></div>
           </dl>
         </Section>
 
         <Section id="mine" title="Your responsibilities">
-          <p>You belong to a team when an admin has made you a <b>member</b> of it, which is the same as being <b>Owner</b> for it; a team can have as many members as it needs. If you are a member of a team or unit, or edit the standards of a unit, the top bar has <b>My responsibilities</b>. The number next to it is what is waiting for you: reviews that are overdue and feedback nobody has dealt with.</p>
+          <p>If you are a member of a team, a platform or a practice, the top bar has <b>My responsibilities</b>. It covers what your teams maintain and what belongs to your platforms and practices; each entry says through which of them it is yours, and if you have more than one, the buttons at the top narrow the page to one of them. The number next to the link is what is waiting for you: reviews that are overdue and feedback nobody has dealt with.</p>
           <dl className="guide-dl">
-            <div><dt><CalendarCheck size={14} />Reviews to do</dt><dd>What is overdue or due within a month, the most overdue first. Read it; if it is still right, press <b>Still correct</b>. That records today and your name, as a version of its own. You do not have to be an editor for this: the review belongs to the team that owns the thing. If something has to change, change it (or ask an editor), then confirm.</dd></div>
-            <div><dt><Flag size={14} />Feedback waiting for you</dt><dd>Every open item on what your teams own, the oldest first: what was said, about which step or requirement, by whom, and how many others hit the same. <b>Mark as fixed</b> closes it and tells the person who reported it.</dd></div>
+            <div><dt><CalendarCheck size={14} />Reviews to do</dt><dd>What is overdue or due within a month, the most overdue first. Read it; if it is still right, press <b>Still correct</b>. That records today and your name, as a version of its own. You do not have to be an editor for this: the review belongs to the team that owns the thing. If something has to change, change it (if you may) or ask somebody who may, then confirm.</dd></div>
+            <div><dt><Flag size={14} />Feedback waiting for you</dt><dd>Every open item on what is yours, the oldest first: what was said, about which step or requirement, by whom, and how many others hit the same. <b>Mark as fixed</b> closes it and tells the person who reported it.</dd></div>
             <div><dt>Unfinished</dt><dd>Drafts that were never published, and things in use that nobody is asked to review because they have no review rhythm.</dd></div>
-            <div><dt>Everything that is yours</dt><dd>Every process and standard of your teams and units with its status, its next review, its open feedback, and its version with who changed it last.</dd></div>
+            <div><dt>Everything that is yours</dt><dd>Every process and standard of your teams, platforms and practices with its status, its next review, its open feedback, and its version with who changed it last.</dd></div>
           </dl>
           <p>“Mark as reviewed” on a process or standard does the same from its own page. If somebody changed it after you opened it, the review is not recorded: you are shown the current version first, so nobody confirms what they have not read.</p>
         </Section>
 
         <Section id="edit" title="Editing a process">
-          <p>Switch to <b>Editor</b>. Changes go into a draft; nothing is published until you press <b>Save changes</b>, and saving is blocked while the checker reports a problem. A save takes effect for everyone at once. A new process starts with its name: the name gives it its address, which never changes afterwards, and it starts as a draft that only editors see.</p>
+          <p>Switch to <b>Editor</b>. Changes go into a draft; nothing is published until you press <b>Save changes</b>, and saving is blocked while the checker reports a problem. A save takes effect for everyone at once. A new process starts with its name: the name gives it its address, which never changes afterwards, and it starts as a draft that only editors see. If you may change only what belongs to your platforms and practices, you also choose which of them it belongs to.</p>
           <div className="guide-cards three">
             <div><Plus size={20} /><h3>Insert on an arrow</h3><p>Press the small + on an arrow of the map (it appears when you point at the map; on a touch screen it is always there). A form appears right there: what happens, who does it, what kind. The step lands exactly between the two blocks. A new decision starts with a “Yes” and a “No” path.</p></div>
             <div><GripVertical size={20} /><h3>Drag between lanes</h3><p>Drag a block to another lane to change who does it. The + on a block adds a step after it; on a decision it adds a branch.</p></div>
             <div><ListChecks size={20} /><h3>Insert in the checklist</h3><p>The checklist works the same way: press “Insert a step here” between two steps. Use it when you think in order rather than in lanes.</p></div>
-            <div><MousePointerClick size={20} /><h3>Click for the rest</h3><p>“Edit step” in the side panel holds the exact actions, tool, link, result, sub-process and what comes next. “Details” holds name, owner, where it applies, the standards it helps to meet, participants and prerequisites.</p></div>
+            <div><MousePointerClick size={20} /><h3>Click for the rest</h3><p>“Edit step” in the side panel holds the exact actions, tool, link, result, sub-process and what comes next. “Details” holds name, owning team, what it belongs to (category, platform, practice) and how binding it is, where it applies, the standards it helps to meet, participants and prerequisites.</p></div>
           </div>
         </Section>
 
         <Section id="editstandard" title="Editing a standard">
-          <p>You can edit the standards of the units your role covers. Press the pencil on a requirement, or <b>Add requirement</b>; the new one continues the numbering.</p>
+          <p>Standards editors can change every standard; platform and practice owners the standards that belong to theirs. Press the pencil on a requirement, or <b>Add requirement</b>; the new one continues the numbering.</p>
           <dl className="guide-dl">
             <div><dt>The rule</dt><dd>One testable sentence or two, the level, the reason, how to comply, and examples. Keep the id stable: people and tools cite it. A changed id is taken over when you leave the field, and refused with a message if another requirement has it.</dd></div>
             <div><dt>How it is checked</dt><dd>Automatically, in code review, or by a person, and by what.</dd></div>
             <div><dt>For reviewers</dt><dd>The signs of a violation in a pull request, the files where it matters (one pattern per row), and how a finding is reported: blocker, warning or info. Leave it empty for rules that cannot be seen in a change. This is what the review agent is built from.</dd></div>
             <div><dt>Applies only to</dt><dd>A requirement can be narrower than its standard, for example “production only”.</dd></div>
-            <div><dt>Details</dt><dd>The unit that issues it, scope, where it applies, the process for exceptions, and background links.</dd></div>
+            <div><dt>Details</dt><dd>The team that issues it, scope, its category, platform and practice, where it applies, the process for exceptions, and background links. How binding a standard is follows from the levels of its requirements, so it has no setting of its own. A new standard also starts with the team that issues it.</dd></div>
           </dl>
         </Section>
 
@@ -250,13 +287,13 @@ export function GuidePage() {
         <Section id="lifecycle" title="Life-cycle and reviews">
           <p>A description that nobody checks goes stale. Every process and every standard therefore has a status and a review rhythm, both set in Details.</p>
           <dl className="guide-dl">
-            <div><dt>Draft</dt><dd>Being written. Only the people who can edit it and the team or unit that owns it get to see it: for everyone else it does not exist, not in the lists and not by its link. No skill is generated. New processes and standards start here.</dd></div>
+            <div><dt>Draft</dt><dd>Being written. Only the people who may change it and the members of its owning team get to see it: for everyone else it does not exist, not in the lists and not by its link. No skill is generated. New processes and standards start here.</dd></div>
             <div><dt>Active</dt><dd>In use and visible to everyone. The owner is asked to review it every 3, 6, 12 or 24 months.</dd></div>
             <div><dt>Retired</dt><dd>No longer the way to do it. It stays for reference, greyed out, and can point to what replaces it. Its skills are withdrawn.</dd></div>
           </dl>
           <Chart process={reviewFlow} caption="The review cycle of an active process or standard. “Mark as reviewed” records the date and who confirmed it." />
-          <p><CalendarCheck size={13} /> Owners find what is due under <b>My responsibilities</b>. In Editor mode the library shows what needs a review, and <b>Admin › Health</b> lists everything that is due, for all teams.</p>
-          <p>“Mark as reviewed” on something without other changes is saved at once, as a version of its own with the note “Reviewed: confirmed as still correct” and the date of the day. The team or unit that owns it can do this as well as its editors; see <b>Your responsibilities</b>.</p>
+          <p><CalendarCheck size={13} /> Owners find what is due under <b>My responsibilities</b>. In Editor mode the list of processes shows what needs a review, and <b>Admin › Health</b> lists everything that is due, for all teams.</p>
+          <p>“Mark as reviewed” on something without other changes is saved at once, as a version of its own with the note “Reviewed: confirmed as still correct” and the date of the day. The members of its owning team can do this as well as the people who may change it; see <b>Your responsibilities</b>.</p>
         </Section>
 
         <Section id="skills" title="Skills and review agents">
@@ -280,11 +317,11 @@ export function GuidePage() {
           <p>The same knowledge is meant for people and for AI agents. People use this app. Agents will use an <b>MCP server</b> (Model Context Protocol) on top of the same content. The server is <b>not built yet</b>; the contract below is the plan, described in full in <code>docs/mcp.md</code>.</p>
           <table className="guide-table">
             <tbody>
-              <tr><td><code>search_processes</code>, <code>search_standards</code></td><td>Find what applies, by words, tier, environment and language. Only what is active.</td></tr>
+              <tr><td><code>search_processes</code>, <code>search_standards</code></td><td>Find what applies, by words, category, platform, practice, rigour, tier, environment and language. Only what is active.</td></tr>
               <tr><td><code>get_process</code>, <code>get_standard</code></td><td>The full content, with names and contacts resolved.</td></tr>
               <tr><td><code>get_my_steps</code></td><td>Only the steps of one participant, in order, with exact actions.</td></tr>
               <tr><td><code>get_skill</code></td><td>The latest version of a generated skill or review agent.</td></tr>
-              <tr><td><code>get_catalog</code></td><td>Teams with contacts, tools with links, tiers, environments and languages.</td></tr>
+              <tr><td><code>get_catalog</code></td><td>Teams, practices and platforms with contacts and members, categories, tools with links, tiers, environments and languages.</td></tr>
               <tr><td><code>report_problem</code></td><td>File feedback on a step or a requirement, the same as the flag in the app.</td></tr>
             </tbody>
           </table>
@@ -300,8 +337,8 @@ export function GuidePage() {
         <Section id="admin" title="The Admin panel">
           <p><b>Admin</b> in the top bar is where everything is configured. Admins see all of it; people who manage the lists see Lists, Skills and Health.</p>
           <dl className="guide-dl">
-            <div><dt><KeyRound size={14} />Access</dt><dd>Who has which role, person by person. Give a role by email, optionally limited to one team or unit; remove it with one click. A change applies on the person’s next click, without signing in again.</dd></div>
-            <div><dt><List size={14} />Lists</dt><dd>Teams and units, tools, tiers, environments and languages. Each team and unit shows its <b>members</b>, and an admin adds and removes them there.</dd></div>
+            <div><dt><KeyRound size={14} />Access</dt><dd>Who has which role, person by person. Give a role by email; Owner, Platform owner and Practice owner are always for one team, platform or practice, chosen from the lists. Remove a role with one click. A change applies on the person’s next click, without signing in again.</dd></div>
+            <div><dt><List size={14} />Lists</dt><dd>Teams, practices, platforms, categories, tools, tiers, environments and languages. Each team, practice and platform shows its <b>members</b>, and an admin adds and removes them there.</dd></div>
             <div><dt><Bot size={14} />Skills</dt><dd>Every generated skill and review agent, with its versions and extra guidance.</dd></div>
             <div><dt><CalendarCheck size={14} />Health</dt><dd>Reviews that are due, open feedback, drafts that were never published, and active documents without an owner or a review rhythm.</dd></div>
             <div><dt>Activity</dt><dd>Who changed what and when: content with the version and its note, lists, roles, skills, and feedback that was closed, reopened or deleted by someone other than its author. The newest entries come first; “Show older” goes back as far as the log does.</dd></div>
@@ -313,14 +350,17 @@ export function GuidePage() {
         <Section id="catalog" title="The lists">
           <p>Processes and standards do not type these in; they pick them from shared lists, so a team is spelled the same everywhere and renaming it once renames it everywhere. Everyone can look them up under <b>Teams &amp; tools</b>; they are changed in <b>Admin › Lists</b>.</p>
           <dl className="guide-dl">
-            <div><dt>Teams and units</dt><dd>A team owns processes and takes part in them, which gives it a lane. A <b>unit</b> is a team of the kind cyber security, platform owner or practice: only units issue standards.</dd></div>
-            <div><dt>Members</dt><dd>The people who belong to a team or unit. A member is Owner for it: what the team owns shows up under their “My responsibilities”, they confirm its reviews and close its feedback. A unit can also have members who edit its standards. In <b>Admin › Lists</b> an admin opens the team, types an email address under Members and presses Add member; removing works the same way and takes effect at once. It is the same thing as giving the role under Access, seen from the team’s side. A team without members has nobody who is asked to review what it owns.</dd></div>
+            <div><dt><Users size={14} />Teams</dt><dd>Groups of people. A team maintains processes and issues standards, and takes part in processes, which gives it a lane.</dd></div>
+            <div><dt><Compass size={14} />Practices</dt><dd>Disciplines such as cyber security or engineering. They are a list of their own, apart from the teams; a practice and a team may have the same name.</dd></div>
+            <div><dt><Boxes size={14} />Platforms</dt><dd>What people build on or get access to, such as Google Cloud, Azure, Apigee or GitHub. A list of their own, apart from teams and practices.</dd></div>
+            <div><dt><Tag size={14} />Categories</dt><dd>Subjects that group processes and standards in search and in the list of processes.</dd></div>
+            <div><dt>Members</dt><dd>Every team, practice and platform shows its members; what members may do is under <b>Teams, platforms and practices</b>. In <b>Admin › Lists</b> an admin opens the entry, types an email address under Members and presses <b>Add member</b>; removing works the same way and takes effect at once. It is the same thing as giving the role under Access, seen from that side. A team without members has nobody who is asked to review what it owns; a platform or practice without members is changed only by the editors.</dd></div>
             <div><dt>Tools</dt><dd>A step picks its tool from the list. Editors who manage the lists can add a missing tool straight from that picker.</dd></div>
             <div><dt><Layers size={14} />Tiers</dt><dd>How critical an application is. A process or standard applies to every tier or to chosen ones.</dd></div>
             <div><dt>Environments</dt><dd>Where things run, such as test or production. A requirement can apply to production only.</dd></div>
             <div><dt>Languages</dt><dd>Most content does not depend on the programming language. Some does, such as publishing a Go module.</dd></div>
           </dl>
-          <p>An entry that is still used cannot be removed; its page lists the processes and standards that use it. A team that a role is limited to cannot be removed either. The lists have versions like everything else, and two people changing them at once are told about each other.</p>
+          <p>An entry that is still used cannot be removed; its page lists the processes and standards that use it. A team, platform or practice that still has members cannot be removed either. The lists have versions like everything else, and two people changing them at once are told about each other.</p>
         </Section>
 
         <Section id="architecture" title="How it is built">
@@ -365,8 +405,9 @@ export function GuidePage() {
           <dl className="guide-dl">
             <div><dt>Sam Consumer</dt><dd>Reads, follows and reports problems.</dd></div>
             <div><dt>Alex Editor</dt><dd>Edits processes and manages the lists.</dd></div>
-            <div><dt>Casey Owner</dt><dd>Owner for the Cloud Platform team: closes feedback on what it owns.</dd></div>
-            <div><dt>Riley Security</dt><dd>Edits the standards of Cyber Security.</dd></div>
+            <div><dt>Casey Owner</dt><dd>Member (Owner) of the Cloud Platform team: confirms reviews and closes feedback on what it maintains.</dd></div>
+            <div><dt>Riley Security</dt><dd>Practice owner of Cyber security: changes what belongs to it. Also a member of the Cyber Security team.</dd></div>
+            <div><dt>Jordan Platform</dt><dd>An ordinary reader who is Platform owner of Google Cloud, Practice owner of Engineering and a member of the Cloud Platform team: one person in a team, a platform and a practice.</dd></div>
             <div><dt>Dana Admin</dt><dd>Admin: everything, including who has which role.</dd></div>
           </dl>
           <p>Choosing who to be only works on your own machine: the server refuses to start this way on an address that others can reach.</p>
@@ -377,7 +418,7 @@ export function GuidePage() {
           <p>Every level is tested, and <code>npm run test:all</code> runs all of it. The same runs on every pull request.</p>
           <table className="guide-table">
             <tbody>
-              <tr><td><code>npm test</code></td><td>The logic of the app: both checkers, editing, undo and the rules for saving, comparing versions, map layout, review dates, the AI prompts, rights, and that every sample file in the repository is valid.</td></tr>
+              <tr><td><code>npm test</code></td><td>The logic of the app: both checkers, editing, undo and the rules for saving, comparing versions, map layout, review dates, search and its filters, the AI prompts, rights and members, and that every sample file in the repository is valid.</td></tr>
               <tr><td><code>npm run test:server</code></td><td>The server against a real Postgres: sign-in (with a stand-in for Entra and Google that signs real tokens), roles, content with versions and saves at the same time, the skill generators, feedback, the Admin endpoints, starting and stopping.</td></tr>
               <tr><td><code>npm run test:e2e</code></td><td>A real browser against the real server and database: signing in, following a process, reading a standard, editing both, versions and two people editing at once, feedback, the Admin panel, skills, AI import.</td></tr>
               <tr><td><code>npm run validate</code></td><td>The sample files, or a folder written by <code>npm run export</code>, against the schemas and the rules.</td></tr>
@@ -404,7 +445,7 @@ export function GuidePage() {
             </tbody>
           </table>
           <p>The server answers <code>/healthz</code> when it runs and <code>/readyz</code> when it can also reach the database; use the second to decide whether it gets traffic. Several copies can start at the same time, also on an empty database. When it is asked to stop it finishes the requests it is answering first.</p>
-          <p>On its first start with an empty database the server loads the sample content from the container; after that the database is the only source, and a new version of the container never overwrites it. The full list of settings, the API and the rights are in <code>docs/backend.md</code>; a template is in <code>.env.example</code>.</p>
+          <p>On its first start with an empty database the server loads the sample content from the container; after that the database is the only source, and a new version of the container never overwrites it. When a new version needs the stored content in another shape, it converts it by itself at its first start, as new versions with a note. The full list of settings, the API and the rights are in <code>docs/backend.md</code>; a template is in <code>.env.example</code>.</p>
         </Section>
 
         <Section id="files" title="Files, schema and checker">
@@ -421,7 +462,7 @@ export function GuidePage() {
               <tr><td><code>.claude/skills/</code></td><td>Instructions for AI coding assistants working on this repository</td></tr>
             </tbody>
           </table>
-          <p>The checker runs in the app on every change and from the command line with <code>npm run validate</code>. Beyond the schema it catches, for a process: steps that point nowhere, unknown participants, decisions without labelled branches, missing sub-processes, and steps that can never be reached. For a standard: duplicate requirement ids, an owner that is not a unit, a requirement wider than its standard, and rules checked in review that give reviewers nothing to look for.</p>
+          <p>The checker runs in the app on every change and from the command line with <code>npm run validate</code>. Beyond the schema it catches, for a process: steps that point nowhere, unknown participants, decisions without labelled branches, missing sub-processes, and steps that can never be reached. For both: a category, platform or practice that is not in the lists. For a standard: duplicate requirement ids, a requirement wider than its standard, and rules checked in review that give reviewers nothing to look for.</p>
         </Section>
 
         <Section id="docs" title="Keeping this guide current">

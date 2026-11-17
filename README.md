@@ -3,7 +3,9 @@
 A portal for two questions:
 
 - **“How do I get…?”** A **process** (request a GCP project, a repository, an Akamai onboarding…) shown as a swim-lane map, where the first lane is always you, and as a checklist with the exact actions.
-- **“What must I meet?”** A **standard** issued by a unit (cyber security, a platform owner, a practice): requirements with the reason, how to comply, and how each is checked.
+- **“What must I meet?”** A **standard** (the rules of cyber security, a platform or a practice): requirements with the reason, how to comply, and how each is checked.
+
+The home page is one search over both, with filters by type, rigour, category, practice and platform.
 
 From both, the portal generates **skills for AI coding assistants** and, for standards, **pull request review agents**, and keeps them up to date as the content changes.
 
@@ -27,8 +29,9 @@ Open http://localhost:5173 and pick who to be:
 | --- | --- |
 | Sam Consumer | Reads, follows, reports problems |
 | Alex Editor | Edits processes and manages the lists |
-| Casey Owner | Owner for the Cloud Platform team: closes feedback on what it owns |
-| Riley Security | Edits the standards of Cyber Security |
+| Casey Owner | Member (Owner) of the Cloud Platform team: confirms reviews, closes feedback on what it maintains |
+| Riley Security | Practice owner of Cyber security: changes what belongs to it; member of the Cyber Security team |
+| Jordan Platform | Reader who is Platform owner of Google Cloud, Practice owner of Engineering and member of the Cloud Platform team |
 | Dana Admin | Everything, including who has which role |
 
 `npm run dev` starts three things in one terminal: a Postgres container (docker compose, port 54329), the Go server (rebuilt and restarted when a `.go` file changes) and Vite with hot reload. An empty database is filled from the sample content in `processes/`, `standards/` and `catalog/`.
@@ -43,21 +46,23 @@ To use a Postgres you already run instead of Docker, set `PM_PG`, for example `P
 
 ## How it is built
 
-React + Vite frontend; Go server; Postgres. Everything people change lives in the database: processes, standards, the lists, roles, feedback and the generated skills. Every save is a numbered version with a note; a save made from an outdated version is refused, so two people never overwrite each other. The files in this repository are the code, the formats (`schema/`) and sample content for a first start. Details, API and settings: [`docs/backend.md`](docs/backend.md).
+React + Vite frontend; Go server; Postgres. Everything people change lives in the database: processes, standards, the lists, roles, feedback and the generated skills. Every save is a numbered version with a note; a save made from an outdated version is refused, so two people never overwrite each other. The files in this repository are the code, the formats (`schema/`) and sample content for a first start. A database filled by an earlier version is converted by the server at its first start. Details, API and settings: [`docs/backend.md`](docs/backend.md).
 
 ## What is in it
 
 | | |
 | --- | --- |
+| **Search** | Home (`#/`) searches processes and standards together; results (`#/search?…`) filter by type, rigour, category, practice and platform, and the address holds the whole search so it can be shared. The process list is `#/processes`, standards `#/standards` |
 | **Processes** | Map and checklist, sub-processes, prerequisites, block types, editing on the map and in the checklist |
 | **Standards** | Requirements with level (must / should / may), reason, how to comply, examples, how it is checked, and what a reviewer looks for |
+| **What it belongs to** | An owning team, and optionally a category, a platform and a practice; a process also says how binding it is (mandatory, recommended, optional), a standard follows from its requirements' levels |
 | **Where it applies** | Application tiers, environments and programming languages, on a process, a standard or a single requirement; “My application” hides the rest |
 | **Life-cycle** | Draft (hidden from readers), active, retired; periodic reviews by the owner |
 | **Versions** | Every save is a version with who, when and a note; what changed between versions in plain words; restore; undo while editing; a warning before unsaved changes are left; a decision when somebody else saved first |
 | **Feedback** | On a step or a requirement, “I hit this too”, closed by the owner, flagged when the text changed since |
-| **My responsibilities** | For owners: reviews to do, feedback waiting, drafts, and everything their teams and units own, on one page with a count in the top bar |
+| **My responsibilities** | For owners: reviews to do, feedback waiting, drafts, and everything of their teams, platforms and practices, on one page with a count in the top bar |
 | **Skills** | Generated per process and per standard, versioned automatically, with optional hand-written guidance |
-| **Admin panel** | Roles, the lists (teams and units with their members, tools, tiers, environments, languages), the skills registry, health, activity |
+| **Admin panel** | Roles, the lists (teams, practices and platforms with their members, categories, tools, tiers, environments, languages), the skills registry, health, activity |
 | **AI authoring** | A self-contained prompt for any chat assistant turns text into a process or a standard; the checker validates what comes back |
 
 ![A standard](docs/standard.png)
@@ -76,13 +81,15 @@ Everyone who signs in (Entra ID or Google) can read, tick and give feedback. Rol
 
 | Role | Adds |
 | --- | --- |
-| Owner (for one team or unit) | Confirm reviews and close feedback on what it owns; a page of their own, **My responsibilities**, shows what is waiting |
-| Process editor | Create and change processes |
-| Standards editor (one unit or all) | Create and change standards |
-| Lists manager | Teams, tools, tiers, environments, languages |
+| Owner (of one team) | Confirm reviews and close feedback on what the team maintains; a page of their own, **My responsibilities**, shows what is waiting |
+| Platform owner (of one platform) | Create, change and delete the processes and standards that belong to the platform, and everything an Owner does for them |
+| Practice owner (of one practice) | The same for one practice |
+| Process editor | Create and change every process |
+| Standards editor | Create and change every standard |
+| Lists manager | Teams, practices, platforms, categories, tools, tiers, environments, languages |
 | Admin | Everything, including roles |
 
-A team or unit can have any number of members: a member is somebody with the Owner role for it, added on the team itself in **Admin › Lists** or person by person in **Admin › Access**.
+The members of a team, platform or practice are the people with Owner, Platform owner or Practice owner for it. Admins add them on the entry in **Admin › Lists** or person by person in **Admin › Access**; everyone can see them under **Teams & tools**. One person can be in a team, a platform and a practice at once. The rules in detail: the Guide and [`docs/backend.md`](docs/backend.md).
 
 The first admins are named in the server setting `PM_ADMINS`.
 
@@ -96,7 +103,7 @@ npm run test:all
 
 | Command | What it covers |
 | --- | --- |
-| `npm test` | Frontend logic (Vitest): both checkers, editing helpers, undo and the rules for saving, comparing versions, layout, life-cycle, prompts, rights, and that every sample file is valid |
+| `npm test` | Frontend logic (Vitest): both checkers, editing helpers, undo and the rules for saving, comparing versions, layout, life-cycle, search, prompts, rights and members, and that every sample file is valid |
 | `npm run test:server` | Go server against a real Postgres: sign-in incl. a fake OpenID Connect provider, roles, content with versions and concurrent saves, skill generators, feedback, admin, start-up and shutdown |
 | `npm run test:e2e` | Playwright against the real server and database: consumer and editor journeys for processes and standards, versions and two people editing at once, feedback, the Admin panel, skills, AI import |
 | `npm run typecheck`, `npm run validate` | Types; the sample files (or an exported folder) against the schemas and rules |

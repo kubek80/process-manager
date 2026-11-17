@@ -97,6 +97,28 @@ func TestPrepareFillsAnEmptyDatabaseOnce(t *testing.T) {
 	}
 }
 
+// Content that differs from the samples (for example a database converted from an older
+// version) may lack the platform or practice a built-in user is owner of.
+func TestDevelopmentRolesOnlyPointAtWhatTheListsHave(t *testing.T) {
+	st := newStores(t)
+	lists := `{"tiers":[],"environments":[],"languages":[],"teams":[{"id":"cloud-platform-team","name":"Cloud Platform team"}],"practices":[],"platforms":[],"categories":[],"tools":[]}`
+	if _, _, err := st.docs.Save(ctx, docs.Change{Kind: docs.Catalog, ID: docs.CatalogID, Body: []byte(lists), By: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepare(ctx, config.Config{Auth: config.AuthDev, SeedDir: t.TempDir()}, st, quiet); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := st.roles.All(ctx)
+	var got []string
+	for _, a := range all {
+		got = append(got, a.Email+" "+a.Role+" "+a.Scope)
+	}
+	want := "alex@example.com catalog-manager , alex@example.com process-editor , casey@example.com owner cloud-platform-team, jordan@example.com owner cloud-platform-team"
+	if strings.Join(got, ", ") != want {
+		t.Fatalf("roles:\n got %s\nwant %s", strings.Join(got, ", "), want)
+	}
+}
+
 func TestNoDevelopmentRolesWithARealProvider(t *testing.T) {
 	st := newStores(t)
 	if err := prepare(ctx, config.Config{Auth: config.AuthEntra, SeedDir: t.TempDir()}, st, quiet); err != nil {

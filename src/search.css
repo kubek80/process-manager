@@ -5,7 +5,7 @@
 /* ---------- the search box ---------- */
 .search-box { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 5px 0 14px; max-width: 760px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; color: var(--text-3); box-shadow: var(--shadow-1); }
 .search-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.search-box input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--text); font-size: 15px; }
+.search-box input, .search-box input:focus { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; outline: 0; box-shadow: none; background: none; color: var(--text); font-size: 15px; }
 .search-box input::placeholder { color: var(--text-3); }
 .search-box input::-webkit-search-cancel-button { cursor: pointer; }
 .search-box .btn { height: 36px; flex: none; }

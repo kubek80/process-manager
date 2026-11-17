@@ -80,11 +80,11 @@ export const signInFlow = flow("guide-sign-in", "Signing in", "How you get into 
     s("redirect", "Send you to the company sign-in", "app", "automation", ["sign-in"]),
     s("sign-in", "Sign in as usual", "me", "form", ["confirm"], "password, MFA"),
     s("confirm", "Confirm who you are", "idp", "verify", ["rights"], "name and email"),
-    s("rights", "Look up your rights", "app", "automation", ["use"], "editor? owner team?"),
+    s("rights", "Look up your rights", "app", "automation", ["use"], "roles, teams, platforms"),
     s("use", "Use the app", "me", "task", [], "signed in for 12 hours"),
   ]);
 
-export const standardFlow = flow("guide-standard", "From a standard to a reviewed pull request", "How a rule written by a unit reaches the code.",
+export const standardFlow = flow("guide-standard", "From a standard to a reviewed pull request", "How a rule written once reaches the code.",
   [["app", "Process Manager"], ["dev", "Developer and AI assistant"]],
   [
     s("write", "Write or change the standard", "me", "document", ["generate"], "requirements"),
@@ -95,7 +95,7 @@ export const standardFlow = flow("guide-standard", "From a standard to a reviewe
     s("found", "Violations?", "dev", "decision", [["fix", "Yes"], ["merge", "No"]]),
     s("fix", "Fix, or ask for an exception", "dev", "code", ["check"]),
     s("merge", "Merge", "dev", "verify", []),
-  ], "Unit");
+  ], "Standard editor");
 
 export const versionFlow = flow("guide-versions", "Two people edit the same process", "How a save becomes a version and what happens when somebody else saved first.",
   [["colleague", "A colleague"], ["app", "Process Manager"]],
@@ -110,3 +110,15 @@ export const versionFlow = flow("guide-versions", "Two people edit the same proc
     s("stored", "Keep it as a new version", "app", "automation", []),
   ]);
 
+
+export const rightsFlow = flow("guide-rights", "Who may change a process or standard", "How the app decides what you may do with one process or standard.",
+  [["app", "Process Manager"]],
+  [
+    s("open", "Open a process or standard", "me", "task", ["editor"]),
+    s("editor", "Admin, or editor of all of them?", "app", "decision", [["change", "Yes"], ["owns", "No"]], "process or standards editor"),
+    s("owns", "Owner of its platform or practice?", "app", "decision", [["change", "Yes"], ["team", "No"]]),
+    s("team", "Member of its owning team?", "app", "decision", [["manage", "Yes"], ["read", "No"]]),
+    s("change", "Change, create or delete it", "me", "document", [], "also reviews, feedback"),
+    s("manage", "Confirm reviews, answer feedback", "me", "review", [], "and see drafts"),
+    s("read", "Read it and give feedback", "me", "task", []),
+  ]);

@@ -25,7 +25,7 @@ For each change ask: would someone who uses, edits, runs or deploys the app now 
 | The server: API, settings, rights, database, notifications, deployment | `docs/backend.md`, `.env.example`, and the “Running it” sections of the Guide |
 | A format (`schema/*.json`) | Run `npm run validators` first (the app's checks are generated from the schemas). Then: field `description`s in the schema, the server's consistency check (`server/internal/docs/check.go`), the modelling rules in `src/lib/prompt.ts`, the generators in `server/internal/skills`, the Guide, `docs/mcp.md`, and the skills `edit-process` / `edit-standard` / `manage-catalog` |
 | A prompt, a schema, or the sample content | Regenerate `docs/llm-prompt.md` and `docs/llm-prompt-standards.md` with `npm run prompt`. Never edit those files by hand. |
-| Roles or what they allow | The roles table in the Guide (“Signing in and your rights”), `README.md`, `docs/backend.md`, and the texts in `src/components/AdminPage.tsx` |
+| Roles or what they allow | The roles table in the Guide (“Signing in and your rights”) and its section “Teams, platforms and practices”, `README.md`, `docs/backend.md`, and the texts in `src/components/AdminPage.tsx` and `src/lib/members.ts` |
 | What a generated skill or review agent says | The “Skills and review agents” section of the Guide |
 | What agents will get over MCP, or anything it promises | `docs/mcp.md` (it describes a plan: keep it marked as not built) |
 | npm scripts, commands, folder names | Every place that names them: `README.md`, the Guide, `docs/backend.md`, `CLAUDE.md`, the skills in `.claude/skills/` |
