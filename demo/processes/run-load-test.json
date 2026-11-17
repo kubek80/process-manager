@@ -1,0 +1,158 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "run-load-test",
+  "title": "Run a load test before a major release",
+  "summary": "Check in staging that a critical service handles the expected peak traffic before a major release, with the results stored so the next release can compare.",
+  "owner": "quality-engineering-team",
+  "category": "testing",
+  "practice": "quality",
+  "rigour": "recommended",
+  "tiers": [
+    "tier-0",
+    "tier-1"
+  ],
+  "environments": [
+    "staging"
+  ],
+  "estimatedDuration": "1-2 working days",
+  "tags": [
+    "load test",
+    "performance",
+    "release"
+  ],
+  "updatedAt": "2026-11-10",
+  "status": "draft",
+  "review": {
+    "intervalMonths": 6
+  },
+  "resources": [
+    {
+      "title": "Load test scripts",
+      "url": "https://github.example.com/quality/load-tests",
+      "kind": "repository",
+      "description": "k6 scripts and the peak traffic profile of every tier 0 service."
+    }
+  ],
+  "standards": [
+    "test-automation"
+  ],
+  "prerequisites": [
+    {
+      "title": "The release candidate is deployed to staging",
+      "description": "The image version you plan to release runs in staging with production-like settings."
+    },
+    {
+      "title": "Dashboard for the service",
+      "processId": "set-up-service-monitoring"
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "An engineer of the team that releases the service."
+    },
+    {
+      "id": "quality",
+      "name": "Quality Engineering team",
+      "description": "Slack #quality",
+      "teamId": "quality-engineering-team"
+    }
+  ],
+  "steps": [
+    {
+      "id": "book-staging",
+      "title": "Book the staging environment",
+      "actor": "me",
+      "type": "communication",
+      "instructions": [
+        "Post the date and time of the test in #quality.",
+        "Check no other load test is planned at the same time."
+      ],
+      "duration": "5 min",
+      "next": [
+        {
+          "to": "set-profile"
+        }
+      ]
+    },
+    {
+      "id": "set-profile",
+      "title": "Set the traffic profile",
+      "actor": "me",
+      "type": "code",
+      "instructions": [
+        "Open the load-tests repository and find the folder of your service.",
+        "Set the peak requests per second from last year's busiest day plus 20%.",
+        "Open a pull request."
+      ],
+      "tool": "github",
+      "duration": "30 min",
+      "next": [
+        {
+          "to": "run-test"
+        }
+      ]
+    },
+    {
+      "id": "run-test",
+      "title": "Run the load test",
+      "actor": "quality",
+      "type": "automation",
+      "description": "The test ramps up to the peak in 10 minutes and holds it for 30.",
+      "tool": "github-actions",
+      "duration": "45 min",
+      "next": [
+        {
+          "to": "targets-met"
+        }
+      ]
+    },
+    {
+      "id": "targets-met",
+      "title": "Response times within target?",
+      "actor": "me",
+      "type": "decision",
+      "next": [
+        {
+          "to": "store-results",
+          "label": "Yes"
+        },
+        {
+          "to": "fix-bottleneck",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "fix-bottleneck",
+      "title": "Find and fix the bottleneck",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Open the service dashboard for the time of the test.",
+        "Find what ran out first: CPU, memory, database connections or a dependency.",
+        "Fix it, deploy to staging and run the test again."
+      ],
+      "tool": "grafana",
+      "next": [
+        {
+          "to": "run-test"
+        }
+      ]
+    },
+    {
+      "id": "store-results",
+      "title": "Attach the results to the change record",
+      "actor": "me",
+      "type": "document",
+      "instructions": [
+        "Download the summary from the test run.",
+        "Attach it to the change record of the release."
+      ],
+      "tool": "servicenow",
+      "next": []
+    }
+  ]
+}

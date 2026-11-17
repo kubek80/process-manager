@@ -1,0 +1,159 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "book-architecture-review",
+  "title": "Book an architecture review",
+  "summary": "Present the design of a new or much changed critical system to the Architecture Board before building it, and get its advice in writing. Expected for tier 0 and tier 1 systems.",
+  "owner": "architecture-board",
+  "category": "architecture",
+  "practice": "architecture",
+  "rigour": "recommended",
+  "tiers": [
+    "tier-0",
+    "tier-1"
+  ],
+  "estimatedDuration": "2-3 weeks",
+  "tags": [
+    "architecture",
+    "design",
+    "review board"
+  ],
+  "updatedAt": "2026-01-20",
+  "status": "active",
+  "review": {
+    "intervalMonths": 12,
+    "lastReviewedAt": "2026-01-20",
+    "reviewedBy": "Chief architect"
+  },
+  "resources": [
+    {
+      "title": "Design document template",
+      "url": "https://wiki.example.com/architecture/design-template",
+      "kind": "template",
+      "description": "Context diagram, data flows, failure modes, security and cost."
+    },
+    {
+      "title": "Board calendar",
+      "url": "https://wiki.example.com/architecture/board-calendar",
+      "kind": "other",
+      "description": "The board meets every second Thursday; slots close a week before."
+    }
+  ],
+  "prerequisites": [
+    {
+      "title": "Decision records for the main choices",
+      "processId": "write-architecture-decision-record",
+      "description": "The board reads them before the meeting; they keep the discussion short."
+    },
+    {
+      "title": "Sponsor agreed to the project",
+      "description": "Someone with budget has said yes to the work."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The lead engineer or solution architect of the project."
+    },
+    {
+      "id": "board",
+      "name": "Architecture Board",
+      "description": "Slack #architecture",
+      "teamId": "architecture-board"
+    }
+  ],
+  "steps": [
+    {
+      "id": "write-design",
+      "title": "Write the design document",
+      "actor": "me",
+      "type": "document",
+      "instructions": [
+        "Copy the design document template.",
+        "Draw the context diagram and the main data flows.",
+        "Describe what happens when each dependency fails.",
+        "Link the decision records."
+      ],
+      "duration": "2-5 days",
+      "next": [
+        {
+          "to": "book-slot"
+        }
+      ]
+    },
+    {
+      "id": "book-slot",
+      "title": "Book a slot with the board",
+      "actor": "me",
+      "type": "form",
+      "instructions": [
+        "Create a Jira ticket in the ARCH project of type 'Review request'.",
+        "Attach the design document and choose a date from the board calendar."
+      ],
+      "tool": "jira",
+      "url": "https://jira.example.com/projects/ARCH",
+      "urlLabel": "Open ARCH in Jira",
+      "duration": "10 min",
+      "next": [
+        {
+          "to": "pre-read"
+        }
+      ]
+    },
+    {
+      "id": "pre-read",
+      "title": "Read the design and send questions",
+      "actor": "board",
+      "type": "review",
+      "duration": "1 week",
+      "next": [
+        {
+          "to": "present-design"
+        }
+      ]
+    },
+    {
+      "id": "present-design",
+      "title": "Present the design",
+      "actor": "me",
+      "type": "meeting",
+      "instructions": [
+        "Answer the written questions in the first five minutes.",
+        "Walk through the context diagram and the failure modes.",
+        "Note every piece of advice the board gives."
+      ],
+      "duration": "45 min",
+      "next": [
+        {
+          "to": "board-outcome"
+        }
+      ]
+    },
+    {
+      "id": "board-outcome",
+      "title": "Board outcome?",
+      "actor": "board",
+      "type": "decision",
+      "next": [
+        {
+          "to": "record-advice",
+          "label": "Go"
+        },
+        {
+          "to": "write-design",
+          "label": "Come back"
+        }
+      ]
+    },
+    {
+      "id": "record-advice",
+      "title": "Record the advice on the ticket",
+      "actor": "board",
+      "type": "document",
+      "description": "The board writes its advice and conditions on the Jira ticket and closes it.",
+      "tool": "jira",
+      "next": []
+    }
+  ]
+}

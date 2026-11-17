@@ -1,0 +1,117 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "register-service-in-catalogue",
+  "title": "Register a service in the service catalogue",
+  "summary": "Add a new service to the service catalogue with its owner team, tier and on-call contact, so that it gets a service id that namespaces, dashboards and access groups are named after.",
+  "owner": "developer-experience-team",
+  "platform": "service-catalogue",
+  "rigour": "mandatory",
+  "estimatedDuration": "30 minutes",
+  "tags": [
+    "catalogue",
+    "ownership",
+    "service id"
+  ],
+  "updatedAt": "2026-09-25",
+  "status": "active",
+  "review": {
+    "intervalMonths": 6,
+    "lastReviewedAt": "2026-09-25",
+    "reviewedBy": "Process owner"
+  },
+  "resources": [
+    {
+      "title": "catalog-info.yaml reference",
+      "url": "https://wiki.example.com/devex/catalog-info",
+      "kind": "documentation",
+      "description": "Every field of the catalogue file, with examples."
+    }
+  ],
+  "prerequisites": [
+    {
+      "title": "A repository for the service",
+      "processId": "request-github-repository"
+    },
+    {
+      "title": "The tier of the service",
+      "description": "Agree it with your product owner using the tier descriptions in the portal."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "An engineer of the team that will own the service."
+    },
+    {
+      "id": "developer-portal",
+      "name": "Developer portal",
+      "description": "Reads catalog-info.yaml from every repository."
+    }
+  ],
+  "steps": [
+    {
+      "id": "add-catalog-file",
+      "title": "Add catalog-info.yaml to the repository",
+      "actor": "me",
+      "type": "code",
+      "instructions": [
+        "Create catalog-info.yaml in the root of the repository.",
+        "Fill in name, description, owner team, tier and lifecycle 'experimental'.",
+        "Merge it to main."
+      ],
+      "tool": "github",
+      "duration": "15 min",
+      "next": [
+        {
+          "to": "import-service"
+        }
+      ]
+    },
+    {
+      "id": "import-service",
+      "title": "Register the repository in the portal",
+      "actor": "me",
+      "type": "form",
+      "instructions": [
+        "Open the developer portal and press 'Register existing component'.",
+        "Paste the link to catalog-info.yaml and press 'Import'."
+      ],
+      "tool": "developer-portal",
+      "duration": "5 min",
+      "next": [
+        {
+          "to": "create-entry"
+        }
+      ]
+    },
+    {
+      "id": "create-entry",
+      "title": "Create the catalogue entry and service id",
+      "actor": "developer-portal",
+      "type": "automation",
+      "tool": "developer-portal",
+      "duration": "a few minutes",
+      "outcome": "Service id, e.g. svc-payments-api",
+      "next": [
+        {
+          "to": "check-entry"
+        }
+      ]
+    },
+    {
+      "id": "check-entry",
+      "title": "Check the entry and note the service id",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Search the portal for your service.",
+        "Check owner team and tier are right.",
+        "Copy the service id; the next processes ask for it."
+      ],
+      "tool": "developer-portal",
+      "next": []
+    }
+  ]
+}

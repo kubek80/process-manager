@@ -1,0 +1,205 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "request-data-warehouse-dataset",
+  "title": "Request a dataset in the data warehouse",
+  "summary": "Get a BigQuery dataset in the company data warehouse for reporting or analytics, classified, with access for your team and a privacy check when it holds personal data.",
+  "owner": "data-platform-team",
+  "category": "data",
+  "practice": "data",
+  "platform": "data-warehouse",
+  "rigour": "mandatory",
+  "languages": [
+    "sql",
+    "python"
+  ],
+  "estimatedDuration": "3-10 working days",
+  "tags": [
+    "bigquery",
+    "dataset",
+    "personal data",
+    "access"
+  ],
+  "updatedAt": "2026-04-28",
+  "status": "active",
+  "review": {
+    "intervalMonths": 6,
+    "lastReviewedAt": "2026-04-28",
+    "reviewedBy": "Process owner"
+  },
+  "resources": [
+    {
+      "title": "Data classification guide",
+      "url": "https://wiki.example.com/data/classification",
+      "kind": "documentation",
+      "description": "Public, internal, confidential, personal: what each means, with examples."
+    },
+    {
+      "title": "Dataset request template",
+      "url": "https://wiki.example.com/data/dataset-template",
+      "kind": "template"
+    }
+  ],
+  "standards": [
+    "data-classification"
+  ],
+  "prerequisites": [
+    {
+      "title": "A GCP project to run your queries from",
+      "processId": "request-gcp-project",
+      "description": "Query costs are charged to this project."
+    },
+    {
+      "title": "List of the tables and their source",
+      "description": "Which systems the data comes from and which columns you need."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The analyst or engineer who needs the dataset."
+    },
+    {
+      "id": "data-protection",
+      "name": "Data protection officer",
+      "description": "Checks every use of personal data."
+    },
+    {
+      "id": "data-platform",
+      "name": "Data Platform team",
+      "description": "Slack #data-platform",
+      "teamId": "data-platform-team"
+    }
+  ],
+  "steps": [
+    {
+      "id": "classify-data",
+      "title": "Classify the data you will store",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "List every column you plan to load.",
+        "Give each column a class: public, internal, confidential or personal.",
+        "The dataset gets the highest class of its columns."
+      ],
+      "duration": "1 hour",
+      "outcome": "Classification of the dataset",
+      "next": [
+        {
+          "to": "raise-dataset-request"
+        }
+      ]
+    },
+    {
+      "id": "raise-dataset-request",
+      "title": "Raise the 'New BigQuery dataset' request",
+      "actor": "me",
+      "type": "subprocess",
+      "instructions": [
+        "Catalogue item: New BigQuery dataset.",
+        "Attach the filled-in dataset request template.",
+        "Enter the classification, the retention period and the access group."
+      ],
+      "tool": "servicenow",
+      "subProcessId": "raise-servicenow-request",
+      "outcome": "Request number (RITMxxxxxxx)",
+      "next": [
+        {
+          "to": "has-personal-data"
+        }
+      ]
+    },
+    {
+      "id": "has-personal-data",
+      "title": "Does it hold personal data?",
+      "actor": "data-platform",
+      "type": "decision",
+      "next": [
+        {
+          "to": "privacy-check",
+          "label": "Yes"
+        },
+        {
+          "to": "create-dataset",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "privacy-check",
+      "title": "Check the purpose and the retention",
+      "actor": "data-protection",
+      "type": "review",
+      "description": "The officer checks that the purpose is allowed, that only the needed columns are loaded and that the retention period is set.",
+      "duration": "up to 5 working days",
+      "next": [
+        {
+          "to": "privacy-ok"
+        }
+      ]
+    },
+    {
+      "id": "privacy-ok",
+      "title": "Privacy check passed?",
+      "actor": "data-protection",
+      "type": "decision",
+      "next": [
+        {
+          "to": "create-dataset",
+          "label": "Yes"
+        },
+        {
+          "to": "reduce-columns",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "reduce-columns",
+      "title": "Remove or mask personal columns",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Read the officer's comment on the request.",
+        "Drop the columns you do not need, or replace them with a hashed id.",
+        "Update the template and reply on the request."
+      ],
+      "tool": "servicenow",
+      "next": [
+        {
+          "to": "privacy-check"
+        }
+      ]
+    },
+    {
+      "id": "create-dataset",
+      "title": "Create the dataset with labels and access",
+      "actor": "data-platform",
+      "type": "automation",
+      "description": "The dataset is created with its classification label, the retention period as table expiry, and read access for your group.",
+      "tool": "bigquery",
+      "duration": "1 working day",
+      "next": [
+        {
+          "to": "check-dataset"
+        }
+      ]
+    },
+    {
+      "id": "check-dataset",
+      "title": "Run a first query",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Open BigQuery and select your project.",
+        "Find the dataset and check its label shows the right classification.",
+        "Run SELECT 1 against it to check your access."
+      ],
+      "tool": "bigquery",
+      "url": "https://console.cloud.google.com/bigquery",
+      "urlLabel": "Open BigQuery",
+      "next": []
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "set-up-service-monitoring",
+  "title": "Set up monitoring and alerts for a service",
+  "summary": "Get a standard dashboard, alerts that page your on-call engineer and log shipping for a new service, before it takes production traffic.",
+  "owner": "observability-team",
+  "category": "operations",
+  "practice": "operations",
+  "platform": "observability",
+  "rigour": "recommended",
+  "estimatedDuration": "1 working day",
+  "tags": [
+    "monitoring",
+    "alerts",
+    "dashboard",
+    "on-call"
+  ],
+  "updatedAt": "2026-10-12",
+  "status": "active",
+  "review": {
+    "intervalMonths": 6,
+    "lastReviewedAt": "2026-10-12",
+    "reviewedBy": "Process owner"
+  },
+  "resources": [
+    {
+      "title": "Dashboard and alert templates",
+      "url": "https://github.example.com/observability/service-templates",
+      "kind": "repository",
+      "description": "Grafana dashboards and alert rules for HTTP services, workers and batch jobs."
+    },
+    {
+      "title": "Skill: add monitoring for a service",
+      "url": "https://github.example.com/observability/service-templates/tree/main/.claude/skills/add-monitoring",
+      "kind": "skill",
+      "description": "Generates the dashboard and alert files from your service id and opens the pull request."
+    }
+  ],
+  "standards": [
+    "observability-baseline",
+    "secure-logging"
+  ],
+  "prerequisites": [
+    {
+      "title": "Service registered in the service catalogue",
+      "processId": "register-service-in-catalogue",
+      "description": "The dashboard and the on-call schedule are named after the service id."
+    },
+    {
+      "title": "The service exposes health and metrics endpoints",
+      "description": "/healthz and /metrics, as the platform libraries do by default."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "An engineer of the team that runs the service."
+    },
+    {
+      "id": "observability",
+      "name": "Observability team",
+      "description": "Slack #observability",
+      "teamId": "observability-team"
+    }
+  ],
+  "steps": [
+    {
+      "id": "add-monitoring-files",
+      "title": "Add the dashboard and alert rules",
+      "actor": "me",
+      "type": "code",
+      "instructions": [
+        "Copy the template for your kind of service to services/<service-id>/.",
+        "Set the service id, the tier and the PagerDuty schedule.",
+        "Keep the four standard alerts: errors, response time, saturation and availability.",
+        "Open a pull request."
+      ],
+      "tool": "github",
+      "url": "https://github.example.com/observability/service-templates",
+      "urlLabel": "Open service-templates",
+      "duration": "1 hour",
+      "next": [
+        {
+          "to": "review-alerts"
+        }
+      ]
+    },
+    {
+      "id": "review-alerts",
+      "title": "Check thresholds and paging",
+      "actor": "observability",
+      "type": "review",
+      "description": "The team checks that alerts page only for what needs a person at night, and that the thresholds fit the tier.",
+      "tool": "github",
+      "duration": "1 working day",
+      "next": [
+        {
+          "to": "set-up-on-call"
+        }
+      ]
+    },
+    {
+      "id": "set-up-on-call",
+      "title": "Create the on-call schedule",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "In PagerDuty, create a schedule named after the service id.",
+        "Add at least two people per week.",
+        "Link the schedule to the service in PagerDuty."
+      ],
+      "tool": "pagerduty",
+      "duration": "20 min",
+      "next": [
+        {
+          "to": "test-alert"
+        }
+      ]
+    },
+    {
+      "id": "test-alert",
+      "title": "Send a test alert",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "In Grafana, open the alert rule 'availability' and press 'Test'.",
+        "Check that the on-call engineer is paged and acknowledges.",
+        "Check the dashboard shows data for the last hour."
+      ],
+      "tool": "grafana",
+      "outcome": "Dashboard, alerts and on-call in place",
+      "next": []
+    }
+  ]
+}

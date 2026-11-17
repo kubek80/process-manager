@@ -1,0 +1,107 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "write-architecture-decision-record",
+  "title": "Write an architecture decision record",
+  "summary": "Write down an important design decision in one page - the problem, the options and why you chose one - so that people who join later understand it. A help for any team; not required.",
+  "owner": "architecture-board",
+  "category": "architecture",
+  "rigour": "optional",
+  "estimatedDuration": "1-2 hours",
+  "tags": [
+    "adr",
+    "design",
+    "decision"
+  ],
+  "updatedAt": "2026-07-14",
+  "status": "active",
+  "resources": [
+    {
+      "title": "Decision record template",
+      "url": "https://github.example.com/architecture/adr-template",
+      "kind": "template",
+      "description": "A Markdown file with the five headings: context, options, decision, consequences, status."
+    },
+    {
+      "title": "Examples of good decision records",
+      "url": "https://wiki.example.com/architecture/adr-examples",
+      "kind": "documentation"
+    }
+  ],
+  "prerequisites": [],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The engineer or architect who made or proposes the decision."
+    },
+    {
+      "id": "team",
+      "name": "Your team",
+      "description": "The people who will live with the decision."
+    }
+  ],
+  "steps": [
+    {
+      "id": "copy-template",
+      "title": "Copy the template into your repository",
+      "actor": "me",
+      "type": "document",
+      "instructions": [
+        "Create docs/adr/ in your repository if it does not exist.",
+        "Copy the template to docs/adr/NNNN-short-title.md with the next number."
+      ],
+      "tool": "github",
+      "duration": "5 min",
+      "next": [
+        {
+          "to": "write-options"
+        }
+      ]
+    },
+    {
+      "id": "write-options",
+      "title": "Write the problem, the options and the decision",
+      "actor": "me",
+      "type": "document",
+      "instructions": [
+        "Describe the problem in three sentences a new colleague would understand.",
+        "List at least two options with their pros and cons.",
+        "Write the decision and what it makes harder later.",
+        "Set the status to 'Proposed'."
+      ],
+      "duration": "1 hour",
+      "next": [
+        {
+          "to": "discuss-with-team"
+        }
+      ]
+    },
+    {
+      "id": "discuss-with-team",
+      "title": "Discuss it in a pull request",
+      "actor": "team",
+      "type": "review",
+      "description": "The team comments on the pull request. Disagreement is fine; it goes into the record as a consequence.",
+      "tool": "github",
+      "duration": "a few days",
+      "next": [
+        {
+          "to": "accept-record"
+        }
+      ]
+    },
+    {
+      "id": "accept-record",
+      "title": "Mark the record as accepted",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Change the status to 'Accepted' with today's date.",
+        "Merge the pull request."
+      ],
+      "tool": "github",
+      "next": []
+    }
+  ]
+}

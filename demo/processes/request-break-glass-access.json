@@ -1,0 +1,179 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "request-break-glass-access",
+  "title": "Get emergency access to a production GCP project",
+  "summary": "Get temporary owner access to a production Google Cloud project when an incident cannot be fixed through the pipeline. The access ends by itself after four hours and every action is recorded.",
+  "owner": "cloud-platform-team",
+  "category": "access",
+  "practice": "security",
+  "platform": "google-cloud",
+  "rigour": "mandatory",
+  "environments": [
+    "production"
+  ],
+  "estimatedDuration": "15-30 minutes",
+  "tags": [
+    "break glass",
+    "emergency",
+    "access",
+    "incident"
+  ],
+  "updatedAt": "2026-05-04",
+  "status": "active",
+  "review": {
+    "intervalMonths": 6,
+    "lastReviewedAt": "2026-05-04",
+    "reviewedBy": "Process owner"
+  },
+  "resources": [
+    {
+      "title": "Emergency access runbook",
+      "url": "https://wiki.example.com/cloud/break-glass",
+      "kind": "documentation",
+      "description": "What the access allows, how it is recorded and what to do if the tool is down."
+    }
+  ],
+  "standards": [
+    "access-management",
+    "infrastructure-as-code"
+  ],
+  "prerequisites": [
+    {
+      "title": "An open incident",
+      "processId": "handle-production-incident",
+      "description": "Emergency access is only given for a SEV1 or SEV2 incident with a PagerDuty number."
+    },
+    {
+      "title": "Member of the emergency access group of your team",
+      "processId": "request-application-access",
+      "description": "The group gcp-<team>-breakglass; ask for it before you join the on-call rota."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The on-call engineer working on the incident."
+    },
+    {
+      "id": "second-person",
+      "name": "Incident commander",
+      "description": "Approves the access; must be someone else than you."
+    },
+    {
+      "id": "cloud-platform",
+      "name": "Cloud Platform team",
+      "description": "Slack #cloud-platform",
+      "teamId": "cloud-platform-team"
+    }
+  ],
+  "steps": [
+    {
+      "id": "ask-access",
+      "title": "Ask for emergency access",
+      "actor": "me",
+      "type": "form",
+      "instructions": [
+        "Open the access portal and choose 'Emergency access - GCP production'.",
+        "Choose the project and enter the PagerDuty incident number.",
+        "Write in one sentence what you need to do that the pipeline cannot."
+      ],
+      "tool": "entra-id",
+      "duration": "2 min",
+      "next": [
+        {
+          "to": "approve-emergency"
+        }
+      ]
+    },
+    {
+      "id": "approve-emergency",
+      "title": "Approve the emergency access",
+      "actor": "second-person",
+      "type": "approval",
+      "description": "Four eyes: the incident commander confirms the incident and the reason.",
+      "tool": "entra-id",
+      "duration": "5 min",
+      "next": [
+        {
+          "to": "emergency-approved"
+        }
+      ]
+    },
+    {
+      "id": "emergency-approved",
+      "title": "Approved?",
+      "actor": "second-person",
+      "type": "decision",
+      "next": [
+        {
+          "to": "do-fix",
+          "label": "Yes"
+        },
+        {
+          "to": "use-pipeline",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "use-pipeline",
+      "title": "Fix it through the pipeline instead",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Make the change in the infrastructure repository.",
+        "Ask a second engineer for a fast review and merge."
+      ],
+      "tool": "github",
+      "next": []
+    },
+    {
+      "id": "do-fix",
+      "title": "Make only the change you asked for",
+      "actor": "me",
+      "type": "task",
+      "description": "Everything you do is recorded. The access ends after four hours, or earlier when you give it back.",
+      "instructions": [
+        "Open the GCP console with the emergency role.",
+        "Make the change and post each action in the incident channel.",
+        "Give the access back in the access portal when you are done."
+      ],
+      "tool": "gcp-console",
+      "url": "https://console.cloud.google.com",
+      "urlLabel": "Open GCP console",
+      "next": [
+        {
+          "to": "bring-code-in-line"
+        }
+      ]
+    },
+    {
+      "id": "bring-code-in-line",
+      "title": "Bring the infrastructure code in line",
+      "actor": "me",
+      "type": "code",
+      "description": "A change made by hand is undone by the next pipeline run unless the code says the same.",
+      "instructions": [
+        "Write the same change in the infrastructure repository within one working day.",
+        "Put the incident number in the pull request title."
+      ],
+      "tool": "terraform",
+      "next": [
+        {
+          "to": "check-records"
+        }
+      ]
+    },
+    {
+      "id": "check-records",
+      "title": "Check the recorded actions",
+      "actor": "cloud-platform",
+      "type": "review",
+      "description": "The team compares the recorded actions with the reason given and raises anything unexpected with Cyber Security.",
+      "duration": "1 working day",
+      "next": []
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "request-shared-test-environment",
+  "title": "Request a slot on a shared test environment",
+  "summary": "The old way to get a test environment: book one of the five shared virtual machines for up to two weeks. Retired - test environments are now namespaces on the Kubernetes test cluster.",
+  "owner": "quality-engineering-team",
+  "environments": [
+    "test"
+  ],
+  "estimatedDuration": "2-5 working days",
+  "tags": [
+    "test environment",
+    "retired"
+  ],
+  "updatedAt": "2026-05-04",
+  "status": "deprecated",
+  "replacedBy": "request-kubernetes-namespace",
+  "review": {
+    "intervalMonths": 6,
+    "lastReviewedAt": "2025-11-03",
+    "reviewedBy": "Process owner"
+  },
+  "prerequisites": [
+    {
+      "title": "Test plan",
+      "description": "What you will test and for how long."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The tester or engineer who needs the environment."
+    },
+    {
+      "id": "quality",
+      "name": "Quality Engineering team",
+      "description": "Slack #quality",
+      "teamId": "quality-engineering-team"
+    }
+  ],
+  "steps": [
+    {
+      "id": "raise-slot-request",
+      "title": "Raise the 'Test environment slot' request",
+      "actor": "me",
+      "type": "subprocess",
+      "instructions": [
+        "Catalogue item: Test environment slot.",
+        "Enter the start date and the number of days, at most 10."
+      ],
+      "tool": "servicenow",
+      "subProcessId": "raise-servicenow-request",
+      "next": [
+        {
+          "to": "assign-slot"
+        }
+      ]
+    },
+    {
+      "id": "assign-slot",
+      "title": "Assign a free environment",
+      "actor": "quality",
+      "type": "task",
+      "duration": "up to 3 working days",
+      "next": [
+        {
+          "to": "deploy-build"
+        }
+      ]
+    },
+    {
+      "id": "deploy-build",
+      "title": "Deploy your build to the environment",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Copy your build to the machine named in the request.",
+        "Run the install script from the environment's wiki page."
+      ],
+      "next": [
+        {
+          "to": "release-slot"
+        }
+      ]
+    },
+    {
+      "id": "release-slot",
+      "title": "Give the environment back",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Remove your data from the machine.",
+        "Close the request."
+      ],
+      "tool": "servicenow",
+      "next": []
+    }
+  ]
+}
