@@ -15,6 +15,7 @@ export function IconField({ icon, name, onChange }: { icon?: string; name: strin
   const labelId = useId();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
+  const [shown, setShown] = useState(0); // a new upload shows again an image that did not load before
   const pick = async (file: File | undefined) => {
     if (!file) return;
     const wrong = iconFileProblem(file);
@@ -24,6 +25,7 @@ export function IconField({ icon, name, onChange }: { icon?: string; name: strin
       const type = iconContentType(file);
       const { id } = await uploadIcon(type === file.type ? file : new Blob([file], { type }));
       onChange(id);
+      setShown((n) => n + 1);
     } catch (e) {
       setProblem((e as Error).message); // the server's own sentence
     } finally {
@@ -36,7 +38,7 @@ export function IconField({ icon, name, onChange }: { icon?: string; name: strin
       <span className="field-label" id={labelId}>Icon<em>Optional. Shown next to the name.</em></span>
       <div className="icon-field-row">
         <span className="icon-field-preview">
-          <EntryIcon icon={icon} size={56} fallback={<span className="icon-field-none">No icon</span>} />
+          <EntryIcon key={shown} icon={icon} size={56} fallback={<span className="icon-field-none">No icon</span>} />
         </span>
         <div className="icon-field-actions">
           <div className="btn-row">

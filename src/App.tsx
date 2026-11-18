@@ -28,6 +28,8 @@ const GuidePage = lazy(() => import("./components/GuidePage").then((m) => ({ def
 const HomePage = lazy(() => import("./components/HomePage").then((m) => ({ default: m.HomePage })));
 const SearchPage = lazy(() => import("./components/SearchPage").then((m) => ({ default: m.SearchPage })));
 const RequestsPage = lazy(() => import("./components/RequestsPage").then((m) => ({ default: m.RequestsPage })));
+const EditProcessPage = lazy(() => import("./components/EditProcessPage").then((m) => ({ default: m.EditProcessPage })));
+const EditStandardPage = lazy(() => import("./components/EditStandardPage").then((m) => ({ default: m.EditStandardPage })));
 const AiDialog = lazy(() => import("./components/AiDialog").then((m) => ({ default: m.AiDialog }))) as typeof import("./components/AiDialog").AiDialog;
 
 function useTheme() {
@@ -40,6 +42,15 @@ function useTheme() {
     try { localStorage.setItem("pm:theme", dark ? "dark" : "light"); } catch { /* ignore */ }
   }, [dark]);
   return [dark, setDark] as const;
+}
+
+/** An editing screen for something that is not there (deleted, or never existed). */
+function NotFound({ noun, id }: { noun: "process" | "standard"; id: string }) {
+  return (
+    <div className="page"><h1>{noun === "process" ? "Process" : "Standard"} not found</h1>
+      <p className="muted">There is no {noun} “{id}”, or you may not see it.</p>
+      <a className="btn" href={href({ page: noun === "process" ? "library" : "standards" })}>Back to all {noun === "process" ? "processes" : "standards"}</a></div>
+  );
 }
 
 /** Signed out: the sign-in screen. Signed in: the app. */
@@ -377,7 +388,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     const doc = tidy({ ...p, id, status: "draft", $schema: "../schema/process.schema.json", updatedAt: today() });
     try { await saveProcess(doc, 0, "Created"); } catch (e) { notify.error("The process could not be created.", whyNotCreated(e, "process")); if ((e as ApiError).conflict) load(); throw e; }
     setAi(null); setNaming(null); setPending(null);
-    go({ page: "process", id, tab: "flow" });
+    go({ page: "edit-process", id });
   };
   const createStandard = async (s: Standard) => {
     if (!canEdit(perms, "standard", s) || belongsRefused(perms, "standard", undefined, s).length) { setPending(s); setAi(null); setNaming("standard"); return; }
@@ -385,7 +396,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     const doc = tidyStandard({ ...s, id, status: "draft", $schema: "../schema/standard.schema.json", updatedAt: today() });
     try { await saveStandard(doc, 0, "Created"); } catch (e) { notify.error("The standard could not be created.", whyNotCreated(e, "standard")); if ((e as ApiError).conflict) load(); throw e; }
     setAi(null); setNaming(null); setPending(null);
-    go({ page: "standard", id, tab: "doc" });
+    go({ page: "edit-standard", id });
   };
   // Deleting: the version the person is looking at. If somebody changed it since, it is not
   // deleted - nobody removes a version they have not seen.
@@ -429,14 +440,18 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   };
 
   const all = processes ?? [];
+  // after publishing: what readers now see, and the versions, come from the server
+  const refreshAll = async () => { await fetchAll(); };
   // what needs the signed-in person as an owner: shown as a count next to "My responsibilities"
   const mine = useMemo(() => myGroups(perms), [perms]);
   const waiting = useMemo(() => {
     // the top bar is on every page: whatever is wrong with one document, it must not take all of them down
     try { return mine.length ? urgent(responsibilities(perms, null, all, standards, feedback).tasks) : 0; } catch { return 0; }
   }, [mine, perms, all, standards, feedback]);
-  const process = route.page === "process" ? all.find((p) => p.id === route.id) : undefined;
-  const standard = route.page === "standard" ? standards.find((s) => s.id === route.id) : undefined;
+  const process = route.page === "process" || route.page === "edit-process" ? all.find((p) => p.id === route.id) : undefined;
+  const standard = route.page === "standard" || route.page === "edit-standard" ? standards.find((s) => s.id === route.id) : undefined;
+  // the editing screen is a screen of its own: its editing bar takes the place of the top bar
+  const editing = route.page === "edit-process" || route.page === "edit-standard";
   const on = (...pages: string[]) => (pages.includes(route.page) ? "on" : "");
   const current = (...pages: string[]) => (pages.includes(route.page) ? "page" as const : undefined);
 
@@ -446,7 +461,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   return (
     <CatalogContext.Provider value={catalogApi}>
     <FeedbackContext.Provider value={actions}>
-      <header className="topbar">
+      {!editing && <header className="topbar">
         <a className="brand" href="#/" aria-label="Process Manager">
           <span className="logo"><svg viewBox="0 0 32 32" width="18" height="18" aria-hidden="true"><path d="M5 9h9v5H5zM18 18h9v5h-9z" fill="currentColor" /><path d="M14 11.5h6.5V18" stroke="currentColor" strokeWidth="2.2" fill="none" /></svg></span>
           <span className="brand-name">Process Manager</span>
@@ -469,20 +484,20 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         <span className="spacer" />
         <button className="icon-btn" onClick={() => setDark(!dark)} aria-label={dark ? "Switch to the light theme" : "Switch to the dark theme"}>{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
         <UserMenu me={me} onSignedOut={onSignedOut} />
-      </header>
+      </header>}
 
       {error && <div className="page"><LoadError what="The content could not be loaded." error={error} onRetry={load} /></div>}
       {!processes && !error && <Loading page />}
       <ErrorBoundary resetKey={href(route)}>
       <Suspense fallback={<Loading page />}>
-      {processes && route.page === "home" && <HomePage processes={all} standards={standards} feedback={feedback} />}
-      {processes && route.page === "search" && <SearchPage route={route} processes={all} standards={standards} feedback={feedback} />}
+      {processes && route.page === "home" && <HomePage processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }} />}
+      {processes && route.page === "search" && <SearchPage route={route} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }} />}
       {processes && route.page === "library" && (
-        <Library processes={all} standardIds={standards.map((s) => s.id)} feedback={feedback.process} onAi={() => setAi("process")}
+        <Library processes={all} standardIds={standards.map((s) => s.id)} feedback={feedback.process} meta={processMeta} onAi={() => setAi("process")}
           onNew={() => setNaming("process")} />
       )}
       {processes && route.page === "standards" && (
-        <StandardsLibrary standards={standards} processes={all} feedback={feedback.standard} onAi={() => setAi("standard")} onNew={newStandard} />
+        <StandardsLibrary standards={standards} processes={all} feedback={feedback.standard} meta={standardMeta} onAi={() => setAi("standard")} onNew={newStandard} />
       )}
       {processes && route.page === "catalog" && <CatalogPage processes={all} standards={standards} editable={false} />}
       {processes && route.page === "requests" && <RequestsPage state={route.state} kind={route.kind} processes={all} standards={standards} />}
@@ -496,14 +511,22 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         : <div className="page"><h1>Admin</h1><p className="muted">You do not have access to the Admin panel. An admin can give it to you.</p></div>)}
       {processes && route.page === "process" && (process
         ? <ProcessPage key={process.id} process={process} meta={processMeta[process.id]} all={all} standards={standards} tab={route.tab} item={route.item}
-          onSave={saveProcess} onReload={() => reloadProcess(process.id)} onDelete={(base) => deleteProcess(process.id, base)} onReviewed={(base) => reviewed("process", process.id, base)}
-          feedback={feedback.process[process.id] ?? []} />
+          onReviewed={(base) => reviewed("process", process.id, base)} feedback={feedback.process[process.id] ?? []} />
         : <div className="page"><h1>Process not found</h1><p className="muted">There is no process “{route.id}”.</p><a className="btn" href={href({ page: "library" })}>Back to all processes</a></div>)}
       {processes && route.page === "standard" && (standard
         ? <StandardPage key={standard.id} standard={standard} meta={standardMeta[standard.id]} all={standards} processes={all} tab={route.tab} item={route.item}
-          onSave={saveStandard} onReload={() => reloadStandard(standard.id)} onDelete={(base) => deleteStandard(standard.id, base)} onReviewed={(base) => reviewed("standard", standard.id, base)}
-          feedback={feedback.standard[standard.id] ?? []} />
+          onReviewed={(base) => reviewed("standard", standard.id, base)} feedback={feedback.standard[standard.id] ?? []} />
         : <div className="page"><h1>Standard not found</h1><p className="muted">There is no standard “{route.id}”.</p><a className="btn" href="#/standards">Back to all standards</a></div>)}
+      {processes && route.page === "edit-process" && (process
+        ? <EditProcessPage key={process.id} process={process} meta={processMeta[process.id]} all={all} standards={standards} item={route.item}
+          feedback={feedback.process[process.id] ?? []} onSave={saveProcess} onReload={() => reloadProcess(process.id)} onRefresh={refreshAll}
+          onDelete={(base) => deleteProcess(process.id, base)} onDraftMeta={(d) => setMeta(setProcessMeta, process.id, { ...processMeta[process.id], draft: d ?? undefined })} />
+        : <NotFound noun="process" id={route.id} />)}
+      {processes && route.page === "edit-standard" && (standard
+        ? <EditStandardPage key={standard.id} standard={standard} meta={standardMeta[standard.id]} all={standards} processes={all} item={route.item}
+          feedback={feedback.standard[standard.id] ?? []} onSave={saveStandard} onReload={() => reloadStandard(standard.id)} onRefresh={refreshAll}
+          onDelete={(base) => deleteStandard(standard.id, base)} onDraftMeta={(d) => setMeta(setStandardMeta, standard.id, { ...standardMeta[standard.id], draft: d ?? undefined })} />
+        : <NotFound noun="standard" id={route.id} />)}
       </Suspense>
       </ErrorBoundary>
       <Suspense fallback={null}>

@@ -45,8 +45,12 @@ export interface Draft<T> {
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  /** Saves; resolves to true when it went through. A refused save sets `conflict`. */
-  save: (note?: string) => Promise<boolean>;
+  /**
+   * Saves; resolves to true when it went through. A refused save sets `conflict`. `finish` is
+   * applied to what is sent, e.g. the status "active" when a draft is published; "Save mine
+   * over theirs" after a refused save applies it again.
+   */
+  save: (note?: string, finish?: (d: T) => T) => Promise<boolean>;
   conflict: Conflict | null;
   /** Save my version on top of theirs. */
   keepMine: (note?: string) => Promise<boolean>;
@@ -99,9 +103,12 @@ export function useDraft<T>(o: DraftOptions<T>): Draft<T> {
   const latest = useRef(state);
   latest.current = state;
 
+  // what the last save added to the document, for "Save mine over theirs" after it was refused
+  const finishing = useRef<((d: T) => T) | undefined>(undefined);
   const send = useCallback(async (base: number, note: string): Promise<boolean> => {
     const tidied = opts.current.tidy(latest.current.draft);
-    const sent = opts.current.stamp ? opts.current.stamp(tidied) : tidied;
+    const finished = finishing.current ? finishing.current(tidied) : tidied;
+    const sent = opts.current.stamp ? opts.current.stamp(finished) : finished;
     setSaving(true);
     setError(null);
     try {
@@ -119,7 +126,7 @@ export function useDraft<T>(o: DraftOptions<T>): Draft<T> {
     }
   }, []);
 
-  const save = useCallback((note = "") => send(latest.current.base, note), [send]);
+  const save = useCallback((note = "", finish?: (d: T) => T) => { finishing.current = finish; return send(latest.current.base, note); }, [send]);
   const keepMine = useCallback((note = "") => send(conflict?.exists ? (conflict.version ?? 0) : 0, note), [send, conflict]);
   const takeTheirs = useCallback(async () => {
     let now: { saved: T; version: number } | null;

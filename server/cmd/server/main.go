@@ -54,10 +54,10 @@ func main() {
 	var o options
 	flag.BoolVar(&o.seed, "seed", false, "add sample feedback when the database has none, and with PM_AUTH=dev sample views, upvotes, bookmarks, downloads and requests when there are none (local development)")
 	flag.BoolVar(&o.reset, "reset", false, "delete all feedback, views, bookmarks, upvotes, skill downloads and requests, then exit (combine with -seed to refill; local development only)")
-	flag.StringVar(&o.importDir, "import", "", "load processes/, standards/ and catalog/ from this folder into the database, then exit")
+	flag.StringVar(&o.importDir, "import", "", "load processes/, standards/ and catalog/ (with the icons in catalog/icons/) from this folder into the database, then exit")
 	flag.BoolVar(&o.migrate, "migrate", false, "upgrade the tables, convert content stored by an earlier version and regenerate the skills, print what was done, then exit")
 	flag.BoolVar(&o.reindex, "reindex", false, "bring the index of search by meaning up to date (all of it again when its settings changed), print what was done, then exit")
-	flag.StringVar(&o.exportDir, "export", "", "write processes, standards, lists and generated skills to this folder, then exit")
+	flag.StringVar(&o.exportDir, "export", "", "write processes, standards, lists, the icons the lists name and generated skills to this folder, then exit")
 	flag.Parse()
 	// PM_LOG_FORMAT=json gives one JSON object per line, which log collectors prefer
 	var handler slog.Handler = slog.NewTextHandler(os.Stderr, nil)

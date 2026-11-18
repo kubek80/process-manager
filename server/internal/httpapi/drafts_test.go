@@ -317,7 +317,7 @@ func TestOrdinarySavesWhileThereAreUnpublishedChanges(t *testing.T) {
 	path := "/api/processes/" + gcp
 	for _, c := range []struct{ body, want string }{
 		{e.body(docs.Process, gcp, `"status": "active"`, `"status": "draft"`), "This process has unpublished changes by alex@example.com. Publish or discard them before you hide the process from readers again."},
-		{e.body(docs.Process, gcp, `"status": "active"`, `"status": "deprecated", "replacedBy": "` + repoP + `"`), "This process has unpublished changes by alex@example.com. Publish or discard them before you retire the process."},
+		{e.body(docs.Process, gcp, `"status": "active"`, `"status": "deprecated", "replacedBy": "`+repoP+`"`), "This process has unpublished changes by alex@example.com. Publish or discard them before you retire the process."},
 		{e.body(docs.Process, gcp, "Request a GCP project", "Changed directly"), "This process has unpublished changes by alex@example.com. Publish or discard them first, then make this change."},
 	} {
 		status, body := e.as(jordan).do("PUT", path, c.body)
