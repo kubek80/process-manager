@@ -3,6 +3,7 @@ package retrieval
 import (
 	"context"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"io"
 	"log/slog"
@@ -628,5 +629,12 @@ func TestEnsureWorksWhileTheProviderIsDown(t *testing.T) {
 	}
 	if n, _ := ix.Pending(bg); n != 0 {
 		t.Fatalf("pending after catching up: %d", n)
+	}
+}
+
+func TestTheWayPartsAreWrittenIsPartOfTheSettings(t *testing.T) {
+	ix := New(nil, nil, newFake(), chunking.Options{}, quiet)
+	if _, _, chunks := ix.settings(); !strings.Contains(chunks, fmt.Sprintf("text=%d", chunking.Version)) {
+		t.Fatalf("settings: %s", chunks)
 	}
 }

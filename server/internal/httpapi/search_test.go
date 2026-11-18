@@ -266,11 +266,17 @@ func TestAHangingProviderNeitherSlowsASaveNorBlocksThePortal(t *testing.T) {
 	release := f.hang()
 	editor := e.as(alex)
 	n := int(e.deps.Docs.Pool.Config().MaxConns) + 2
+	var slowest time.Duration
+	defer func() {
+		t.Logf("the slowest of %d saves while the provider hangs took %s", n, slowest.Round(time.Millisecond))
+	}()
 	for i := 0; i < n; i++ {
 		start := time.Now()
 		status, body := editor.do("PUT", "/api/processes/"+gcp, e.body(docs.Process, gcp, "Request a GCP project", fmt.Sprintf("Request a GCP project (%d)", i)))
 		wantStatus(t, status, 200, body)
-		if took := time.Since(start); took > 3*time.Second {
+		took := time.Since(start)
+		slowest = max(slowest, took)
+		if took > 3*time.Second {
 			t.Fatalf("save %d took %s while the provider hangs", i+1, took)
 		}
 	}

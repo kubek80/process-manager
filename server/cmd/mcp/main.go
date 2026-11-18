@@ -32,6 +32,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kubek80/process-manager/server/internal/config"
+	"github.com/kubek80/process-manager/server/internal/db"
 	"github.com/kubek80/process-manager/server/internal/docs"
 	"github.com/kubek80/process-manager/server/internal/embedding"
 	"github.com/kubek80/process-manager/server/internal/feedback"
@@ -123,38 +124,16 @@ func loadSettings(getenv func(string) string) (settings, error) {
 	return s, nil
 }
 
-// requiredMigration is the newest table migration (server/internal/db/migrations) this command
-// reads from. Raise it when the command starts to use a table or column of a later one.
-const requiredMigration = 6
-
 // checkDatabase makes sure the portal server has prepared the database: this command neither
 // creates nor upgrades tables.
 func checkDatabase(ctx context.Context, pool *pgxpool.Pool) error {
-	var ready bool
-	err := pool.QueryRow(ctx, `select to_regclass('schema_migrations') is not null and to_regclass('documents') is not null
-		and to_regclass('skills') is not null and to_regclass('feedback') is not null and to_regclass('role_assignments') is not null`).Scan(&ready)
-	if err != nil {
+	if err := db.Current(ctx, pool); err != nil {
+		if errors.Is(err, db.ErrBehind) {
+			return fmt.Errorf("the database is not ready for this version of the portal (%w)", err)
+		}
 		return fmt.Errorf("the database cannot be read: %w", err)
-	}
-	if !ready {
-		return errors.New("the database has no portal tables yet. Start the portal server once (or run it with -migrate) to create them, then start this again")
-	}
-	var newest int
-	if err := pool.QueryRow(ctx, `select coalesce(max(version), 0) from schema_migrations`).Scan(&newest); err != nil {
-		return fmt.Errorf("the database cannot be read: %w", err)
-	}
-	if newest < requiredMigration {
-		return errors.New("the database was prepared by an older version of the portal. Upgrade it first: start the portal server of this version once, or run it with -migrate")
 	}
 	return nil
-}
-
-// indexBuilt reports whether the portal server has built the search index. (To be replaced by
-// the index's own read-only check when retrieval has one: index.Ready(ctx) == nil.)
-func indexBuilt(ctx context.Context, pool *pgxpool.Pool, _ *retrieval.Index) bool {
-	var built bool
-	err := pool.QueryRow(ctx, `select to_regclass('search_settings') is not null and to_regclass('search_chunks') is not null`).Scan(&built)
-	return err != nil || built // a check that fails says nothing either way
 }
 
 // connect waits a little for a database that is still starting.
@@ -239,9 +218,11 @@ func run(ctx context.Context, getenv func(string) string, log *slog.Logger, list
 			return fmt.Errorf("search by meaning: %w", err)
 		}
 		index = retrieval.New(pool, store, e, s.Embeddings.ChunkOptions(), log)
-		// the portal server builds the index; this command only reads it
-		if !indexBuilt(ctx, pool, index) {
-			log.Warn("the search index has not been built yet: the portal server builds it when it starts with the same settings. Until then agents search by words")
+		index.SetMinScore(s.Embeddings.MinScore) // -1: the provider's own floor
+		// the portal server builds the index; this command only reads it (never Ensure or CatchUp)
+		if err := index.Ready(ctx); err != nil {
+			reason := strings.TrimPrefix(err.Error(), retrieval.ErrNotSetUp.Error()+": ")
+			log.Warn("search by meaning is not ready, so agents search by words until the portal server has the index ready: " + reason)
 		}
 	}
 	var notifier notify.Notifier = notify.Log{Logger: log}

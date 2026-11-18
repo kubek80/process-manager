@@ -74,7 +74,7 @@ func (e providerError) Unwrap() error        { return e.err }
 const (
 	lockEnsure = 7461010
 	// per document, inside the transaction that writes its parts
-	lockDocSpace = 7463
+	lockDocSpace = 7466
 )
 
 // layout is the version of the tables below. A change of it rebuilds the index like a change
