@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { copiedStatus, SHARE_HINT, escapeHtml, googleChatMessage, mailtoLink, oneLine, plainMessage, shareUrl, slackMessage } from "../share";
+import { canShareNatively, copiedStatus, linkAndTitle, mailtoLink, nativeShareData, oneLine, SHARE_HINT, shareCancelled, shareUrl } from "../share";
 
 const gcp = { kind: "process" as const, id: "request-gcp-project", title: "Request a GCP project", summary: "Get a new Google Cloud project\n created by the project factory." };
 const URL_ = "https://pm.example.com/#/p/request-gcp-project";
@@ -32,19 +32,13 @@ describe("one line of summary", () => {
 });
 
 describe("messages", () => {
-  it("plain text has the title, the summary and the link on its own line", () => {
-    expect(plainMessage(gcp, URL_)).toBe(`Request a GCP project\nGet a new Google Cloud project created by the project factory.\n${URL_}`);
-    expect(plainMessage({ ...gcp, summary: "" }, URL_)).toBe(`Request a GCP project\n${URL_}`);
+  it("link and title: the title on one line, the address on the next", () => {
+    expect(linkAndTitle(gcp, URL_)).toBe(`Request a GCP project\n${URL_}`);
+    expect(linkAndTitle({ ...gcp, title: " Two\n lines " }, URL_)).toBe(`Two lines\n${URL_}`);
   });
-  it("Slack: bold title in plain text, and HTML with a real link and escaped text", () => {
-    const m = slackMessage({ ...gcp, title: "Tom & Jerry <b>" }, URL_);
-    expect(m.text.split("\n")[0]).toBe("*Tom & Jerry <b>*");
-    expect(m.text.split("\n")[2]).toBe(URL_);
-    expect(m.html).toContain("<b>Tom &amp; Jerry &lt;b&gt;</b>");
-    expect(m.html).toContain(`<a href="${URL_}">${URL_}</a>`);
-  });
-  it("Google Chat: bold title, link as it is", () => {
-    expect(googleChatMessage(gcp, URL_)).toBe(`*Request a GCP project*\nGet a new Google Cloud project created by the project factory.\n${URL_}`);
+  it("the device's share sheet gets the title, the summary as text, and the address", () => {
+    expect(nativeShareData(gcp, URL_)).toEqual({ title: "Request a GCP project", text: "Get a new Google Cloud project created by the project factory.", url: URL_ });
+    expect(nativeShareData({ ...gcp, summary: undefined }, URL_).text).toBe("Request a GCP project");
   });
   it("e-mail: subject and text encoded, spaces as %20, lines as CRLF", () => {
     const link = mailtoLink({ ...gcp, title: "Q&A: 100% sure? #1" }, URL_);
@@ -57,16 +51,33 @@ describe("messages", () => {
     // no summary: no empty lines piled up
     expect(decodeURIComponent(mailtoLink({ ...gcp, summary: "" }, URL_).split("&body=")[1])).not.toContain("\r\n\r\n\r\n");
   });
-  it("escapes HTML", () => {
-    expect(escapeHtml(`<a href="x">'&'</a>`)).toBe("&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;");
+});
+
+describe("the device's own share sheet", () => {
+  const data = nativeShareData(gcp, URL_);
+  const share = async () => {};
+  it("is offered only where the browser has one", () => {
+    expect(canShareNatively(undefined, data)).toBe(false);
+    expect(canShareNatively({}, data)).toBe(false);
+    expect(canShareNatively({ share }, data)).toBe(true);
+  });
+  it("asks canShare where the browser has it", () => {
+    expect(canShareNatively({ share, canShare: () => true }, data)).toBe(true);
+    expect(canShareNatively({ share, canShare: () => false }, data)).toBe(false);
+    expect(canShareNatively({ share, canShare: () => { throw new TypeError("no"); } }, data)).toBe(false);
+  });
+  it("a closed share sheet is not a failure", () => {
+    expect(shareCancelled(new DOMException("closed", "AbortError"))).toBe(true);
+    expect(shareCancelled({ name: "AbortError" })).toBe(true);
+    expect(shareCancelled(new DOMException("denied", "NotAllowedError"))).toBe(false);
+    expect(shareCancelled(null)).toBe(false);
   });
 });
 
 describe("the share dialog's words", () => {
   it("each way of sharing has its own hint and its own confirmation", () => {
-    expect(new Set(Object.values(SHARE_HINT)).size).toBe(3);
-    expect(copiedStatus("slack")).toBe("The message for Slack was copied. Paste it there.");
-    expect(copiedStatus("chat")).toBe("The message for Google Chat was copied. Paste it there.");
-    expect(copiedStatus("link")).toMatch(/^The link was copied/);
+    expect(new Set(Object.values(SHARE_HINT)).size).toBe(Object.keys(SHARE_HINT).length);
+    expect(copiedStatus("link")).toBe("The link was copied. Paste it where you want to share it.");
+    expect(copiedStatus("title")).toMatch(/^The link and title were copied/);
   });
 });

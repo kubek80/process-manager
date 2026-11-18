@@ -2,45 +2,53 @@
 
 .search-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
-/* ---------- the search box ---------- */
-.search-box { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 5px 0 14px; max-width: 760px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; color: var(--text-3); box-shadow: var(--shadow-1); }
-.search-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.search-box input, .search-box input:focus { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; outline: 0; box-shadow: none; background: none; color: var(--text); font-size: 15px; }
-.search-box input::placeholder { color: var(--text-3); }
-.search-box input::-webkit-search-cancel-button { cursor: pointer; }
-.search-box .btn { height: 36px; flex: none; }
-.search-box.big { height: 58px; padding-left: 18px; border-radius: 14px; box-shadow: var(--shadow-2); }
-.search-box.big input { font-size: 17px; }
-.search-box.big .btn { height: 44px; padding: 0 18px; border-radius: 10px; font-size: 14.5px; }
-@media (max-width: 520px) {
-  .search-box, .search-box.big { height: 50px; padding-left: 12px; }
-  .search-box.big input, .search-box input { font-size: 16px; } /* 16px: phones do not zoom in */
-  .search-box .btn, .search-box.big .btn { height: 38px; padding: 0 12px; }
-}
+/* the search box itself is in lists.css: the lists use it too */
 
 /* ---------- home ---------- */
-.home-search { padding: 36px 0 28px; max-width: 760px; }
+.home-search { padding: 36px 0 28px; }
 .home-search h1 { font-size: 38px; }
 .home-search .lead { margin: 8px 0 22px; }
 @media (max-width: 520px) { .home-search { padding: 12px 0 20px; } .home-search h1 { font-size: 28px; } }
 
-.home-all { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; max-width: 760px; margin-bottom: 28px; }
-.home-entry { display: flex; align-items: center; gap: 12px; padding: 14px 16px; min-width: 0; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow-1); transition: border-color .15s, box-shadow .15s; }
-.home-entry:hover { border-color: var(--line-strong); box-shadow: var(--shadow-2); }
-.home-entry-icon { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
-.home-entry-icon.standard { background: var(--bad-bg); color: var(--bad); }
-.home-entry-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.home-entry-text .muted { font-size: 12.5px; }
-.home-entry-count { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.home-entry-go { flex: none; color: var(--text-3); transition: transform .15s, color .15s; }
-.home-entry:hover .home-entry-go { transform: translateX(3px); color: var(--accent); }
+/* the search and the rest on the left; the ways to browse on the right, on a surface of their own */
+.home-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 0 40px; align-items: start; }
+.home-main { min-width: 0; }
+.home-search .search-box { max-width: none; }
 
-.home-browse { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-.home-group { padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
-.home-group h2 { font-size: 15px; }
-.home-group > .muted { margin: 2px 0 12px; }
+.home-all { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 28px; }
+.home-entry { --kind: var(--kind-process); --kind-bg: var(--kind-process-bg); display: flex; align-items: center; gap: 14px; padding: 16px 16px 16px 20px; min-width: 0; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: inset 4px 0 0 var(--kind), var(--shadow-1); transition: border-color .15s, box-shadow .15s; }
+.home-entry.standard { --kind: var(--kind-standard); --kind-bg: var(--kind-standard-bg); }
+.home-entry:hover { border-color: var(--line-strong); box-shadow: inset 4px 0 0 var(--kind), var(--shadow-2); }
+.home-entry-icon { display: grid; place-items: center; flex: none; width: 40px; height: 40px; background: var(--kind-bg); color: var(--kind); }
+/* the same shapes as the markers on the cards: round for a process, square for a standard */
+.home-entry-icon.process { border-radius: 50%; }
+.home-entry-icon.standard { border-radius: 8px; box-shadow: inset 0 0 0 1px var(--kind-standard-line); }
+.home-entry-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.home-entry-kind { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--kind); }
+.home-entry-text .muted { font-size: 12.5px; }
+.home-entry-count { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--kind); }
+.home-entry-go { flex: none; color: var(--text-3); transition: transform .15s, color .15s; }
+.home-entry:hover .home-entry-go { transform: translateX(3px); color: var(--kind); }
+
+.home-browse { display: flex; flex-direction: column; margin-top: 36px; padding: 6px 20px 8px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 16px; min-width: 0; }
+.home-browse-title { display: flex; align-items: center; gap: 8px; padding: 14px 0 4px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); }
+.home-group { padding: 14px 0 16px; min-width: 0; }
+.home-group + .home-group { border-top: 1px solid var(--line); }
+.home-group h3 { font-size: 15px; }
+.home-group > .muted { margin: 2px 0 10px; }
 .home-links { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .home-links .chip { max-width: 100%; }
+/* narrower: the ways to browse come after the rest, in columns side by side */
+@media (max-width: 1100px) {
+  .home-layout { grid-template-columns: minmax(0, 1fr); }
+  .home-browse { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 28px; margin-top: 8px; }
+  .home-browse-title { grid-column: 1 / -1; }
+  .home-group + .home-group { border-top: 0; }
+}
+@media (max-width: 620px) {
+  .home-browse { display: flex; padding: 4px 16px 6px; }
+  .home-group + .home-group { border-top: 1px solid var(--line); }
+}
 
 /* ---------- results (the panel, the cards and the pages are in lists.css) ---------- */
 .search-page > .search-box { max-width: none; margin-bottom: 18px; }

@@ -196,7 +196,8 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
 .block.done .block-num { background: var(--good); color: #fff; }
 .block-add { position: absolute; right: -12px; top: 50%; margin-top: -12px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow-2); opacity: 0; transform: scale(.7); transition: opacity .12s, transform .12s; z-index: 5; }
 .block:hover .block-add, .block-add:focus-visible { opacity: 1; transform: scale(1); }
-.flow-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--surface); }
+.flow-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.map-tools { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
 .zoom { display: flex; align-items: center; gap: 2px; flex: none; }
@@ -518,7 +519,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .guide-table td:first-child { white-space: nowrap; width: 1%; padding-right: 24px; }
 .guide-table td:last-child { color: var(--text-2); }
 .guide-hero, .guide-cards, .guide-dl, .guide-blocks { max-width: 1040px; }
-.flow-wrap.bare .flow-foot { padding: 8px 12px; }
+.flow-wrap.bare .flow-head { padding: 8px 12px; }
 
 /* ---------- life-cycle, languages, resources ---------- */
 .tier-tag.status-draft { background: var(--warn-bg); border-color: transparent; color: var(--warn); }

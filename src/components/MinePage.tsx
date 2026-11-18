@@ -7,11 +7,13 @@ import { groupKey, myGroups, responsibilities, type Group, type Owned, type Task
 import { useFeedbackActions, usePerms } from "../lib/session";
 import { href, type MetaById } from "../lib/store";
 import { FEEDBACK_KINDS } from "./Feedback";
+import "../mine.css";
 
 const day = (iso?: string) => (iso ? iso.slice(0, 10) : "");
 const pageOf = (o: Owned, feedback = false) => href(o.kind === "process"
   ? { page: "process", id: o.doc.id, tab: feedback ? "feedback" : "flow" }
   : { page: "standard", id: o.doc.id, tab: feedback ? "feedback" : "doc" });
+const editPage = (o: Owned) => href(o.kind === "process" ? { page: "edit-process", id: o.doc.id } : { page: "edit-standard", id: o.doc.id });
 const noun = (kind: TargetKind) => (kind === "process" ? "process" : "standard");
 const GROUP_ICON = { team: Users, platform: Boxes, practice: Compass };
 const GROUP_TITLE = { team: "Team", platform: "Platform", practice: "Practice" };
@@ -51,6 +53,9 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
 
   const of = (...kinds: Task["kind"][]) => tasks.filter((t) => kinds.includes(t.kind));
   const overdue = of("review-overdue"), soon = of("review-soon"), open = of("feedback"), other = of("draft", "no-rhythm");
+  // published, with changes saved beside it that readers do not see yet (only sent to whoever may edit it)
+  const workingDraft = (o: Owned) => (o.status === "draft" ? undefined : meta[o.kind][o.doc.id]?.draft);
+  const changed = owned.filter((o) => workingDraft(o));
   const review = async (o: Owned) => {
     setBusy(o.kind + o.doc.id);
     try { await onReviewed(o.kind, o.doc.id); } finally { setBusy(null); }
@@ -140,15 +145,27 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
         </section>
       )}
 
-      {other.length > 0 && (
+      {other.length + changed.length > 0 && (
         <section className="admin-card" aria-labelledby="mine-other">
-          <h2 id="mine-other"><PencilLine size={16} />Unfinished <span>{other.length}</span></h2>
+          <h2 id="mine-other"><PencilLine size={16} />Unfinished <span>{other.length + changed.length}</span></h2>
           <ul className="mine-list">
+            {changed.map((o) => {
+              const d = workingDraft(o)!;
+              return (
+                <li key={"changes" + o.kind + o.doc.id} className="mine-changes">
+                  <Icon o={o} />
+                  <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a>
+                    <em>Changed by {d.updatedBy} on {day(d.updatedAt)}. Readers still see version {meta[o.kind][o.doc.id]?.version}.</em></span>
+                  <span className="tier-tag unpublished">Unpublished changes</span>
+                  <a className="btn small" href={editPage(o)}>Continue editing<ArrowUpRight size={13} /></a>
+                </li>
+              );
+            })}
             {other.map(({ kind, item: o }) => (
               <li key={kind + o.kind + o.doc.id}>
                 <Icon o={o} />
                 <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a>
-                  <em>{kind === "draft" ? "A draft: readers do not see it until its status is set to Active." : "In use, but nobody is asked to review it: no review rhythm is set in Details."}</em></span>
+                  <em>{kind === "draft" ? "A draft: readers do not see it until it is published." : "In use, but nobody is asked to review it: no review rhythm is set under About when editing it."}</em></span>
                 <span className={`tier-tag ${kind === "draft" ? "status-draft" : "review-soon"}`}>{kind === "draft" ? "Draft" : "No review rhythm"}</span>
                 <a className="btn small" href={pageOf(o)}>Open<ArrowUpRight size={13} /></a>
               </li>
@@ -171,7 +188,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
                     <tr key={o.kind + o.doc.id}>
                       <td><a href={pageOf(o)}><Icon o={o} />{o.doc.title}</a></td>
                       <td>{via(o)}</td>
-                      <td>{o.status === "active" ? "In use" : <span className={`tier-tag status-${o.status}`}>{STATUS_LABEL[o.status]}</span>}</td>
+                      <td>{o.status === "active" ? "In use" : <span className={`tier-tag status-${o.status}`}>{STATUS_LABEL[o.status]}</span>}{workingDraft(o) && <> <span className="tier-tag unpublished" title={`Changed by ${workingDraft(o)!.updatedBy} on ${day(workingDraft(o)!.updatedAt)}`}>Unpublished changes</span></>}</td>
                       <td>{o.review.state === "ok" ? o.review.label : o.review.state === "none" ? <span className="muted">—</span> : <span className={`tier-tag review-${o.review.state}`}>{o.review.label}</span>}</td>
                       <td>{o.open.length ? <a href={pageOf(o, true)} className="tier-tag flagged">{o.open.length} open</a> : <span className="muted">none</span>}</td>
                       <td>{m ? <>Version {m.version} · {day(m.updatedAt)}<br /><span className="muted">{m.updatedBy}</span></> : <span className="muted">—</span>}</td>

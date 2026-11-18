@@ -39,15 +39,18 @@ const (
 // caller may not edit for.
 var errDenied = errors.New("not allowed")
 
-// docMeta is what the app needs to know about a document besides its content.
+// docMeta is what the app needs to know about a document besides its content. Draft says that
+// it has unpublished changes, and is only there for the people who may edit it.
 type docMeta struct {
-	Version   int       `json:"version"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	UpdatedBy string    `json:"updatedBy"`
+	Version   int             `json:"version"`
+	UpdatedAt time.Time       `json:"updatedAt"`
+	UpdatedBy string          `json:"updatedBy"`
+	CreatedAt time.Time       `json:"createdAt"`
+	Draft     *docs.DraftInfo `json:"draft,omitempty"`
 }
 
 func metaOf(d docs.Doc) docMeta {
-	return docMeta{Version: d.Version, UpdatedAt: d.UpdatedAt, UpdatedBy: d.UpdatedBy}
+	return docMeta{Version: d.Version, UpdatedAt: d.UpdatedAt, UpdatedBy: d.UpdatedBy, CreatedAt: d.CreatedAt}
 }
 
 // headOf reads what a document belongs to (its team, platform and practice) and its status.
@@ -81,6 +84,12 @@ func (a *api) listDocs(kind, key string) http.HandlerFunc {
 			a.fail(w, r, err)
 			return
 		}
+		// unpublished changes: one query for the whole list, shown only to who may edit
+		drafts, err := a.Docs.Drafts(r.Context(), kind)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
 		s := who(r)
 		bodies := make([]json.RawMessage, 0, len(list))
 		meta := map[string]docMeta{}
@@ -89,7 +98,11 @@ func (a *api) listDocs(kind, key string) http.HandlerFunc {
 				continue
 			}
 			bodies = append(bodies, d.Body)
-			meta[d.ID] = metaOf(d)
+			m := metaOf(d)
+			if info, ok := drafts[d.ID]; ok && s.CanEdit(kind, belongsOf(d.Body)) {
+				m.Draft = &info
+			}
+			meta[d.ID] = m
 		}
 		writeJSON(w, 200, map[string]any{key: bodies, "meta": meta})
 	}
@@ -369,78 +382,115 @@ func (a *api) putDoc(kind string) http.HandlerFunc {
 			a.fail(w, r, err)
 			return
 		}
-		s := who(r)
-		// The right is needed for what it belongs to now and for what it is moved to: an owner of
-		// one platform can neither take over a document of another nor hand theirs away.
-		if !s.CanEdit(kind, belongsOf(body)) {
-			deniedFor(w, kind, s)
-			return
+		// A person's ordinary save of a process or standard that has unpublished changes is
+		// refused: the changes would be lost, or hidden under a version they never saw.
+		rule := docs.KeepDraft
+		if kind != docs.Catalog {
+			rule = docs.RefuseIfDraft
 		}
-		if err := a.Schemas.Validate(kind, body); err != nil {
-			a.fail(w, r, err)
-			return
-		}
-		lists, err := a.Docs.Lists(r.Context())
-		if err == nil && kind == docs.Catalog {
-			err = json.Unmarshal(body, &lists) // the lists are checked against themselves
-		}
-		if err == nil {
-			err = docs.Check(kind, body, lists)
-		}
-		if err == nil && kind == docs.Catalog {
-			err = a.stillUsed(r.Context(), s, body)
-		}
-		if err != nil {
-			a.fail(w, r, err)
-			return
-		}
-		note := r.URL.Query().Get("note")
-		doc, changed, err := a.Docs.Save(r.Context(), docs.Change{
-			Kind: kind, ID: id, Body: body, By: s.Email, Note: note, Base: base,
-			Check: func(current *docs.Doc) error {
-				var stored *rbac.Belongs
-				if current != nil {
-					b := belongsOf(current.Body)
-					if !s.CanEdit(kind, b) {
-						return errDenied
-					}
-					stored = &b
-				}
-				// a document shared with another platform or practice stays with it
-				if field, id := s.Misplaced(kind, stored, belongsOf(body)); field != "" {
-					return &misplaced{kind: kind, field: field, name: placeName(lists, field, id)}
-				}
-				return nil
-			},
-			After: func(ctx context.Context, tx pgx.Tx, saved docs.Doc) error {
-				detail := fmt.Sprintf("version %d", saved.Version)
-				if n := strings.TrimSpace(note); n != "" {
-					detail += ": " + n
-				}
-				return audit.AddIn(ctx, tx, s.Email, s.Name, noun[kind]+".save", id, detail)
-			},
-		})
-		var c *docs.Conflict
-		var m *misplaced
-		switch {
-		case errors.Is(err, errDenied):
-			denied(w, kind)
-			return
-		case errors.As(err, &m):
-			writeError(w, 403, m.Error())
-			return
-		case errors.As(err, &c):
-			conflict(w, kind, c)
-			return
-		case err != nil:
-			a.fail(w, r, err)
-			return
-		}
-		if changed {
-			a.syncSkills(r.Context(), kind, id)
-		}
-		writeJSON(w, 200, map[string]any{"ok": true, "changed": changed, "version": doc.Version, "updatedAt": doc.UpdatedAt, "updatedBy": doc.UpdatedBy})
+		a.save(w, r, saving{kind: kind, id: id, body: body, base: base, note: r.URL.Query().Get("note"), action: "save", drafts: rule})
 	}
+}
+
+// saving is one save of a document by a person: an ordinary save, or publishing a working draft.
+type saving struct {
+	kind, id string
+	body     []byte
+	base     *int
+	note     string
+	action   string // in the activity log: noun + "." + action
+	drafts   docs.DraftRule
+	revision int // of the working draft that is published
+}
+
+// save runs every check a save gets - rights, the format, the checker, what is still used - and
+// stores a new version through docs.Store.Save; skills and the search index follow. It answers
+// the request.
+func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
+	kind, id, body := sv.kind, sv.id, sv.body
+	s := who(r)
+	// The right is needed for what it belongs to now and for what it is moved to: an owner of
+	// one platform can neither take over a document of another nor hand theirs away.
+	if !s.CanEdit(kind, belongsOf(body)) {
+		deniedFor(w, kind, s)
+		return
+	}
+	if err := a.Schemas.Validate(kind, body); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	lists, err := a.Docs.Lists(r.Context())
+	if err == nil && kind == docs.Catalog {
+		err = json.Unmarshal(body, &lists) // the lists are checked against themselves
+	}
+	if err == nil {
+		err = docs.Check(kind, body, lists)
+	}
+	if err == nil && kind == docs.Catalog {
+		err = a.stillUsed(r.Context(), s, body)
+	}
+	if err == nil && kind == docs.Catalog {
+		err = a.knownIcons(r.Context(), body)
+	}
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	note := sv.note
+	doc, changed, err := a.Docs.Save(r.Context(), docs.Change{
+		Kind: kind, ID: id, Body: body, By: s.Email, Note: note, Base: sv.base,
+		Drafts: sv.drafts, Revision: sv.revision, Log: a.Log,
+		Check: func(current *docs.Doc) error {
+			var stored *rbac.Belongs
+			if current != nil {
+				b := belongsOf(current.Body)
+				if !s.CanEdit(kind, b) {
+					return errDenied
+				}
+				stored = &b
+			}
+			// a document shared with another platform or practice stays with it
+			if field, id := s.Misplaced(kind, stored, belongsOf(body)); field != "" {
+				return &misplaced{kind: kind, field: field, name: placeName(lists, field, id)}
+			}
+			return nil
+		},
+		After: func(ctx context.Context, tx pgx.Tx, saved docs.Doc) error {
+			detail := fmt.Sprintf("version %d", saved.Version)
+			if n := strings.TrimSpace(note); n != "" {
+				detail += ": " + n
+			}
+			return audit.AddIn(ctx, tx, s.Email, s.Name, noun[kind]+"."+sv.action, id, detail)
+		},
+	})
+	var c *docs.Conflict
+	var m *misplaced
+	var pending *docs.DraftPending
+	var dc *docs.DraftConflict
+	switch {
+	case errors.Is(err, errDenied):
+		denied(w, kind)
+		return
+	case errors.As(err, &m):
+		writeError(w, 403, m.Error())
+		return
+	case errors.As(err, &c):
+		conflict(w, kind, c)
+		return
+	case errors.As(err, &pending):
+		draftPending(w, kind, pending)
+		return
+	case errors.As(err, &dc):
+		draftConflict(w, dc)
+		return
+	case err != nil:
+		a.fail(w, r, err)
+		return
+	}
+	if changed {
+		a.syncSkills(r.Context(), kind, id)
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "changed": changed, "version": doc.Version, "updatedAt": doc.UpdatedAt, "updatedBy": doc.UpdatedBy})
 }
 
 // reviewRhythm is the rhythm a document gets when its first review is recorded and it had none.

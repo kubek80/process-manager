@@ -1,9 +1,11 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Lightbulb, Search, SlidersHorizontal, X } from "lucide-react";
+import type { TargetKind } from "../types";
 import { href } from "../lib/store";
 import type { Profile } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
-import { countText, countWords, FILTER_LABEL, type FilterKey, type Option } from "../lib/search";
+import { countText, countWords, emptyFilterText, FILTER_LABEL, PROFILE_HINT, PROFILE_KEYS, PROFILE_LABEL, type FilterKey, type Option, type ProfileKey } from "../lib/search";
+import { SORT_KEYS, sortLabel, sortOf, type SortKey } from "../lib/sorting";
 import { pageNumbers, PAGE_SIZES, showingText, storedPage, type Page, type StoredPage } from "../lib/paging";
 import "../lists.css";
 
@@ -11,35 +13,76 @@ import "../lists.css";
 // on the left, the chosen filters above the results, and the pages under them.
 
 /** Long lists leave out what would give nothing; short ones (type, rigour) show it greyed. */
-const HIDE_EMPTY: FilterKey[] = ["category", "practice", "platform", "owner"];
+const HIDE_EMPTY: string[] = ["category", "practice", "platform", "owner", "tier", "environment", "language"];
 
 /** What one dropdown says it holds: "Any", the one name, or the names (cut by the layout). */
 export function chosenSummary(options: Option[]): string {
-  const on = options.filter((o) => o.chosen);
+  const on = options.filter((o) => o.chosen && o.value !== "");
   return on.length ? on.map((o) => o.label).join(", ") : "Any";
 }
 
+const SEARCH_PLACEHOLDER = "Search processes and standards, e.g. GCP project or logging";
+
 /**
- * A dropdown with a checkbox per option and how many results each gives. Opens with Enter,
- * Space or the down arrow; the arrows move between the options; Escape closes it and returns
- * to the button.
+ * The one search box, full width at the top: on Home and the results page it searches when
+ * Enter or Search is pressed; on the lists (`live`) the results follow the typing.
  */
-export function FilterDropdown({ name, label, options, onToggle, atLeast }: { name: FilterKey; label?: string; options: Option[]; onToggle: (value: string) => void; atLeast?: boolean }) {
+export function SearchBox({ value, onChange, onSubmit, big, autoFocus, live, placeholder = SEARCH_PLACEHOLDER, label = "Search processes and standards" }: {
+  value: string; onChange: (v: string) => void; onSubmit?: () => void; big?: boolean; autoFocus?: boolean;
+  /** Searches as you type: no Search button. */
+  live?: boolean;
+  placeholder?: string; label?: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    // on a desktop the box is ready for typing; on a phone the keyboard would cover the page
+    if (autoFocus && window.matchMedia?.("(min-width: 768px) and (pointer: fine)").matches) ref.current?.focus();
+  }, [autoFocus]);
+  return (
+    <form role="search" aria-label={live ? label : "Processes and standards"} className={`search-box ${big ? "big" : ""} ${live ? "live" : ""}`.trim()}
+      onSubmit={(e) => { e.preventDefault(); onSubmit?.(); }}>
+      <Search size={big ? 20 : 17} aria-hidden="true" />
+      <input ref={ref} type="search" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+        aria-label={label} enterKeyHint="search" autoComplete="off" spellCheck={false} />
+      {!live && <button type="submit" className="btn primary">Search</button>}
+    </form>
+  );
+}
+
+/** Whether every option of a filter would give nothing (and none is chosen): it has nothing to offer. */
+export const nothingToChoose = (options: Option[]) => options.length > 0 && options.every((o) => o.count === 0 && !o.chosen);
+
+/**
+ * A dropdown with a checkbox per option and how many results each gives (or, with `single`, a
+ * choice of one, the first option being "Any …"). Opens with Enter, Space or the down arrow; the
+ * arrows move between the options; Escape closes it and returns to the button. When no option
+ * would give anything, it says why (`empty`) instead of showing options that cannot be used.
+ */
+export function FilterDropdown({ name, label, options, onToggle, atLeast, single, hint, empty }: {
+  name: string; label?: string; options: Option[]; onToggle: (value: string) => void; atLeast?: boolean;
+  /** One choice of all (radio buttons), as "My application" is one application. */
+  single?: boolean;
+  /** A sentence at the top of the open list: what choosing does. */
+  hint?: string;
+  /** Why there is nothing to choose, when no option would give anything. */
+  empty?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [focusFirst, setFocusFirst] = useState(false);
   const id = useId();
   const button = useRef<HTMLButtonElement>(null);
   const box = useRef<HTMLDivElement>(null);
-  const title = label ?? FILTER_LABEL[name];
-  const shown = HIDE_EMPTY.includes(name) ? options.filter((o) => o.count > 0 || o.chosen) : options;
+  const title = label ?? (FILTER_LABEL as Record<string, string>)[name] ?? name;
+  const dead = nothingToChoose(options);
+  const shown = dead ? [] : HIDE_EMPTY.includes(name) ? options.filter((o) => o.count > 0 || o.chosen || (single && o.value === "")) : options;
   const boxes = () => [...(box.current?.querySelectorAll<HTMLInputElement>("input:not(:disabled)") ?? [])];
   const focusAt = (i: number) => { const all = boxes(); all[(i + all.length) % all.length]?.focus(); };
   // the down arrow on the button opens the list and goes to its first option
   useEffect(() => { if (open && focusFirst) { setFocusFirst(false); focusAt(0); } }, [open, focusFirst]); // eslint-disable-line react-hooks/exhaustive-deps
   // a list that is empty in every case (nothing uses it) is left out
   if (!options.length) return null;
-  const summary = chosenSummary(shown);
-  const n = shown.filter((o) => o.chosen).length;
+  const summary = dead ? "Nothing to choose" : chosenSummary(shown);
+  const n = shown.filter((o) => o.chosen && o.value !== "").length;
   const onButtonKey = (e: KeyboardEvent) => {
     if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setFocusFirst(true); }
     if (e.key === "Escape" && open) { e.preventDefault(); setOpen(false); }
@@ -54,7 +97,7 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast }: { na
     else if (e.key === "End") { e.preventDefault(); focusAt(all.length - 1); }
   };
   return (
-    <div className={`filter-dd ${open ? "open" : ""} ${n ? "chosen" : ""}`.trim()} data-filter={name}>
+    <div className={`filter-dd ${open ? "open" : ""} ${n ? "chosen" : ""} ${dead ? "empty" : ""}`.trim()} data-filter={name}>
       <button ref={button} type="button" className="filter-dd-button" aria-expanded={open} aria-controls={`${id}-list`}
         aria-label={`${title}: ${summary}`} onClick={() => setOpen(!open)} onKeyDown={onButtonKey}>
         <span className="filter-dd-text">
@@ -65,13 +108,14 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast }: { na
         <ChevronDown size={16} aria-hidden="true" className="filter-dd-chevron" />
       </button>
       {open && (
-        <div ref={box} id={`${id}-list`} className="filter-dd-list" role="group" aria-label={title} onKeyDown={onListKey}>
-          {!shown.length && <p className="filter-none">Nothing to choose with the other filters.</p>}
+        <div ref={box} id={`${id}-list`} className="filter-dd-list" role={single ? "radiogroup" : "group"} aria-label={title} onKeyDown={onListKey}>
+          {hint && !dead && <p className="filter-dd-hint">{hint}</p>}
+          {dead && <p className="filter-none">{empty ?? "Nothing to choose with the other filters."}</p>}
           {shown.map((o) => {
             const off = o.count === 0 && !o.chosen;
             return (
               <label key={o.value} className={`filter-option ${o.chosen ? "on" : ""} ${off ? "off" : ""}`.trim()}>
-                <input type="checkbox" checked={o.chosen} disabled={off} onChange={() => onToggle(o.value)}
+                <input type={single ? "radio" : "checkbox"} name={single ? id : undefined} checked={o.chosen} disabled={off} onChange={() => onToggle(o.value)}
                   aria-label={`${o.label}, ${countWords(o.count, atLeast)}`} />
                 <span className="filter-option-name">{o.label}</span>
                 <span className="filter-option-count" aria-hidden="true">{countText(o.count, atLeast)}</span>
@@ -91,59 +135,37 @@ export interface FlagControl {
   unknown?: string;
 }
 
-/** "My application": the selects for tier, environment and language. */
-function ProfileSelects({ value, onChange }: { value: Profile; onChange: (p: Profile) => void }) {
-  const { catalog } = useCatalog();
-  const lists = [
-    { key: "tier" as const, list: catalog.tiers, any: "any tier", label: "Tier" },
-    { key: "environment" as const, list: catalog.environments, any: "any environment", label: "Environment" },
-    { key: "language" as const, list: catalog.languages, any: "any language", label: "Language" },
-  ].filter((x) => x.list.length > 0);
-  if (!lists.length) return null;
-  return (
-    <fieldset className="filter-group profile-filter">
-      <legend>My application</legend>
-      {lists.map(({ key, list, any, label }) => (
-        <label key={key} className="filter-select">
-          <span>{label}</span>
-          <select aria-label={label} value={value[key] ?? ""} onChange={(e) => onChange({ ...value, [key]: e.target.value || undefined })}>
-            <option value="">{any}</option>
-            {list.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-          </select>
-        </label>
-      ))}
-    </fieldset>
-  );
-}
-
 export interface FilterPanelProps {
   id: string;
   /** On a narrow screen the panel is folded away until "Filters" is pressed. */
   open: boolean;
-  text?: { value: string; onChange: (v: string) => void; placeholder: string; label: string };
   keys: FilterKey[];
   labels?: Partial<Record<FilterKey, string>>;
   options: Record<FilterKey, Option[]>;
   onToggle: (key: FilterKey, value: string) => void;
   flags: FlagControl[];
+  /** "My application": one tier, environment and language, with how many results each gives. */
   profile: Profile;
   onProfile: (p: Profile) => void;
+  profileOptions: Record<ProfileKey, Option[]>;
+  /** What the results are (for why a filter has nothing to choose), and how many there are now. */
+  subject: TargetKind | "any";
+  total: number;
   /** On a narrow screen, the button at the end of the open panel: "Show 12 processes". */
   done?: { label: string; onClick: () => void };
   /** The results are the closest of more that matched: the counts say "at least" ("12+"). */
   atLeast?: boolean;
 }
 
-/** The filters on the left of a list. */
-export function FilterPanel({ id, open, text, keys, labels, options, onToggle, flags, profile, onProfile, done, atLeast }: FilterPanelProps) {
+/** The filters on the left of a list: the yes/no ones, then one dropdown per filter, "My application" last. */
+export function FilterPanel({ id, open, keys, labels, options, onToggle, flags, profile, onProfile, profileOptions, subject, total, done, atLeast }: FilterPanelProps) {
+  const setProfile = (k: ProfileKey, v: string) => {
+    const p = { ...profile };
+    if (v) p[k] = v; else delete p[k];
+    onProfile(p);
+  };
   return (
     <aside id={id} className={`filter-panel ${open ? "open" : ""}`.trim()} aria-label="Filters">
-      {text && (
-        <div className="search filter-search">
-          <Search size={16} aria-hidden="true" />
-          <input type="search" value={text.value} onChange={(e) => text.onChange(e.target.value)} placeholder={text.placeholder} aria-label={text.label} autoComplete="off" spellCheck={false} />
-        </div>
-      )}
       {flags.length > 0 && (
         <div className="filter-group filter-flags">
           {flags.map((f) => (
@@ -157,9 +179,18 @@ export function FilterPanel({ id, open, text, keys, labels, options, onToggle, f
         </div>
       )}
       <div className="filter-group filter-dds">
-        {keys.map((k) => <FilterDropdown key={k} name={k} label={labels?.[k]} options={options[k]} onToggle={(v) => onToggle(k, v)} atLeast={atLeast} />)}
+        {keys.map((k) => (
+          <FilterDropdown key={k} name={k} label={labels?.[k]} options={options[k]} onToggle={(v) => onToggle(k, v)} atLeast={atLeast}
+            empty={emptyFilterText(k, subject, total)} />
+        ))}
+        {PROFILE_KEYS.map((k) => (
+          <FilterDropdown key={k} name={k} label={PROFILE_LABEL[k]} options={profileOptions[k] ?? []} single hint={PROFILE_HINT[k]}
+            onToggle={(v) => setProfile(k, v)} atLeast={atLeast} empty={emptyFilterText(k, subject, total)} />
+        ))}
       </div>
-      <ProfileSelects value={profile} onChange={onProfile} />
+      {PROFILE_KEYS.some((k) => (profileOptions[k] ?? []).length > 0) && (
+        <p className="filter-profile-note">Tier, environment and language show only what applies to your application, here and on every process and standard.</p>
+      )}
       {done && <button type="button" className="btn primary filter-done" onClick={done.onClick}>{done.label}</button>}
     </aside>
   );
@@ -194,30 +225,62 @@ export function profileChosen(profile: Profile, onChange: (p: Profile) => void, 
   return out;
 }
 
-/** The line above the results: how many are shown (announced politely), "Filters (n)" on a phone, the page size. */
-export function ResultsBar({ page, noun, panelId, open, onOpen, chosen, size, onSize, extra }: {
+/** The line above the results: how many are shown (announced politely), "Filters (n)" on a phone, the order, the page size and the pages. */
+export function ResultsBar({ page, noun, panelId, open, onOpen, chosen, size, onSize, extra, sort, onSort, searched, pager }: {
   page: Page; noun: { one: string; many: string }; panelId: string; open: boolean; onOpen: (open: boolean) => void; chosen: number;
   size: number; onSize: (n: number) => void; extra?: ReactNode;
+  sort: SortKey; onSort: (k: SortKey) => void;
+  /** Something is searched for: the usual order is the best match, else the name. */
+  searched: boolean;
+  /** The pager above the results, at the end of the line. */
+  pager?: ReactNode;
 }) {
   return (
     <div className="results-bar">
       <p className="list-count" role="status" aria-live="polite" aria-atomic="true">{showingText(page, noun)}{extra}</p>
-      <button type="button" className="btn small filter-toggle" aria-expanded={open} aria-controls={panelId} onClick={() => onOpen(!open)}>
-        <SlidersHorizontal size={14} aria-hidden="true" />Filters{chosen ? ` (${chosen})` : ""}
-      </button>
-      <PageSize size={size} onSize={onSize} />
+      <div className="results-tools">
+        <button type="button" className="btn small filter-toggle" aria-expanded={open} aria-controls={panelId} onClick={() => onOpen(!open)}>
+          <SlidersHorizontal size={14} aria-hidden="true" />Filters{chosen ? ` (${chosen})` : ""}
+        </button>
+        <SortBy sort={sort} onSort={onSort} searched={searched} />
+        <PageSize size={size} onSize={onSize} />
+        {pager}
+      </div>
     </div>
   );
 }
 
-export function PageSize({ size, onSize }: { size: number; onSize: (n: number) => void }) {
+/** "Sort by": the best match (or the name), the newest, the most recently updated. */
+export function SortBy({ sort, onSort, searched }: { sort: SortKey; onSort: (k: SortKey) => void; searched: boolean }) {
+  return (
+    <label className="sort-by">
+      <span>Sort by</span>
+      <select value={sort} onChange={(e) => onSort(sortOf(e.target.value))} aria-label="Sort by">
+        {SORT_KEYS.map((k) => <option key={k} value={k}>{sortLabel(k, searched)}</option>)}
+      </select>
+    </label>
+  );
+}
+
+export function PageSize({ size, onSize, label = "Items per page" }: { size: number; onSize: (n: number) => void; label?: string }) {
   return (
     <label className="page-size">
       <span>Per page</span>
-      <select value={size} onChange={(e) => onSize(Number(e.target.value))} aria-label="Items per page">
+      <select value={size} onChange={(e) => onSize(Number(e.target.value))} aria-label={label}>
         {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
       </select>
     </label>
+  );
+}
+
+/** Under the results: the pages and, beside them, the page size. Nothing when there is nothing to page through. */
+export function ResultsFoot({ page, onPage, label, size, onSize }: { page: Page; onPage: (n: number) => void; label: string; size: number; onSize: (n: number) => void }) {
+  if (!page.total || page.total <= PAGE_SIZES[0]) return null;
+  return (
+    <div className="results-foot">
+      <Pager page={page} onPage={onPage} label={label} />
+      <PageSize size={size} onSize={onSize} label="Items per page, at the end" />
+    </div>
   );
 }
 

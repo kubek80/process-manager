@@ -30,10 +30,10 @@ func TestMigrateIsRepeatableAndConcurrent(t *testing.T) {
 		}
 	}
 	var n int
-	if err := pool.QueryRow(ctx, `select count(*) from schema_migrations`).Scan(&n); err != nil || n != 6 {
+	if err := pool.QueryRow(ctx, `select count(*) from schema_migrations`).Scan(&n); err != nil || n != 8 {
 		t.Fatalf("migrations recorded: %d, %v", n, err)
 	}
-	for _, table := range []string{"feedback", "feedback_also_hit", "documents", "document_versions", "role_assignments", "audit_log", "skills", "skill_versions", "signed_out"} {
+	for _, table := range []string{"feedback", "feedback_also_hit", "documents", "document_versions", "working_drafts", "role_assignments", "audit_log", "skills", "skill_versions", "signed_out"} {
 		if _, err := pool.Exec(ctx, "select 1 from "+table+" limit 1"); err != nil {
 			t.Errorf("table %s: %v", table, err)
 		}
@@ -60,7 +60,7 @@ func TestMigrateOnAnEmptyDatabaseFromSeveralInstances(t *testing.T) {
 			}
 		}
 		var n int
-		if err := pool.QueryRow(ctx, `select count(*) from schema_migrations`).Scan(&n); err != nil || n != 6 {
+		if err := pool.QueryRow(ctx, `select count(*) from schema_migrations`).Scan(&n); err != nil || n != 8 {
 			t.Fatalf("round %d: migrations recorded: %d, %v", round, n, err)
 		}
 	}
@@ -140,7 +140,7 @@ func TestCurrentSaysWhetherTheDatabaseIsUpToDate(t *testing.T) {
 	if err := db.Current(ctx, dbtest.NewPool(t)); err != nil {
 		t.Fatalf("migrated: %v", err)
 	}
-	if db.Latest() < 6 {
+	if db.Latest() < 8 {
 		t.Fatalf("latest: %d", db.Latest())
 	}
 }

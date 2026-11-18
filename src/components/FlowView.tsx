@@ -4,7 +4,9 @@ import type { Feedback, Process, StepType } from "../types";
 import { diamondPoints, L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import { toolName, useCatalog } from "../lib/catalog";
+import { isZoomWheel, scrollForZoom, wheelZoom, clampZoom, zoomKey } from "../lib/zoom";
 import { openCount } from "./Feedback";
+import { EntryIcon } from "./EntryIcon";
 import { TypeIcon } from "./ui";
 
 import { QuickAdd, type InsertAt } from "./QuickAdd";
@@ -30,7 +32,12 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const { catalog } = useCatalog();
   const L = bare ? L_COMPACT : L_FULL;
   const layout = useMemo(() => layoutProcess(process, L), [process, L]);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoomState] = useState(1);
+  // the zoom as the last event left it: several wheel events can arrive before the next render
+  const zoomNow = useRef(1);
+  const setZoom = (z: number) => { zoomNow.current = z; setZoomState(z); };
+  // where to scroll once the new zoom is on screen, so that the point under the pointer stays put
+  const scrollTo = useRef<{ left: number; top: number } | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const [adding, setAdding] = useState<Adding | null>(null);
   const [drag, setDrag] = useState<string | null>(null);
@@ -87,6 +94,32 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
       el.removeEventListener("pointercancel", up);
     };
   }, [bare]);
+  // Ctrl + scroll (Cmd on a Mac, a pinch on a trackpad) zooms around the pointer; a plain scroll
+  // is left alone, so the page keeps scrolling
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || bare) return;
+    const wheel = (e: WheelEvent) => {
+      if (!isZoomWheel(e)) return;
+      e.preventDefault(); // not the browser's own zoom of the whole page
+      const from = zoomNow.current, to = wheelZoom(from, e.deltaY, e.deltaMode);
+      if (to === from) return;
+      const box = el.getBoundingClientRect();
+      const scroll = scrollTo.current ?? { left: el.scrollLeft, top: el.scrollTop };
+      scrollTo.current = scrollForZoom(from, to, { x: e.clientX - box.left, y: e.clientY - box.top }, scroll);
+      zoomNow.current = to;
+      setZoomState(to);
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }, [bare]);
+  useLayoutEffect(() => {
+    const el = scroller.current, to = scrollTo.current;
+    if (!el || !to) return;
+    scrollTo.current = null;
+    el.scrollLeft = to.left;
+    el.scrollTop = to.top;
+  }, [zoom]);
   const fit = () => {
     const w = scroller.current?.clientWidth ?? 0;
     if (w) setZoom(Math.max(bare ? 0.6 : 0.75, Math.min(1, Math.floor((w / layout.width) * 20) / 20)));
@@ -98,6 +131,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const titleOf = (id: string) => process.steps.find((s) => s.id === id)?.title ?? id;
   const Main = bare ? "div" : "button";
   const usedTypes = [...new Set(process.steps.map((s) => s.type))];
+  const toolIcon = (id: string) => catalog.tools.find((t) => t.id === id)?.icon;
   const POP_W = 340, POP_H = 330;
   const openAdd = (at: InsertAt, x: number, y: number) => setAdding({
     ...at,
@@ -106,8 +140,26 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   });
   const height = Math.max(layout.height, adding ? adding.y + POP_H + 12 : 0);
 
+  const step = (dir: 1 | -1) => setZoom(clampZoom(+(zoomNow.current + dir * 0.1).toFixed(1)));
   return (
     <div className={`flow-wrap ${bare ? "bare" : ""}`}>
+      <div className="flow-head">
+        <div className="legend" role="group" aria-label="Kinds of steps">
+          {usedTypes.map((t) => (
+            <span key={t} className="legend-item"><TypeIcon type={t} size={20} />{STEP_META[t].label}</span>
+          ))}
+          <span className="legend-item"><svg width="26" height="8" aria-hidden="true"><path d="M0,4 H26" className="edge back" /></svg>Loop back</span>
+        </div>
+        {!bare && <div className="map-tools">
+          <span className="map-pan-hint"><Hand size={14} aria-hidden="true" />Drag to move · <kbd className="key">{zoomKey()}</kbd> + scroll to zoom</span>
+          <div className="zoom" role="group" aria-label="Zoom">
+            <button className="btn small ghost" onClick={fit}><Maximize2 size={14} />Fit</button>
+            <button className="icon-btn" onClick={() => step(-1)} aria-label="Zoom out"><Minus size={16} /></button>
+            <button className="zoom-val" onClick={() => setZoom(1)} aria-label={`Zoom ${Math.round(zoom * 100)}%, press for 100%`}>{Math.round(zoom * 100)}%</button>
+            <button className="icon-btn" onClick={() => step(1)} aria-label="Zoom in"><Plus size={16} /></button>
+          </div>
+        </div>}
+      </div>
       <div className={`flow-scroll ${bare ? "" : "pannable"} ${panning ? "panning" : ""}`} ref={scroller}>
         <div className={`flow-canvas ${drag ? "dragging" : ""}`} style={{ width: layout.width, height, zoom }} onMouseDown={() => setAdding(null)}>
           {layout.lanes.map((lane) => {
@@ -186,7 +238,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                     <span className="block-type">{meta.label}</span>
                     <span className="block-title">{s.title}</span>
                     <span className="block-meta">
-                      {s.tool && <span><Wrench size={11} />{toolName(catalog, s.tool)}</span>}
+                      {s.tool && <span>{toolIcon(s.tool) ? <EntryIcon icon={toolIcon(s.tool)} size={12} /> : <Wrench size={11} />}{toolName(catalog, s.tool)}</span>}
                       {s.duration && <span><Clock size={11} />{s.duration}</span>}
                       {s.subProcessId && !s.tool && <span><Workflow size={11} />opens a sub-process</span>}
                     </span>
@@ -218,22 +270,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
         </div>
       </div>
 
-      <div className="flow-foot">
-        <div className="legend">
-          {usedTypes.map((t) => (
-            <span key={t} className="legend-item"><TypeIcon type={t} size={20} />{STEP_META[t].label}</span>
-          ))}
-          <span className="legend-item"><svg width="26" height="8"><path d="M0,4 H26" className="edge back" /></svg>Loop back</span>
-        </div>
-        {!bare && <span className="map-pan-hint"><Hand size={14} aria-hidden="true" />Drag the map to move around</span>}
-        {!bare && <div className="zoom">
-          <button className="btn small ghost" onClick={fit}><Maximize2 size={14} />Fit</button>
-          <button className="icon-btn" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(1)))} aria-label="Zoom out"><Minus size={16} /></button>
-          <button className="zoom-val" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
-          <button className="icon-btn" onClick={() => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(1)))} aria-label="Zoom in"><Plus size={16} /></button>
-        </div>}
-      </div>
-      {editable && <p className="flow-hint"><b>Edit on the map:</b> press <span className="kbd">+</span> on an arrow to insert a step there · <span className="kbd">+</span> on a block to add one after it · drag a block to another lane to change who does it · click a block for details.</p>}
+      {editable && <p className="flow-hint"><b>Edit on the map:</b> press <span className="kbd">+</span> on an arrow to insert a step there · <span className="kbd">+</span> on a block to add one after it · drag a block to another lane to change who does it · select a block to change it.</p>}
     </div>
   );
 }

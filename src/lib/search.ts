@@ -57,7 +57,7 @@ export interface Option { value: string; label: string; count: number; chosen: b
 export interface SearchInput {
   processes: Process[];
   standards: Standard[];
-  catalog: Pick<Catalog, "teams" | "tools"> & Partial<Pick<Catalog, "categories" | "practices" | "platforms">>;
+  catalog: Pick<Catalog, "teams" | "tools"> & Partial<Pick<Catalog, "categories" | "practices" | "platforms" | "tiers" | "environments" | "languages">>;
   q?: string;
   filters?: Filters;
   /**
@@ -254,6 +254,75 @@ export function search(input: SearchInput): SearchOutput {
     },
     flags: Object.fromEntries(Object.keys(flags).map((k) => [k, found.filter(({ d }) => d.flags[k] && passes(d, filters, flags, k)).length])),
   };
+}
+
+// ---------- "My application": tier, environment, language
+
+/**
+ * "My application" narrows the lists to what applies to one application: one tier, one
+ * environment, one language (a single choice each, as the process and standard pages use the
+ * same choice to hide what does not apply).
+ */
+export type ProfileKey = keyof Profile;
+export const PROFILE_KEYS: ProfileKey[] = ["tier", "environment", "language"];
+export const PROFILE_LABEL: Record<ProfileKey, string> = { tier: "Tier", environment: "Environment", language: "Language" };
+const PROFILE_ANY: Record<ProfileKey, string> = { tier: "Any tier", environment: "Any environment", language: "Any language" };
+const PROFILE_LIST: Record<ProfileKey, "tiers" | "environments" | "languages"> = { tier: "tiers", environment: "environments", language: "languages" };
+/** What the dropdowns of "My application" say about themselves. */
+export const PROFILE_HINT: Record<ProfileKey, string> = {
+  tier: "Shows only what applies to an application of this tier.",
+  environment: "Shows only what applies to an application in this environment.",
+  language: "Shows only what applies to an application written in this language.",
+};
+
+/**
+ * The options of "My application", each with how many results it would give with everything
+ * else as chosen: first "Any …" (the value ""), then the list in its order. A list that is empty
+ * gives no options (the dropdown is left out). A chosen value that is not in the list any more
+ * still shows (under its id), so that it can be changed.
+ */
+export function profileOptions(input: SearchInput): Record<ProfileKey, Option[]> {
+  const profile = input.profile ?? {};
+  const out = {} as Record<ProfileKey, Option[]>;
+  for (const k of PROFILE_KEYS) {
+    const list = [...(input.catalog[PROFILE_LIST[k]] ?? [])];
+    const now = profile[k];
+    if (now && !list.some((x) => x.id === now)) list.push({ id: now, name: now } as (typeof list)[number]);
+    if (!list.length) { out[k] = []; continue; }
+    const rest: Profile = { ...profile };
+    delete rest[k];
+    const base = search({ ...input, profile: rest }).results;
+    out[k] = [
+      { value: "", label: PROFILE_ANY[k], count: base.length, chosen: !now },
+      ...list.map((x) => ({ value: x.id, label: x.name, count: base.filter((r) => appliesTo(r.doc, { [k]: x.id })).length, chosen: now === x.id })),
+    ];
+  }
+  return out;
+}
+
+// ---------- a filter that has nothing to offer
+
+type Subject = TargetKind | "any";
+const NOTHING: Record<Subject, string> = { process: "No process here", standard: "No standard here", any: "Nothing here" };
+
+/**
+ * Why a filter has nothing to choose, when every one of its options would give nothing. `total`
+ * is how many results there are now (this filter has nothing chosen, so it does not count):
+ * none at all, and it is the other choices that leave nothing; else nothing shown has a value
+ * for it, which the sentence says in the words of that filter.
+ */
+export function emptyFilterText(key: FilterKey | ProfileKey, subject: Subject, total: number): string {
+  if (total === 0) return "Nothing matches the other choices, so there is nothing to choose here.";
+  const who = NOTHING[subject];
+  switch (key) {
+    case "rigour": return subject === "standard" ? `${who} gives its requirements a level (must, should or may).` : `${who} says how binding it is.`;
+    case "category": return `${who} has a category.`;
+    case "platform": return `${who} belongs to a platform.`;
+    case "practice": return `${who} belongs to a practice.`;
+    case "owner": return `${who} names the team that maintains it.`;
+    case "type": return "There is nothing here to choose between.";
+    default: return `${who} is limited to particular ${PROFILE_LIST[key]}: everything applies.`;
+  }
 }
 
 // ---------- the filters as a value

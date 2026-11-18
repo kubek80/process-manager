@@ -1,30 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, CalendarCheck, ChartColumn, Flag, KeyRound, List, Plus, Search, Server, ShieldCheck, Sparkles, Trash2, Workflow } from "lucide-react";
-import type { Assignment, AuditEntry, FeedbackByTarget, Process, Role, Skill, Standard } from "../types";
-import { groupName, teamName, useCatalog } from "../lib/catalog";
-import { groupKindOf } from "../lib/members";
+import { useCallback, useEffect, useState } from "react";
+import { Activity, CalendarCheck, ChartColumn, Flag, KeyRound, List, Search, Server, ShieldCheck, Sparkles, Workflow } from "lucide-react";
+import type { AuditEntry, FeedbackByTarget, Process, Skill, Standard } from "../types";
+import { teamName, useCatalog } from "../lib/catalog";
 import { reviewInfo, statusOf } from "../lib/lifecycle";
 import { usePerms } from "../lib/session";
-import { go, grantAccess, href, loadAccess, loadAudit, loadSkills, loadSystem, revokeAccess, type Access, type AdminSection, type SystemInfo } from "../lib/store";
+import { go, href, loadAudit, loadSkills, loadSystem, type AdminSection, type SystemInfo } from "../lib/store";
 import { CatalogPage } from "./CatalogPage";
+import { UsersSection } from "./UsersSection";
 import { openCount } from "./Feedback";
 import { SKILL_KIND, SkillPanel } from "./SkillPanel";
 import { StatisticsSection } from "./StatisticsPage";
-import { confirmDialog, Field, LoadError, Loading, notify } from "./ui";
+import { LoadError, Loading } from "./ui";
 
-/** The roles, what they allow in plain words, and for the three that are limited to a group: which list it is picked from. */
-export const ROLES: Record<Role, { label: string; can: string; scope: "none" | "required"; scopeLabel?: string; always?: string }> = {
-  admin: { label: "Admin", can: "Everything, including who has access", scope: "none" },
-  "catalog-manager": { label: "Lists manager", can: "Teams, practices, platforms, categories, tools, tiers, environments, languages", scope: "none" },
-  "process-editor": { label: "Process editor", can: "Create and change every process; close its feedback", scope: "none" },
-  "standards-editor": { label: "Standards editor", can: "Create and change every standard; close its feedback", scope: "none" },
-  "platform-owner": { label: "Platform owner", can: "Create and change the processes and standards that belong to a platform; confirm their reviews and close their feedback", scope: "required", scopeLabel: "For the platform", always: "Always for one platform" },
-  "practice-owner": { label: "Practice owner", can: "Create and change the processes and standards that belong to a practice; confirm their reviews and close their feedback", scope: "required", scopeLabel: "For the practice", always: "Always for one practice" },
-  owner: { label: "Owner", can: "Confirm reviews and close feedback on what a team maintains; see its drafts", scope: "required", scopeLabel: "For the team", always: "Always for one team" },
-};
-
-/** The name of what a role is limited to: a team, a platform or a practice. */
-const scopeName = (catalog: ReturnType<typeof useCatalog>["catalog"], role: Role, scope: string) => groupName(catalog, groupKindOf(role) ?? "team", scope);
+export { ROLES } from "../lib/users";
 
 const SECTIONS: { id: AdminSection; label: string; icon: typeof List; admin?: boolean; hint: string }[] = [
   { id: "access", label: "Access", icon: KeyRound, admin: true, hint: "Who may do what" },
@@ -35,112 +23,6 @@ const SECTIONS: { id: AdminSection; label: string; icon: typeof List; admin?: bo
   { id: "statistics", label: "Statistics", icon: ChartColumn, admin: true, hint: "How much each process and standard is used" },
   { id: "system", label: "System", icon: Server, admin: true, hint: "How this installation is set up" },
 ];
-
-function AccessSection() {
-  const { catalog } = useCatalog();
-  const [access, setAccess] = useState<Access | null>(null);
-  const [error, setError] = useState("");
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<Role>("process-editor");
-  const [scope, setScope] = useState("");
-  const [refused, setRefused] = useState(""); // why the last "Give role" did not work
-  const [busy, setBusy] = useState(false);
-  const load = useCallback(() => { setError(""); loadAccess().then(setAccess, (e) => setError(e.message)); }, []);
-  useEffect(load, [load]);
-
-  const spec = ROLES[role];
-  // the email is only cleared when the role was given: after a refusal it stays to be corrected
-  const grant = () => {
-    if (busy) return;
-    setBusy(true); setRefused("");
-    grantAccess({ email: email.trim(), role, scope: spec.scope === "none" ? "" : scope })
-      .then((a) => { setAccess(a); setEmail(""); notify.info(`${email.trim()} is now ${spec.label}.`); }, (e) => setRefused(e.message))
-      .finally(() => setBusy(false));
-  };
-  const revoke = async (a: Assignment) => {
-    const label = ROLES[a.role]?.label ?? a.role;
-    const yes = await confirmDialog({
-      title: "Remove this role?",
-      body: <>{a.email} will no longer be {label}{a.scope ? ` for ${scopeName(catalog, a.role, a.scope)}` : ""}. You can give the role again at any time.</>,
-      confirmLabel: "Remove role", danger: true,
-    });
-    if (!yes) return;
-    revokeAccess({ email: a.email, role: a.role, scope: a.scope }).then(setAccess, (e) => notify.error("The role could not be removed.", e));
-  };
-  // one row per person, with all their roles
-  const people = useMemo(() => {
-    const by = new Map<string, Assignment[]>();
-    for (const a of access?.assignments ?? []) by.set(a.email, [...(by.get(a.email) ?? []), a]);
-    return [...by.entries()];
-  }, [access]);
-  const ready = /\S+@\S+\.\S+/.test(email) && (spec.scope !== "required" || scope !== "");
-
-  return (
-    <div className="admin-section">
-      <p className="lead small">People sign in with their company account. What they may do is decided here. Everyone who can sign in can read, tick steps and give feedback. The members of one team, platform or practice are easier to manage on it, under <a href="#/admin/lists">Lists</a>.</p>
-      {error && <LoadError what="The list of people with roles could not be loaded." error={error} onRetry={load} />}
-
-      <section className="admin-card">
-        <h2>Give someone a role</h2>
-        <div className="grant">
-          <Field label="Email"><input type="email" value={email} placeholder="name@company.com" aria-invalid={!!refused} onChange={(e) => { setEmail(e.target.value); setRefused(""); }} onKeyDown={(e) => e.key === "Enter" && ready && grant()} /></Field>
-          <Field label="Role">
-            <select value={role} onChange={(e) => { setRole(e.target.value as Role); setScope(""); }}>
-              {(Object.keys(ROLES) as Role[]).map((r) => <option key={r} value={r}>{ROLES[r].label}</option>)}
-            </select>
-          </Field>
-          {spec.scope !== "none" && (
-            <Field label={spec.scopeLabel!}>
-              <select value={scope} onChange={(e) => setScope(e.target.value)}>
-                <option value="">Choose…</option>
-                {(role === "platform-owner" ? catalog.platforms : role === "practice-owner" ? catalog.practices : catalog.teams).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </Field>
-          )}
-          <button className="btn primary" disabled={!ready || busy} onClick={grant}><Plus size={16} />Give role</button>
-        </div>
-        {refused && <LoadError what="The role was not given." error={refused} />}
-        <p className="muted small">{spec.label}: {spec.can}.</p>
-      </section>
-
-      <section className="admin-card">
-        <h2>People with roles <span>{people.length + (access?.bootstrapAdmins.length ?? 0)}</span></h2>
-        {!access && !error && <Loading />}
-        <ul className="people">
-          {(access?.bootstrapAdmins ?? []).map((e) => (
-            <li key={`b-${e}`}>
-              <span className="avatar">{e.slice(0, 1).toUpperCase()}</span>
-              <span className="person"><strong>{e}</strong><em>Named in the server settings, so there is always a way in. Cannot be removed here.</em></span>
-              <span className="role-chip fixed">Admin</span>
-            </li>
-          ))}
-          {people.map(([person, list]) => (
-            <li key={person}>
-              <span className="avatar">{person.slice(0, 1).toUpperCase()}</span>
-              <span className="person"><strong>{person}</strong><em>since {list[0].grantedAt.slice(0, 10)}, by {list[0].grantedBy}</em></span>
-              <span className="role-chips">
-                {list.map((a) => (
-                  <span key={a.role + a.scope} className="role-chip">
-                    {ROLES[a.role]?.label ?? a.role}{a.scope && <em>{scopeName(catalog, a.role, a.scope)}</em>}
-                    <button aria-label={`Remove ${ROLES[a.role]?.label ?? a.role} from ${person}`} onClick={() => revoke(a)}><Trash2 size={12} /></button>
-                  </span>
-                ))}
-              </span>
-            </li>
-          ))}
-          {access && people.length === 0 && access.bootstrapAdmins.length === 0 && <li className="muted">Nobody has a role yet.</li>}
-        </ul>
-      </section>
-
-      <section className="admin-card">
-        <h2>What each role can do</h2>
-        <table className="guide-table"><tbody>
-          {(Object.keys(ROLES) as Role[]).map((r) => <tr key={r}><td><b>{ROLES[r].label}</b></td><td>{ROLES[r].can}{ROLES[r].always && `. ${ROLES[r].always}`}</td></tr>)}
-        </tbody></table>
-      </section>
-    </div>
-  );
-}
 
 function SkillsSection() {
   const [skills, setSkills] = useState<Skill[] | null>(null);
@@ -249,7 +131,7 @@ function HealthSection({ processes, standards, feedback }: { processes: Process[
 
 const ACTION: Record<string, string> = {
   "process.save": "saved the process", "process.delete": "deleted the process", "standard.save": "saved the standard", "standard.delete": "deleted the standard",
-  "lists.save": "changed the lists", "access.grant": "gave a role to", "access.revoke": "removed a role from", "skill.guidance": "changed the extra guidance of",
+  "lists.save": "changed the lists", "access.grant": "gave a role to", "access.revoke": "removed a role from", "access.set": "set the roles of", "access.delete": "removed every role of", "user.roles": "set the roles of", "user.delete": "removed every role of", "icon.upload": "added an icon", "skill.guidance": "changed the extra guidance of",
   "content.import": "imported", "process.review": "confirmed the review of the process", "standard.review": "confirmed the review of the standard", "feedback.fixed": "marked feedback as fixed on the", "feedback.reopen": "reopened feedback on the",
   "feedback.delete": "deleted feedback on the",
   "content.convert": "brought stored content up to date for this version:",
@@ -336,7 +218,7 @@ export function AdminPage({ section, processes, standards, feedback }: {
       </aside>
       <main className="admin-main">
         <header><h2>{current.label}</h2><p className="muted">{current.hint}</p></header>
-        {current.id === "access" && <AccessSection />}
+        {current.id === "access" && <UsersSection />}
         {current.id === "lists" && <CatalogPage processes={processes} standards={standards} editable />}
         {current.id === "skills" && <SkillsSection />}
         {current.id === "health" && <HealthSection processes={processes} standards={standards} feedback={feedback} />}

@@ -1,0 +1,38 @@
+/* Admin > Access: the people with roles, and the dialog that sets all of a person's roles */
+.users-bar { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; }
+.users-bar h2 { font-size: 15px; display: flex; align-items: center; gap: 8px; margin-right: auto; }
+.users-bar h2 span { font-size: 13px; font-weight: 500; color: var(--text-3); }
+.users-bar .search { flex: 1 1 240px; max-width: 360px; height: 36px; }
+.users-bar .search input { border: 0; height: auto; padding: 0; box-shadow: none; background: transparent; }
+.users-list .user-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1.3fr) auto; align-items: start; gap: 6px 14px; padding: 12px 0; }
+.users-list .avatar { margin-top: 2px; }
+.users-list .person strong { overflow-wrap: anywhere; }
+.user-you { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-style: normal; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); }
+.user-roles { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13px; color: var(--text-2); line-height: 1.45; }
+.user-roles li { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; border: 0; padding: 0; }
+.user-fixed { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: 999px; font-size: 11px; color: var(--text-3); background: var(--surface-2); border: 1px solid var(--line); }
+.user-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.user-note { grid-column: 2 / -1; }
+@media (max-width: 720px) {
+  .users-list .user-row { grid-template-columns: 30px minmax(0, 1fr); }
+  .user-roles, .user-actions, .user-note { grid-column: 2; }
+  .user-actions { justify-content: flex-start; }
+}
+.roles-dialog { display: grid; gap: 14px; }
+.roles-list { margin: 0; padding: 0; border: 0; display: grid; gap: 8px; min-width: 0; }
+.roles-list legend { padding: 0; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.role-row { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.role-row.on { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
+.role-switch { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.role-switch input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; padding: 0; accent-color: var(--accent); }
+.role-switch input:disabled { cursor: not-allowed; }
+.role-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+.role-name strong { font-size: 14px; font-weight: 600; }
+.role-name em { font-style: normal; font-size: 12.5px; color: var(--text-3); }
+.role-scopes { display: grid; gap: 6px; padding-left: 28px; }
+.role-scope { display: flex; align-items: center; gap: 6px; }
+.role-scope select { flex: 1 1 auto; max-width: 360px; }
+.role-more { justify-self: start; }
+.roles-problems ul { margin: 0; padding-left: 18px; color: var(--text); }
+.roles-summary { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 520px) { .role-scopes { padding-left: 0; } .modal-foot .roles-summary { flex-basis: 100%; } }

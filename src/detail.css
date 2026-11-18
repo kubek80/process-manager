@@ -48,7 +48,8 @@
 .map-hint { display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 5px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--text-2); font-size: 13px; }
 .map-hint > svg { color: var(--accent); flex: none; }
 .map-hint b { color: var(--text); font-weight: 650; }
-.map-pan-hint { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
+.map-pan-hint { display: inline-flex; align-items: center; gap: 6px; color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
+kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; font: 600 11px/16px inherit; font-family: inherit; color: var(--text-2); background: var(--surface); }
 @media (max-width: 700px) { .map-pan-hint { display: none; } }
 .flow-scroll.pannable { cursor: grab; }
 .flow-scroll.pannable .block-main, .flow-scroll.pannable button, .flow-scroll.pannable a { cursor: pointer; }

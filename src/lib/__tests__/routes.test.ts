@@ -9,6 +9,10 @@ describe("addresses", () => {
     { page: "process", id: "request-gcp-project", tab: "flow", item: "raise-request" },
     { page: "standard", id: "secure-logging", tab: "feedback" },
     { page: "standard", id: "secure-logging", tab: "doc", item: "SEC-LOG-03" },
+    { page: "edit-process", id: "request-gcp-project" },
+    { page: "edit-process", id: "request-gcp-project", item: "raise-request" },
+    { page: "edit-standard", id: "secure-logging" },
+    { page: "edit-standard", id: "secure-logging", item: "SEC-LOG-03" },
   ];
   it("lead back to the same place, including the open step or requirement", () => {
     for (const r of routes) expect(parseRoute(href(r))).toEqual(r);
@@ -22,6 +26,12 @@ describe("addresses", () => {
     expect(parseRoute("#/admin")).toEqual({ page: "admin", section: "access" });
     // a requirement id is upper case, a step id lower case: the wrong kind is simply not an item
     expect(parseRoute("#/s/secure-logging/doc/lower-case")).toEqual({ page: "standard", id: "secure-logging", tab: "doc" });
+    expect(parseRoute("#/s/secure-logging/edit/lower-case")).toEqual({ page: "edit-standard", id: "secure-logging" });
+  });
+  it("of the JSON tab, which no longer exists, open the editing screen", () => {
+    expect(parseRoute("#/p/some-process/json")).toEqual({ page: "edit-process", id: "some-process" });
+    expect(parseRoute("#/s/some-standard/json")).toEqual({ page: "edit-standard", id: "some-standard" });
+    expect(href({ page: "process", id: "x", tab: "json" })).toBe("#/p/x/edit");
   });
 });
 
@@ -29,11 +39,12 @@ describe("unsaved work", () => {
   it("is only lost by leaving the place where it is edited", () => {
     expect(unsavedWork()).toBeNull();
     const release = guardLeaving("process/demo", "this process");
-    // other tabs and steps of the same process keep the edits
-    expect(unsavedWork({ page: "process", id: "demo", tab: "list" })).toBeNull();
-    expect(unsavedWork({ page: "process", id: "demo", tab: "flow", item: "ask" })).toBeNull();
-    // everything else loses them: another process, a list, the guide, signing out
-    expect(unsavedWork({ page: "process", id: "other", tab: "flow" })).toBe("this process");
+    // other steps on the editing screen of the same process keep the edits
+    expect(unsavedWork({ page: "edit-process", id: "demo" })).toBeNull();
+    expect(unsavedWork({ page: "edit-process", id: "demo", item: "ask" })).toBeNull();
+    // everything else loses them: the reader's page, another process, a list, the guide, signing out
+    expect(unsavedWork({ page: "process", id: "demo", tab: "flow" })).toBe("this process");
+    expect(unsavedWork({ page: "edit-process", id: "other" })).toBe("this process");
     expect(unsavedWork({ page: "library" })).toBe("this process");
     expect(unsavedWork({ page: "guide" })).toBe("this process");
     expect(unsavedWork()).toBe("this process");
@@ -71,11 +82,15 @@ describe("something new takes its address from its name", () => {
   });
 });
 
-describe("the guard knows where text in the JSON tab lives", () => {
-  it("staying in that tab loses nothing; other tabs of the same process do", () => {
+describe("the guard knows where edits live", () => {
+  it("staying on the editing screen loses nothing; the reader's page of the same process does", () => {
     const json = guardLeaving("process/demo#json", "the JSON of this process");
-    expect(unsavedWork({ page: "process", id: "demo", tab: "json" })).toBeNull();
-    expect(unsavedWork({ page: "process", id: "demo", tab: "list" })).toBe("the JSON of this process");
+    const doc = guardLeaving("process/demo", "this process");
+    expect(unsavedWork({ page: "edit-process", id: "demo" })).toBeNull();
+    expect(unsavedWork({ page: "edit-process", id: "demo", item: "a-step" })).toBeNull();
+    expect(unsavedWork({ page: "process", id: "demo", tab: "flow" })).toBe("the JSON of this process");
+    expect(unsavedWork({ page: "edit-process", id: "other" })).not.toBeNull();
+    doc();
     expect(hasUnsaved("process/demo#json")).toBe(true);
     json();
     expect(hasUnsaved("process/demo#json")).toBe(false);

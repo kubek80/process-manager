@@ -44,23 +44,28 @@
   "languages": [
     {
       "id": "go",
-      "name": "Go"
+      "name": "Go",
+      "icon": "3d82e126fdb151997b4262cad4a4652841e4fa025112c97db3bdb2c4240ef5c8"
     },
     {
       "id": "java",
-      "name": "Java"
+      "name": "Java",
+      "icon": "ce596360af44bedfb3bc8b1304c2f676749a3dc7b82f0b1be257abf6d05d8aa5"
     },
     {
       "id": "javascript",
-      "name": "JavaScript / TypeScript"
+      "name": "JavaScript / TypeScript",
+      "icon": "7d5faa284074b727034be1ec1c3b9b9831adccc310a3d4599a95a6c0e800822c"
     },
     {
       "id": "python",
-      "name": "Python"
+      "name": "Python",
+      "icon": "6227be030ed86fd7b1118192a231b409e1b0298170368daecadeca96e2daf3a7"
     },
     {
       "id": "sql",
-      "name": "SQL"
+      "name": "SQL",
+      "icon": "09e64d39c6578da80f59d5832c9d8a09ad6314dc30151423340d1ca0bb641792"
     }
   ],
   "teams": [
@@ -348,7 +353,8 @@
     },
     {
       "id": "developer-portal",
-      "name": "Developer portal"
+      "name": "Developer portal",
+      "icon": "5955904ffc36440ed985deeeff494be6f4d5e085f28f2e3d0d82f808aa4b2669"
     },
     {
       "id": "entra-id",
@@ -358,11 +364,13 @@
     {
       "id": "gcp-console",
       "name": "GCP console",
+      "icon": "8e680accf09d92ac23dcce3e390bd8ced875bd6ba8eeb56fffd0fdffb518dccf",
       "url": "https://console.cloud.google.com"
     },
     {
       "id": "github",
       "name": "GitHub",
+      "icon": "2bdc4225afff3ebd0a8944a9dc04a452d993fea4272610ad2b5e28453d4a597d",
       "url": "https://github.example.com"
     },
     {
@@ -372,16 +380,19 @@
     {
       "id": "grafana",
       "name": "Grafana",
+      "icon": "ba1425189f290a0290c564277e6c6cfef6057b8906e06da20b20aa4b162032ae",
       "description": "Dashboards and alert rules."
     },
     {
       "id": "jira",
       "name": "Jira",
+      "icon": "3fdca5d45d753a01cf549ad20e718e50d4c5e1131b1bc0fe948ac4aef20318de",
       "url": "https://jira.example.com"
     },
     {
       "id": "pagerduty",
       "name": "PagerDuty",
+      "icon": "3fc3f4f1521e92d57c6726fbe11db1cdb506f729e9f4d1db643db6434e67244d",
       "description": "On-call schedules and paging."
     },
     {
@@ -392,6 +403,7 @@
     {
       "id": "servicenow",
       "name": "ServiceNow",
+      "icon": "c3961f47d4dace361974d23b960ca061f4b902f88448155ab29e83bc224fcba4",
       "url": "https://servicenow.example.com"
     },
     {
@@ -401,7 +413,8 @@
     },
     {
       "id": "terraform",
-      "name": "Terraform"
+      "name": "Terraform",
+      "icon": "39670e5de4fa16a98b53cd3e18e2781247b96f7931ee34d0b1db0b1dc57b063a"
     }
   ]
 }

@@ -1,16 +1,17 @@
 import { useMemo } from "react";
 import { Plus, Sparkles } from "lucide-react";
-import type { Feedback, Process, Standard } from "../types";
-import { useEditor } from "../lib/mode";
+import type { DocMeta, Feedback, Process, Standard } from "../types";
 import { canCreate, usePerms } from "../lib/session";
 import { DocList } from "./DocList";
 
-export function StandardsLibrary({ standards, processes, feedback, onNew, onAi }: {
+export function StandardsLibrary({ standards, processes, feedback, onNew, onAi, meta }: {
   standards: Standard[]; processes: Process[]; feedback: Record<string, Feedback[]>; onNew: () => void; onAi: () => void;
+  /** What the server says about each standard (dates, unpublished changes), by id. */
+  meta?: Record<string, DocMeta | undefined>;
 }) {
   const perms = usePerms();
   // the buttons to create one: for a standards editor, and for whoever owns a platform or practice
-  const editor = useEditor() && canCreate(perms, "standard");
+  const editor = canCreate(perms, "standard");
   const standardIds = useMemo(() => standards.map((s) => s.id), [standards]);
   return (
     <div className="page library">
@@ -26,7 +27,7 @@ export function StandardsLibrary({ standards, processes, feedback, onNew, onAi }
           </div>
         )}
       </section>
-      <DocList kind="standard" processes={processes} standards={standards} standardIds={standardIds} feedback={feedback}
+      <DocList kind="standard" processes={processes} standards={standards} standardIds={standardIds} feedback={feedback} meta={meta}
         empty={editor ? "There are no standards yet. Create the first one with the buttons above." : "There are no standards yet."} />
     </div>
   );

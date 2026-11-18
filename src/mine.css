@@ -1,0 +1,2 @@
+/* My responsibilities: published, with changes readers do not see yet */
+.tier-tag.unpublished { background: var(--warn-bg); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }

@@ -1,45 +1,28 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Search, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { FeedbackByTarget, Process, Standard } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { useEngagement } from "../lib/engagement";
-import { useEditor } from "../lib/mode";
 import { pageOf, sizeOf, usePageSize } from "../lib/paging";
 import { useProfile, useRemembered } from "../lib/profile";
-import { canEdit, useMe, usePerms, useVisibleDrafts } from "../lib/session";
+import { canEdit, canManage, useMe, usePerms } from "../lib/session";
+import { sortOf, sortResults, type MetaByKind, type SortKey } from "../lib/sorting";
 import { contentStamp, fromMeaning, fuse, markedWords, meaningHelp, modeOf, needsServer, planOf, providerOf, rememberMode, SEARCH_MODES, truncatedText, typingMovesAddress, useMeaningSearch, type Found, type Provider, type SearchMode } from "../lib/meaning";
 import { go, href, type SearchState } from "../lib/store";
-import { countText, FILTER_LABEL, filterCount, filtersOf, search, toggleFilter, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
+import { countText, FILTER_LABEL, filterCount, filtersOf, profileOptions, search, toggleFilter, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
 import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
 import { openCount } from "./Feedback";
 import { DocCard, Marked } from "./DocCard";
 import { needsReview } from "./DocList";
-import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, Pager, profileChosen, ResultsBar, toResults, type Chosen, type FlagControl } from "./Lists";
+import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, Pager, profileChosen, ResultsBar, ResultsFoot, SearchBox, toResults, type Chosen, type FlagControl } from "./Lists";
 import "../search.css";
 
 export { Marked };
 
-const PLACEHOLDER = "Search processes and standards, e.g. GCP project or logging";
 const KEYS: FilterKey[] = ["type", "category", "platform", "practice", "rigour", "owner"];
 
-/** The one search box, on Home and on the results page. */
-export function SearchBox({ value, onChange, onSubmit, big, autoFocus }: {
-  value: string; onChange: (v: string) => void; onSubmit: () => void; big?: boolean; autoFocus?: boolean;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    // on a desktop the box is ready for typing; on a phone the keyboard would cover the page
-    if (autoFocus && window.matchMedia?.("(min-width: 768px) and (pointer: fine)").matches) ref.current?.focus();
-  }, [autoFocus]);
-  return (
-    <form role="search" aria-label="Processes and standards" className={`search-box ${big ? "big" : ""}`} onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>
-      <Search size={big ? 20 : 17} aria-hidden="true" />
-      <input ref={ref} type="search" value={value} onChange={(e) => onChange(e.target.value)} placeholder={PLACEHOLDER}
-        aria-label="Search processes and standards" enterKeyHint="search" autoComplete="off" spellCheck={false} />
-      <button type="submit" className="btn primary">Search</button>
-    </form>
-  );
-}
+/** The one search box, on Home and on the results page (it lives with the lists, which use it too). */
+export { SearchBox };
 
 const MODE_LABEL: Record<SearchMode, string> = { words: "Words", meaning: "Meaning", both: "Both" };
 
@@ -80,17 +63,19 @@ export function SearchModeSwitch({ mode, onChange, outside, provider }: { mode: 
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-export function SearchPage({ route, processes, standards, feedback }: {
+export function SearchPage({ route, processes, standards, feedback, meta }: {
   route: SearchState; processes: Process[]; standards: Standard[];
   /** Open feedback per process and standard, for the cards. */
   feedback?: FeedbackByTarget;
+  /** What the server says about each process and standard (dates, unpublished changes). */
+  meta?: MetaByKind;
 }) {
   const { catalog } = useCatalog();
   const perms = usePerms();
-  const editing = useEditor();
   const eng = useEngagement();
   const known = engagementKnown(eng);
-  const drafts = useVisibleDrafts(); // in editor mode, the drafts the person may edit
+  // the server sends a never-published draft only to whoever may see it
+  const drafts = true;
   const filters = useMemo(() => filtersOf(route), [route]);
   const q = route.q ?? "";
   const [profile, setProfile] = useProfile();
@@ -99,8 +84,11 @@ export function SearchPage({ route, processes, standards, feedback }: {
   const [mySize, setMySize] = usePageSize();
   // a shared link shows the same page: the address carries the page and its size
   const size = route.size ? sizeOf(route.size) : mySize;
-  const keep = route.size ? { size: route.size } : {};
-  const mayEdit = (kind: "process" | "standard", d: Process | Standard) => editing && canEdit(perms, kind, d);
+  const sort: SortKey = sortOf(route.sort);
+  // what stays in the address when something else changes: the page size and the order
+  const keep = { ...(route.size ? { size: route.size } : {}), ...(sort ? { sort } : {}) };
+  const mayEdit = (kind: "process" | "standard", d: Process | Standard) => canEdit(perms, kind, d);
+  const manages = (kind: "process" | "standard", d: Process | Standard) => canManage(perms, kind, d);
 
   // search by meaning: offered when the server has it switched on (and has not switched it off since)
   const me = useMe();
@@ -144,7 +132,7 @@ export function SearchPage({ route, processes, standards, feedback }: {
   const flags: Record<string, Flag> = {
     // while the bookmarks are not known, "only my bookmarks" waits instead of showing nothing
     bookmarked: { on: bookmarked && known, test: (k, d) => eng.isBookmarked(k, d.id) },
-    ...(editing ? { review: { on: due, test: (k: "process" | "standard", d: Process | Standard) => mayEdit(k, d) && needsReview(d) } } : {}),
+    review: { on: due, test: (k: "process" | "standard", d: Process | Standard) => manages(k, d) && needsReview(d) },
   };
   const plan = planOf(mode, q, asked, offered, meaning);
   const shownQ = plan.q;
@@ -160,11 +148,15 @@ export function SearchPage({ route, processes, standards, feedback }: {
       .map((r): Found => ({ kind: r.kind, id: r.doc.id, score: r.score, hits: r.hits, by: ["words"] }));
     return fuse(byWords, byMeaning);
   }, [plan.show, plan.meaning, shownQ, processes, standards, catalog, drafts, profile]);
-  const out = search({ processes, standards, catalog, q: shownQ, filters, drafts, profile, flags, found });
+  const input = { processes, standards, catalog, q: shownQ, filters, drafts, profile, flags, found };
+  const out = search(input);
+  const mine = profileOptions(input);
+  // by meaning (and both ways) the order is the best match the server gave, unless another is chosen
+  const sorted = useMemo(() => sortResults(out.results, sort, meta), [out.results, sort, meta]);
   const anyChosen = filterCount(filters) > 0 || bookmarked || due || !!(profile.tier || profile.environment || profile.language);
   const withoutFilters = anyChosen && !out.results.length ? search({ processes, standards, catalog, q: shownQ, drafts, found }).results.length : 0;
   // drafts are not searched by meaning: an editor with drafts of their own is told where to find them
-  const ownDrafts = !!drafts && (processes.some((d) => d.status === "draft" && drafts("process", d)) || standards.some((d) => d.status === "draft" && drafts("standard", d)));
+  const ownDrafts = processes.some((d) => d.status === "draft") || standards.some((d) => d.status === "draft");
   // the results are of an earlier search than what is in the box now
   const earlier = mode !== "words" && offered && !plan.busy && text.trim() !== shownQ.trim();
   // the server sent only the closest of more that matched: the counts are "at least"
@@ -175,13 +167,15 @@ export function SearchPage({ route, processes, standards, feedback }: {
   const n = out.results.length;
   const page = pageOf(n, route.pageNo ?? 1, size);
   const goTo = (p: number) => {
-    go({ page: "search", q, ...filters, pageNo: p, size, ...modeParam });
+    go({ page: "search", q, ...filters, pageNo: p, size, ...(sort ? { sort } : {}), ...modeParam });
     toResults(results.current);
   };
   const changeSize = (s: number) => {
     setMySize(s);
-    go({ page: "search", q, ...filters, size: s, ...modeParam }, { replace: true });
+    go({ page: "search", q, ...filters, size: s, ...(sort ? { sort } : {}), ...modeParam }, { replace: true });
   };
+  // a new order starts again on the first page
+  const changeSort = (k: SortKey) => go({ page: "search", q, ...filters, ...(route.size ? { size: route.size } : {}), ...(k ? { sort: k } : {}), ...modeParam }, { replace: true });
 
   const ids = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds: standards.map((s) => s.id), catalog }), [processes, standards, catalog]);
   const usedBy = (id: string) => processes.filter((p) => Array.isArray(p.steps) && p.steps.some((s) => s && s.subProcessId === id)).length;
@@ -189,7 +183,7 @@ export function SearchPage({ route, processes, standards, feedback }: {
   const flagControls: FlagControl[] = [
     { key: "bookmarked", label: "Only my bookmarks", count: out.flags.bookmarked ?? 0, on: bookmarked, onChange: (v) => { setBookmarked(v); toFirst(); }, unknown: bookmarksUnknown(eng) },
   ];
-  if (editing && ((out.flags.review ?? 0) > 0 || due)) flagControls.push({ key: "review", label: "Only what needs a review", count: out.flags.review ?? 0, on: due, onChange: (v) => { setDue(v); toFirst(); } });
+  if ((out.flags.review ?? 0) > 0 || due) flagControls.push({ key: "review", label: "Only what needs a review", count: out.flags.review ?? 0, on: due, onChange: (v) => { setDue(v); toFirst(); } });
   const changeProfile = (p: typeof profile) => { setProfile(p); toFirst(); };
 
   const chosen: Chosen[] = [
@@ -212,13 +206,14 @@ export function SearchPage({ route, processes, standards, feedback }: {
       <div className="list-layout">
         <div className="list-head">
           <ResultsBar page={page} noun={{ one: "result", many: "results" }} panelId="search-filters" open={open} onOpen={setOpen}
-            chosen={chosen.length} size={size} onSize={changeSize} extra={summary} />
+            chosen={chosen.length} size={size} onSize={changeSize} extra={summary}
+            sort={sort} onSort={changeSort} searched={!!shownQ.trim()}
+            pager={<Pager page={page} onPage={goTo} label="Pages of results" compact />} />
           {truncated && <p className="search-truncated">{truncatedText(plan.meaning.length)}</p>}
           <ChosenFilters chosen={chosen} onClear={clear} />
-          <Pager page={page} onPage={goTo} label="Pages of results" compact />
         </div>
         <FilterPanel id="search-filters" open={open} keys={KEYS} options={out.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}
-          flags={flagControls} profile={profile} onProfile={changeProfile} atLeast={truncated}
+          flags={flagControls} profile={profile} onProfile={changeProfile} profileOptions={mine} subject="any" total={n} atLeast={truncated}
           done={{ label: `Show ${countText(n, truncated)} ${n === 1 ? "result" : "results"}`, onClick: () => { setOpen(false); toResults(results.current); } }} />
         <section className="list-results" aria-label="Results" ref={results} tabIndex={-1} aria-busy={plan.busy || undefined}>
           {offered && (
@@ -282,18 +277,18 @@ export function SearchPage({ route, processes, standards, feedback }: {
             </div>
           ) : (
             <ol className="cards">
-              {out.results.slice(page.start, page.end).map((r) => {
-                const mine = mayEdit(r.kind, r.doc);
-                const broken = mine && hasErrors(r.kind === "process" ? validateProcess(r.doc, ids) : validateStandard(r.doc, ids));
+              {sorted.slice(page.start, page.end).map((r) => {
+                const edits = mayEdit(r.kind, r.doc);
+                const broken = edits && hasErrors(r.kind === "process" ? validateProcess(r.doc, ids) : validateStandard(r.doc, ids));
                 return (
                   <DocCard key={`${r.kind}:${r.doc.id}`} kind={r.kind} doc={r.doc} rigour={r.rigour} rules={r.rules} hits={r.hits} words={words}
-                    openFeedback={openCount(feedback?.[r.kind]?.[r.doc.id] ?? [])} mayEdit={mine} broken={broken}
+                    openFeedback={openCount(feedback?.[r.kind]?.[r.doc.id] ?? [])} mayEdit={edits} manages={manages(r.kind, r.doc)} broken={broken} meta={meta?.[r.kind]?.[r.doc.id]}
                     usedBy={r.kind === "process" ? usedBy(r.doc.id) : undefined} foundBy={plan.show === "both" ? r.by : undefined} />
                 );
               })}
             </ol>
           )}
-          <Pager page={page} onPage={goTo} label="Pages of results, at the end" />
+          <ResultsFoot page={page} onPage={goTo} label="Pages of results, at the end" size={size} onSize={changeSize} />
         </section>
       </div>
     </div>

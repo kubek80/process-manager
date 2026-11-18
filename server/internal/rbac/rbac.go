@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -369,20 +370,215 @@ func (s *Store) Grant(ctx context.Context, a Assignment) error {
 // name a bootstrap admin.
 func (s *Store) Revoke(ctx context.Context, email, role, scope string) error {
 	email = norm(email)
-	if role == Admin && len(s.Bootstrap) == 0 {
-		var others int
-		if err := s.Pool.QueryRow(ctx, `select count(*) from role_assignments where role = 'admin' and email <> $1`, email).Scan(&others); err != nil {
+	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if err := lockRoles(ctx, tx); err != nil {
 			return err
 		}
-		if others == 0 {
-			return ErrLastAdmin
+		if role == Admin && scope == "" {
+			if err := s.keepAnAdmin(ctx, tx, email); err != nil {
+				return err
+			}
+		}
+		tag, err := tx.Exec(ctx, `delete from role_assignments where email = $1 and role = $2 and scope = $3`, email, role, scope)
+		if err == nil && tag.RowsAffected() == 0 {
+			return ErrNotGiven
+		}
+		return err
+	})
+}
+
+// lockRoles serialises the changes that take roles away, so that two admins removing each
+// other at the same moment cannot both succeed and leave nobody.
+func lockRoles(ctx context.Context, tx pgx.Tx) error {
+	_, err := tx.Exec(ctx, `select pg_advisory_xact_lock(7461010)`)
+	return err
+}
+
+// keepAnAdmin refuses to take the admin role from email when nobody else would be left as an
+// admin. An admin named in the server settings is always left.
+func (s *Store) keepAnAdmin(ctx context.Context, tx pgx.Tx, email string) error {
+	if len(s.Bootstrap) > 0 {
+		return nil
+	}
+	var others int
+	if err := tx.QueryRow(ctx, `select count(*) from role_assignments where role = 'admin' and scope = '' and email <> $1`, email).Scan(&others); err != nil {
+		return err
+	}
+	if others == 0 {
+		return ErrLastAdmin
+	}
+	return nil
+}
+
+// Role is one role of a person, as a person's complete set of roles is given.
+type Role struct {
+	Role  string `json:"role"`
+	Scope string `json:"scope"`
+}
+
+// Change is what a replacement of a person's roles did: the roles added and removed, each in
+// the order of Roles, then by scope.
+type Change struct {
+	Added   []Assignment
+	Removed []Assignment
+}
+
+// Replace gives a person exactly these roles, in one transaction: roles not in the set are
+// removed, new ones added, the ones kept keep who gave them and when. Every role is checked as
+// Check does (whether its team, platform or practice exists is for the caller); the same role
+// twice counts once. The last admin cannot lose the admin role, unless the server settings name
+// an admin. An empty set removes every role of the person.
+func (s *Store) Replace(ctx context.Context, email string, roles []Role, by string) (Change, error) {
+	email = norm(email)
+	want := map[Role]bool{}
+	for _, r := range roles {
+		if err := Check(Assignment{Email: email, Role: r.Role, Scope: r.Scope}); err != nil {
+			return Change{}, err
+		}
+		want[r] = true
+	}
+	if len(roles) == 0 {
+		if err := Check(Assignment{Email: email, Role: Admin}); err != nil {
+			return Change{}, err // the email itself
 		}
 	}
-	tag, err := s.Pool.Exec(ctx, `delete from role_assignments where email = $1 and role = $2 and scope = $3`, email, role, scope)
-	if err == nil && tag.RowsAffected() == 0 {
-		return ErrNotGiven
+	var ch Change
+	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		ch = Change{}
+		if err := lockRoles(ctx, tx); err != nil {
+			return err
+		}
+		rows, err := tx.Query(ctx, `select email, role, scope, granted_by, granted_at from role_assignments where email = $1`, email)
+		if err != nil {
+			return err
+		}
+		have := map[Role]bool{}
+		for rows.Next() {
+			var a Assignment
+			if err := rows.Scan(&a.Email, &a.Role, &a.Scope, &a.GrantedBy, &a.GrantedAt); err != nil {
+				rows.Close()
+				return err
+			}
+			r := Role{a.Role, a.Scope}
+			have[r] = true
+			if !want[r] {
+				ch.Removed = append(ch.Removed, a)
+			}
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if have[Role{Role: Admin}] && !want[Role{Role: Admin}] {
+			if err := s.keepAnAdmin(ctx, tx, email); err != nil {
+				return err
+			}
+		}
+		for _, a := range ch.Removed {
+			if _, err := tx.Exec(ctx, `delete from role_assignments where email = $1 and role = $2 and scope = $3`, email, a.Role, a.Scope); err != nil {
+				return err
+			}
+		}
+		for r := range want {
+			if have[r] {
+				continue
+			}
+			a := Assignment{Email: email, Role: r.Role, Scope: r.Scope, GrantedBy: by}
+			if err := tx.QueryRow(ctx, `insert into role_assignments (email, role, scope, granted_by) values ($1, $2, $3, $4) returning granted_at`,
+				email, r.Role, r.Scope, by).Scan(&a.GrantedAt); err != nil {
+				return err
+			}
+			ch.Added = append(ch.Added, a)
+		}
+		return nil
+	})
+	if err != nil {
+		return Change{}, err
 	}
-	return err
+	SortAssignments(ch.Added)
+	SortAssignments(ch.Removed)
+	return ch, nil
+}
+
+// SortAssignments orders assignments as the Admin panel lists roles: by the order of Roles,
+// then by scope.
+func SortAssignments(list []Assignment) {
+	rank := map[string]int{}
+	for i, r := range Roles {
+		rank[r] = i + 1
+	}
+	sort.SliceStable(list, func(i, j int) bool {
+		ri, rj := rank[list[i].Role], rank[list[j].Role]
+		if ri == 0 {
+			ri = len(Roles) + 1 // a role of an earlier version: last
+		}
+		if rj == 0 {
+			rj = len(Roles) + 1
+		}
+		if ri != rj {
+			return ri < rj
+		}
+		if list[i].Role != list[j].Role {
+			return list[i].Role < list[j].Role
+		}
+		return list[i].Scope < list[j].Scope
+	})
+}
+
+// User is a person with their roles, as Admin > Access lists them.
+type User struct {
+	Email     string       `json:"email"`
+	Name      string       `json:"name"`
+	Roles     []Assignment `json:"roles"`
+	Bootstrap bool         `json:"bootstrap"` // an admin named in the server settings
+}
+
+// Users lists every person who has a role, and the admins named in the server settings, by
+// email. Names are left for the caller to fill in.
+func (s *Store) Users(ctx context.Context) ([]User, error) {
+	all, err := s.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byEmail := map[string]*User{}
+	var order []string
+	get := func(email string) *User {
+		u, ok := byEmail[email]
+		if !ok {
+			u = &User{Email: email, Roles: []Assignment{}, Bootstrap: s.IsBootstrap(email)}
+			byEmail[email] = u
+			order = append(order, email)
+		}
+		return u
+	}
+	for _, a := range all {
+		u := get(a.Email)
+		u.Roles = append(u.Roles, a)
+	}
+	for _, b := range s.Bootstrap {
+		if e := norm(b); e != "" {
+			get(e)
+		}
+	}
+	sort.Strings(order)
+	out := make([]User, 0, len(order))
+	for _, e := range order {
+		u := byEmail[e]
+		SortAssignments(u.Roles)
+		out = append(out, *u)
+	}
+	return out, nil
+}
+
+// UserOf is one person as Users lists them, also when they have no role at all.
+func (s *Store) UserOf(ctx context.Context, email string) (User, error) {
+	email = norm(email)
+	list, err := s.query(ctx, "where email = $1", email)
+	if err != nil {
+		return User{}, err
+	}
+	SortAssignments(list)
+	return User{Email: email, Roles: list, Bootstrap: s.IsBootstrap(email)}, nil
 }
 
 // Count returns the number of assignments.

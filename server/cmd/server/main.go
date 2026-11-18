@@ -28,6 +28,7 @@ import (
 	"github.com/kubek80/process-manager/server/internal/engagement"
 	"github.com/kubek80/process-manager/server/internal/feedback"
 	"github.com/kubek80/process-manager/server/internal/httpapi"
+	"github.com/kubek80/process-manager/server/internal/icons"
 	"github.com/kubek80/process-manager/server/internal/notify"
 	"github.com/kubek80/process-manager/server/internal/rbac"
 	"github.com/kubek80/process-manager/server/internal/requests"
@@ -106,6 +107,7 @@ type stores struct {
 	engagement *engagement.Store
 	requests   *requests.Store
 	index      *retrieval.Index                     // search by meaning; switched off when PM_EMBEDDINGS=off
+	icons      *icons.Store                         // nil: on the pool of docs
 	validate   func(kind string, body []byte) error // the format check for imported files
 }
 
@@ -125,7 +127,7 @@ func run(log *slog.Logger, o options) error {
 	st := stores{
 		docs: &docs.Store{Pool: pool}, roles: &rbac.Store{Pool: pool, Bootstrap: cfg.Admins},
 		skills: &skills.Store{Pool: pool}, feedback: &feedback.Store{Pool: pool}, audit: &audit.Log{Pool: pool},
-		engagement: &engagement.Store{Pool: pool}, requests: &requests.Store{Pool: pool},
+		engagement: &engagement.Store{Pool: pool}, requests: &requests.Store{Pool: pool}, icons: &icons.Store{Pool: pool},
 	}
 	embedder, err := newEmbedder(ctx, cfg.Embeddings.EmbeddingOptions())
 	if err != nil {
@@ -514,7 +516,57 @@ func prepare(ctx context.Context, cfg config.Config, st stores, log *slog.Logger
 			return err
 		}
 	}
+	// icons that no version of the lists has ever named, uploaded more than a day ago
+	if removed, err := st.iconStore().Clean(ctx); err != nil {
+		return err
+	} else if removed > 0 {
+		log.Info("unused icons removed", "icons", removed)
+	}
 	return st.skills.SyncAll(ctx, st.docs)
+}
+
+func (st stores) iconStore() *icons.Store {
+	if st.icons != nil {
+		return st.icons
+	}
+	return &icons.Store{Pool: st.docs.Pool}
+}
+
+// importIcons loads catalog/icons/ of dir. It runs before the lists are imported, so that the
+// lists find the icons they name.
+func importIcons(ctx context.Context, st stores, dir string, log *slog.Logger) (int, error) {
+	n, problems, err := st.iconStore().ImportDir(ctx, dir, "import")
+	for _, p := range problems {
+		log.Warn("icon not imported", "problem", p)
+	}
+	if err != nil {
+		return n, err
+	}
+	if n > 0 || len(problems) > 0 {
+		log.Info("icons imported", "from", icons.Folder(dir), "added", n, "skipped", len(problems))
+	}
+	return n, nil
+}
+
+// warnMissingIcons says which tools and languages of the stored lists name an icon that is not
+// stored (its file was missing or refused). The lists are imported all the same: the app
+// shows the name without the icon.
+func warnMissingIcons(ctx context.Context, st stores, log *slog.Logger) error {
+	cat, err := st.docs.Get(ctx, docs.Catalog, docs.CatalogID)
+	if errors.Is(err, docs.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	missing, err := st.iconStore().Missing(ctx, cat.Body)
+	if err != nil {
+		return err
+	}
+	for _, u := range missing {
+		log.Warn("the lists name an icon that is not stored: put its file in catalog/icons/ and import again", "entry", u.What(), "icon", u.Icon)
+	}
+	return nil
 }
 
 // devRoles gives each built-in development user who has no role at all the roles of
@@ -566,8 +618,14 @@ func devRoles(ctx context.Context, st stores, log *slog.Logger) error {
 }
 
 func importFiles(ctx context.Context, st stores, dir string, log *slog.Logger) error {
+	if _, err := importIcons(ctx, st, dir, log); err != nil {
+		return err
+	}
 	n, problems, err := st.docs.ImportDir(ctx, dir, "import", st.validate)
 	if err != nil {
+		return err
+	}
+	if err := warnMissingIcons(ctx, st, log); err != nil {
 		return err
 	}
 	for _, p := range problems {
@@ -583,6 +641,16 @@ func importFiles(ctx context.Context, st stores, dir string, log *slog.Logger) e
 func exportFiles(ctx context.Context, st stores, dir string, log *slog.Logger) error {
 	n, err := st.docs.ExportDir(ctx, dir)
 	if err != nil {
+		return err
+	}
+	// the icons the lists name
+	if cat, err := st.docs.Get(ctx, docs.Catalog, docs.CatalogID); err == nil {
+		k, err := st.iconStore().ExportDir(ctx, dir, cat.Body)
+		if err != nil {
+			return err
+		}
+		log.Info("icons exported", "to", icons.Folder(dir), "icons", k)
+	} else if !errors.Is(err, docs.ErrNotFound) {
 		return err
 	}
 	if err := st.skills.SyncAll(ctx, st.docs); err != nil {

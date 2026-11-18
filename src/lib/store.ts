@@ -5,6 +5,7 @@ import { completeCatalog } from "./catalog";
 import { completePerms } from "./rights";
 import { parseRequestsQuery, requestsQuery, type DocRequest, type NewRequest, type RequestState, type RequestsView } from "./requests";
 import type { Period, Statistics } from "./statistics";
+import type { AdminUser, UserRole } from "./users";
 
 export class ApiError extends Error {
   /** Set when a save was refused because somebody else saved (or deleted) first. */
@@ -80,6 +81,26 @@ export async function loadStandards(): Promise<{ docs: Standard[]; meta: MetaByI
 export const putStandard = (s: Standard, base: number, note?: string) => call<DocMeta>("PUT", `/api/standards/${s.id}${saveQuery(base, note)}`, s);
 export const removeStandard = (id: string, base: number) => call<void>("DELETE", `/api/standards/${id}?base=${base}`);
 
+// Unpublished changes to a published process or standard: one shared working draft beside it,
+// seen only by its editors. Readers, skills and search keep the published version until it is
+// published. `revision` counts the saves of the draft; a save says which one it was made from.
+export interface WorkingDraft<T> { doc: T; base: number; revision: number; updatedBy: string; updatedAt: string }
+export interface DraftSaved { revision: number; base: number; updatedBy: string; updatedAt: string }
+const docsPath = (kind: TargetKind, id: string) => `/api/${kind === "process" ? "processes" : "standards"}/${encodeURIComponent(id)}`;
+/** The working draft, or null when there is none. */
+export async function loadWorkingDraft<T>(kind: TargetKind, id: string): Promise<WorkingDraft<T> | null> {
+  try { return await call<WorkingDraft<T>>("GET", `${docsPath(kind, id)}/draft`); } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
+}
+/** Saves the working draft on top of revision `rev` (0: creates it). */
+export const putWorkingDraft = <T>(kind: TargetKind, id: string, doc: T, rev: number) => call<DraftSaved>("PUT", `${docsPath(kind, id)}/draft?rev=${rev}`, doc);
+export const deleteWorkingDraft = (kind: TargetKind, id: string, rev: number) => call<void>("DELETE", `${docsPath(kind, id)}/draft?rev=${rev}`);
+/** Publishes the working draft as the next version. `over`: publish it over a version somebody else published since. */
+export const publishWorkingDraft = (kind: TargetKind, id: string, rev: number, note = "", over?: number) =>
+  call<{ version: number }>("POST", `${docsPath(kind, id)}/publish?rev=${rev}${note.trim() ? `&note=${encodeURIComponent(note.trim())}` : ""}${over ? `&over=${over}` : ""}`);
+
 /**
  * Records that a process or standard was reviewed and is still correct: today and the person's
  * name, as a version of its own. For the team that owns it and for whoever may edit it.
@@ -140,6 +161,10 @@ export interface Access { assignments: Assignment[]; bootstrapAdmins: string[]; 
 export const loadAccess = () => call<Access>("GET", "/api/admin/access");
 export const grantAccess = (a: { email: string; role: Role; scope: string }) => call<Access>("POST", "/api/admin/access", a);
 export const revokeAccess = (a: { email: string; role: Role; scope: string }) => call<Access>("DELETE", "/api/admin/access", a);
+// People and all their roles at once (Admin > Access).
+export const loadUsers = async () => (await call<{ users?: AdminUser[] }>("GET", "/api/admin/users")).users ?? [];
+export const saveUserRoles = (email: string, roles: UserRole[]) => call<AdminUser>("PUT", `/api/admin/users/${encodeURIComponent(email)}`, { roles });
+export const deleteUser = (email: string) => call<void>("DELETE", `/api/admin/users/${encodeURIComponent(email)}`);
 /** A page of the activity log, newest first. `before` is the id of the last entry already shown. */
 export const loadAudit = (limit = 100, before = 0) => call<{ entries: AuditEntry[]; more: boolean }>("GET", `/api/admin/audit?limit=${limit}${before ? `&before=${before}` : ""}`);
 export interface SystemInfo { provider: string; baseUrl: string; notify: string; processes: number; standards: number; skills: number; assignments: number; openFeedback: number }
@@ -194,6 +219,7 @@ export function useProgress(processId: string) {
   return { done, toggle, reset };
 }
 
+/** "json": an older address of the text of a document; it now opens the editing screen. */
 export type Tab = "flow" | "list" | "feedback" | "skills" | "json";
 export type StandardTab = "doc" | "feedback" | "skills" | "json";
 export type AdminSection = "access" | "lists" | "skills" | "health" | "activity" | "statistics" | "system";
@@ -204,7 +230,10 @@ export type Route =
   | ({ page: "requests" } & RequestsView)
   | { page: "admin"; section: AdminSection }
   | { page: "process"; id: string; tab: Tab; item?: string }
-  | { page: "standard"; id: string; tab: StandardTab; item?: string };
+  | { page: "standard"; id: string; tab: StandardTab; item?: string }
+  /** The editing screen; `item` is the step or requirement that is selected. */
+  | { page: "edit-process"; id: string; item?: string }
+  | { page: "edit-standard"; id: string; item?: string };
 
 /**
  * What the results page shows: the words searched for and the filters. Several values of one
@@ -283,9 +312,13 @@ const parse = (h: string = location.hash): Route => {
   if (requests) return { page: "requests", ...parseRequestsQuery(requests[1] ?? "") };
   const admin = h.match(/^#\/admin(?:\/(access|lists|skills|health|activity|statistics|system))?/);
   if (admin) return { page: "admin", section: (admin[1] as AdminSection) ?? "access" };
-  const s = h.match(/^#\/s\/([a-z0-9-]+)(?:\/(doc|feedback|skills|json)(?:\/([A-Z][A-Z0-9-]*))?)?/);
+  const es = h.match(/^#\/s\/([a-z0-9-]+)\/(?:edit(?:\/([A-Z][A-Z0-9-]*))?|json)/);
+  if (es) return { page: "edit-standard", id: es[1], ...(es[2] ? { item: es[2] } : {}) };
+  const ep = h.match(/^#\/p\/([a-z0-9-]+)\/(?:edit(?:\/([a-z0-9-]+))?|json)/);
+  if (ep) return { page: "edit-process", id: ep[1], ...(ep[2] ? { item: ep[2] } : {}) };
+  const s = h.match(/^#\/s\/([a-z0-9-]+)(?:\/(doc|feedback|skills)(?:\/([A-Z][A-Z0-9-]*))?)?/);
   if (s) return { page: "standard", id: s[1], tab: (s[2] as StandardTab) ?? "doc", ...(s[3] ? { item: s[3] } : {}) };
-  const m = h.match(/^#\/p\/([a-z0-9-]+)(?:\/(flow|list|feedback|skills|json)(?:\/([a-z0-9-]+))?)?/);
+  const m = h.match(/^#\/p\/([a-z0-9-]+)(?:\/(flow|list|feedback|skills)(?:\/([a-z0-9-]+))?)?/);
   return m ? { page: "process", id: m[1], tab: (m[2] as Tab) ?? "flow", ...(m[3] ? { item: m[3] } : {}) } : { page: "home" };
 };
 /** The route an address stands for; exported for tests. */
@@ -298,12 +331,15 @@ export const parseRoute = (hash: string): Route => parse(hash);
 const unsaved = new Map<string, string>(); // what is being edited -> what to call it
 /**
  * The places a route keeps open: leaving all places where something is edited is what loses
- * the edits. Text typed in the JSON tab lives only while that tab is open.
+ * the edits. A process or standard is edited only on its editing screen (with its JSON); the
+ * reader's page edits nothing.
  */
 const placesOf = (r: Route): string[] => {
-  const doc = r.page === "process" ? `process/${r.id}` : r.page === "standard" ? `standard/${r.id}` : r.page === "admin" && r.section === "lists" ? "catalog" : null;
-  if (!doc) return [];
-  return (r.page === "process" || r.page === "standard") && r.tab === "json" ? [doc, `${doc}#json`] : [doc];
+  if (r.page === "edit-process" || r.page === "edit-standard") {
+    const doc = `${r.page === "edit-process" ? "process" : "standard"}/${r.id}`;
+    return [doc, `${doc}#json`];
+  }
+  return r.page === "admin" && r.section === "lists" ? ["catalog"] : [];
 };
 
 const beforeUnload = (e: BeforeUnloadEvent) => { if (unsaved.size) e.preventDefault(); };
@@ -423,8 +459,10 @@ export const href = (r: Route): string => {
     case "mine": return "#/mine";
     case "requests": return `#/requests${requestsQuery(r)}`;
     case "admin": return `#/admin/${r.section}`;
-    case "standard": return `#/s/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
-    case "process": return `#/p/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
+    case "standard": return r.tab === "json" ? `#/s/${r.id}/edit` : `#/s/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
+    case "process": return r.tab === "json" ? `#/p/${r.id}/edit` : `#/p/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
+    case "edit-process": return `#/p/${r.id}/edit${r.item ? `/${r.item}` : ""}`;
+    case "edit-standard": return `#/s/${r.id}/edit${r.item ? `/${r.item}` : ""}`;
   }
 };
 /**
@@ -451,12 +489,27 @@ export function pageTitle(r: Route, names: { process?: string; standard?: string
     case "admin": here = `${r.section.slice(0, 1).toUpperCase()}${r.section.slice(1)} · Admin`; break;
     case "process": here = of(names.process, "Process not found"); break;
     case "standard": here = of(names.standard, "Standard not found"); break;
+    case "edit-process": here = names.process ? `Editing ${names.process}` : of(undefined, "Process not found"); break;
+    case "edit-standard": here = names.standard ? `Editing ${names.standard}` : of(undefined, "Standard not found"); break;
   }
   return here ? `${here} · ${APP}` : APP;
 }
 
 /** Where an uploaded icon (of a tool or a language) is served. */
 export const iconUrl = (id: string) => `/api/icons/${encodeURIComponent(id)}`;
+/** Uploads an icon (the image's bytes as they are); the answer's `id` is what a tool or language names. */
+export async function uploadIcon(file: Blob): Promise<{ id: string; contentType: string; width: number; height: number }> {
+  let res: Response;
+  try {
+    res = await fetch("/api/icons", { method: "POST", headers: { "Content-Type": file.type || "application/octet-stream", "X-Requested-With": "process-manager" }, body: file });
+  } catch {
+    throw new ApiError(0, "The server cannot be reached. Is it running?");
+  }
+  const data = await res.json().catch(() => null);
+  if (res.status === 401) { window.dispatchEvent(new Event(SIGNED_OUT)); throw new ApiError(401, "You are signed out. Sign in again, then repeat what you were doing."); }
+  if (!res.ok) throw new ApiError(res.status, data?.error ?? `The server answered ${res.status}.`);
+  return data;
+}
 
 export async function copyText(text: string): Promise<boolean> {
   try { await navigator.clipboard.writeText(text); return true; } catch {

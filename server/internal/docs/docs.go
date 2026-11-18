@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -53,6 +54,9 @@ type Doc struct {
 	Body      json.RawMessage
 	UpdatedAt time.Time
 	UpdatedBy string
+	// CreatedAt is when the document was added: when its first version was saved (since it was
+	// last deleted, if it ever was).
+	CreatedAt time.Time
 }
 
 // Version describes one saved version.
@@ -106,6 +110,12 @@ type Change struct {
 	Check func(current *Doc) error
 	// After runs in the same transaction when a new version was written.
 	After func(ctx context.Context, tx pgx.Tx, saved Doc) error
+	// Drafts says what happens when the document has a working draft (see DraftRule).
+	Drafts DraftRule
+	// Revision is the revision of the working draft that is published (Drafts: PublishDraft).
+	Revision int
+	// Log is told when a working draft is dropped; nil: the default logger.
+	Log *slog.Logger
 }
 
 // Removal is one delete.
@@ -126,8 +136,8 @@ func lock(ctx context.Context, tx pgx.Tx, kind, id string) error {
 
 func current(ctx context.Context, tx pgx.Tx, kind, id string) (*Doc, error) {
 	d := Doc{}
-	err := tx.QueryRow(ctx, `select kind, id, version, body, updated_at, updated_by from documents where kind = $1 and id = $2`, kind, id).
-		Scan(&d.Kind, &d.ID, &d.Version, &d.Body, &d.UpdatedAt, &d.UpdatedBy)
+	err := tx.QueryRow(ctx, `select kind, id, version, body, updated_at, updated_by, created_at from documents where kind = $1 and id = $2`, kind, id).
+		Scan(&d.Kind, &d.ID, &d.Version, &d.Body, &d.UpdatedAt, &d.UpdatedBy, &d.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -154,7 +164,11 @@ func checkBase(base *int, cur *Doc) error {
 	return &Conflict{Current: *cur, Exists: true}
 }
 
-type Store struct{ Pool *pgxpool.Pool }
+type Store struct {
+	Pool *pgxpool.Pool
+	// Log is told what an import does to working drafts; nil: the default logger.
+	Log *slog.Logger
+}
 
 // Pretty re-indents JSON without changing the order of the keys.
 func Pretty(body []byte) ([]byte, error) {
@@ -167,7 +181,7 @@ func Pretty(body []byte) ([]byte, error) {
 
 // List returns the current documents of one kind, ordered by id.
 func (s *Store) List(ctx context.Context, kind string) ([]Doc, error) {
-	rows, err := s.Pool.Query(ctx, `select kind, id, version, body, updated_at, updated_by from documents where kind = $1 order by id`, kind)
+	rows, err := s.Pool.Query(ctx, `select kind, id, version, body, updated_at, updated_by, created_at from documents where kind = $1 order by id`, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +189,7 @@ func (s *Store) List(ctx context.Context, kind string) ([]Doc, error) {
 	out := []Doc{}
 	for rows.Next() {
 		var d Doc
-		if err := rows.Scan(&d.Kind, &d.ID, &d.Version, &d.Body, &d.UpdatedAt, &d.UpdatedBy); err != nil {
+		if err := rows.Scan(&d.Kind, &d.ID, &d.Version, &d.Body, &d.UpdatedAt, &d.UpdatedBy, &d.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
@@ -186,8 +200,8 @@ func (s *Store) List(ctx context.Context, kind string) ([]Doc, error) {
 // Get returns one document.
 func (s *Store) Get(ctx context.Context, kind, id string) (Doc, error) {
 	var d Doc
-	err := s.Pool.QueryRow(ctx, `select kind, id, version, body, updated_at, updated_by from documents where kind = $1 and id = $2`, kind, id).
-		Scan(&d.Kind, &d.ID, &d.Version, &d.Body, &d.UpdatedAt, &d.UpdatedBy)
+	err := s.Pool.QueryRow(ctx, `select kind, id, version, body, updated_at, updated_by, created_at from documents where kind = $1 and id = $2`, kind, id).
+		Scan(&d.Kind, &d.ID, &d.Version, &d.Body, &d.UpdatedAt, &d.UpdatedBy, &d.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return d, ErrNotFound
 	}
@@ -195,8 +209,9 @@ func (s *Store) Get(ctx context.Context, kind, id string) (Doc, error) {
 }
 
 // Put saves a document as a new version without checking what it was based on. See Save.
+// A working draft of the document is kept (see KeepDraft).
 func (s *Store) Put(ctx context.Context, kind, id string, body []byte, by string) (Doc, bool, error) {
-	return s.Save(ctx, Change{Kind: kind, ID: id, Body: body, By: by})
+	return s.Save(ctx, Change{Kind: kind, ID: id, Body: body, By: by, Log: s.Log})
 }
 
 // Save stores a document as a new version. The body must be a JSON object; except for the
@@ -255,8 +270,27 @@ func SaveIn(ctx context.Context, tx pgx.Tx, c Change) (doc Doc, changed bool, er
 			return doc, false, err
 		}
 	}
+	// a draft that was published or discarded by someone else in the meantime is said first:
+	// that, rather than a newer version, is what the person needs to know
+	var draft *WorkingDraft
+	if c.Drafts != KeepDraft && cur != nil {
+		if draft, err = draftIn(ctx, tx, kind, id); err != nil {
+			return doc, false, err
+		}
+	}
+	if c.Drafts == PublishDraft && (draft == nil || draft.Revision != c.Revision) {
+		return doc, false, &DraftConflict{Current: draft}
+	}
 	if err := checkBase(c.Base, cur); err != nil {
 		return doc, false, err
+	}
+	switch {
+	case c.Drafts == RefuseIfDraft && draft != nil:
+		return doc, false, &DraftPending{Draft: *draft, Status: StatusOf(cur.Body), NewStatus: StatusOf(pretty)}
+	case c.Drafts == PublishDraft:
+		if _, err := tx.Exec(ctx, `delete from working_drafts where kind = $1 and id = $2`, kind, id); err != nil {
+			return doc, false, err
+		}
 	}
 	if cur != nil && bytes.Equal(cur.Body, pretty) {
 		return *cur, false, nil
@@ -268,13 +302,20 @@ func SaveIn(ctx context.Context, tx pgx.Tx, c Change) (doc Doc, changed bool, er
 	}
 	err = tx.QueryRow(ctx, `insert into documents (kind, id, version, body, updated_by) values ($1, $2, $3, $4, $5)
 		on conflict (kind, id) do update set version = excluded.version, body = excluded.body, updated_by = excluded.updated_by, updated_at = now()
-		returning kind, id, version, body, updated_at, updated_by`, kind, id, next, pretty, c.By).
-		Scan(&doc.Kind, &doc.ID, &doc.Version, &doc.Body, &doc.UpdatedAt, &doc.UpdatedBy)
+		returning kind, id, version, body, updated_at, updated_by, created_at`, kind, id, next, pretty, c.By).
+		Scan(&doc.Kind, &doc.ID, &doc.Version, &doc.Body, &doc.UpdatedAt, &doc.UpdatedBy, &doc.CreatedAt)
 	if err != nil {
 		return doc, false, err
 	}
 	if _, err := tx.Exec(ctx, `insert into document_versions (kind, id, version, body, saved_by, note) values ($1, $2, $3, $4, $5, $6)`, kind, id, next, pretty, c.By, note); err != nil {
 		return doc, false, err
+	}
+	// Only a published document has a working draft. A save that is allowed to go past one
+	// (an import, the conversion of older content) and makes the document unpublished drops it.
+	if c.Drafts == KeepDraft && cur != nil && StatusOf(pretty) == "draft" {
+		if err := dropDraftIn(ctx, tx, kind, id, c.Log); err != nil {
+			return doc, false, err
+		}
 	}
 	if c.After != nil {
 		if err := c.After(ctx, tx, doc); err != nil {
@@ -402,6 +443,16 @@ func (s *Store) ImportDir(ctx context.Context, dir, by string, validate func(kin
 		}
 		if did {
 			changed++
+			// unpublished changes stay; publishing them later shows that the document moved on
+			var by string
+			if s.Pool.QueryRow(ctx, `select updated_by from working_drafts where kind = $1 and id = $2`, kind, id).Scan(&by) == nil {
+				log := s.Log
+				if log == nil {
+					log = slog.Default()
+				}
+				log.Info("imported over a document that has unpublished changes: they are kept, and whoever publishes them is told that the document changed in the meantime",
+					"kind", kind, "id", id, "lastSavedBy", by)
+			}
 		}
 	}
 	if file := filepath.Join(dir, "catalog", "catalog.json"); exists(file) {

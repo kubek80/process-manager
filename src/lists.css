@@ -1,6 +1,16 @@
 /* The lists of processes and standards and the search results: the filter panel on the left,
    the cards, the pages. Uses the tokens of styles.css, so both themes work. */
 
+:root {
+  /* the two kinds: a process is teal with a round marker, a standard violet with a square one */
+  --kind-process: #0f766e; --kind-process-bg: #e2f3f0; --kind-process-line: #9fd6cd;
+  --kind-standard: #6d28d9; --kind-standard-bg: #f1ebfd; --kind-standard-line: #cdb9f5;
+}
+:root[data-theme="dark"] {
+  --kind-process: #5eead4; --kind-process-bg: #12302d; --kind-process-line: #1f5c54;
+  --kind-standard: #c4b5fd; --kind-standard-bg: #271f40; --kind-standard-line: #4c3d7a;
+}
+
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* the panel on the left; above the results what is shown and chosen; on a phone that comes first */
@@ -12,9 +22,6 @@
 
 /* ---------- the filter panel ---------- */
 .filter-panel { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 18px; max-height: calc(100vh - 96px); overflow: auto; padding: 2px 4px 2px 2px; min-width: 0; }
-.filter-panel .filter-search { max-width: none; flex: none; height: 38px; }
-.filter-panel .filter-search input { height: 100%; padding: 0; border: 0; box-shadow: none; background: none; }
-.filter-panel .filter-search input::-webkit-search-cancel-button { cursor: pointer; }
 .filter-group { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; border: 0; min-width: 0; }
 .filter-group > legend { padding: 0; margin-bottom: 8px; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
 .filter-flags { gap: 2px; }
@@ -43,20 +50,26 @@
 .filter-option-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .filter-option-count { flex: none; color: var(--text-3); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .filter-option-why { display: block; font-size: 12px; font-weight: 400; color: var(--text-3); }
-.filter-none { padding: 6px 8px; font-size: 13px; color: var(--text-3); }
+.filter-none { padding: 6px 8px; font-size: 13px; line-height: 1.45; color: var(--text-2); }
+.filter-dd.empty .filter-dd-button { border-style: dashed; }
+.filter-dd.empty .filter-dd-value { color: var(--text-3); font-style: italic; }
+.filter-dd-hint { padding: 4px 8px 6px; margin-bottom: 2px; border-bottom: 1px solid var(--line); font-size: 12px; line-height: 1.4; color: var(--text-3); }
+.filter-profile-note { margin-top: -8px; font-size: 12px; line-height: 1.45; color: var(--text-3); }
+.filter-option input[type="radio"] { border-radius: 50%; }
 .filter-option.flag { padding-left: 4px; }
 
-.filter-panel .profile-filter { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin: 0; font-size: 13px; font-weight: 400; }
-.filter-select { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; font-weight: 600; color: var(--text-3); }
-.filter-select select { height: 36px; padding: 0 8px; font-size: 13.5px; font-weight: 400; color: var(--text); }
 
 /* ---------- above the results ---------- */
-.results-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 34px; margin-bottom: 10px; }
-.list-count { flex: 1 1 200px; min-width: 0; color: var(--text-2); overflow-wrap: anywhere; }
+/* one line: the count, then the order, the page size and the pages; it wraps on a narrow screen */
+.results-bar { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; min-height: 34px; margin-bottom: 12px; }
+.list-count { flex: 1 1 180px; min-width: 0; color: var(--text-2); overflow-wrap: anywhere; }
+.results-tools { display: flex; align-items: center; justify-content: flex-end; gap: 8px 14px; flex-wrap: wrap; flex: 0 1 auto; margin-left: auto; }
 .filter-toggle { display: none; }
 .filter-done { display: none; }
-.page-size { display: inline-flex; align-items: center; gap: 8px; flex: none; font-size: 13px; color: var(--text-3); }
-.page-size select { width: auto; height: 32px; padding: 0 8px; font-size: 13px; }
+.page-size, .sort-by { display: inline-flex; align-items: center; gap: 8px; flex: none; font-size: 13px; color: var(--text-3); white-space: nowrap; }
+.page-size select, .sort-by select { width: auto; height: 32px; padding: 0 8px; font-size: 13px; }
+.results-foot { display: flex; align-items: center; justify-content: center; gap: 10px 24px; flex-wrap: wrap; margin: 24px 0 8px; }
+.results-foot .pager { margin: 0; }
 
 .filter-chosen { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 14px; }
 .filter-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; min-height: 30px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere; }
@@ -75,11 +88,19 @@
 .card:hover { box-shadow: var(--shadow-2); border-color: var(--line-strong); }
 .card:has(.card-link:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 .card.draft { border-style: dashed; border-color: var(--line-strong); }
+/* the kind at a glance: a coloured edge on the left, and the marker with its icon, shape and word */
+.card[data-kind="process"] { --kind: var(--kind-process); --kind-bg: var(--kind-process-bg); }
+.card[data-kind="standard"] { --kind: var(--kind-standard); --kind-bg: var(--kind-standard-bg); }
+.card[data-kind] { box-shadow: inset 4px 0 0 var(--kind), var(--shadow-1); padding-left: 21px; }
+.card[data-kind]:hover { box-shadow: inset 4px 0 0 var(--kind), var(--shadow-2); }
+.kind-tag { display: inline-flex; align-items: center; gap: 5px; flex: none; height: 22px; padding: 0 9px 0 7px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; line-height: 1; }
+.kind-tag.process { border-radius: 999px; background: var(--kind-process-bg); color: var(--kind-process); }
+.kind-tag.standard { border-radius: 4px; background: var(--kind-standard-bg); color: var(--kind-standard); box-shadow: inset 0 0 0 1px var(--kind-standard-line); }
 
 .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.card-eyebrow { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-size: 11.5px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); line-height: 1.5; }
+.card-eyebrow { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-size: 11.5px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); line-height: 1.5; }
 .card-eyebrow svg { flex: none; }
-.card-cat { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-cat { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text-2); }
 .card-tiers { flex: none; max-width: 50%; font-size: 12px; font-weight: 600; color: var(--text-3); text-align: right; line-height: 1.5; }
 .card-tiers.some { color: var(--text); }
 
@@ -88,6 +109,7 @@
 .card-mark.draft { background: var(--warn-bg); color: var(--warn); }
 .card-mark.retired { color: var(--text-3); }
 .card-mark.bad { background: var(--bad-bg); color: var(--bad); }
+.card-mark.changes { background: var(--accent-soft); color: var(--accent); }
 
 .card-title { font-size: 17px; line-height: 1.3; letter-spacing: -.01em; overflow-wrap: anywhere; }
 .card-link { color: var(--text); }
@@ -132,7 +154,7 @@
 .pager-gap { min-width: 20px; text-align: center; color: var(--text-3); }
 .pager-of { display: none; font-size: 13px; color: var(--text-2); }
 /* above the results: smaller, at the right */
-.pager.compact { justify-content: flex-end; gap: 4px; margin: 0 0 14px; }
+.pager.compact { justify-content: flex-end; gap: 4px; margin: 0; }
 .pager.compact .pager-num, .pager.compact .pager-step { min-width: 30px; height: 30px; padding: 0 8px; font-size: 12.5px; border-radius: 8px; }
 .pager.compact .pager-word { display: none; }
 
@@ -147,6 +169,25 @@
 .home-bookmarks h2 { font-size: 15px; margin-bottom: 12px; }
 .home-bookmarks-more { margin-top: 12px; }
 
+/* ---------- the search box (Home, the results, the lists) ---------- */
+.search-box { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 5px 0 14px; max-width: 760px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; color: var(--text-3); box-shadow: var(--shadow-1); }
+.search-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.search-box input, .search-box input:focus { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; outline: 0; box-shadow: none; background: none; color: var(--text); font-size: 15px; }
+.search-box input::placeholder { color: var(--text-3); }
+.search-box input::-webkit-search-cancel-button { cursor: pointer; }
+.search-box .btn { height: 36px; flex: none; }
+.search-box.live { padding-right: 12px; }
+.search-box.big { height: 58px; padding-left: 18px; border-radius: 14px; box-shadow: var(--shadow-2); }
+.search-box.big input { font-size: 17px; }
+.search-box.big .btn { height: 44px; padding: 0 18px; border-radius: 10px; font-size: 14.5px; }
+/* on the lists, full width above the panel and the results */
+.library > .search-box { max-width: none; margin: 4px 0 18px; }
+@media (max-width: 520px) {
+  .search-box, .search-box.big { height: 50px; padding-left: 12px; }
+  .search-box.big input, .search-box input { font-size: 16px; } /* 16px: phones do not zoom in */
+  .search-box .btn, .search-box.big .btn { height: 38px; padding: 0 12px; }
+}
+
 /* narrow screens: the filters fold away behind "Filters (n)" */
 @media (max-width: 860px) {
   .list-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: "head" "panel" "body"; }
@@ -158,6 +199,9 @@
 }
 @media (max-width: 520px) {
   .card { padding: 14px 14px 10px; }
+  .card[data-kind] { padding-left: 17px; }
+  .results-tools { justify-content: flex-start; margin-left: 0; flex-basis: 100%; }
+  .results-tools .pager.compact { margin-left: auto; }
   .card-lines { grid-template-columns: 6rem minmax(0, 1fr); }
   .pager-pages, .pager-word { display: none; }
   .pager-of { display: inline; padding: 0 6px; }

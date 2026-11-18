@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpRight, Boxes, Code2, Compass, Server, ExternalLink, Layers, Plus, Search, Tag, Trash2, Users, Wrench } from "lucide-react";
 import type { Catalog, Membership, Process, Standard } from "../types";
 import { GroupMembers } from "./TeamMembers";
+import { EntryIcon } from "./EntryIcon";
+import { IconField } from "./IconField";
 import { membersOf, type GroupKind } from "../lib/members";
 import { slugify, uniqueId } from "../lib/edit";
 import { docCount, removeHint, useCatalog } from "../lib/catalog";
@@ -12,7 +14,7 @@ import { hasErrors, validateCatalog } from "../lib/validate";
 import { Field, IssueList, notify, useBottomBar } from "./ui";
 
 type Key = "teams" | "practices" | "platforms" | "categories" | "tools" | "tiers" | "environments" | "languages";
-type Row = { id: string; name: string; contact?: string; url?: string; description?: string };
+type Row = { id: string; name: string; contact?: string; url?: string; description?: string; icon?: string };
 
 const KINDS: Record<Key, {
   title: string; noun: string; icon: typeof Users; color: string; blurb: string;
@@ -75,6 +77,8 @@ const KEYS: Key[] = ["teams", "practices", "platforms", "categories", "tools", "
 /** The lists whose entries have members. */
 const GROUP_OF: Partial<Record<Key, GroupKind>> = { teams: "team", practices: "practice", platforms: "platform" };
 const ORDERED: Key[] = ["tiers", "environments"]; // lists whose order means something
+/** The lists whose entries can have an icon. */
+const WITH_ICON: Key[] = ["tools", "languages"];
 
 interface Use { process: Process | Standard; how: string }
 
@@ -203,7 +207,8 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
               return (
                 <li key={r.id}>
                   <button className={`cat-item ${current?.id === r.id ? "on" : ""}`} onClick={() => { setSelected(r.id); setAdding(false); }}>
-                    <span className="cat-avatar">{ORDERED.includes(key) ? rank + (key === "tiers" ? 0 : 1) : r.name.slice(0, 1).toUpperCase()}</span>
+                    <EntryIcon icon={WITH_ICON.includes(key) ? r.icon : undefined} size={32}
+                      fallback={<span className="cat-avatar">{ORDERED.includes(key) ? rank + (key === "tiers" ? 0 : 1) : r.name.slice(0, 1).toUpperCase()}</span>} />
                     <span className="cat-item-text">
                       <strong>{r.name || "Unnamed"}{isNew(r.id) && <i>new</i>}</strong>
                       <em>{r.contact ?? r.url?.replace(/^https?:\/\//, "") ?? r.description ?? "No details yet"}</em>
@@ -238,7 +243,8 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
           {!adding && current && (
             <>
               <header className="cat-detail-head">
-                <span className="cat-avatar big">{ORDERED.includes(key) ? rows.findIndex((x) => x.id === current.id) + (key === "tiers" ? 0 : 1) : current.name.slice(0, 1).toUpperCase()}</span>
+                <EntryIcon icon={WITH_ICON.includes(key) ? current.icon : undefined} size={56}
+                  fallback={<span className="cat-avatar big">{ORDERED.includes(key) ? rows.findIndex((x) => x.id === current.id) + (key === "tiers" ? 0 : 1) : current.name.slice(0, 1).toUpperCase()}</span>} />
                 <div>
                   <span className="eyebrow">{kind.noun}</span>
                   <h2>{current.name || "Unnamed"}</h2>
@@ -255,6 +261,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
               {editor ? (
                 <div className="form">
                   <Field label="Name"><input value={current.name} maxLength={40} onChange={(e) => upd({ name: e.target.value })} /></Field>
+                  {WITH_ICON.includes(key) && <IconField key={current.id} icon={current.icon} name={current.name} onChange={(icon) => upd({ icon })} />}
                   {kind.fields.map((f) => (
                     <Field key={f.field} label={f.label}>
                       {f.long
@@ -307,7 +314,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
         </section>
       </div>
 
-      {editor && <BehindBanner d={d} meta={{ version, updatedAt: "", updatedBy: "" }} noun="the lists" />}
+      {editor && <BehindBanner d={d} meta={{ version, updatedAt: "", updatedBy: "", createdAt: "" }} noun="the lists" />}
       {editor && (
         <div ref={saveBar} className={`cat-save ${dirty ? "dirty" : ""}`}>
           {dirty && <span className="cat-save-text" role="status"><b>Unsaved changes</b> to the lists</span>}

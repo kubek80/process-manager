@@ -133,6 +133,13 @@ func New(d Deps) http.Handler {
 	mux.Handle("DELETE /api/standards/{id}", user(a.deleteDoc(docs.Standard)))
 	mux.Handle("POST /api/processes/{id}/review", user(a.reviewDoc(docs.Process)))
 	mux.Handle("POST /api/standards/{id}/review", user(a.reviewDoc(docs.Standard)))
+	// unpublished changes to a published process or standard (working drafts)
+	for kind, path := range map[string]string{docs.Process: "processes", docs.Standard: "standards"} {
+		mux.Handle("GET /api/"+path+"/{id}/draft", user(a.getDraft(kind)))
+		mux.Handle("PUT /api/"+path+"/{id}/draft", user(a.putDraft(kind)))
+		mux.Handle("DELETE /api/"+path+"/{id}/draft", user(a.deleteDraft(kind)))
+		mux.Handle("POST /api/"+path+"/{id}/publish", user(a.publishDraft(kind)))
+	}
 	mux.Handle("GET /api/catalog", user(a.getCatalog))
 	mux.Handle("PUT /api/catalog", user(a.putDoc(docs.Catalog)))
 	mux.Handle("GET /api/history/{kind}/{id}", user(a.history))
@@ -172,10 +179,17 @@ func New(d Deps) http.Handler {
 	// search by meaning
 	mux.Handle("GET /api/search", user(a.search))
 
+	// icons of tools and languages
+	mux.Handle("POST /api/icons", user(a.uploadIcon))
+	mux.Handle("GET /api/icons/{id}", user(a.getIcon))
+
 	// who belongs to which team, platform and practice
 	mux.Handle("GET /api/members", user(a.listMembers))
 
 	// admin panel
+	mux.Handle("GET /api/admin/users", admin(a.listUsers))
+	mux.Handle("PUT /api/admin/users/{email}", admin(a.putUser))
+	mux.Handle("DELETE /api/admin/users/{email}", admin(a.deleteUser))
 	mux.Handle("GET /api/admin/access", admin(a.listAccess))
 	mux.Handle("POST /api/admin/access", admin(a.grantAccess))
 	mux.Handle("DELETE /api/admin/access", admin(a.revokeAccess))

@@ -1,6 +1,6 @@
 import { Fragment } from "react";
-import { CircleAlert, MessageSquare, MessageSquarePlus, ShieldCheck, Workflow } from "lucide-react";
-import type { Process, Rigour, Standard, TargetKind } from "../types";
+import { CircleAlert, MessageSquare, MessageSquarePlus, PencilLine, ShieldCheck, Workflow } from "lucide-react";
+import type { DocMeta, Process, Rigour, Standard, TargetKind } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { cardLines, tiersText } from "../lib/cardLines";
 import { statusOf } from "../lib/lifecycle";
@@ -34,9 +34,10 @@ const HIT_WORD: Record<Hit["where"], string> = { step: "Step", requirement: "Req
 /** Where a result was found, when it was searched for both ways. */
 const FOUND_BY: Record<string, string> = { words: "Found by words", meaning: "Found by meaning", "meaning,words": "Found by words and by meaning" };
 
-/** Where a process or standard opens; somebody who may fix a broken one gets its text. */
+/** Where a process or standard opens; somebody who may fix a broken one gets its editing screen. */
 export const docHref = (kind: TargetKind, id: string, fix = false) =>
-  kind === "process" ? href({ page: "process", id, tab: fix ? "json" : "flow" }) : href({ page: "standard", id, tab: fix ? "json" : "doc" });
+  fix ? href({ page: kind === "process" ? "edit-process" : "edit-standard", id })
+    : kind === "process" ? href({ page: "process", id, tab: "flow" }) : href({ page: "standard", id, tab: "doc" });
 
 /** Where a place inside a document opens. */
 function hitHref(kind: TargetKind, id: string, h: Hit): string {
@@ -53,8 +54,12 @@ export interface DocCardProps {
   hits?: Hit[];
   words?: string[];
   openFeedback: number;
-  /** The reader may change it: they see its review and whether it needs fixing. */
+  /** The reader may change it: they see whether it needs fixing. */
   mayEdit: boolean;
+  /** The reader looks after it (edits it, or owns its team): they see where its review stands. */
+  manages?: boolean;
+  /** What the server says about it: whether it has unpublished changes (sent only to its editors). */
+  meta?: DocMeta;
   /** It has errors (shown only to those who may change it). */
   broken?: boolean;
   usedBy?: number;
@@ -69,12 +74,13 @@ export interface DocCardProps {
  * is the link; it covers the whole card for the mouse, while the links and buttons inside stay
  * separate and reachable with the keyboard (no link inside a link).
  */
-export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openFeedback, mayEdit, broken, usedBy, level = 2, foundBy }: DocCardProps) {
+export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openFeedback, mayEdit, manages, meta, broken, usedBy, level = 2, foundBy }: DocCardProps) {
   const { catalog } = useCatalog();
   const known = engagementKnown(useEngagement());
   const status = statusOf(doc);
   const fix = !!broken && mayEdit;
-  const lines = cardLines({ kind, doc, catalog, rigour, rules, mayEdit, usedBy });
+  const lines = cardLines({ kind, doc, catalog, rigour, rules, mayEdit: mayEdit || !!manages, usedBy });
+  const changes = !!meta?.draft && status !== "draft";
   const { word, Icon } = KIND[kind];
   const title = typeof doc.title === "string" && doc.title ? doc.title : doc.id;
   const category = doc.category ? catalog.categories.find((c) => c.id === doc.category)?.name ?? doc.category : NO_CATEGORY_LABEL;
@@ -85,19 +91,18 @@ export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openF
     <li className={`card ${status === "deprecated" ? "retired" : ""} ${status === "draft" ? "draft" : ""}`.trim()} data-kind={kind} data-id={doc.id}>
       <div className="card-top">
         <span className="card-eyebrow">
-          <Icon size={13} aria-hidden="true" />
-          <span className="card-kind">{word}</span>
-          <span className="card-dot" aria-hidden="true">·</span>
+          <span className={`kind-tag ${kind}`}><Icon size={13} aria-hidden="true" /><span className="card-kind">{word}</span></span>
           <span className="card-cat">{category}</span>
         </span>
         <span className={`card-tiers ${doc.tiers?.length ? "some" : ""}`} title="Application tiers it applies to">
           <span className="sr-only">Applies to: </span>{tiers}
         </span>
       </div>
-      {(status !== "active" || fix) && (
+      {(status !== "active" || fix || changes) && (
         <div className="card-marks">
           {status === "draft" && <span className="card-mark draft">Draft</span>}
           {status === "deprecated" && <span className="card-mark retired">Retired</span>}
+          {changes && <span className="card-mark changes" title={`Saved by ${meta!.draft!.updatedBy}, not yet published`}><PencilLine size={12} aria-hidden="true" />Unpublished changes</span>}
           {fix && <span className="card-mark bad"><CircleAlert size={12} aria-hidden="true" />Needs fixing</span>}
         </div>
       )}

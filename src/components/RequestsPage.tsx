@@ -7,7 +7,6 @@ import {
   type DocRequest, type NewRequest, type RequestFilter, type RequestState,
 } from "../lib/requests";
 import { createRequest, go, href, loadRequests, setRequestState, voteRequest, withdrawRequest } from "../lib/store";
-import { useEditor } from "../lib/mode";
 import { usePerms } from "../lib/session";
 import { confirmDialog, Field, LoadError, Loading, Modal, notify } from "./ui";
 import "../requests.css";
@@ -154,12 +153,11 @@ function RequestItem({ r, processes, standards, onVote, onWithdraw, onRemove, on
   onVote: () => void; onWithdraw: () => void; onRemove: () => void; onReopen: () => void; onChange: (to: RequestState) => void;
 }) {
   const { catalog } = useCatalog();
-  // Consumer mode shows what a reader sees: moving requests on is part of the Editor view
-  const editor = useEditor();
+  // the server says who may move a request along (whoever could create what is asked for)
   const admin = usePerms().admin;
-  const manage = editor && r.canManage;
+  const manage = r.canManage;
   const withdrawable = r.mine && r.state === "open";
-  const removable = editor && admin && !withdrawable;
+  const removable = admin && !withdrawable;
   const answer = r.state === "done" ? answerOf(r, r.kind === "process" ? processes : standards) : null;
   const titleId = `req-${r.id}-title`;
   return (
