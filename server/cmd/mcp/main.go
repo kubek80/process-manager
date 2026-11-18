@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -61,12 +62,14 @@ func main() {
 // settings are what this command reads from the environment.
 type settings struct {
 	DatabaseURL string
-	Addr        string
-	Secret      string
-	BaseURL     string
-	Notify      string
-	WebhookURL  string
-	Embeddings  config.Embeddings
+	// EmailDomains are the domains of the portal's sign-in: only their people can be acted for.
+	EmailDomains []string
+	Addr         string
+	Secret       string
+	BaseURL      string
+	Notify       string
+	WebhookURL   string
+	Embeddings   config.Embeddings
 }
 
 func loadSettings(getenv func(string) string) (settings, error) {
@@ -83,6 +86,13 @@ func loadSettings(getenv func(string) string) (settings, error) {
 		BaseURL:     strings.TrimRight(get("PM_BASE_URL", "http://localhost:5173"), "/"),
 		Notify:      get("PM_NOTIFY", "log"),
 		WebhookURL:  get("PM_NOTIFY_WEBHOOK_URL", ""),
+	}
+	// the same settings the portal's sign-in reads (config.Load): PM_ALLOWED_EMAIL_DOMAINS, and
+	// for Google sign-in the Workspace domain
+	for _, d := range strings.Split(get("PM_ALLOWED_EMAIL_DOMAINS", "")+","+get("PM_GOOGLE_HOSTED_DOMAIN", ""), ",") {
+		if d = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(d), "@")); d != "" && !slices.Contains(s.EmailDomains, d) {
+			s.EmailDomains = append(s.EmailDomains, d)
+		}
 	}
 	var problems []string
 	if s.DatabaseURL == "" {
@@ -139,6 +149,14 @@ func checkDatabase(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
+// indexBuilt reports whether the portal server has built the search index. (To be replaced by
+// the index's own read-only check when retrieval has one: index.Ready(ctx) == nil.)
+func indexBuilt(ctx context.Context, pool *pgxpool.Pool, _ *retrieval.Index) bool {
+	var built bool
+	err := pool.QueryRow(ctx, `select to_regclass('search_settings') is not null and to_regclass('search_chunks') is not null`).Scan(&built)
+	return err != nil || built // a check that fails says nothing either way
+}
+
 // connect waits a little for a database that is still starting.
 func connect(ctx context.Context, url string, log *slog.Logger) (*pgxpool.Pool, error) {
 	pool, err := pgxpool.New(ctx, url)
@@ -169,16 +187,18 @@ type meaning struct{ ix *retrieval.Index }
 
 func (m meaning) Enabled() bool { return m.ix.Enabled() }
 
-func (m meaning) Search(ctx context.Context, query string, limit int) ([]mcpserver.Found, error) {
+func (m meaning) Search(ctx context.Context, query string, limit int) ([]mcpserver.Found, bool, error) {
 	results, err := m.ix.Search(ctx, query, limit)
 	switch {
 	case errors.Is(err, retrieval.ErrNotSetUp):
-		return nil, fmt.Errorf("%w: %v", mcpserver.ErrIndexNotReady, err)
+		return nil, false, fmt.Errorf("%w: %v", mcpserver.ErrIndexNotReady, err)
 	case errors.Is(err, retrieval.ErrProvider):
-		return nil, fmt.Errorf("%w: %v", mcpserver.ErrIndexProvider, err)
+		return nil, false, fmt.Errorf("%w: %v", mcpserver.ErrIndexProvider, err)
 	case err != nil:
-		return nil, err
+		return nil, false, err
 	}
+	// Until the index says itself that it had more, a full page is taken to mean that it had.
+	truncated := len(results) >= limit
 	out := make([]mcpserver.Found, 0, len(results))
 	for _, r := range results {
 		if r.Status != "active" { // the search tools return active documents only (the server checks again)
@@ -190,7 +210,7 @@ func (m meaning) Search(ctx context.Context, query string, limit int) ([]mcpserv
 		}
 		out = append(out, f)
 	}
-	return out, nil
+	return out, truncated, nil
 }
 
 // shutdownGrace is how long calls being answered get to finish when asked to stop.
@@ -220,8 +240,7 @@ func run(ctx context.Context, getenv func(string) string, log *slog.Logger, list
 		}
 		index = retrieval.New(pool, store, e, s.Embeddings.ChunkOptions(), log)
 		// the portal server builds the index; this command only reads it
-		var built bool
-		if err := pool.QueryRow(ctx, `select to_regclass('search_settings') is not null and to_regclass('search_chunks') is not null`).Scan(&built); err == nil && !built {
+		if !indexBuilt(ctx, pool, index) {
 			log.Warn("the search index has not been built yet: the portal server builds it when it starts with the same settings. Until then agents search by words")
 		}
 	}
@@ -234,6 +253,7 @@ func run(ctx context.Context, getenv func(string) string, log *slog.Logger, list
 	srv, err := mcpserver.New(mcpserver.Options{
 		Docs: store, Skills: &skills.Store{Pool: pool}, Feedback: &feedback.Store{Pool: pool}, Roles: &rbac.Store{Pool: pool},
 		Index: meaning{index}, Notifier: notifier, Ready: pool.Ping, BaseURL: s.BaseURL, Secret: s.Secret, Version: version, Log: log,
+		EmailDomains: s.EmailDomains, CallTimeout: mcpserver.DefaultCallTimeout,
 	})
 	if err != nil {
 		return err
@@ -246,7 +266,7 @@ func run(ctx context.Context, getenv func(string) string, log *slog.Logger, list
 	httpSrv := &http.Server{
 		Handler: srv,
 		// a client that sends or reads slowly cannot hold a connection open for ever
-		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 2 * time.Minute,
+		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: mcpserver.DefaultCallTimeout + 15*time.Second, IdleTimeout: 2 * time.Minute,
 	}
 	stopped := make(chan struct{})
 	go func() {

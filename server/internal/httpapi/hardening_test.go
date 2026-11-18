@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/kubek80/process-manager/server/internal/docs"
+	"github.com/kubek80/process-manager/server/internal/feedback"
 )
 
 func TestEveryAnswerCarriesSecurityHeaders(t *testing.T) {
@@ -188,7 +189,7 @@ func TestManagingOtherPeoplesFeedbackLeavesATrace(t *testing.T) {
 func TestOnePersonCannotFloodTheOwners(t *testing.T) {
 	e := setup(t, nil)
 	c := e.as(sam)
-	for i := 0; i < maxFeedbackPerHour; i++ {
+	for i := 0; i < feedback.MaxPerHour; i++ {
 		c.report(docs.Process, gcp, "", "The same thing again")
 	}
 	status, body := c.do("POST", "/api/feedback", map[string]string{"targetKind": docs.Process, "targetId": gcp, "kind": "broken", "text": "And again"})

@@ -3,7 +3,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, Lightbulb, Search, SlidersHoriz
 import { href } from "../lib/store";
 import type { Profile } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
-import { FILTER_LABEL, type FilterKey, type Option } from "../lib/search";
+import { countText, countWords, FILTER_LABEL, type FilterKey, type Option } from "../lib/search";
 import { pageNumbers, PAGE_SIZES, showingText, storedPage, type Page, type StoredPage } from "../lib/paging";
 import "../lists.css";
 
@@ -24,7 +24,7 @@ export function chosenSummary(options: Option[]): string {
  * Space or the down arrow; the arrows move between the options; Escape closes it and returns
  * to the button.
  */
-export function FilterDropdown({ name, label, options, onToggle }: { name: FilterKey; label?: string; options: Option[]; onToggle: (value: string) => void }) {
+export function FilterDropdown({ name, label, options, onToggle, atLeast }: { name: FilterKey; label?: string; options: Option[]; onToggle: (value: string) => void; atLeast?: boolean }) {
   const [open, setOpen] = useState(false);
   const [focusFirst, setFocusFirst] = useState(false);
   const id = useId();
@@ -72,9 +72,9 @@ export function FilterDropdown({ name, label, options, onToggle }: { name: Filte
             return (
               <label key={o.value} className={`filter-option ${o.chosen ? "on" : ""} ${off ? "off" : ""}`.trim()}>
                 <input type="checkbox" checked={o.chosen} disabled={off} onChange={() => onToggle(o.value)}
-                  aria-label={`${o.label}, ${o.count} ${o.count === 1 ? "result" : "results"}`} />
+                  aria-label={`${o.label}, ${countWords(o.count, atLeast)}`} />
                 <span className="filter-option-name">{o.label}</span>
-                <span className="filter-option-count" aria-hidden="true">{o.count}</span>
+                <span className="filter-option-count" aria-hidden="true">{countText(o.count, atLeast)}</span>
               </label>
             );
           })}
@@ -130,10 +130,12 @@ export interface FilterPanelProps {
   onProfile: (p: Profile) => void;
   /** On a narrow screen, the button at the end of the open panel: "Show 12 processes". */
   done?: { label: string; onClick: () => void };
+  /** The results are the closest of more that matched: the counts say "at least" ("12+"). */
+  atLeast?: boolean;
 }
 
 /** The filters on the left of a list. */
-export function FilterPanel({ id, open, text, keys, labels, options, onToggle, flags, profile, onProfile, done }: FilterPanelProps) {
+export function FilterPanel({ id, open, text, keys, labels, options, onToggle, flags, profile, onProfile, done, atLeast }: FilterPanelProps) {
   return (
     <aside id={id} className={`filter-panel ${open ? "open" : ""}`.trim()} aria-label="Filters">
       {text && (
@@ -147,15 +149,15 @@ export function FilterPanel({ id, open, text, keys, labels, options, onToggle, f
           {flags.map((f) => (
             <label key={f.key} className={`filter-option flag ${f.on ? "on" : ""} ${f.unknown && !f.on ? "off" : ""}`.trim()} data-flag={f.key}>
               <input type="checkbox" checked={f.on} disabled={!!f.unknown && !f.on} onChange={(e) => f.onChange(e.target.checked)}
-                aria-label={f.unknown ? `${f.label}: ${f.unknown}` : `${f.label}, ${f.count} ${f.count === 1 ? "result" : "results"}`} />
+                aria-label={f.unknown ? `${f.label}: ${f.unknown}` : `${f.label}, ${countWords(f.count, atLeast)}`} />
               <span className="filter-option-name">{f.label}{f.unknown && <span className="filter-option-why" aria-hidden="true">{f.unknown}</span>}</span>
-              {!f.unknown && <span className="filter-option-count" aria-hidden="true">{f.count}</span>}
+              {!f.unknown && <span className="filter-option-count" aria-hidden="true">{countText(f.count, atLeast)}</span>}
             </label>
           ))}
         </div>
       )}
       <div className="filter-group filter-dds">
-        {keys.map((k) => <FilterDropdown key={k} name={k} label={labels?.[k]} options={options[k]} onToggle={(v) => onToggle(k, v)} />)}
+        {keys.map((k) => <FilterDropdown key={k} name={k} label={labels?.[k]} options={options[k]} onToggle={(v) => onToggle(k, v)} atLeast={atLeast} />)}
       </div>
       <ProfileSelects value={profile} onChange={onProfile} />
       {done && <button type="button" className="btn primary filter-done" onClick={done.onClick}>{done.label}</button>}

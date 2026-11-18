@@ -18,7 +18,9 @@ import (
 	"net"
 	"net/http"
 	"net/mail"
+	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -47,8 +49,9 @@ const MinSecret = 32
 // adapted to it in the command; nil or disabled means search by words only.
 type Index interface {
 	Enabled() bool
-	// Search returns published processes and standards, best first.
-	Search(ctx context.Context, query string, limit int) ([]Found, error)
+	// Search returns published processes and standards, best first, at most limit of them.
+	// truncated says that more matched than were returned.
+	Search(ctx context.Context, query string, limit int) (found []Found, truncated bool, err error)
 }
 
 // Errors an Index returns so that the agent is told why it gets a word match instead.
@@ -86,7 +89,26 @@ type Options struct {
 	Version  string // the server's version as agents see it
 	Log      *slog.Logger
 	Now      func() time.Time // what "today" is for the review state; tests
+	// EmailDomains, when set, are the only domains whose people an agent may act for: the
+	// domains of the portal's sign-in (PM_ALLOWED_EMAIL_DOMAINS, PM_GOOGLE_HOSTED_DOMAIN).
+	EmailDomains []string
+	// CallTimeout bounds every tool call; 0 means DefaultCallTimeout. It must be shorter than
+	// the HTTP server's write timeout, so that every call gets an answer.
+	CallTimeout time.Duration
+	// MeaningTimeout is how long search by meaning may take before the words take over; 0
+	// means DefaultMeaningTimeout.
+	MeaningTimeout time.Duration
+	// SearchesPerMinute is the brake on searches that use the embeddings provider, per caller;
+	// 0 means DefaultSearchesPerMinute.
+	SearchesPerMinute int
 }
+
+// Defaults of the Options.
+const (
+	DefaultCallTimeout       = 45 * time.Second
+	DefaultMeaningTimeout    = 5 * time.Second
+	DefaultSearchesPerMinute = 60
+)
 
 // Server answers MCP calls.
 type Server struct {
@@ -94,6 +116,9 @@ type Server struct {
 	readOnly *mcp.Server // without report_problem
 	acting   *mcp.Server // with report_problem: a person was named together with the secret
 	handler  http.Handler
+	brake    *brake       // searches that use the embeddings provider, per caller
+	notReady atomic.Bool  // "the index is not built yet" was logged once
+	sdkLog   *slog.Logger // the SDK's own messages, one level lower
 }
 
 // CheckSecret says, in plain words, why a shared secret cannot be used; "" when it can.
@@ -173,8 +198,20 @@ func New(o Options) (*Server, error) {
 	if o.Version == "" {
 		o.Version = "1"
 	}
+	if o.CallTimeout <= 0 {
+		o.CallTimeout = DefaultCallTimeout
+	}
+	if o.MeaningTimeout <= 0 {
+		o.MeaningTimeout = DefaultMeaningTimeout
+	}
+	if o.SearchesPerMinute <= 0 {
+		o.SearchesPerMinute = DefaultSearchesPerMinute
+	}
+	for i, d := range o.EmailDomains {
+		o.EmailDomains[i] = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(d), "@"))
+	}
 	o.BaseURL = strings.TrimRight(o.BaseURL, "/")
-	s := &Server{o: o}
+	s := &Server{o: o, brake: newBrake(o.SearchesPerMinute, time.Minute), sdkLog: slog.New(quieter{o.Log.Handler()})}
 	cache := mcp.NewSchemaCache()
 	s.readOnly = s.newMCP(false, cache)
 	s.acting = s.newMCP(true, cache)
@@ -187,7 +224,7 @@ func New(o Options) (*Server, error) {
 		// Every request stands on its own: whom an agent acts for is read from each request, and
 		// nothing is kept between calls.
 		Stateless:           true,
-		Logger:              o.Log,
+		Logger:              s.sdkLog,
 		MaxRequestBodyBytes: 1 << 20,
 	})
 	mux := http.NewServeMux()
@@ -231,10 +268,12 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			// without the secret nobody can say whom the agent acts for
 			r.Header.Del(HeaderPerson)
 			r.Header.Del(HeaderPersonName)
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, s.withCaller(r))
 			return
 		}
-		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		// the scheme is case-insensitive (RFC 9110): "Bearer", "bearer" and "BEARER" alike
+		scheme, token, _ := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " ")
+		ok := strings.EqualFold(scheme, "Bearer")
 		got := sha256.Sum256([]byte(strings.TrimSpace(token)))
 		// both sides are hashed first, so the comparison takes as long whatever was sent
 		if subtle.ConstantTimeCompare(got[:], want[:]) != 1 || !ok {
@@ -243,20 +282,39 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			return
 		}
 		if r.Header.Get(HeaderPerson) != "" || r.Header.Get(HeaderPersonName) != "" {
-			if problem := checkPerson(r.Header); problem != "" {
+			if problem := s.checkPerson(r.Header); problem != "" {
 				http.Error(w, problem, http.StatusBadRequest)
 				return
 			}
 		}
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, s.withCaller(r))
 	})
+}
+
+// headerCaller carries the address of the caller from the guard to the tools (the SDK hands
+// the tools the request's headers, not the request). What a client sends under that name is
+// replaced.
+const headerCaller = "X-Pm-Internal-Caller"
+
+func (s *Server) withCaller(r *http.Request) *http.Request {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	r.Header.Set(headerCaller, host)
+	return r
 }
 
 // actor is the person an agent acts for.
 type actor struct{ Email, Name string }
 
-// checkPerson says why the person headers cannot be used; "" when they can.
-func checkPerson(h http.Header) string {
+// maxPersonName is the longest name of a person that is used; a longer one gives way to the
+// part of the email before the @.
+const maxPersonName = 60
+
+// checkPerson says why the person an agent names cannot be accepted; "" when they can. The name
+// never refuses a call: one that cannot be used gives way to the part of the email before the @.
+func (s *Server) checkPerson(h http.Header) string {
 	email := strings.TrimSpace(h.Get(HeaderPerson))
 	if email == "" {
 		return HeaderPerson + " is missing: " + HeaderPersonName + " only goes with it."
@@ -264,13 +322,10 @@ func checkPerson(h http.Header) string {
 	if a, err := mail.ParseAddress(email); err != nil || a.Address != email || a.Name != "" || len(email) > 254 || !strings.Contains(email[strings.LastIndex(email, "@")+1:], ".") {
 		return HeaderPerson + " must be the email address of the person the agent acts for, e.g. sam@example.com."
 	}
-	if name := h.Get(HeaderPersonName); name != "" {
-		clean, problem := docs.CheckText(name, HeaderPersonName, false)
-		if problem != "" {
-			return problem
-		}
-		if utf8.RuneCountInString(clean) > 100 {
-			return HeaderPersonName + " must be at most 100 characters."
+	if len(s.o.EmailDomains) > 0 {
+		domain := strings.ToLower(email[strings.LastIndex(email, "@")+1:])
+		if !slices.Contains(s.o.EmailDomains, domain) {
+			return HeaderPerson + " must be an address of " + strings.Join(s.o.EmailDomains, ", ") + ": only people who can sign in to the portal can be acted for."
 		}
 	}
 	return ""
@@ -279,15 +334,43 @@ func checkPerson(h http.Header) string {
 // person is whom the request acts for: only with the secret configured (the guard has checked
 // that it was presented and the headers are valid). The zero actor otherwise.
 func (s *Server) person(h http.Header) actor {
-	if s.o.Secret == "" || h == nil || checkPerson(h) != "" {
+	if s.o.Secret == "" || h == nil || s.checkPerson(h) != "" {
 		return actor{}
 	}
 	email := strings.ToLower(strings.TrimSpace(h.Get(HeaderPerson)))
-	name, _ := docs.CheckText(h.Get(HeaderPersonName), "", false)
-	if name == "" {
-		name = email
+	return actor{Email: email, Name: personName(h.Get(HeaderPersonName), email)}
+}
+
+// personName is the name as the agent gave it when it can be stored and shown as it is (one
+// line, no control or direction characters, at most maxPersonName characters); otherwise the
+// part of the email before the @.
+func personName(name, email string) string {
+	clean, problem := docs.CheckText(name, "The name", false)
+	if problem != "" || clean == "" || utf8.RuneCountInString(clean) > maxPersonName {
+		return email[:strings.LastIndex(email, "@")]
 	}
-	return actor{Email: email, Name: name}
+	return clean
+}
+
+// quieter passes the SDK's messages on one level lower: a line per connection at INFO would
+// drown what matters. Warnings stay warnings.
+type quieter struct{ h slog.Handler }
+
+func (q quieter) Enabled(ctx context.Context, l slog.Level) bool {
+	return q.h.Enabled(ctx, lower(l))
+}
+func (q quieter) Handle(ctx context.Context, r slog.Record) error {
+	r.Level = lower(r.Level)
+	return q.h.Handle(ctx, r)
+}
+func (q quieter) WithAttrs(a []slog.Attr) slog.Handler { return quieter{q.h.WithAttrs(a)} }
+func (q quieter) WithGroup(n string) slog.Handler      { return quieter{q.h.WithGroup(n)} }
+
+func lower(l slog.Level) slog.Level {
+	if l < slog.LevelWarn {
+		return slog.LevelDebug
+	}
+	return l
 }
 
 // instructions is what every agent is told when it connects: the rules from docs/mcp.md.
@@ -306,7 +389,7 @@ const instructions = `Process Manager holds the company's processes (how to get 
 func (s *Server) newMCP(acting bool, cache *mcp.SchemaCache) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: Name, Title: "Process Manager", Version: s.o.Version}, &mcp.ServerOptions{
 		Instructions: instructions,
-		Logger:       s.o.Log,
+		Logger:       s.sdkLog,
 		SchemaCache:  cache,
 	})
 	s.addTools(srv)

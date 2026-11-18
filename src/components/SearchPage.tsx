@@ -7,9 +7,9 @@ import { useEditor } from "../lib/mode";
 import { pageOf, sizeOf, usePageSize } from "../lib/paging";
 import { useProfile, useRemembered } from "../lib/profile";
 import { canEdit, useMe, usePerms, useVisibleDrafts } from "../lib/session";
-import { fromMeaning, fuse, markedWords, modeOf, nextAsked, needsServer, planOf, rememberMode, SEARCH_MODES, useMeaningSearch, type AskEvent, type Found, type SearchMode } from "../lib/meaning";
+import { contentStamp, fromMeaning, fuse, markedWords, meaningHelp, modeOf, needsServer, planOf, providerOf, rememberMode, SEARCH_MODES, truncatedText, typingMovesAddress, useMeaningSearch, type Found, type Provider, type SearchMode } from "../lib/meaning";
 import { go, href, type SearchState } from "../lib/store";
-import { FILTER_LABEL, filterCount, filtersOf, search, toggleFilter, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
+import { countText, FILTER_LABEL, filterCount, filtersOf, search, toggleFilter, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
 import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
 import { openCount } from "./Feedback";
 import { DocCard, Marked } from "./DocCard";
@@ -47,7 +47,7 @@ const MODE_LABEL: Record<SearchMode, string> = { words: "Words", meaning: "Meani
  * "Search by": Words, Meaning, Both. One choice of three, like radio buttons: the arrow keys move
  * the choice, Tab leaves the group; the choice is announced.
  */
-export function SearchModeSwitch({ mode, onChange, outside }: { mode: SearchMode; onChange: (m: SearchMode) => void; outside: boolean }) {
+export function SearchModeSwitch({ mode, onChange, outside, provider }: { mode: SearchMode; onChange: (m: SearchMode) => void; outside: boolean; provider?: Provider }) {
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
   const onKey = (e: KeyboardEvent) => {
     const at = SEARCH_MODES.indexOf(mode);
@@ -70,7 +70,7 @@ export function SearchModeSwitch({ mode, onChange, outside }: { mode: SearchMode
       </div>
       <ul className="search-mode-help" id="search-mode-help">
         <li><b>Words</b> finds what contains every word you type.</li>
-        <li><b>Meaning</b> puts first what comes closest to what you type, even when not every word is in it.</li>
+        <li className="search-mode-meaning" data-provider={provider ?? "unknown"}><b>Meaning</b> {meaningHelp(provider)}</li>
         <li><b>Both</b> shows what either finds, the best of each first.</li>
         {outside && <li className="search-mode-outside">With Meaning and Both, what you type is sent to Google Cloud to be compared.</li>}
       </ul>
@@ -108,30 +108,34 @@ export function SearchPage({ route, processes, standards, feedback }: {
   const offered = !!me.search?.meaning && !off;
   const mode: SearchMode = offered ? modeOf(route.mode) : "words";
   const modeParam = mode === "words" ? {} : { mode };
-  // the query sent to the server: on arriving, on Search or Enter, on a change of mode - not while typing
-  const [asked, setAsked] = useState(() => q.trim());
-  const [attempt, setAttempt] = useState(0);
-  const ask = (e: AskEvent) => { setAsked((a) => nextAsked(a, e)); if (e.type !== "type") setAttempt((n) => n + 1); };
-  const meaning = useMeaningSearch(asked, needsServer(mode, asked, offered), attempt);
+  // the query sent to the server is the one in the address: with Meaning and Both the address
+  // changes only when the search is run (Enter, the button, a change of mode), not while typing
+  const asked = q.trim();
+  const [attempt, setAttempt] = useState(0); // Search again with the same words asks again (after a problem)
+  // answers are kept per query and per content: after a save or a reload the next search asks again
+  const stamp = useMemo(() => contentStamp(processes, standards), [processes, standards]);
+  const meaning = useMeaningSearch(asked, needsServer(mode, asked, offered), attempt, stamp);
   useEffect(() => { if (meaning.problem?.kind === "off") setOff(true); }, [meaning.problem]);
 
   // what is typed is in the address at once, without a new entry in the browser's history
   const [text, setText] = useState(q);
   const pushed = useRef(q);
   useEffect(() => {
-    // the address changed from elsewhere (Back, a link): that is a search of its own
-    if (q !== pushed.current) { pushed.current = q; setText(q); ask({ type: "arrive", q }); }
-  }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
-  const type = (v: string) => {
-    setText(v);
+    // the address changed from elsewhere (Back, a link): the box shows what it says
+    if (q !== pushed.current) { pushed.current = q; setText(q); }
+  }, [q]);
+  // writes the words to the address: the search is run with them
+  const run = (v: string, m: SearchMode = mode) => {
     pushed.current = v.trim() ? v : "";
-    go({ page: "search", ...filters, q: v, ...keep, ...modeParam }, { replace: true });
+    go({ page: "search", ...filters, q: v, ...keep, ...(m === "words" ? {} : { mode: m }) }, { replace: true });
   };
-  const submit = () => { type(text); ask({ type: "submit", q: text }); };
+  // with Words the results follow the typing; with Meaning and Both the typing waits for Search
+  const type = (v: string) => { setText(v); if (typingMovesAddress(mode, offered)) run(v); };
+  const submit = () => { run(text); setAttempt((n) => n + 1); };
   const setMode = (m: SearchMode) => {
     rememberMode(me.user?.email, m);
-    ask({ type: "mode", q: text });
-    go({ page: "search", q, ...filters, ...keep, ...(m === "words" ? {} : { mode: m }) }, { replace: true });
+    run(text, m);
+    setAttempt((n) => n + 1);
   };
   // a new search or filter starts again on the first page (the address leaves the page out)
   const setFilters = (f: Filters) => go({ page: "search", q, ...f, ...keep, ...modeParam }, { replace: true });
@@ -163,6 +167,8 @@ export function SearchPage({ route, processes, standards, feedback }: {
   const ownDrafts = !!drafts && (processes.some((d) => d.status === "draft" && drafts("process", d)) || standards.some((d) => d.status === "draft" && drafts("standard", d)));
   // the results are of an earlier search than what is in the box now
   const earlier = mode !== "words" && offered && !plan.busy && text.trim() !== shownQ.trim();
+  // the server sent only the closest of more that matched: the counts are "at least"
+  const truncated = plan.truncated && plan.show !== "words" && plan.show !== "none";
 
   const [open, setOpen] = useState(false); // the filters on a narrow screen
   const results = useRef<HTMLElement>(null);
@@ -201,18 +207,19 @@ export function SearchPage({ route, processes, standards, feedback }: {
     <div className="page search-page">
       <h1 className="sr-only">Search processes and standards</h1>
       <SearchBox value={text} onChange={type} onSubmit={submit} autoFocus={!q && !chosen.length} />
-      {offered && <SearchModeSwitch mode={mode} onChange={setMode} outside={!!me.search?.outside} />}
+      {offered && <SearchModeSwitch mode={mode} onChange={setMode} outside={!!me.search?.outside} provider={providerOf(me.search?.provider)} />}
 
       <div className="list-layout">
         <div className="list-head">
           <ResultsBar page={page} noun={{ one: "result", many: "results" }} panelId="search-filters" open={open} onOpen={setOpen}
             chosen={chosen.length} size={size} onSize={changeSize} extra={summary} />
+          {truncated && <p className="search-truncated">{truncatedText(plan.meaning.length)}</p>}
           <ChosenFilters chosen={chosen} onClear={clear} />
           <Pager page={page} onPage={goTo} label="Pages of results" compact />
         </div>
         <FilterPanel id="search-filters" open={open} keys={KEYS} options={out.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}
-          flags={flagControls} profile={profile} onProfile={changeProfile}
-          done={{ label: `Show ${plural(n, "result")}`, onClick: () => { setOpen(false); toResults(results.current); } }} />
+          flags={flagControls} profile={profile} onProfile={changeProfile} atLeast={truncated}
+          done={{ label: `Show ${countText(n, truncated)} ${n === 1 ? "result" : "results"}`, onClick: () => { setOpen(false); toResults(results.current); } }} />
         <section className="list-results" aria-label="Results" ref={results} tabIndex={-1} aria-busy={plan.busy || undefined}>
           {offered && (
             <div className="search-state" role="status" aria-live="polite">
@@ -250,13 +257,6 @@ export function SearchPage({ route, processes, standards, feedback }: {
                     {!chosen.length && plan.show === "words" && words.length > 1 && " Every word must be found, so try fewer words."}
                     {!chosen.length && plan.show === "words" && words.length <= 1 && " Check the spelling, or try another word."}
                   </p>
-                  {offered && shownQ.trim() && (plan.show === "meaning" || mode === "words") && (
-                    <p className="search-try-other">
-                      <button type="button" className="btn small accent-soft" onClick={() => setMode(plan.show === "meaning" ? "words" : "meaning")}>
-                        {plan.show === "meaning" ? "Search by words instead" : "Search by meaning instead"}
-                      </button>
-                    </p>
-                  )}
                   {chosen.length > 0 && (
                     <div className="btn-row">
                       {chosen.map((c) => (
@@ -264,6 +264,14 @@ export function SearchPage({ route, processes, standards, feedback }: {
                       ))}
                       <button type="button" className="btn small primary" onClick={clear}>Clear all filters</button>
                     </div>
+                  )}
+                  {/* the other way of searching, unless it is the filters that hide what was found */}
+                  {offered && shownQ.trim() && (plan.show === "meaning" || mode === "words") && !(chosen.length > 0 && withoutFilters > 0) && (
+                    <p className="search-try-other">
+                      <button type="button" className="btn small accent-soft" onClick={() => setMode(plan.show === "meaning" ? "words" : "meaning")}>
+                        {plan.show === "meaning" ? "Search by words instead" : "Search by meaning instead"}
+                      </button>
+                    </p>
                   )}
                   <p className="muted small search-empty-browse">
                     Or browse <a href={href({ page: "library" })}>all processes</a> and <a href={href({ page: "standards" })}>all standards</a>.

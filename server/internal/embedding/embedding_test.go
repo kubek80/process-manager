@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
+	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -84,10 +87,19 @@ func TestNew(t *testing.T) {
 }
 
 func TestNewVertexWithoutCredentials(t *testing.T) {
-	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/nonexistent/credentials.json")
-	_, err := New(context.Background(), Options{Provider: "vertex", Project: "p", Location: "europe-west4"})
-	if err == nil || !strings.Contains(err.Error(), "GOOGLE_APPLICATION_CREDENTIALS") {
-		t.Errorf("missing credentials: %v", err)
+	for _, file := range []string{"/nonexistent/credentials.json", ""} {
+		t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", file)
+		t.Setenv("HOME", t.TempDir())
+		t.Setenv("CLOUDSDK_CONFIG", t.TempDir())
+		start := time.Now()
+		_, err := New(context.Background(), Options{Provider: "vertex", Project: "p", Location: "europe-west4"})
+		if err == nil || !strings.Contains(err.Error(), "GOOGLE_APPLICATION_CREDENTIALS") {
+			t.Errorf("missing credentials (%q): %v", file, err)
+		}
+		// on a machine outside Google Cloud the lookup ends fast; inside it is bounded by credsTimeout
+		if d := time.Since(start); d > credsTimeout+time.Second {
+			t.Errorf("the lookup took %v", d)
+		}
 	}
 }
 
@@ -309,17 +321,137 @@ func TestVertexErrorsSayWhatToFix(t *testing.T) {
 	}
 }
 
-func TestVertexRespectsTheContext(t *testing.T) {
+// hanging answers nothing until the request is given up.
+func hanging(calls *atomic.Int32) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		<-r.Context().Done()
+	}))
+}
+
+func vertexAt(t *testing.T, srv *httptest.Server, client *http.Client) *vertex {
+	t.Helper()
+	if client == nil {
+		client = srv.Client()
+	}
+	e, err := New(context.Background(), Options{Provider: "vertex", Project: "p", Location: "l", Endpoint: srv.URL, HTTPClient: client})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := e.(*vertex)
+	v.backoff = time.Millisecond
+	return v
+}
+
+func TestVertexTimeouts(t *testing.T) {
+	if embedCeiling(1) != 20*time.Second || embedCeiling(30) != 78*time.Second || maxAttempts != 3 || requestTimeout != 10*time.Second {
+		t.Errorf("the documented limits changed: %v %v %d %v", embedCeiling(1), embedCeiling(30), maxAttempts, requestTimeout)
+	}
+
+	// each request times out and is tried again, up to maxAttempts
+	var calls atomic.Int32
+	srv := hanging(&calls)
+	defer srv.Close()
+	v := vertexAt(t, srv, nil)
+	v.timeout = 30 * time.Millisecond
+	start := time.Now()
+	_, err := v.Embed(context.Background(), []string{"x"}, Query)
+	if err == nil || !strings.Contains(err.Error(), "did not answer within") || time.Since(start) > 2*time.Second {
+		t.Errorf("hanging: %v after %v", err, time.Since(start))
+	}
+	if calls.Load() != maxAttempts {
+		t.Errorf("%d calls, want %d", calls.Load(), maxAttempts)
+	}
+
+	// the ceiling of the whole call wins over the tries
+	calls.Store(0)
+	v.timeout = time.Hour
+	v.ceiling = func(int) time.Duration { return 50 * time.Millisecond }
+	start = time.Now()
+	_, err = v.Embed(context.Background(), []string{"x", "y"}, Document)
+	if err == nil || !strings.Contains(err.Error(), "did not answer within 50ms") || time.Since(start) > 2*time.Second {
+		t.Errorf("ceiling: %v after %v", err, time.Since(start))
+	}
+
+	// the caller's context: given back as it is, never tried again
+	calls.Store(0)
+	v.ceiling = embedCeiling
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err = v.Embed(ctx, []string{"x"}, Document)
+	if !errors.Is(err, context.DeadlineExceeded) || calls.Load() != 1 {
+		t.Errorf("caller's deadline: %v, %d calls", err, calls.Load())
+	}
+	ctx, cancel = context.WithCancel(context.Background())
+	cancel()
+	if _, err := v.Embed(ctx, []string{"x"}, Document); !errors.Is(err, context.Canceled) {
+		t.Errorf("cancelled: %v", err)
+	}
+}
+
+func TestVertexWaitsNoLongerThanTheDeadline(t *testing.T) {
 	s, v := newStandIn(t, testToken)
 	s.status = 503
 	s.failures.Store(100)
 	v.backoff = time.Hour
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
 	start := time.Now()
-	_, err := v.Embed(ctx, []string{"x", "y"}, Document)
-	if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > 5*time.Second {
-		t.Errorf("err %v after %v", err, time.Since(start))
+	_, err := v.Embed(context.Background(), []string{"x"}, Document)
+	if err == nil || !strings.Contains(err.Error(), "(503)") || time.Since(start) > 2*time.Second || s.calls.Load() != 1 {
+		t.Errorf("%v after %v, %d calls", err, time.Since(start), s.calls.Load())
+	}
+}
+
+type roundTrip func(*http.Request) (*http.Response, error)
+
+func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestVertexRetriesOnlyWhatCanPass(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+	for _, c := range []struct {
+		err   error
+		calls int32
+		says  string
+	}{
+		{syscall.ECONNRESET, maxAttempts, "broke off"},
+		{io.ErrUnexpectedEOF, maxAttempts, "broke off"},
+		{errors.New("tls: bad certificate"), 1, "could not be reached"},
+		{&net.DNSError{Err: "no such host", Name: "x"}, 1, "PM_VERTEX_LOCATION"},
+	} {
+		var calls atomic.Int32
+		v := vertexAt(t, srv, &http.Client{Transport: roundTrip(func(*http.Request) (*http.Response, error) {
+			calls.Add(1)
+			return nil, c.err
+		})})
+		_, err := v.Embed(context.Background(), []string{"x"}, Document)
+		if err == nil || !strings.Contains(err.Error(), c.says) || calls.Load() != c.calls {
+			t.Errorf("%v: %v after %d calls", c.err, err, calls.Load())
+		}
+	}
+
+	for _, c := range []struct {
+		code int
+		msg  string
+		says string
+	}{
+		{400, "Unable to submit request because the input token count is 3000 but the model supports up to 2048.", "PM_CHUNK_MAX_CHARS"},
+		{400, "Invalid value at 'parameters.outputDimensionality'", "PM_EMBEDDINGS_DIMENSIONS"},
+		{401, "", "credentials"},
+		{403, "", "roles/aiplatform.user"},
+		{404, "", "PM_VERTEX_PROJECT"},
+	} {
+		var calls atomic.Int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls.Add(1)
+			w.WriteHeader(c.code)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"code": c.code, "message": c.msg}})
+		}))
+		v := vertexAt(t, srv, nil)
+		_, err := v.Embed(context.Background(), []string{"x"}, Document)
+		if err == nil || !strings.Contains(err.Error(), c.says) || calls.Load() != 1 {
+			t.Errorf("%d %q: %v after %d calls", c.code, c.msg, err, calls.Load())
+		}
+		srv.Close()
 	}
 }
 

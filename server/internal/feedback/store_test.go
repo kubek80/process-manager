@@ -185,3 +185,41 @@ func TestDeleteByTargetAndReset(t *testing.T) {
 		t.Fatalf("reset left %d items", n)
 	}
 }
+
+func TestReportHoldsTheLimitPerPersonEvenAtOnce(t *testing.T) {
+	s := newStore(t)
+	const tries = 2 * feedback.MaxPerHour
+	errs := make(chan error, tries)
+	for range tries {
+		go func() {
+			_, err := s.Report(ctx, sample(""))
+			errs <- err
+		}()
+	}
+	stored := 0
+	for range tries {
+		switch err := <-errs; {
+		case err == nil:
+			stored++
+		case !errors.Is(err, feedback.ErrTooMany):
+			t.Fatal(err)
+		}
+	}
+	if n, _ := s.Count(ctx); stored != feedback.MaxPerHour || n != feedback.MaxPerHour {
+		t.Fatalf("%d reported, %d stored", stored, n)
+	}
+	// the same person in other letters is the same person; somebody else is not held back
+	other := sample("")
+	other.AuthorEmail = "SAM@example.com"
+	if _, err := s.Report(ctx, other); !errors.Is(err, feedback.ErrTooMany) {
+		t.Fatalf("got %v", err)
+	}
+	other.AuthorEmail = "alex@example.com"
+	if _, err := s.Report(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	// Create (samples, imports) has no limit
+	if _, err := s.Create(ctx, sample("")); err != nil {
+		t.Fatal(err)
+	}
+}

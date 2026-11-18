@@ -10,6 +10,10 @@
 // document has no parts, and a search checks the current state of every document it returns,
 // so a document that just became a draft is never returned, even before its parts are removed.
 //
+// The provider may be slow or hang. Nothing here holds a database connection while it waits
+// for the provider: a sync embeds first, then writes in a short transaction after checking that
+// the document did not change meanwhile; a search embeds the question before it reads.
+//
 // The table depends on the pgvector extension, which may live in any schema; every use of its
 // type, operator and operator class is qualified with that schema.
 package retrieval
@@ -26,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -37,25 +42,57 @@ import (
 	"github.com/kubek80/process-manager/server/internal/embedding"
 )
 
-// ErrProvider marks a failure of the embedding provider (it could not be reached, or refused).
+// ErrProvider marks a failure of the embedding provider (it could not be reached, refused, or
+// did not answer in time).
 var ErrProvider = errors.New("the embeddings provider could not be reached")
 
-// ErrNotSetUp is returned by a search when the index has not been created yet, or was built with
-// other settings than this server's.
+// ErrNotSetUp is returned when the index cannot be searched: it has not been built yet, it is
+// still being built, it is not in use (search by meaning was switched off), or it was built with
+// other settings than this program's.
 var ErrNotSetUp = errors.New("the search index is not set up")
 
+// ErrOtherSettings is returned by a sync when the index belongs to settings other than this
+// program's (another server, or -migrate, switched it): nothing is written.
+var ErrOtherSettings = errors.New("the search index was built with other settings of search by meaning")
+
+// providerError carries the provider's own message, which already says what went wrong, and
+// counts as ErrProvider.
+type providerError struct{ err error }
+
+func (e providerError) Error() string {
+	msg := e.err.Error()
+	if strings.HasPrefix(msg, "embeddings:") || strings.Contains(msg, "embeddings provider") {
+		return msg
+	}
+	return ErrProvider.Error() + ": " + msg
+}
+func (e providerError) Is(target error) bool { return target == ErrProvider }
+func (e providerError) Unwrap() error        { return e.err }
+
 // Locks that keep several servers from doing the same work at once (the numbers continue those
-// of the db package).
+// of the db package). Each is held only for quick database work, never while the provider is asked.
 const (
-	lockEnsure  = 7461010
-	lockRebuild = 7461011
-	// per document, inside the transaction of one sync
+	lockEnsure = 7461010
+	// per document, inside the transaction that writes its parts
 	lockDocSpace = 7463
 )
 
 // layout is the version of the tables below. A change of it rebuilds the index like a change
 // of settings does.
-const layout = 2
+const layout = 3
+
+// Time limits. One call to the provider (a document's new parts, or a question) gets
+// embedTimeout; the probe before an index is switched to new settings gets the same.
+const (
+	embedTimeout = 30 * time.Second
+	// a document that changes while its parts are embedded is read and embedded again, this often
+	syncAttempts = 3
+	// above this many parts a search uses the vector index (approximate) instead of comparing
+	// every part (exact)
+	exactParts = 50000
+	// the vector index looks at this many parts at most (the largest value pgvector accepts)
+	maxCandidates = 1000
+)
 
 // Hit is one part of a document that matched.
 type Hit struct {
@@ -77,8 +114,18 @@ type Result struct {
 	Status string `json:"-"`
 }
 
+// Page is the answer of SearchPage: the documents found, best first, and whether more
+// documents matched than were returned.
+type Page struct {
+	Results   []Result
+	Truncated bool
+}
+
 // MaxHits is the largest number of parts returned for one document.
 const MaxHits = 3
+
+// MaxLimit is the largest number of documents one search returns.
+const MaxLimit = 500
 
 // Report says what a rebuild did.
 type Report struct {
@@ -107,8 +154,14 @@ type Index struct {
 	log   *slog.Logger
 	cache *queryCache
 
-	mu     sync.Mutex
-	schema string // where the extension lives, once found
+	mu       sync.Mutex
+	schema   string  // where the extension lives, once found
+	minScore float64 // < 0: the floor of the provider
+
+	rebuilding  sync.Mutex  // one rebuild at a time in this program
+	switching   atomic.Bool // the stored index has other settings: CatchUp switches it
+	toldOthers  atomic.Bool // "another server owns the index" was logged
+	embedBudget time.Duration
 }
 
 // New creates the index. e == nil switches it off.
@@ -119,7 +172,18 @@ func New(pool *pgxpool.Pool, store *docs.Store, e embedding.Embedder, c chunking
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Index{pool: pool, store: store, emb: e, opts: c, log: log, cache: newQueryCache(500, 5*time.Minute)}
+	return &Index{pool: pool, store: store, emb: e, opts: c, log: log, cache: newQueryCache(500, 5*time.Minute), minScore: -1, embedBudget: embedTimeout}
+}
+
+// SetMinScore overrides the floor of the provider (PM_SEARCH_MIN_SCORE): parts less similar
+// than this are not matches. A negative value keeps the provider's floor.
+func (ix *Index) SetMinScore(f float64) {
+	if ix == nil {
+		return
+	}
+	ix.mu.Lock()
+	ix.minScore = f
+	ix.mu.Unlock()
 }
 
 // Enabled reports whether search by meaning is switched on.
@@ -134,6 +198,12 @@ func (ix *Index) Provider() string {
 	return ix.emb.Name()
 }
 
+// ProviderKind is the provider without its model: "builtin" or "vertex"; "" when switched off.
+func (ix *Index) ProviderKind() string {
+	name, _, _ := strings.Cut(ix.Provider(), ":")
+	return name
+}
+
 // Outside reports whether text leaves the server to be embedded (documents and questions).
 func (ix *Index) Outside() bool { return ix.Enabled() && ix.emb.Outside() }
 
@@ -142,6 +212,23 @@ func (ix *Index) settings() (provider string, dims int, chunks string) {
 	parts := append([]string(nil), ix.opts.Parts...)
 	sort.Strings(parts)
 	return ix.emb.Name(), ix.emb.Dimensions(), fmt.Sprintf("parts=%s;max=%d;layout=%d", strings.Join(parts, ","), ix.opts.MaxChars, layout)
+}
+
+// embed asks the provider, within the time limit, holding no database connection.
+func (ix *Index) embed(ctx context.Context, texts []string, p embedding.Purpose) ([][]float32, error) {
+	ctx, cancel := context.WithTimeout(ctx, ix.embedBudget)
+	defer cancel()
+	got, err := ix.emb.Embed(ctx, texts, p)
+	if err == nil && len(got) != len(texts) {
+		err = fmt.Errorf("it answered %d vectors for %d texts", len(got), len(texts))
+	}
+	if err != nil {
+		if ctx.Err() != nil && !strings.Contains(err.Error(), "time") {
+			err = fmt.Errorf("no answer within %s: %w", ix.embedBudget, err)
+		}
+		return nil, providerError{err}
+	}
+	return got, nil
 }
 
 // ---------- the extension
@@ -215,86 +302,85 @@ func (ix *Index) ensureExtension(ctx context.Context) (string, error) {
 
 // ---------- the tables
 
-// Ensure makes the index usable: the extension, the tables and the vector index. When the
-// stored vectors were made with other settings (provider, model, size, parts) everything is
-// removed and built again. Several servers may run it at once. A provider that cannot be
-// reached does not make it fail: what could not be embedded is tried again later.
+const settingsTable = `create table if not exists search_settings (
+	key int primary key default 1 check (key = 1),
+	provider text not null,
+	dimensions int not null,
+	chunks text not null,
+	built_at timestamptz not null default now())`
+
+// complete is false while the index is being built, and when it is not in use (search by
+// meaning was switched off and the index may be out of date): a search then answers "not set up".
+const settingsComplete = `alter table search_settings add column if not exists complete boolean not null default false`
+
+// markComplete records that the index holds everything once nothing waits any more.
+const markComplete = `update search_settings set complete = true where not complete and not exists (select 1 from search_pending)`
+
+// Ensure makes the index usable, doing only quick work in the database: the extension, the
+// tables, the vector index. A new index is created empty, with every document marked to be
+// embedded; CatchUp fills it. When the stored index was built with other settings (provider,
+// model, size, parts) nothing is dropped here: the index is switched by CatchUp, once the new
+// provider answers. Several servers may run it at once.
 func (ix *Index) Ensure(ctx context.Context) error {
-	_, _, err := ix.ensure(ctx)
-	if errors.Is(err, ErrProvider) {
-		ix.log.Warn("search by meaning: the search index could not be filled because the embeddings provider cannot be reached; it is tried again in a few minutes", "error", err)
+	if !ix.Enabled() {
 		return nil
 	}
-	return err
-}
-
-// CatchUp is Ensure followed by a rebuild: the index is usable and holds everything that is
-// published now. The report covers both. An ErrProvider means the index is usable but not
-// complete; what is missing is tried again later.
-func (ix *Index) CatchUp(ctx context.Context) (Report, error) {
-	r, built, err := ix.ensure(ctx)
-	if err != nil || built {
-		return r, err
-	}
-	return ix.Rebuild(ctx)
-}
-
-// ensure is Ensure that says whether it built the index anew, and what that did.
-func (ix *Index) ensure(ctx context.Context) (Report, bool, error) {
-	if !ix.Enabled() {
-		return Report{}, false, nil
-	}
-	fresh := false
-	err := db.WithLock(ctx, ix.pool, lockEnsure, func() error {
+	return db.WithLock(ctx, ix.pool, lockEnsure, func() error {
 		vs, err := ix.ensureExtension(ctx)
 		if err != nil {
 			return err
 		}
-		fresh, err = ix.ensureTables(ctx, vs)
-		return err
+		return ix.ensureTables(ctx, vs, false)
 	})
-	if err != nil || !fresh {
-		return Report{}, false, err
-	}
-	r, err := ix.Rebuild(ctx)
-	if err == nil {
-		ix.log.Info("search index built", "provider", ix.emb.Name(), "result", r.String())
-	}
-	return r, true, err
 }
 
-// ensureTables creates the tables, or drops and creates them when the settings changed. It
-// reports whether the index is new and has to be filled.
-func (ix *Index) ensureTables(ctx context.Context, vs string) (bool, error) {
+// ensureTables creates the tables, and drops and creates them when the settings changed and
+// force is set. Without force a change of settings is only noted (ix.switching).
+func (ix *Index) ensureTables(ctx context.Context, vs string, force bool) error {
 	provider, dims, chunks := ix.settings()
-	fresh := false
-	err := pgx.BeginFunc(ctx, ix.pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `create table if not exists search_settings (
-			key int primary key default 1 check (key = 1),
-			provider text not null,
-			dimensions int not null,
-			chunks text not null,
-			built_at timestamptz not null default now())`); err != nil {
-			return err
+	return pgx.BeginFunc(ctx, ix.pool, func(tx pgx.Tx) error {
+		for _, stmt := range []string{settingsTable, settingsComplete} {
+			if _, err := tx.Exec(ctx, stmt); err != nil {
+				return err
+			}
 		}
 		var sp, sc string
 		var sd int
-		err := tx.QueryRow(ctx, `select provider, dimensions, chunks from search_settings where key = 1`).Scan(&sp, &sd, &sc)
+		var complete bool
+		// for update: a sync that checks the settings waits until this is decided
+		err := tx.QueryRow(ctx, `select provider, dimensions, chunks, complete from search_settings where key = 1 for update`).Scan(&sp, &sd, &sc, &complete)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
+		stored := err == nil
 		var exists bool
 		if err := tx.QueryRow(ctx, `select to_regclass('search_chunks') is not null and to_regclass('search_pending') is not null`).Scan(&exists); err != nil {
 			return err
 		}
-		if exists && err == nil && sp == provider && sd == dims && sc == chunks {
+		same := stored && sp == provider && sd == dims && sc == chunks
+		switch {
+		case exists && same:
+			ix.switching.Store(false)
+			if !complete {
+				// not in use for a while, or a build that did not finish: everything is looked at again
+				_, err := tx.Exec(ctx, `insert into search_pending (kind, doc_id, reason) select kind, id, 'catching up' from documents
+					where kind in ('process', 'standard') on conflict do nothing`)
+				if err == nil {
+					_, err = tx.Exec(ctx, markComplete)
+				}
+				return err
+			}
+			return nil
+		case exists && stored && !force:
+			ix.switching.Store(true)
+			ix.log.Warn("search by meaning: the settings changed since the search index was built. It is built again in the background as soon as the new provider answers; until it is ready, search by meaning answers \"not ready yet\" and the old index stays as it is",
+				"index", fmt.Sprintf("%s, %d dimensions, %s", sp, sd, sc), "settings", fmt.Sprintf("%s, %d dimensions, %s", provider, dims, chunks))
 			return nil
 		}
-		if sp != "" {
-			ix.log.Warn("the settings of search by meaning changed: the search index is built again",
+		if stored && !same {
+			ix.log.Warn("search by meaning: the search index is dropped and built again with the new settings; search by meaning answers \"not ready yet\" until it is done",
 				"before", fmt.Sprintf("%s, %d dimensions, %s", sp, sd, sc), "now", fmt.Sprintf("%s, %d dimensions, %s", provider, dims, chunks))
 		}
-		fresh = true
 		stmts := []string{
 			`drop table if exists search_chunks`,
 			`drop table if exists search_pending`,
@@ -306,7 +392,7 @@ func (ix *Index) ensureTables(ctx context.Context, vs string) (bool, error) {
 				seq int not null,
 				label text not null,
 				snippet text not null, -- the readable text of the part, without metadata
-				content_hash text not null,
+				content_hash text not null, -- of the provider, the size and the embedded text
 				status text not null,
 				embedding %s.vector(%d) not null,
 				updated_at timestamptz not null default now(),
@@ -327,11 +413,72 @@ func (ix *Index) ensureTables(ctx context.Context, vs string) (bool, error) {
 				return err
 			}
 		}
-		_, err = tx.Exec(ctx, `insert into search_settings (key, provider, dimensions, chunks) values (1, $1, $2, $3)
-			on conflict (key) do update set provider = excluded.provider, dimensions = excluded.dimensions, chunks = excluded.chunks, built_at = now()`, provider, dims, chunks)
+		if _, err := tx.Exec(ctx, `insert into search_settings (key, provider, dimensions, chunks, complete) values (1, $1, $2, $3, false)
+			on conflict (key) do update set provider = excluded.provider, dimensions = excluded.dimensions, chunks = excluded.chunks, complete = false, built_at = now()`, provider, dims, chunks); err != nil {
+			return err
+		}
+		ix.switching.Store(false)
+		_, err = tx.Exec(ctx, markComplete) // nothing to embed: ready at once
 		return err
 	})
-	return fresh, err
+}
+
+// MarkUnused is for a server that runs with search by meaning switched off: an index left from
+// earlier is no longer kept up to date, so it is marked as not in use and no program (an MCP
+// server with other settings, say) searches it. Switched on again, the index is caught up
+// before it is searched. It reports whether there was an index in use.
+func (ix *Index) MarkUnused(ctx context.Context) (bool, error) {
+	if ix == nil || ix.pool == nil {
+		return false, nil
+	}
+	var exists bool
+	if err := ix.pool.QueryRow(ctx, `select to_regclass('search_settings') is not null`).Scan(&exists); err != nil || !exists {
+		return false, err
+	}
+	if _, err := ix.pool.Exec(ctx, settingsComplete); err != nil {
+		return false, err
+	}
+	tag, err := ix.pool.Exec(ctx, `update search_settings set complete = false where complete`)
+	return err == nil && tag.RowsAffected() > 0, err
+}
+
+// Ready reports whether this program can search the index: nil, or an ErrNotSetUp that says
+// why not. It only reads.
+func (ix *Index) Ready(ctx context.Context) error {
+	if !ix.Enabled() {
+		return fmt.Errorf("%w: search by meaning is switched off", ErrNotSetUp)
+	}
+	return ix.ready(ctx, ix.pool)
+}
+
+func (ix *Index) ready(ctx context.Context, q interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}) error {
+	provider, dims, chunks := ix.settings()
+	var exists bool
+	if err := q.QueryRow(ctx, `select to_regclass('search_settings') is not null and to_regclass('search_chunks') is not null`).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("%w: it has not been built yet", ErrNotSetUp)
+	}
+	var sp, sc string
+	var sd int
+	var complete bool
+	err := q.QueryRow(ctx, `select provider, dimensions, chunks, complete from search_settings where key = 1`).Scan(&sp, &sd, &sc, &complete)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("%w: it has not been built yet", ErrNotSetUp)
+	case err != nil && strings.Contains(err.Error(), "complete"):
+		return fmt.Errorf("%w: it was built by an earlier version and is caught up when the portal server starts", ErrNotSetUp)
+	case err != nil:
+		return err
+	case sp != provider || sd != dims || sc != chunks:
+		return fmt.Errorf("%w: it was built with other settings of search by meaning (%s, %d dimensions); the portal server builds it again when it starts with these settings", ErrNotSetUp, sp, sd)
+	case !complete:
+		return fmt.Errorf("%w: it is being built, or it was not in use and is being caught up", ErrNotSetUp)
+	}
+	return nil
 }
 
 // ---------- keeping the index up to date
@@ -341,11 +488,11 @@ type syncResult struct{ embedded, unchanged, removed int }
 
 // Sync brings the parts of one document in line with what is stored now: a draft or a deleted
 // document loses its parts, a published one gets new or changed parts embedded (in one call to
-// the provider) and parts that are gone removed - all in one transaction, so a search never sees
-// half a document. When it fails (the provider cannot be reached) the earlier parts stay and the
-// document is marked: the next start, a rebuild or the periodic retry picks it up again.
-// The catalog has no parts of its own, but its names appear in the text of the parts: a sync of
-// the catalog goes through every document.
+// the provider) and parts that are gone removed - written in one transaction, so a search never
+// sees half a document. When it fails (the provider cannot be reached, or the index belongs to
+// other settings) the earlier parts stay and the document is marked: the next start, a rebuild
+// or the periodic retry picks it up again. The catalog has no parts of its own, but its names
+// appear in the text of the parts: a sync of the catalog goes through every document.
 func (ix *Index) Sync(ctx context.Context, kind, id string) error {
 	if !ix.Enabled() {
 		return nil
@@ -366,6 +513,10 @@ func (ix *Index) sync(ctx context.Context, kind, id string, lists *docs.Lists) (
 	res, err := ix.syncDoc(ctx, kind, id, lists)
 	if err != nil {
 		ix.markPending(ctx, kind, id, err)
+		if errors.Is(err, ErrOtherSettings) && !ix.toldOthers.Swap(true) {
+			ix.log.Warn("search by meaning: the search index now belongs to other settings (another server, or a -migrate, uses another provider, model, size or parts). This server no longer writes to it or searches it; restart it with the same settings",
+				"error", err)
+		}
 	}
 	return res, err
 }
@@ -393,10 +544,66 @@ type chunkKey struct {
 	seq        int
 }
 
-func hashText(s string) string {
-	sum := sha256.Sum256([]byte(s))
+// hashOf identifies a vector: the provider and model, the size and the text it was made from.
+func (ix *Index) hashOf(text string) string {
+	sum := sha256.Sum256([]byte(ix.emb.Name() + "\x00" + strconv.Itoa(ix.emb.Dimensions()) + "\x00" + text))
 	return hex.EncodeToString(sum[:16])
 }
+
+// docState is a document as read for a sync.
+type docState struct {
+	exists  bool
+	version int
+	body    []byte
+}
+
+func readDoc(ctx context.Context, q interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, kind, id string) (docState, error) {
+	var d docState
+	err := q.QueryRow(ctx, `select version, body from documents where kind = $1 and id = $2`, kind, id).Scan(&d.version, &d.body)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return d, nil
+	}
+	d.exists = err == nil
+	return d, err
+}
+
+type want struct {
+	key  chunkKey
+	c    chunking.Chunk
+	hash string
+}
+
+// partsOf cuts a document into the parts the index should hold (none for a draft or a deleted one).
+func (ix *Index) partsOf(kind, id string, d docState, lists docs.Lists) (all []want, status string, readable content, err error) {
+	var head struct {
+		Status string `json:"status"`
+	}
+	published := d.exists && json.Unmarshal(d.body, &head) == nil && head.Status != "draft"
+	readable = readContent(kind, d.body)
+	status = head.Status
+	if status == "" {
+		status = "active"
+	}
+	if !published {
+		return nil, status, readable, nil
+	}
+	chunks, err := chunking.Chunks(kind, d.body, lists, ix.opts)
+	if err != nil {
+		return nil, status, readable, fmt.Errorf("the %s %q could not be cut into parts: %w", kind, id, err)
+	}
+	seen := map[[2]string]int{}
+	for _, c := range chunks {
+		pi := [2]string{c.Part, c.Item}
+		all = append(all, want{key: chunkKey{part: c.Part, item: c.Item, seq: seen[pi]}, c: c, hash: ix.hashOf(c.Text)})
+		seen[pi]++
+	}
+	return all, status, readable, nil
+}
+
+// errChanged: the document changed while its parts were embedded; the sync starts over.
+var errChanged = errors.New("the document changed while it was being indexed")
 
 func (ix *Index) syncDoc(ctx context.Context, kind, id string, lists *docs.Lists) (syncResult, error) {
 	var res syncResult
@@ -411,30 +618,97 @@ func (ix *Index) syncDoc(ctx context.Context, kind, id string, lists *docs.Lists
 		}
 		lists = &l
 	}
-	err = pgx.BeginFunc(ctx, ix.pool, func(tx pgx.Tx) error {
+	vectors := map[string][]float32{} // by hash; kept across attempts
+	for attempt := 0; attempt < syncAttempts; attempt++ {
+		// 1. read, without a transaction: the document and the hashes stored for it
+		d, err := readDoc(ctx, ix.pool, kind, id)
+		if err != nil {
+			return res, err
+		}
+		all, status, readable, err := ix.partsOf(kind, id, d, *lists)
+		if err != nil {
+			return res, err
+		}
+		have := map[string]bool{}
+		if len(all) > 0 {
+			rows, err := ix.pool.Query(ctx, `select content_hash from search_chunks where kind = $1 and doc_id = $2`, kind, id)
+			if err != nil {
+				return res, err
+			}
+			for rows.Next() {
+				var h string
+				if err := rows.Scan(&h); err != nil {
+					rows.Close()
+					return res, err
+				}
+				have[h] = true
+			}
+			rows.Close()
+			if err := rows.Err(); err != nil {
+				return res, err
+			}
+		}
+		// 2. embed what is new, holding no connection
+		var texts, hashes []string
+		for _, w := range all {
+			if !have[w.hash] && vectors[w.hash] == nil && !contains(hashes, w.hash) {
+				texts = append(texts, w.c.Text)
+				hashes = append(hashes, w.hash)
+			}
+		}
+		if len(texts) > 0 {
+			got, err := ix.embed(ctx, texts, embedding.Document)
+			if err != nil {
+				return res, err
+			}
+			for i, h := range hashes {
+				vectors[h] = got[i]
+			}
+		}
+		// 3. write, if the document is still what was embedded
+		res, err = ix.write(ctx, vs, kind, id, d, all, status, readable, vectors)
+		if errors.Is(err, errChanged) {
+			continue
+		}
+		return res, err
+	}
+	return res, fmt.Errorf("%w %d times in a row; it is tried again later", errChanged, syncAttempts)
+}
+
+func contains(list []string, v string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+// write stores the parts of one document in one short transaction.
+func (ix *Index) write(ctx context.Context, vs, kind, id string, read docState, all []want, status string, readable content, vectors map[string][]float32) (syncResult, error) {
+	var res syncResult
+	err := pgx.BeginFunc(ctx, ix.pool, func(tx pgx.Tx) error {
 		res = syncResult{}
 		if _, err := tx.Exec(ctx, `select pg_advisory_xact_lock(hashtextextended($1, $2))`, kind+"/"+id, lockDocSpace); err != nil {
 			return err
 		}
-		var body []byte
-		err := tx.QueryRow(ctx, `select body from documents where kind = $1 and id = $2`, kind, id).Scan(&body)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		// the index must still belong to these settings; for share: a switch waits until this is written
+		provider, dims, chunks := ix.settings()
+		var sp, sc string
+		var sd int
+		err := tx.QueryRow(ctx, `select provider, dimensions, chunks from search_settings where key = 1 for share`).Scan(&sp, &sd, &sc)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && (sp != provider || sd != dims || sc != chunks)) {
+			return fmt.Errorf("%w (the index: %s, %d dimensions; this server: %s, %d dimensions)", ErrOtherSettings, sp, sd, provider, dims)
+		}
+		if err != nil {
 			return err
 		}
-		var head struct {
-			Status string `json:"status"`
+		now, err := readDoc(ctx, tx, kind, id)
+		if err != nil {
+			return err
 		}
-		published := err == nil && json.Unmarshal(body, &head) == nil && head.Status != "draft"
-		var chunks []chunking.Chunk
-		readable := readContent(kind, body)
-		if published {
-			if chunks, err = chunking.Chunks(kind, body, *lists, ix.opts); err != nil {
-				return fmt.Errorf("the %s %q could not be cut into parts: %w", kind, id, err)
-			}
-		}
-		status := head.Status
-		if status == "" {
-			status = "active"
+		if now.exists != read.exists || now.version != read.version {
+			return errChanged
 		}
 
 		stored := map[chunkKey]storedChunk{}
@@ -456,48 +730,16 @@ func (ix *Index) syncDoc(ctx context.Context, kind, id string, lists *docs.Lists
 			return err
 		}
 
-		// what each part is now, and which of them need a new vector
-		type want struct {
-			key  chunkKey
-			c    chunking.Chunk
-			hash string
-		}
-		seen := map[[2]string]int{}
-		var all []want
-		var toEmbed []int
-		for _, c := range chunks {
-			pi := [2]string{c.Part, c.Item}
-			k := chunkKey{part: c.Part, item: c.Item, seq: seen[pi]}
-			seen[pi]++
-			w := want{key: k, c: c, hash: hashText(c.Text)}
-			if old, ok := stored[k]; !ok || old.hash != w.hash {
-				toEmbed = append(toEmbed, len(all))
-			}
-			all = append(all, w)
-		}
-		vectors := map[int][]float32{}
-		if len(toEmbed) > 0 {
-			texts := make([]string, len(toEmbed))
-			for i, n := range toEmbed {
-				texts[i] = all[n].c.Text
-			}
-			got, err := ix.emb.Embed(ctx, texts, embedding.Document)
-			if err != nil {
-				return fmt.Errorf("%w: %v", ErrProvider, err)
-			}
-			if len(got) != len(texts) {
-				return fmt.Errorf("%w: it answered %d vectors for %d texts", ErrProvider, len(got), len(texts))
-			}
-			for i, n := range toEmbed {
-				vectors[n] = got[i]
-			}
-		}
-
 		keep := map[chunkKey]bool{}
-		for n, w := range all {
+		for _, w := range all {
 			keep[w.key] = true
 			snippet := readable.of(w.key.part, w.key.item) // the readable text; cut to a snippet when searched
-			if v, ok := vectors[n]; ok {
+			old, ok := stored[w.key]
+			if !ok || old.hash != w.hash {
+				v := vectors[w.hash]
+				if v == nil {
+					return errChanged // another sync changed the stored parts meanwhile
+				}
 				if _, err := tx.Exec(ctx, fmt.Sprintf(`insert into search_chunks (kind, doc_id, part, item, seq, label, snippet, content_hash, status, embedding)
 					values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::%s.vector)
 					on conflict (kind, doc_id, part, item, seq) do update set label = excluded.label, snippet = excluded.snippet,
@@ -509,7 +751,7 @@ func (ix *Index) syncDoc(ctx context.Context, kind, id string, lists *docs.Lists
 				continue
 			}
 			res.unchanged++
-			if old := stored[w.key]; old.label != w.c.Label || old.snippet != snippet || old.status != status {
+			if old.label != w.c.Label || old.snippet != snippet || old.status != status {
 				if _, err := tx.Exec(ctx, `update search_chunks set label = $6, snippet = $7, status = $8, updated_at = now()
 					where kind = $1 and doc_id = $2 and part = $3 and item = $4 and seq = $5`,
 					kind, id, w.key.part, w.key.item, w.key.seq, w.c.Label, snippet, status); err != nil {
@@ -526,7 +768,10 @@ func (ix *Index) syncDoc(ctx context.Context, kind, id string, lists *docs.Lists
 			}
 			res.removed++
 		}
-		_, err = tx.Exec(ctx, `delete from search_pending where kind = $1 and doc_id = $2`, kind, id)
+		if _, err := tx.Exec(ctx, `delete from search_pending where kind = $1 and doc_id = $2`, kind, id); err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, markComplete)
 		return err
 	})
 	return res, err
@@ -547,21 +792,49 @@ func vectorText(v []float32) string {
 	return b.String()
 }
 
+// CatchUp brings the index up to date with everything stored; it is what a start runs in the
+// background, and -migrate and -reindex in the foreground. When the stored index was built with
+// other settings, it first asks the new provider once: only when that answers is the old index
+// dropped and a new one built; otherwise the old index and its settings stay, a warning is
+// logged and ErrProvider returned (the next start or retry tries again). Parts that did not
+// change are not embedded again. An ErrProvider means the index is usable but not complete;
+// what is missing is tried again later.
+func (ix *Index) CatchUp(ctx context.Context) (Report, error) {
+	if !ix.Enabled() {
+		return Report{}, nil
+	}
+	if ix.switching.Load() {
+		if _, err := ix.embed(ctx, []string{"Process: probe"}, embedding.Document); err != nil {
+			ix.log.Warn("search by meaning: the new provider cannot be reached, so the search index is not switched to the new settings. The old index stays as it was; it is tried again in a few minutes and at the next start",
+				"provider", ix.emb.Name(), "error", err)
+			return Report{}, err
+		}
+		err := db.WithLock(ctx, ix.pool, lockEnsure, func() error {
+			vs, err := ix.ensureExtension(ctx)
+			if err != nil {
+				return err
+			}
+			return ix.ensureTables(ctx, vs, true)
+		})
+		if err != nil {
+			return Report{}, err
+		}
+	}
+	return ix.Rebuild(ctx)
+}
+
 // Rebuild brings every document up to date: parts that did not change are kept, everything else
 // is embedded, and parts of documents that no longer exist (or became drafts) are removed. A
 // document that fails is marked and tried again later; when the provider cannot be reached at
-// all the rebuild stops early and returns the error, with every document left marked.
+// all, or the index belongs to other settings, the rebuild stops early and returns the error,
+// with every document left marked. Progress is logged.
 func (ix *Index) Rebuild(ctx context.Context) (Report, error) {
-	var r Report
 	if !ix.Enabled() {
-		return r, nil
+		return Report{}, nil
 	}
-	err := db.WithLock(ctx, ix.pool, lockRebuild, func() error {
-		var err error
-		r, err = ix.rebuild(ctx)
-		return err
-	})
-	return r, err
+	ix.rebuilding.Lock()
+	defer ix.rebuilding.Unlock()
+	return ix.rebuild(ctx)
 }
 
 func (ix *Index) rebuild(ctx context.Context) (Report, error) {
@@ -606,17 +879,18 @@ func (ix *Index) rebuild(ctx context.Context) (Report, error) {
 		return r, err
 	}
 
+	r.Documents = len(order)
+	last := time.Now()
 	for i, k := range order {
 		res, err := ix.sync(ctx, k[0], k[1], &lists)
 		if err != nil {
 			r.Failed++
-			if errors.Is(err, ErrProvider) || ctx.Err() != nil {
+			if errors.Is(err, ErrProvider) || errors.Is(err, ErrOtherSettings) || ctx.Err() != nil {
 				// no point in trying the rest now: mark them for the retry
 				for _, rest := range order[i+1:] {
 					ix.markPending(ctx, rest[0], rest[1], err)
 					r.Failed++
 				}
-				r.Documents = len(order)
 				return r, err
 			}
 			ix.log.Error("search by meaning: a document could not be indexed; it is tried again later", "kind", k[0], "id", k[1], "error", err)
@@ -625,8 +899,11 @@ func (ix *Index) rebuild(ctx context.Context) (Report, error) {
 		r.Embedded += res.embedded
 		r.Unchanged += res.unchanged
 		r.Removed += res.removed
+		if time.Since(last) > 10*time.Second {
+			last = time.Now()
+			ix.log.Info("search by meaning: bringing the search index up to date", "documents done", i+1, "of", len(order), "parts embedded", r.Embedded)
+		}
 	}
-	r.Documents = len(order)
 	return r, nil
 }
 
@@ -663,7 +940,7 @@ func (ix *Index) Retry(ctx context.Context) (int, error) {
 		switch {
 		case err == nil:
 			done++
-		case errors.Is(err, ErrProvider) || ctx.Err() != nil:
+		case errors.Is(err, ErrProvider) || errors.Is(err, ErrOtherSettings) || ctx.Err() != nil:
 			return done, err // the provider is still down: the rest stays marked
 		default:
 			failed = err // this one document; the others may still work
@@ -682,7 +959,8 @@ func (ix *Index) Pending(ctx context.Context) (int, error) {
 	return n, err
 }
 
-// RetryEvery tries the marked documents again at the given interval until ctx ends.
+// RetryEvery tries the marked documents again at the given interval until ctx ends; while the
+// index still waits to be switched to new settings, it tries that instead.
 func (ix *Index) RetryEvery(ctx context.Context, every time.Duration) {
 	if !ix.Enabled() {
 		return
@@ -695,6 +973,10 @@ func (ix *Index) RetryEvery(ctx context.Context, every time.Duration) {
 			return
 		case <-t.C:
 		}
+		if ix.switching.Load() {
+			ix.LogCatchUp(ctx)
+			continue
+		}
 		n, err := ix.Retry(ctx)
 		switch {
 		case err != nil && ctx.Err() == nil:
@@ -705,10 +987,33 @@ func (ix *Index) RetryEvery(ctx context.Context, every time.Duration) {
 	}
 }
 
+// LogCatchUp runs CatchUp and says in the log how it went. It is what a start runs in the
+// background.
+func (ix *Index) LogCatchUp(ctx context.Context) {
+	if !ix.Enabled() {
+		return
+	}
+	start := time.Now()
+	r, err := ix.CatchUp(ctx)
+	took := time.Since(start).Round(time.Second).String()
+	switch {
+	case ctx.Err() != nil:
+	case errors.Is(err, ErrProvider):
+		ix.log.Warn("search by meaning: the search index could not be brought up to date because the embeddings provider cannot be reached; searches use what is indexed, and what is missing is tried again in a few minutes",
+			"result", r.String(), "error", err)
+	case errors.Is(err, ErrOtherSettings):
+		// logged once by sync
+	case err != nil:
+		ix.log.Error("search by meaning: the search index could not be brought up to date; it is tried again in a few minutes", "error", err)
+	case r.Embedded > 0 || r.Removed > 0:
+		ix.log.Info("search by meaning: the search index is up to date", "result", r.String(), "took", took)
+	}
+}
+
 // ---------- searching
 
 // floors are the lowest similarity at which a part counts as a match at all, per provider: even
-// unrelated texts have some similarity.
+// unrelated texts have some similarity. PM_SEARCH_MIN_SCORE overrides them.
 //
 // builtin: measured on the sample and demo content (TestMeasureFloor). The best part for a
 // sensible question scores 0.30 to 0.77; for questions that have nothing to do with the content
@@ -722,16 +1027,18 @@ var floors = map[string]float64{
 	"vertex":  0.60,
 }
 
-// Floor returns the floor of the configured provider.
+// Floor returns the lowest score of a match: PM_SEARCH_MIN_SCORE, or the floor of the provider.
 func (ix *Index) Floor() float64 {
 	if !ix.Enabled() {
 		return 0
 	}
-	name := ix.emb.Name()
-	if p, _, ok := strings.Cut(name, ":"); ok {
-		name = p
+	ix.mu.Lock()
+	m := ix.minScore
+	ix.mu.Unlock()
+	if m >= 0 {
+		return m
 	}
-	if f, ok := floors[name]; ok {
+	if f, ok := floors[ix.ProviderKind()]; ok {
 		return f
 	}
 	return 0.5
@@ -743,59 +1050,76 @@ const MaxQuery = 1000
 // Search finds the published documents whose parts are closest in meaning to the query, best
 // first, at most limit of them; each with up to MaxHits parts, best first.
 func (ix *Index) Search(ctx context.Context, query string, limit int) ([]Result, error) {
+	p, err := ix.SearchPage(ctx, query, limit)
+	return p.Results, err
+}
+
+// SearchPage is Search that also says whether more documents matched than limit (at most
+// MaxLimit).
+func (ix *Index) SearchPage(ctx context.Context, query string, limit int) (Page, error) {
+	page := Page{Results: []Result{}}
 	query = strings.Join(strings.Fields(query), " ")
 	if !ix.Enabled() || query == "" {
-		return []Result{}, nil
+		return page, nil
 	}
 	if limit <= 0 {
 		limit = 50
+	}
+	if limit > MaxLimit {
+		limit = MaxLimit
 	}
 	if r := []rune(query); len(r) > MaxQuery {
 		query = string(r[:MaxQuery])
 	}
 	vs, err := ix.vectorSchema(ctx)
 	if err != nil {
-		return nil, err
+		return page, err
 	}
+	// not ready: say so without asking the provider
+	if err := ix.ready(ctx, ix.pool); err != nil {
+		return page, err
+	}
+	// the question is embedded while no connection is held
 	vec, err := ix.queryVector(ctx, query)
 	if err != nil {
-		return nil, err
-	}
-	k := limit * 8
-	if k < 100 {
-		k = 100
-	}
-	if k > 1000 {
-		k = 1000
+		return page, err
 	}
 	floor := ix.Floor()
-	out := []Result{}
 	err = pgx.BeginFunc(ctx, ix.pool, func(tx pgx.Tx) error {
-		provider, dims, chunks := ix.settings()
-		var sp, sc string
-		var sd int
-		err := tx.QueryRow(ctx, `select provider, dimensions, chunks from search_settings where key = 1`).Scan(&sp, &sd, &sc)
-		if err != nil || sp != provider || sd != dims || sc != chunks {
-			return fmt.Errorf("%w: the portal server builds it when it starts with the same settings of search by meaning", ErrNotSetUp)
+		if err := ix.ready(ctx, tx); err != nil {
+			return err
 		}
-		// the vector index looks at ef_search candidates at most: enough for the parts wanted
-		if _, err := tx.Exec(ctx, `select set_config('hnsw.ef_search', $1, true)`, strconv.Itoa(k)); err != nil {
+		// Up to exactParts parts every part is compared (exact, nothing is missed). Above, the
+		// vector index finds the nearest maxCandidates parts; if all of them match, there may be more.
+		var estimate float64
+		if err := tx.QueryRow(ctx, `select reltuples from pg_class where oid = to_regclass('search_chunks')`).Scan(&estimate); err != nil {
+			return err
+		}
+		approximate := estimate > exactParts
+		limitSQL := ""
+		if approximate {
+			if _, err := tx.Exec(ctx, `select set_config('hnsw.ef_search', $1, true)`, strconv.Itoa(maxCandidates)); err != nil {
+				return err
+			}
+			limitSQL = " limit " + strconv.Itoa(maxCandidates)
+		} else if _, err := tx.Exec(ctx, `select set_config('enable_indexscan', 'off', true)`); err != nil {
 			return err
 		}
 		// nearest parts first; then only what is published right now, whatever the index holds
 		rows, err := tx.Query(ctx, fmt.Sprintf(`with near as (
 				select kind, doc_id, part, item, label, snippet, embedding OPERATOR(%[1]s.<=>) $1::%[1]s.vector as distance
-				from search_chunks order by embedding OPERATOR(%[1]s.<=>) $1::%[1]s.vector limit $2)
+				from search_chunks order by embedding OPERATOR(%[1]s.<=>) $1::%[1]s.vector%[2]s)
 			select n.kind, n.doc_id, n.part, n.item, n.label, n.snippet, n.distance, coalesce(nullif(d.body->>'status', ''), 'active')
 			from near n join documents d on d.kind = n.kind and d.id = n.doc_id
-			where coalesce(d.body->>'status', '') <> 'draft' and n.distance <= $3
-			order by n.distance, n.kind, n.doc_id, n.part, n.item`, vs),
-			vectorText(vec), k, 1-floor)
+			where coalesce(d.body->>'status', '') <> 'draft' and n.distance <= $2
+			order by n.distance, n.kind, n.doc_id, n.part, n.item`, vs, limitSQL),
+			vectorText(vec), 1-floor)
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
 		at := map[[2]string]int{}
+		matched := 0
 		for rows.Next() {
 			var kind, id, status string
 			var h Hit
@@ -803,28 +1127,33 @@ func (ix *Index) Search(ctx context.Context, query string, limit int) ([]Result,
 			if err := rows.Scan(&kind, &id, &h.Part, &h.Item, &h.Label, &h.Snippet, &distance, &status); err != nil {
 				return err
 			}
+			matched++
 			h.Score = score(distance)
-			h.Snippet = Snippet(h.Snippet, query)
 			key := [2]string{kind, id}
 			i, ok := at[key]
 			if !ok {
-				if len(out) >= limit {
+				if len(page.Results) >= limit {
+					page.Truncated = true
 					continue
 				}
-				at[key] = len(out)
-				out = append(out, Result{Kind: kind, ID: id, Score: h.Score, Status: status})
-				i = len(out) - 1
+				at[key] = len(page.Results)
+				page.Results = append(page.Results, Result{Kind: kind, ID: id, Score: h.Score, Status: status})
+				i = len(page.Results) - 1
 			}
-			if len(out[i].Hits) < MaxHits {
-				out[i].Hits = append(out[i].Hits, h)
+			if len(page.Results[i].Hits) < MaxHits {
+				h.Snippet = Snippet(h.Snippet, query)
+				page.Results[i].Hits = append(page.Results[i].Hits, h)
 			}
+		}
+		if approximate && matched >= maxCandidates {
+			page.Truncated = true
 		}
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, err
+		return Page{Results: []Result{}}, err
 	}
-	return out, nil
+	return page, nil
 }
 
 // score turns a cosine distance into a number from 0 to 1, higher is closer, rounded to three places.
@@ -843,12 +1172,9 @@ func (ix *Index) queryVector(ctx context.Context, query string) ([]float32, erro
 	if v, ok := ix.cache.get(query); ok {
 		return v, nil
 	}
-	got, err := ix.emb.Embed(ctx, []string{query}, embedding.Query)
-	if err == nil && len(got) != 1 {
-		err = fmt.Errorf("it answered %d vectors for one question", len(got))
-	}
+	got, err := ix.embed(ctx, []string{query}, embedding.Query)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrProvider, err)
+		return nil, err
 	}
 	ix.cache.put(query, got[0])
 	return got[0], nil

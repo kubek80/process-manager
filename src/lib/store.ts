@@ -150,13 +150,19 @@ export interface MeaningHit { part: string; item: string; label: string; snippet
 /** One document search by meaning found, with up to three places inside it. */
 export interface MeaningResult { kind: TargetKind; id: string; score: number; hits: MeaningHit[] }
 /**
- * Search by meaning on the server: published processes and standards, best first. Refused with
- * 404 when it is switched off, 429 when one person searches very often, 502 when the service that
- * compares the texts cannot be reached.
+ * Search by meaning on the server: published processes and standards, best first, and whether
+ * more matched than were sent (`truncated`). Refused with 404 when it is switched off, 429 when
+ * one person searches very often, 502 when the service that compares the texts cannot be
+ * reached, 503 while it is not ready yet. A server that takes at most 100 is asked again for 100.
  */
-export async function searchByMeaning(q: string, limit = 100): Promise<MeaningResult[]> {
-  const r = await call<{ results?: MeaningResult[] } | null>("GET", `/api/search?q=${encodeURIComponent(q)}&limit=${limit}`);
-  return Array.isArray(r?.results) ? r!.results : [];
+export async function searchByMeaning(q: string, limit = 500): Promise<{ results: MeaningResult[]; truncated: boolean }> {
+  const ask = (n: number) => call<{ results?: MeaningResult[]; truncated?: boolean } | null>("GET", `/api/search?q=${encodeURIComponent(q)}&limit=${n}`);
+  let r: { results?: MeaningResult[]; truncated?: boolean } | null;
+  try { r = await ask(limit); } catch (e) {
+    if (!(e instanceof ApiError && e.status === 400 && limit > 100)) throw e;
+    r = await ask(100);
+  }
+  return { results: Array.isArray(r?.results) ? r!.results : [], truncated: r?.truncated === true };
 }
 
 /** Use of processes and standards over a period, for admins. */

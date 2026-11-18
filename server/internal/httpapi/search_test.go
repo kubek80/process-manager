@@ -33,6 +33,8 @@ func withSearch(t *testing.T, f *flaky) func(*Deps) {
 	return func(d *Deps) {
 		d.Index = retrieval.New(d.Docs.Pool, d.Docs, f, chunking.Options{}, d.Log)
 		must(t, d.Index.Ensure(bg))
+		_, err := d.Index.CatchUp(bg)
+		must(t, err)
 	}
 }
 

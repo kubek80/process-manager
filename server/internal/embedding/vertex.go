@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -38,14 +39,41 @@ import (
 //   - outputDimensionality truncates the 3072-long vector to a smaller size. Whether the
 //     service scales a truncated vector back to length 1 is not stated clearly (ASSUMED not), so
 //     every vector is normalised here; for one that already has length 1 this changes nothing.
-//   - autoTruncate (default true) cuts a text longer than the model's input limit (2048 tokens)
-//     instead of refusing it; our chunks are far shorter.
+//   - The model reads at most 2048 tokens of one text. autoTruncate=true asks the service to
+//     cut a longer text instead of refusing it. Whether gemini-embedding-001 honours it is not
+//     certain (ASSUMED it may not), so a refusal for a text that is too long becomes an error
+//     naming PM_CHUNK_MAX_CHARS. With the default of 2000 characters a chunk stays far below
+//     the limit (roughly 500 tokens).
+//
+// How long a provider that does not answer may hold things up:
+//   - one request: at most 10 seconds (requestTimeout);
+//   - at most 3 tries (maxAttempts), waiting about 0.5 s and then 1 s between them, longer only
+//     when the service asks for it with Retry-After, never more than 5 s;
+//   - one Embed call as a whole: at most 20 seconds, plus 2 seconds for every further text
+//     (embedCeiling), so a search waits at most 20 s and a document of 30 parts at most 78 s;
+//     a shorter deadline of the caller's context wins;
+//   - only what can pass on its own is tried again: timeouts, broken connections, 429 and
+//     5xx answers. Other refusals (400, 401, 403, 404) and a cancelled context end at once.
+//   - looking up the credentials when the server starts: at most 10 seconds (credsTimeout).
+//     On a machine without any, the library answers within milliseconds; on one that may be in
+//     Google Cloud it asks the local metadata server, which it bounds itself (2 s to connect,
+//     5 s per request). No token is fetched at start.
 
 const (
 	scopeCloudPlatform = "https://www.googleapis.com/auth/cloud-platform"
-	maxAttempts        = 5
+	maxAttempts        = 3
 	parallelRequests   = 4 // one text per request for gemini-embedding-001: a few at a time
+	requestTimeout     = 10 * time.Second
+	maxRetryAfter      = 5 * time.Second
+	credsTimeout       = 10 * time.Second
+	ceilingBase        = 20 * time.Second
+	ceilingPerText     = 2 * time.Second
 )
+
+// embedCeiling is the longest one Embed call of n texts may take.
+func embedCeiling(n int) time.Duration {
+	return ceilingBase + time.Duration(max(n-1, 0))*ceilingPerText
+}
 
 type vertex struct {
 	model, project, location string
@@ -53,6 +81,8 @@ type vertex struct {
 	url                      string
 	client                   *http.Client
 	backoff                  time.Duration // first wait before a retry; doubled each time
+	timeout                  time.Duration // one request
+	ceiling                  func(n int) time.Duration
 }
 
 func newVertex(ctx context.Context, o Options) (*vertex, error) {
@@ -80,18 +110,43 @@ func newVertex(ctx context.Context, o Options) (*vertex, error) {
 			"/publishers/google/models/" + url.PathEscape(model) + ":predict",
 		client:  o.HTTPClient,
 		backoff: 500 * time.Millisecond,
+		timeout: requestTimeout,
+		ceiling: embedCeiling,
 	}
 	if v.client == nil {
-		creds, err := google.FindDefaultCredentials(ctx, scopeCloudPlatform)
+		creds, err := findCredentials(ctx, credsTimeout)
 		if err != nil {
-			return nil, fmt.Errorf("embeddings: no Google credentials found for Vertex AI. Run the server with a Google service account (workload identity), or set GOOGLE_APPLICATION_CREDENTIALS to the path of a credentials file (Application Default Credentials): %v", err)
+			return nil, err
 		}
-		// The token source outlives the start-up context.
-		c := oauth2.NewClient(context.WithoutCancel(ctx), creds.TokenSource)
-		c.Timeout = 60 * time.Second
-		v.client = c
+		// The token source outlives the start-up context. Each request has its own deadline
+		// (requestTimeout), which also bounds fetching a token.
+		v.client = oauth2.NewClient(context.WithoutCancel(ctx), creds.TokenSource)
 	}
 	return v, nil
+}
+
+// findCredentials looks up Application Default Credentials, giving up after limit.
+func findCredentials(ctx context.Context, limit time.Duration) (*google.Credentials, error) {
+	ctx, cancel := context.WithTimeout(ctx, limit)
+	defer cancel()
+	type result struct {
+		c   *google.Credentials
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		c, err := google.FindDefaultCredentials(ctx, scopeCloudPlatform)
+		done <- result{c, err}
+	}()
+	select {
+	case r := <-done:
+		if r.err != nil {
+			return nil, fmt.Errorf("embeddings: no Google credentials found for Vertex AI. Run the server with a Google service account (workload identity), or set GOOGLE_APPLICATION_CREDENTIALS to the path of a credentials file (Application Default Credentials): %v", r.err)
+		}
+		return r.c, nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("embeddings: looking up the Google credentials for Vertex AI took longer than %s. Set GOOGLE_APPLICATION_CREDENTIALS to the path of a credentials file, or check the server's access to the Google metadata server", limit)
+	}
 }
 
 func (v *vertex) Name() string    { return "vertex:" + v.model }
@@ -127,6 +182,9 @@ type predictResponse struct {
 	} `json:"predictions"`
 }
 
+// errSlow is the cause when one Embed call reaches its own ceiling.
+var errSlow = errors.New("ceiling")
+
 func (v *vertex) Embed(ctx context.Context, texts []string, p Purpose) ([][]float32, error) {
 	out := make([][]float32, len(texts))
 	if len(texts) == 0 {
@@ -136,6 +194,10 @@ func (v *vertex) Embed(ctx context.Context, texts []string, p Purpose) ([][]floa
 	if p == Query {
 		task = "RETRIEVAL_QUERY"
 	}
+	parent := ctx
+	limit := v.ceiling(len(texts))
+	ctx, stop := context.WithTimeoutCause(ctx, limit, errSlow)
+	defer stop()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var (
@@ -172,17 +234,20 @@ func (v *vertex) Embed(ctx context.Context, texts []string, p Purpose) ([][]floa
 		}(start, end)
 	}
 	wg.Wait()
-	if firstErr != nil {
+	if err := parent.Err(); err != nil {
+		return nil, err
+	}
+	if firstErr != nil && !errors.Is(firstErr, context.Canceled) && !errors.Is(firstErr, context.DeadlineExceeded) {
 		return nil, firstErr
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
+	if firstErr != nil || ctx.Err() != nil {
+		return nil, fmt.Errorf("embeddings: Vertex AI did not answer within %s; try again later, or check the server's network access to Google", limit)
 	}
 	return out, nil
 }
 
-// call sends one request, retrying what may pass on its own (rate limits, server errors,
-// network trouble) with a growing wait.
+// call sends one request, retrying what may pass on its own (rate limits, server errors, a
+// timeout or a broken connection) with a growing wait.
 func (v *vertex) call(ctx context.Context, texts []string, task string) ([][]float32, error) {
 	var req predictRequest
 	for _, t := range texts {
@@ -195,20 +260,24 @@ func (v *vertex) call(ctx context.Context, texts []string, task string) ([][]flo
 		return nil, err
 	}
 	wait := v.backoff
-	var last error
 	for attempt := 1; ; attempt++ {
 		vecs, retryAfter, err := v.once(ctx, body, len(texts))
 		if err == nil {
 			return vecs, nil
 		}
-		last = err
 		var re retryable
-		if !errors.As(err, &re) || attempt == maxAttempts {
-			break
+		if !errors.As(err, &re) {
+			return nil, err
+		}
+		if attempt == maxAttempts {
+			return nil, re.error
 		}
 		d := wait + time.Duration(rand.Int64N(int64(wait)/2+1))
 		if retryAfter > d {
 			d = retryAfter
+		}
+		if dl, ok := ctx.Deadline(); ok && time.Until(dl) < d {
+			return nil, re.error // waiting would only run into the deadline
 		}
 		t := time.NewTimer(d)
 		select {
@@ -219,41 +288,27 @@ func (v *vertex) call(ctx context.Context, texts []string, task string) ([][]flo
 		}
 		wait *= 2
 	}
-	var re retryable
-	if errors.As(last, &re) {
-		return nil, re.error
-	}
-	return nil, last
 }
 
 // retryable marks an error that may pass when the request is sent again.
 type retryable struct{ error }
 
 func (v *vertex) once(ctx context.Context, body []byte, want int) ([][]float32, time.Duration, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, v.url, bytes.NewReader(body))
+	rctx, cancel := context.WithTimeout(ctx, v.timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(rctx, http.MethodPost, v.url, bytes.NewReader(body))
 	if err != nil {
 		return nil, 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := v.client.Do(req)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, 0, ctx.Err()
-		}
-		var re *oauth2.RetrieveError
-		if errors.As(err, &re) {
-			return nil, 0, fmt.Errorf("embeddings: the server could not get a Google access token for Vertex AI; check its Application Default Credentials (workload identity or GOOGLE_APPLICATION_CREDENTIALS): %v", re)
-		}
-		var ne net.Error
-		if errors.As(err, &ne) || errors.Is(err, io.ErrUnexpectedEOF) || strings.Contains(err.Error(), "connection") {
-			return nil, 0, retryable{fmt.Errorf("embeddings: Vertex AI could not be reached at %s; check the server's network access to Google: %v", req.URL.Host, err)}
-		}
-		return nil, 0, fmt.Errorf("embeddings: Vertex AI could not be called; check the server's Google credentials and network access: %v", err)
+		return nil, 0, v.transportError(ctx, err, req.URL.Host)
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
-		return nil, 0, retryable{fmt.Errorf("embeddings: the answer from Vertex AI was cut off: %v", err)}
+		return nil, 0, v.transportError(ctx, err, req.URL.Host)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, retryAfter(resp.Header.Get("Retry-After")), v.statusError(resp.StatusCode, raw)
@@ -275,6 +330,29 @@ func (v *vertex) once(ctx context.Context, body []byte, want int) ([][]float32, 
 	return out, 0, nil
 }
 
+// transportError sorts a failure to get an answer at all: the caller's context ended (never
+// retried), no access token (not retried: it will not appear on its own), a timeout or a broken
+// connection (retried), anything else (not retried: DNS, TLS, a wrong address).
+func (v *vertex) transportError(ctx context.Context, err error, host string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	var re *oauth2.RetrieveError
+	if errors.As(err, &re) {
+		return fmt.Errorf("embeddings: the server could not get a Google access token for Vertex AI; check its Application Default Credentials (workload identity or GOOGLE_APPLICATION_CREDENTIALS): %v", re)
+	}
+	var ne net.Error
+	timeout := errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout())
+	if timeout {
+		return retryable{fmt.Errorf("embeddings: Vertex AI at %s did not answer within %s; try again later, or check the server's network access to Google", host, v.timeout)}
+	}
+	if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNABORTED) || errors.Is(err, syscall.EPIPE) ||
+		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return retryable{fmt.Errorf("embeddings: the connection to Vertex AI at %s broke off; try again later, or check the server's network access to Google: %v", host, err)}
+	}
+	return fmt.Errorf("embeddings: Vertex AI at %s could not be reached; check PM_VERTEX_LOCATION and the server's network access to Google: %v", host, err)
+}
+
 // statusError turns a refusal into a sentence that says what an operator must fix. Google's
 // own message is added, shortened; it describes the request, not the texts.
 func (v *vertex) statusError(code int, raw []byte) error {
@@ -289,6 +367,7 @@ func (v *vertex) statusError(code int, raw []byte) error {
 	if len(detail) > 300 {
 		detail = detail[:300] + "…"
 	}
+	lower := strings.ToLower(detail)
 	if detail != "" {
 		detail = " Google says: " + detail
 	}
@@ -303,15 +382,27 @@ func (v *vertex) statusError(code int, raw []byte) error {
 		return retryable{fmt.Errorf("embeddings: the Vertex AI quota for embeddings in project %q is used up (429), even after waiting. Try again later, or ask for a higher quota for %s in that project.%s", v.project, v.model, detail)}
 	case code >= 500:
 		return retryable{fmt.Errorf("embeddings: Vertex AI had a problem on its side (%d) and did not recover after %d tries. Try again later.%s", code, maxAttempts, detail)}
+	case code == http.StatusBadRequest && tooLong(lower):
+		return fmt.Errorf("embeddings: Vertex AI refused a text as too long for the model (400). Lower PM_CHUNK_MAX_CHARS (for example to 2000) so every part stays within the model's input limit.%s", detail)
 	case code == http.StatusBadRequest:
 		return fmt.Errorf("embeddings: Vertex AI refused the request (400). Check PM_EMBEDDINGS_MODEL and PM_EMBEDDINGS_DIMENSIONS.%s", detail)
 	}
 	return fmt.Errorf("embeddings: Vertex AI refused the request (%d).%s", code, detail)
 }
 
+// tooLong: does Google's message say that an input is too long?
+func tooLong(msg string) bool {
+	for _, s := range []string{"too long", "token", "exceeds", "exceeded", "input length", "maximum length"} {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
+}
+
 func retryAfter(h string) time.Duration {
 	if s, err := strconv.Atoi(strings.TrimSpace(h)); err == nil && s > 0 {
-		return min(time.Duration(s)*time.Second, 60*time.Second)
+		return min(time.Duration(s)*time.Second, maxRetryAfter)
 	}
 	return 0
 }

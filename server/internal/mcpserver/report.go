@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -13,10 +14,6 @@ import (
 	"github.com/kubek80/process-manager/server/internal/feedback"
 	"github.com/kubek80/process-manager/server/internal/notify"
 )
-
-// MaxFeedbackPerHour is how much one person can report in an hour, through the portal and
-// agents together. It must stay the same as maxFeedbackPerHour in httpapi.
-const MaxFeedbackPerHour = 30
 
 // ReportInput is what report_problem takes.
 type ReportInput struct {
@@ -47,7 +44,7 @@ func (s *Server) addReport(srv *mcp.Server) {
 		Annotations: &mcp.ToolAnnotations{Title: "Report a problem", DestructiveHint: &f, OpenWorldHint: &f},
 		Description: "File feedback about a process or standard (or one step or requirement of it) on behalf of the person you act for, the same as the flag in the portal: " +
 			"the owning team is told and sees it with that person as the author. Use it when a step does not work, something is outdated or unclear, or for a suggestion. " +
-			"Say what happened in plain words. Each person can report at most 30 items an hour.",
+			"Say what happened in plain words. Each person can report at most " + strconv.Itoa(feedback.MaxPerHour) + " items an hour, in the portal and through agents together.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, in ReportInput) (Report, string, error) {
 		var h = req.Extra
 		who := actor{}
@@ -104,24 +101,21 @@ func (s *Server) report(ctx context.Context, who actor, in ReportInput) (Report,
 	case utf8.RuneCountInString(text) > 2000:
 		return Report{}, problem("Keep the text under 2000 characters.")
 	}
-	n, err := s.o.Feedback.CountSince(ctx, who.Email, time.Now().Add(-time.Hour))
-	if err != nil {
-		return Report{}, err
-	}
-	if n >= MaxFeedbackPerHour {
-		return Report{}, problem("This person has reported a lot in the last hour. Try again later.")
-	}
-	it, err := s.o.Feedback.Create(ctx, feedback.New{
+	// the limit per person is shared with the portal, and counted under a lock of the person
+	it, err := s.o.Feedback.Report(ctx, feedback.New{
 		TargetKind: kind, TargetID: id, ItemID: item, Kind: in.Kind, Text: text,
 		AuthorEmail: who.Email, AuthorName: who.Name, ItemHash: t.Items[item],
 	})
+	if errors.Is(err, feedback.ErrTooMany) {
+		return Report{}, problem("This person has reported a lot in the last hour. Try again later.")
+	}
 	if errors.Is(err, feedback.ErrNoTarget) { // deleted in between
 		return Report{}, notFound(kind, id)
 	}
 	if err != nil {
 		return Report{}, err
 	}
-	s.o.Log.Info("problem reported by an agent", "target", kind+" "+id, "for", who.Email)
+	s.o.Log.Info("problem reported by an agent", "target", kind+" "+id)
 
 	// tell the owning team, as the portal does
 	page := "/#/p/"

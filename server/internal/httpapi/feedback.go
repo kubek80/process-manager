@@ -13,9 +13,6 @@ import (
 	"github.com/kubek80/process-manager/server/internal/rbac"
 )
 
-// maxFeedbackPerHour is how much one person can report in an hour.
-const maxFeedbackPerHour = 30
-
 type author struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
@@ -171,18 +168,16 @@ func (a *api) createFeedback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "Keep the feedback under 2000 characters.")
 		return
 	}
-	// a brake on a script (or a very bad day): the owner team is notified about every item
-	if n, err := a.Feedback.CountSince(r.Context(), s.Email, time.Now().Add(-time.Hour)); err != nil {
-		a.fail(w, r, err)
-		return
-	} else if n >= maxFeedbackPerHour {
-		writeError(w, 429, "You have reported a lot in the last hour. Please try again later.")
-		return
-	}
-	item, err := a.Feedback.Create(r.Context(), feedback.New{
+	// a brake on a script (or a very bad day), shared with agents: the owner team is notified
+	// about every item
+	item, err := a.Feedback.Report(r.Context(), feedback.New{
 		TargetKind: in.TargetKind, TargetID: in.TargetID, ItemID: in.ItemID, Kind: in.Kind, Text: in.Text,
 		AuthorEmail: s.Email, AuthorName: s.Name, ItemHash: t.Items[in.ItemID],
 	})
+	if errors.Is(err, feedback.ErrTooMany) {
+		writeError(w, 429, "You have reported a lot in the last hour. Please try again later.")
+		return
+	}
 	if errors.Is(err, feedback.ErrNoTarget) { // deleted between the check above and the insert
 		writeError(w, 400, "That "+what+" does not exist.")
 		return

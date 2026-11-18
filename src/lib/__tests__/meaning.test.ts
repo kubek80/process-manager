@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Catalog, Process, Standard } from "../../types";
-import { fromMeaning, fuse, markedWords, meaningHits, mergeHits, modeOf, needsServer, nextAsked, planOf, problemOf, type Found, type MeaningState } from "../meaning";
-import { search } from "../search";
-import { ApiError, type MeaningResult } from "../store";
+import { answerKey, contentStamp, fromMeaning, fuse, markedWords, meaningHelp, meaningHits, mergeHits, modeOf, needsServer, planOf, problemOf, providerOf, truncatedText, typingMovesAddress, type Found, type MeaningState } from "../meaning";
+import { countText, countWords, search } from "../search";
+import { ApiError, searchByMeaning, type MeaningResult } from "../store";
 
 const catalog: Catalog = {
   tiers: [], environments: [], languages: [], practices: [], tools: [],
@@ -100,11 +100,12 @@ describe("both ways together", () => {
 });
 
 describe("when the server is asked", () => {
-  it("on arriving, on Search, on a change of mode - not while typing", () => {
-    expect(nextAsked("gcp", { type: "type", q: "gcp proj" })).toBe("gcp");
-    expect(nextAsked("gcp", { type: "submit", q: " gcp project " })).toBe("gcp project");
-    expect(nextAsked("", { type: "arrive", q: "logs" })).toBe("logs");
-    expect(nextAsked("logs", { type: "mode", q: "logging" })).toBe("logging");
+  it("typing moves the address only with Words; with Meaning and Both it waits for the search to be run", () => {
+    expect(typingMovesAddress("words", true)).toBe(true);
+    expect(typingMovesAddress("meaning", true)).toBe(false);
+    expect(typingMovesAddress("both", true)).toBe(false);
+    // not offered: the page is Words, whatever the address says
+    expect(typingMovesAddress("meaning", false)).toBe(true);
   });
   it("only with Meaning or Both, when offered and there is something to search for", () => {
     expect(needsServer("meaning", "gcp", true)).toBe(true);
@@ -165,5 +166,76 @@ describe("what the page shows", () => {
 describe("the words marked on cards found by meaning", () => {
   it("leaves out short and common words", () => {
     expect(markedWords(["put", "a", "secret", "in", "the", "log"])).toEqual(["put", "secret", "log"]);
+  });
+});
+
+describe("answers are kept per query and per content", () => {
+  it("the stamp changes with any change to a document, and only then", () => {
+    const one = contentStamp([gcp, azure], [logging]);
+    expect(contentStamp([gcp, azure], [logging])).toBe(one);
+    expect(contentStamp([structuredClone(gcp), azure], [logging])).toBe(one);
+    expect(contentStamp([{ ...gcp, title: "Request a GCP project now" }, azure], [logging])).not.toBe(one);
+    expect(contentStamp([gcp], [logging])).not.toBe(one);
+    expect(contentStamp([gcp, azure], [])).not.toBe(one);
+    expect(answerKey(one, "gcp")).not.toBe(answerKey(contentStamp([gcp], []), "gcp"));
+    expect(answerKey(one, "gcp")).not.toBe(answerKey(one, "gcp project"));
+  });
+});
+
+describe("more found than sent", () => {
+  const res: MeaningResult[] = [{ kind: "process", id: "a", score: 1, hits: [] }];
+  const st = (s: Partial<MeaningState>): MeaningState => ({ for: "", loading: null, answer: null, problem: null, ...s });
+  it("the plan says so, also while a newer answer is awaited", () => {
+    expect(planOf("meaning", "gcp", "gcp", true, st({ for: "gcp", answer: { query: "gcp", results: res, truncated: true } }))).toMatchObject({ truncated: true });
+    expect(planOf("meaning", "gcp", "gcp", true, st({ for: "gcp", answer: { query: "gcp", results: res } }))).toMatchObject({ truncated: false });
+    expect(planOf("both", "x", "x", true, st({ for: "x", loading: "x", answer: { query: "gcp", results: res, truncated: true } }))).toMatchObject({ truncated: true, busy: true });
+    expect(planOf("words", "gcp", "gcp", true, st({ for: "gcp", answer: { query: "gcp", results: res, truncated: true } }))).toMatchObject({ truncated: false });
+  });
+  it("in plain words, and with counts that do not look exact", () => {
+    expect(truncatedText(500)).toBe("Showing the 500 closest. Add words or choose a filter to narrow it down.");
+    expect(countText(12, true)).toBe("12+");
+    expect(countText(0, true)).toBe("0");
+    expect(countText(12)).toBe("12");
+    expect(countWords(1, true)).toBe("at least 1 result");
+    expect(countWords(3)).toBe("3 results");
+    expect(countWords(0, true)).toBe("0 results");
+  });
+});
+
+describe("asking the server", () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+  const answer = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  it("asks for 500 and reads whether more matched", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => { calls.push(url); return answer(200, { results: [{ kind: "process", id: "a", score: 1, hits: [] }], truncated: true }); });
+    expect(await searchByMeaning("gcp project")).toEqual({ results: [{ kind: "process", id: "a", score: 1, hits: [] }], truncated: true });
+    expect(calls).toEqual(["/api/search?q=gcp%20project&limit=500"]);
+  });
+  it("an older server: no `truncated`, and asked again for 100 when it refuses 500", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      calls.push(url);
+      return url.endsWith("limit=500") ? answer(400, { error: "limit must be from 1 to 100" }) : answer(200, { results: [] });
+    });
+    expect(await searchByMeaning("gcp")).toEqual({ results: [], truncated: false });
+    expect(calls).toEqual(["/api/search?q=gcp&limit=500", "/api/search?q=gcp&limit=100"]);
+  });
+  it("other refusals are passed on", async () => {
+    vi.stubGlobal("fetch", async () => answer(429, { error: "You searched very often." }));
+    await expect(searchByMeaning("gcp")).rejects.toMatchObject({ status: 429, message: "You searched very often." });
+  });
+});
+
+describe("what Meaning is said to do", () => {
+  it("is true for the provider in use, and cautious when it is not known", () => {
+    expect(providerOf("builtin")).toBe("builtin");
+    expect(providerOf("vertex")).toBe("vertex");
+    expect(providerOf(undefined)).toBeUndefined();
+    expect(providerOf("other")).toBeUndefined();
+    expect(meaningHelp("builtin")).toContain("words and parts of words");
+    expect(meaningHelp("builtin")).toContain("does not know that different words can mean the same thing");
+    expect(meaningHelp("builtin")).not.toMatch(/other words|about what/);
+    expect(meaningHelp("vertex")).toContain("even when they use other words");
+    expect(meaningHelp(undefined)).toBe("puts first what comes closest to what you type, even when not every word is in it.");
   });
 });

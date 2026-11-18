@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -77,13 +78,43 @@ func nullable(s string) any {
 	return s
 }
 
-// Create stores a new item.
-func (s *Store) Create(ctx context.Context, n New) (Item, error) {
+// MaxPerHour is how much one person can report in an hour: in the portal and through agents
+// together. The owning team is notified about every item, so this is a brake on a script (or
+// a very bad day).
+const MaxPerHour = 30
+
+// ErrTooMany is returned by Report when the person reported MaxPerHour items or more in the
+// hour before.
+var ErrTooMany = errors.New("too much feedback from one person in the last hour")
+
+// Create stores a new item, without a limit (samples, imports). People's feedback goes
+// through Report.
+func (s *Store) Create(ctx context.Context, n New) (Item, error) { return s.create(ctx, n, 0) }
+
+// Report stores feedback a person gives, unless they reported MaxPerHour items or more in the
+// hour before (ErrTooMany). The count and the insert happen under a lock of the person, so
+// reports sent at the same time - from the portal and from agents - cannot slip past.
+func (s *Store) Report(ctx context.Context, n New) (Item, error) { return s.create(ctx, n, MaxPerHour) }
+
+// create stores an item; max > 0 limits how many one author may write in an hour.
+func (s *Store) create(ctx context.Context, n New, max int) (Item, error) {
 	var id string
 	// Only for something that exists, and stays until this is stored: the row of the target is
 	// held, so a delete that is under way is waited for (and then there is nothing to write
 	// about), and a delete that comes after takes this feedback along.
 	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if max > 0 {
+			if _, err := tx.Exec(ctx, `select pg_advisory_xact_lock(hashtextextended($1, 7465))`, strings.ToLower(n.AuthorEmail)); err != nil {
+				return err
+			}
+			var made int
+			if err := tx.QueryRow(ctx, `select count(*) from feedback where lower(author_email) = lower($1) and created_at > now() - interval '1 hour'`, n.AuthorEmail).Scan(&made); err != nil {
+				return err
+			}
+			if made >= max {
+				return ErrTooMany
+			}
+		}
 		var one int
 		if err := tx.QueryRow(ctx, `select 1 from documents where kind = $1 and id = $2 for share`, n.TargetKind, n.TargetID).Scan(&one); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -52,25 +53,67 @@ type env struct {
 	fb     *feedback.Store
 	notes  *recorder
 	secret string
+	srv    *Server
+	log    *logBuffer
+}
+
+// logBuffer keeps what the server logs, at every level.
+type logBuffer struct {
+	mu  sync.Mutex
+	buf strings.Builder
+}
+
+func (l *logBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
+}
+
+func (l *logBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.String()
 }
 
 // fakeIndex answers searches from a fixed list.
 type fakeIndex struct {
-	on    bool
-	found []Found
-	err   error
-	asked string
+	mu        sync.Mutex
+	on        bool
+	found     []Found
+	truncated bool
+	err       error
+	hang      bool // never answers, whatever the context says (a provider that hangs)
+	asked     string
+	limit     int
 }
 
-func (f *fakeIndex) Enabled() bool { return f.on }
-func (f *fakeIndex) Search(_ context.Context, q string, _ int) ([]Found, error) {
-	f.asked = q
-	return f.found, f.err
+func (f *fakeIndex) set(fn func(f *fakeIndex)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fn(f)
+}
+
+func (f *fakeIndex) Enabled() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.on
+}
+
+func (f *fakeIndex) Search(_ context.Context, q string, limit int) ([]Found, bool, error) {
+	f.mu.Lock()
+	f.asked, f.limit = q, limit
+	hang := f.hang
+	found, truncated, err := f.found, f.truncated, f.err
+	f.mu.Unlock()
+	if hang {
+		select {}
+	}
+	return found, truncated, err
 }
 
 // setup starts the server over HTTP on a database with the sample content, a draft process,
 // a draft standard and a retired process.
-func setup(t *testing.T, secret string, index Index) *env {
+func setup(t *testing.T, secret string, index Index, change ...func(*Options)) *env {
 	t.Helper()
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
@@ -112,14 +155,21 @@ func setup(t *testing.T, secret string, index Index) *env {
 		}
 	}
 	e := &env{t: t, docs: d, fb: &feedback.Store{Pool: pool}, notes: &recorder{}, secret: secret}
-	srv, err := New(Options{
+	e.log = &logBuffer{}
+	o := Options{
 		Docs: d, Skills: sk, Feedback: e.fb, Roles: roles, Index: index, Notifier: e.notes, Ready: pool.Ping,
 		BaseURL: "https://processes.example.com", Secret: secret,
 		Now: func() time.Time { return time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC) },
-	})
+		Log: slog.New(slog.NewTextHandler(e.log, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	}
+	for _, fn := range change {
+		fn(&o)
+	}
+	srv, err := New(o)
 	if err != nil {
 		t.Fatal(err)
 	}
+	e.srv = srv
 	ts := httptest.NewServer(srv)
 	t.Cleanup(ts.Close)
 	e.url = ts.URL
@@ -371,7 +421,7 @@ func TestSearchByMeaning(t *testing.T) {
 	cs := e.session(nil)
 	var out SearchOutput
 	mustCall(t, cs, "search_processes", map[string]any{"query": "a website faster"}, &out)
-	if out.RankedBy != "meaning" || out.Total != 2 || out.Results[0].ID != "onboard-site-to-akamai" || out.Results[1].ID != "request-gcp-project" || ix.asked != "a website faster" {
+	if out.RankedBy != "meaning" || out.Total != 2 || out.Results[0].ID != "onboard-site-to-akamai" || out.Results[1].ID != "request-gcp-project" || ix.asked != "a website faster" || ix.limit != 500 {
 		t.Fatalf("%+v", out)
 	}
 	if out.Results[0].Score != 0.8 || out.Results[0].Matches[0] != (Match{Part: "step", Item: "x", Label: "Step 1: X", Snippet: "…x…"}) {
@@ -383,23 +433,23 @@ func TestSearchByMeaning(t *testing.T) {
 		t.Fatalf("%+v", out)
 	}
 	// when the index fails, the words take over
-	ix.err = errors.New("unreachable")
+	ix.set(func(f *fakeIndex) { f.err = errors.New("unreachable") })
 	text := mustCall(t, cs, "search_processes", map[string]any{"query": "budget"}, &out)
-	if out.RankedBy != "words" || out.Total != 1 || out.Note == "" || !strings.Contains(text, out.Note) {
+	if out.RankedBy != "words-fallback" || out.Total != 1 || out.Note == "" || !strings.Contains(text, out.Note) {
 		t.Fatalf("%+v", out)
 	}
-	ix.err = fmt.Errorf("%w: timeout", ErrIndexProvider)
+	ix.set(func(f *fakeIndex) { f.err = fmt.Errorf("%w: timeout", ErrIndexProvider) })
 	mustCall(t, cs, "search_processes", map[string]any{"query": "budget"}, &out)
-	if out.RankedBy != "words" || !strings.Contains(out.Note, "could not be reached") {
+	if out.RankedBy != "words-fallback" || !strings.Contains(out.Note, "could not be reached") {
 		t.Fatalf("%+v", out)
 	}
-	ix.err = ErrIndexNotReady
+	ix.set(func(f *fakeIndex) { f.err = ErrIndexNotReady })
 	mustCall(t, cs, "search_processes", map[string]any{"query": "budget"}, &out)
-	if out.RankedBy != "words" || !strings.Contains(out.Note, "not ready yet") {
+	if out.RankedBy != "words-fallback" || !strings.Contains(out.Note, "not ready yet") {
 		t.Fatalf("%+v", out)
 	}
 	// switched off: words
-	ix.on, ix.err = false, nil
+	ix.set(func(f *fakeIndex) { f.on, f.err = false, nil })
 	mustCall(t, cs, "search_processes", map[string]any{"query": "budget"}, &out)
 	if out.RankedBy != "words" || out.Note != "" {
 		t.Fatalf("%+v", out)
@@ -692,7 +742,7 @@ func TestReportProblem(t *testing.T) {
 	}
 
 	// the limit per person counts what they reported in the portal too
-	for i := 0; i < MaxFeedbackPerHour-3; i++ {
+	for i := 0; i < feedback.MaxPerHour-3; i++ {
 		if _, err := e.fb.Create(ctx, feedback.New{TargetKind: docs.Process, TargetID: "request-gcp-project", Kind: "idea", Text: fmt.Sprint("idea ", i), AuthorEmail: "sam@example.com", AuthorName: "Sam"}); err != nil {
 			t.Fatal(err)
 		}

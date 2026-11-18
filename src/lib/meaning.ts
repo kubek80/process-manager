@@ -132,18 +132,13 @@ export function fuse(words: Found[], meaning: Found[], k = FUSION_K): Found[] {
 // ---------- when the server is asked
 
 /**
- * What the query sent to the server last is, after something happened on the page. The server is
- * asked when somebody submits the search, changes the mode, or arrives with a query (a link, Back,
- * Home's search box) - typing alone does not ask: each search may call an outside service.
+ * Whether typing changes the address at once. With Words it does, as the results follow the
+ * typing. With Meaning and Both the server is asked only when the search is run (Enter, the
+ * button, a change of mode), because each search may call an outside service; the address then
+ * changes only at that moment, so that it always says what the results are for - a copied link,
+ * a reload, Back and Forward show what the person is looking at.
  */
-export type AskEvent =
-  | { type: "arrive"; q: string }
-  | { type: "submit"; q: string }
-  | { type: "mode"; q: string }
-  | { type: "type"; q: string };
-export function nextAsked(asked: string, e: AskEvent): string {
-  return e.type === "type" ? asked : e.q.trim();
-}
+export const typingMovesAddress = (mode: SearchMode, offered: boolean) => !offered || mode === "words";
 
 /** Whether a query goes to the server: only with Meaning or Both, only when there is something to search for. */
 export const needsServer = (mode: SearchMode, asked: string, available: boolean) => available && mode !== "words" && asked.trim() !== "";
@@ -184,11 +179,13 @@ export function rememberMode(email: string | undefined, m: SearchMode) {
 // ---------- asking the server
 
 /** Answers already had, for a short while: Back to the results does not ask again. */
-const answers = new Map<string, { at: number; results: MeaningResult[] }>();
+const answers = new Map<string, { at: number; answer: Answer }>();
+/** What the server answered: best first, and whether more matched than it sent. */
+interface Answer { results: MeaningResult[]; truncated: boolean }
 const KEEP_MS = 2 * 60 * 1000;
 const KEEP_N = 30;
 
-export interface MeaningAnswer { query: string; results: MeaningResult[] }
+export interface MeaningAnswer { query: string; results: MeaningResult[]; truncated?: boolean }
 export interface MeaningState {
   /** The query asked last: what `loading` and `problem` are about. */
   for: string;
@@ -201,23 +198,42 @@ export interface MeaningState {
 }
 
 /**
- * Asks the server for `asked` whenever it, or `attempt`, changes and `enabled` is true. An answer
- * for a query that is no longer the one asked never replaces a newer one.
+ * What the page knows about the content, as a short text that changes whenever a process or
+ * standard it has changes (a save, a reload, one more or one less). Answers kept from the server
+ * are kept per query AND per this, so that after a change the next search asks again.
  */
-export function useMeaningSearch(asked: string, enabled: boolean, attempt: number): MeaningState {
+export function contentStamp(processes: unknown[], standards: unknown[]): string {
+  // FNV-1a over the documents as text: cheap, and the same content gives the same stamp
+  let h = 0x811c9dc5;
+  const text = JSON.stringify([processes, standards]);
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return `${processes.length}.${standards.length}.${(h >>> 0).toString(36)}`;
+}
+/** Where an answer is kept: the query, for this content. */
+export const answerKey = (stamp: string, q: string) => `${stamp}\n${q}`;
+
+/**
+ * Asks the server for `asked` whenever it, or `attempt`, changes and `enabled` is true. An answer
+ * for a query that is no longer the one asked never replaces a newer one. `stamp` is what the
+ * page knows about the content (`contentStamp`): a kept answer is used only for the same content.
+ */
+export function useMeaningSearch(asked: string, enabled: boolean, attempt: number, stamp = ""): MeaningState {
   const [state, setState] = useState<MeaningState>(() => {
-    const had = enabled ? fresh(asked) : null;
-    return { for: had ? asked : "", loading: null, answer: had ? { query: asked, results: had } : null, problem: null };
+    const had = enabled ? fresh(answerKey(stamp, asked)) : null;
+    return { for: had ? asked : "", loading: null, answer: had ? { query: asked, ...had } : null, problem: null };
   });
   const current = useRef("");
+  const stampNow = useRef(stamp);
+  stampNow.current = stamp;
   const run = useCallback((q: string) => {
     current.current = q;
-    const had = fresh(q);
-    if (had) { setState({ for: q, loading: null, answer: { query: q, results: had }, problem: null }); return; }
+    const key = answerKey(stampNow.current, q);
+    const had = fresh(key);
+    if (had) { setState({ for: q, loading: null, answer: { query: q, ...had }, problem: null }); return; }
     setState((s) => ({ ...s, for: q, loading: q, problem: null }));
-    asking(q).then((results) => {
+    asking(key, q).then((a) => {
       if (current.current !== q) return; // a newer search was asked meanwhile
-      setState({ for: q, loading: null, answer: { query: q, results }, problem: null });
+      setState({ for: q, loading: null, answer: { query: q, ...a }, problem: null });
     }, (e: unknown) => {
       if (current.current !== q) return;
       setState((s) => ({ ...s, loading: null, problem: problemOf(e) }));
@@ -230,27 +246,27 @@ export function useMeaningSearch(asked: string, enabled: boolean, attempt: numbe
   return state;
 }
 
-/** One request per query at a time, however often it is asked meanwhile. */
-const pending = new Map<string, Promise<MeaningResult[]>>();
-function asking(q: string): Promise<MeaningResult[]> {
-  let p = pending.get(q);
+/** One request per query and content at a time, however often it is asked meanwhile. */
+const pending = new Map<string, Promise<Answer>>();
+function asking(key: string, q: string): Promise<Answer> {
+  let p = pending.get(key);
   if (!p) {
-    p = searchByMeaning(q).then((results) => {
-      answers.delete(q);
-      answers.set(q, { at: Date.now(), results });
+    p = searchByMeaning(q).then((answer) => {
+      answers.delete(key);
+      answers.set(key, { at: Date.now(), answer });
       while (answers.size > KEEP_N) answers.delete(answers.keys().next().value as string);
-      return results;
-    }).finally(() => pending.delete(q));
-    pending.set(q, p);
+      return answer;
+    }).finally(() => pending.delete(key));
+    pending.set(key, p);
   }
   return p;
 }
 
-function fresh(q: string): MeaningResult[] | null {
-  const had = answers.get(q);
+function fresh(key: string): Answer | null {
+  const had = answers.get(key);
   if (!had) return null;
-  if (Date.now() - had.at > KEEP_MS) { answers.delete(q); return null; }
-  return had.results;
+  if (Date.now() - had.at > KEEP_MS) { answers.delete(key); return null; }
+  return had.answer;
 }
 
 /** For tests: forget the answers had. */
@@ -269,26 +285,29 @@ export interface Plan {
   show: "words" | "meaning" | "both" | "none";
   /** The server's answer for `q`, for "meaning" and "both". */
   meaning: MeaningResult[];
+  /** More matched than the server sent: the filters and counts work on the closest only. */
+  truncated: boolean;
   /** A newer search is awaited. */
   busy: boolean;
   problem: MeaningProblem | null;
 }
 
 /**
- * `q` is the query in the address (it follows the typing), `asked` the one sent to the server
- * last. With Words, or when search by meaning is not offered, the word search follows `q`.
+ * `q` is the query in the address, `asked` the one sent to the server last (with Meaning and Both
+ * the address changes only when the search is run, so the two are the same there). With Words,
+ * or when search by meaning is not offered, the word search follows `q`.
  */
 export function planOf(mode: SearchMode, q: string, asked: string, offered: boolean, st: MeaningState): Plan {
-  const plain = (query: string): Plan => ({ q: query, show: "words", meaning: [], busy: false, problem: null });
+  const plain = (query: string): Plan => ({ q: query, show: "words", meaning: [], truncated: false, busy: false, problem: null });
   if (!offered || mode === "words" || st.problem?.kind === "off") return plain(q);
   const a = asked.trim();
   if (!a) return plain("");
   const settled = st.for === a && !st.loading;
-  if (settled && st.problem) return { q: a, show: mode === "meaning" ? "none" : "words", meaning: [], busy: false, problem: st.problem };
-  if (settled && st.answer?.query === a) return { q: a, show: mode, meaning: st.answer.results, busy: false, problem: null };
+  if (settled && st.problem) return { q: a, show: mode === "meaning" ? "none" : "words", meaning: [], truncated: false, busy: false, problem: st.problem };
+  if (settled && st.answer?.query === a) return { q: a, show: mode, meaning: st.answer.results, truncated: !!st.answer.truncated, busy: false, problem: null };
   // waiting: what was shown stays until the answer comes
-  if (st.answer) return { q: st.answer.query, show: mode, meaning: st.answer.results, busy: true, problem: null };
-  return { q: a, show: mode === "meaning" ? "none" : "words", meaning: [], busy: true, problem: null };
+  if (st.answer) return { q: st.answer.query, show: mode, meaning: st.answer.results, truncated: !!st.answer.truncated, busy: true, problem: null };
+  return { q: a, show: mode === "meaning" ? "none" : "words", meaning: [], truncated: false, busy: true, problem: null };
 }
 
 const LITTLE = new Set(["the", "and", "for", "with", "how", "what", "who", "when", "can", "are", "was", "you", "your", "our", "from", "into", "that", "this", "not", "but", "has", "have", "its", "all", "any", "out", "get", "use"]);
@@ -298,3 +317,24 @@ const LITTLE = new Set(["the", "and", "for", "with", "how", "what", "who", "when
  * left unmarked.
  */
 export const markedWords = (words: string[]) => words.filter((w) => w.length >= 3 && !LITTLE.has(w));
+
+// ---------- what the page says about it
+
+/** The provider of search by meaning, as `/api/me` says: unknown from an older server. */
+export type Provider = "builtin" | "vertex" | undefined;
+export const providerOf = (p: unknown): Provider => (p === "builtin" || p === "vertex" ? p : undefined);
+
+/**
+ * The line that says what "Meaning" does - true for the provider in use. The built-in one
+ * compares words and parts of words; it does not know that different words can mean the same
+ * thing, and it always shows the closest, close or not. Without knowing the provider, the
+ * cautious wording, which holds for both.
+ */
+export function meaningHelp(provider: Provider): string {
+  if (provider === "builtin") return "compares the words and parts of words you type with the text of every process and standard, and shows the closest first, even when none is really close. It does not know that different words can mean the same thing.";
+  if (provider === "vertex") return "finds processes and standards about what you type, even when they use other words, and shows the closest first.";
+  return "puts first what comes closest to what you type, even when not every word is in it.";
+}
+
+/** The sentence near the count when the server sent only the closest of more that matched. */
+export const truncatedText = (n: number) => `Showing the ${n} closest. Add words or choose a filter to narrow it down.`;

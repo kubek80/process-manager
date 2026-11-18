@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -22,28 +23,66 @@ func (p problem) Error() string { return string(p) }
 
 func problemf(format string, args ...any) error { return problem(fmt.Sprintf(format, args...)) }
 
-// tool registers a read-only tool whose answer is a short text for people and the structured
-// result, also as JSON text for clients that do not read structured results.
+// errTimeout is the answer when a call took longer than the server allows.
+var errTimeout = problem("That took too long. Try again, or narrow it down.")
+
+// errServer is the answer when something unexpected went wrong.
+var errServer = problem("Something went wrong on the server. Try again later.")
+
+// tool registers a tool whose answer is a short text for people and the structured result,
+// also as JSON text for clients that do not read structured results. Every call has a
+// deadline shorter than the HTTP server's write timeout and is answered when it passes, even
+// if the work does not stop; a panic is caught, logged with the tool's name (never its
+// arguments) and answered with a plain error, so one bad call cannot take the server down.
 func tool[In, Out any](s *Server, srv *mcp.Server, t *mcp.Tool, fn func(ctx context.Context, req *mcp.CallToolRequest, in In) (Out, string, error)) {
 	mcp.AddTool(srv, t, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
-		out, text, err := fn(ctx, req, in)
-		if err != nil {
-			var zero Out
+		var zero Out
+		ctx, cancel := context.WithTimeout(ctx, s.o.CallTimeout)
+		defer cancel()
+		type answer struct {
+			out  Out
+			text string
+			err  error
+		}
+		done := make(chan answer, 1)
+		go func() {
+			defer func() {
+				if v := recover(); v != nil {
+					s.o.Log.Error("tool failed unexpectedly", "tool", t.Name, "panic", fmt.Sprint(v), "stack", string(debug.Stack()))
+					done <- answer{err: errServer}
+				}
+			}()
+			out, text, err := fn(ctx, req, in)
+			done <- answer{out, text, err}
+		}()
+		var a answer
+		select {
+		case a = <-done:
+		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				s.o.Log.Warn("tool call took too long and was answered with an error", "tool", t.Name, "limit", s.o.CallTimeout.String())
+				return nil, zero, errTimeout
+			}
+			return nil, zero, errServer
+		}
+		if a.err != nil {
 			var p problem
-			if errors.As(err, &p) {
+			if errors.As(a.err, &p) {
 				return nil, zero, p
 			}
-			if ctx.Err() == nil {
-				s.o.Log.Error("tool failed", "tool", t.Name, "error", err)
+			if errors.Is(a.err, context.DeadlineExceeded) {
+				return nil, zero, errTimeout
 			}
-			return nil, zero, problem("Something went wrong on the server. Try again later.")
+			if ctx.Err() == nil {
+				s.o.Log.Error("tool failed", "tool", t.Name, "error", a.err)
+			}
+			return nil, zero, errServer
 		}
-		data, err := json.Marshal(out)
+		data, err := json.Marshal(a.out)
 		if err != nil {
-			var zero Out
 			return nil, zero, err
 		}
-		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}, &mcp.TextContent{Text: string(data)}}}, out, nil
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: a.text}, &mcp.TextContent{Text: string(data)}}}, a.out, nil
 	})
 }
 
@@ -106,8 +145,8 @@ func (s *Server) addTools(srv *mcp.Server) {
 			"Give the person's need as query and/or filters (ids or names, any case). With tier, environment or language only processes that apply to that application are returned. " +
 			"Returns id, title, summary, version, owner team with contact, category, practice, platform, rigour (mandatory = the only allowed way), where it applies, review state, and the matching steps. " +
 			"Then read one with get_process or get_my_steps.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, in SearchInput) (SearchOutput, string, error) {
-		out, err := s.search(ctx, docs.Process, in)
+	}, func(ctx context.Context, req *mcp.CallToolRequest, in SearchInput) (SearchOutput, string, error) {
+		out, err := s.search(ctx, docs.Process, s.caller(req), in)
 		return out, searchText(out, "process", "processes"), err
 	})
 	tool(s, srv, &mcp.Tool{
@@ -117,8 +156,8 @@ func (s *Server) addTools(srv *mcp.Server) {
 			"Give a query and/or filters (ids or names, any case). rigour finds standards with at least one requirement of that level (must = mandatory, should = recommended, may = optional). " +
 			"With tier, environment or language only standards and requirements that apply to that application are returned. " +
 			"Returns each standard with version, owner, review state, the requirements that apply (id, title, level) and the matching requirements. Then read one with get_standard.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, in SearchInput) (SearchOutput, string, error) {
-		out, err := s.search(ctx, docs.Standard, in)
+	}, func(ctx context.Context, req *mcp.CallToolRequest, in SearchInput) (SearchOutput, string, error) {
+		out, err := s.search(ctx, docs.Standard, s.caller(req), in)
 		return out, searchText(out, "standard", "standards"), err
 	})
 	tool(s, srv, &mcp.Tool{
@@ -190,6 +229,18 @@ func (s *Server) addTools(srv *mcp.Server) {
 		out, err := s.catalog(ctx)
 		return out, catalogText(out), err
 	})
+}
+
+// caller is who makes a call, for the brake on searches: the person the agent acts for when
+// known, otherwise the address the call came from.
+func (s *Server) caller(req *mcp.CallToolRequest) string {
+	if req == nil || req.Extra == nil || req.Extra.Header == nil {
+		return "unknown"
+	}
+	if p := s.person(req.Extra.Header); p.Email != "" {
+		return "person:" + p.Email
+	}
+	return "address:" + req.Extra.Header.Get(headerCaller)
 }
 
 // ---------- get_my_steps
@@ -469,6 +520,9 @@ func searchText(out SearchOutput, one, many string) string {
 		return "No active " + many + " match. Try fewer words or filters."
 	}
 	var b strings.Builder
+	if out.AtLeast {
+		b.WriteString("At least ")
+	}
 	fmt.Fprintf(&b, "%s match", plural(out.Total, "active "+one, "active "+many))
 	if out.Total > len(out.Results) {
 		fmt.Fprintf(&b, " (the first %d are shown)", len(out.Results))

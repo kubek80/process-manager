@@ -277,6 +277,13 @@ export function filtersOf(r: Filters): Filters {
   return out as Filters;
 }
 
+/**
+ * A count as a filter shows it. `atLeast`: the results are only the closest of more that matched
+ * (search by meaning), so a count says how many there are at least: "12+", "at least 12 results".
+ */
+export const countText = (n: number, atLeast?: boolean) => (atLeast && n > 0 ? `${n}+` : String(n));
+export const countWords = (n: number, atLeast?: boolean) => `${atLeast && n > 0 ? "at least " : ""}${n} ${n === 1 ? "result" : "results"}`;
+
 /** "3 mandatory, 2 recommended" for a standard; "Mandatory" for a process. */
 export function rigourLine(kind: TargetKind, rigour: Partial<Record<Rigour, number>>): string {
   if (kind === "process") return RIGOURS.filter((x) => rigour[x]).map((x) => RIGOUR_LABEL[x]).join(", ");

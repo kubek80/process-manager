@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"golang.org/x/text/unicode/norm"
@@ -54,9 +56,10 @@ type SearchResult struct {
 
 // SearchOutput is the answer of both search tools.
 type SearchOutput struct {
-	Total    int               `json:"total" jsonschema:"how many match; results holds the first ones"`
+	Total    int               `json:"total" jsonschema:"how many match; results holds the first ones. With totalAtLeast it is a lower bound"`
+	AtLeast  bool              `json:"totalAtLeast,omitempty" jsonschema:"true: more matched than could be counted; total is at least this many"`
 	Results  []SearchResult    `json:"results"`
-	RankedBy string            `json:"rankedBy" jsonschema:"meaning (search by meaning), words (every word of the query found) or title (no query)"`
+	RankedBy string            `json:"rankedBy" jsonschema:"meaning (search by meaning), words (every word of the query found), words-fallback (search by meaning was not available this time, see note: every word of the query found) or title (no query)"`
 	Note     string            `json:"note,omitempty"`
 	Filters  map[string]string `json:"filters" jsonschema:"the filters as understood, by id"`
 }
@@ -440,7 +443,9 @@ type candidate struct {
 	matches []Match
 }
 
-func (s *Server) search(ctx context.Context, kind string, in SearchInput) (SearchOutput, error) {
+// search runs one search. caller is who asks (the person, otherwise the address), for the brake
+// on searches that use the embeddings provider.
+func (s *Server) search(ctx context.Context, kind, caller string, in SearchInput) (SearchOutput, error) {
 	l, err := s.load(ctx)
 	if err != nil {
 		return SearchOutput{}, err
@@ -476,23 +481,39 @@ func (s *Server) search(ctx context.Context, kind string, in SearchInput) (Searc
 			return a < b || (a == b && found[i].e.doc.ID < found[j].e.doc.ID)
 		})
 	case s.o.Index != nil && s.o.Index.Enabled():
-		found, err = s.byMeaning(ctx, query, pool)
+		if ok, wait := s.brake.allow(caller, time.Now()); !ok {
+			return SearchOutput{}, problemf("Too many searches in the last minute (at most %d). Try again in %d seconds.", s.o.SearchesPerMinute, int(wait.Seconds())+1)
+		}
+		found, out.AtLeast, err = s.byMeaning(ctx, query, pool)
 		if err == nil {
 			out.RankedBy = "meaning"
 			break
 		}
+		if ctx.Err() != nil { // the call itself is over: nothing to fall back for
+			return SearchOutput{}, ctx.Err()
+		}
+		out.AtLeast = false
 		switch {
 		case errors.Is(err, ErrIndexNotReady):
-			s.o.Log.Info("the search index is not built yet: agents search by words until the portal server has built it")
+			// as long as the portal server has not built the index this happens on every search
+			level := slog.LevelDebug
+			if s.notReady.CompareAndSwap(false, true) {
+				level = slog.LevelInfo
+			}
+			s.o.Log.Log(ctx, level, "the search index is not built yet: agents search by words until the portal server has built it with the same settings")
 			out.Note = "Search by meaning is not ready yet; these results are a word match."
+		case errors.Is(err, errMeaningTimeout):
+			s.o.Log.Warn("search by meaning did not answer in time; searching by words", "limit", s.o.MeaningTimeout.String())
+			out.Note = "Search by meaning did not answer in time; these results are a word match."
 		case errors.Is(err, ErrIndexProvider):
-			s.o.Log.Warn("search by meaning failed: the embeddings provider could not be reached; searching by words", "error", err)
+			s.o.Log.Warn("search by meaning failed: the embeddings provider could not be reached; searching by words")
 			out.Note = "Search by meaning is not available right now (the service that compares meanings could not be reached); these results are a word match."
 		default:
 			s.o.Log.Warn("search by meaning failed; searching by words", "error", err)
 			out.Note = "Search by meaning is not available right now; these results are a word match."
 		}
-		fallthrough
+		out.RankedBy = "words-fallback"
+		found = byWords(l, query, pool)
 	default:
 		out.RankedBy = "words"
 		found = byWords(l, query, pool)
@@ -527,15 +548,50 @@ func byWords(l *library, query string, pool []candidate) []candidate {
 	return out
 }
 
-// searchDepth is how many documents are asked of the index: enough that the filters leave
-// something over.
-const searchDepth = 200
+// searchDepth is how many documents are asked of the index: as many as it gives, so that the
+// filters leave something over.
+const searchDepth = 500
 
-func (s *Server) byMeaning(ctx context.Context, query string, pool []candidate) ([]candidate, error) {
-	hits, err := s.o.Index.Search(ctx, query, searchDepth)
-	if err != nil {
-		return nil, err
+// errMeaningTimeout: search by meaning took longer than Options.MeaningTimeout.
+var errMeaningTimeout = errors.New("search by meaning did not answer in time")
+
+// byMeaning asks the index and keeps, in its order, what passed the filters. truncated says
+// that the index found more than it returned. It gives up after Options.MeaningTimeout, even if
+// the index does not stop (a provider that hangs).
+func (s *Server) byMeaning(ctx context.Context, query string, pool []candidate) (found []candidate, truncated bool, err error) {
+	type answer struct {
+		hits      []Found
+		truncated bool
+		err       error
 	}
+	wait, cancel := context.WithTimeout(ctx, s.o.MeaningTimeout)
+	defer cancel()
+	done := make(chan answer, 1)
+	go func() {
+		defer func() {
+			if v := recover(); v != nil {
+				done <- answer{err: fmt.Errorf("search by meaning failed unexpectedly: %v", v)}
+			}
+		}()
+		hits, more, err := s.o.Index.Search(wait, query, searchDepth)
+		done <- answer{hits, more, err}
+	}()
+	var a answer
+	select {
+	case a = <-done:
+	case <-wait.Done():
+		if ctx.Err() != nil {
+			return nil, false, ctx.Err()
+		}
+		return nil, false, errMeaningTimeout
+	}
+	if a.err != nil {
+		if errors.Is(a.err, context.DeadlineExceeded) && ctx.Err() == nil {
+			return nil, false, errMeaningTimeout
+		}
+		return nil, false, a.err
+	}
+	hits := a.hits
 	in := map[string]candidate{}
 	for _, c := range pool {
 		in[c.e.kind+"/"+c.e.doc.ID] = c
@@ -558,7 +614,7 @@ func (s *Server) byMeaning(ctx context.Context, query string, pool []candidate) 
 		}
 		out = append(out, c)
 	}
-	return out, nil
+	return out, a.truncated, nil
 }
 
 // dropLeftOut removes the matches in requirements that do not apply to the profile.

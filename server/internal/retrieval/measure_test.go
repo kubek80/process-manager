@@ -34,7 +34,7 @@ func builtinIndex(t *testing.T) *Index {
 	t.Helper()
 	pool, store := filled(t, true)
 	ix := New(pool, store, embedding.Builtin(768), chunking.Options{}, quiet)
-	must(t, ix.Ensure(bg))
+	build(t, ix)
 	return ix
 }
 

@@ -118,6 +118,14 @@ func filled(t *testing.T, demo bool) (*pgxpool.Pool, *docs.Store) {
 	return pool, store
 }
 
+// build makes the index and fills it, as a start does in the background.
+func build(t *testing.T, ix *Index) {
+	t.Helper()
+	must(t, ix.Ensure(bg))
+	_, err := ix.CatchUp(bg)
+	must(t, err)
+}
+
 func chunkCount(t *testing.T, pool *pgxpool.Pool, where string, args ...any) int {
 	t.Helper()
 	var n int
@@ -167,7 +175,7 @@ func TestSwitchedOffIsSafe(t *testing.T) {
 		if ix.Enabled() || ix.Provider() != "" || ix.Outside() {
 			t.Fatal("switched off reports on")
 		}
-		must(t, ix.Ensure(bg))
+		build(t, ix)
 		must(t, ix.Sync(bg, docs.Process, "x"))
 		if r, err := ix.Search(bg, "anything", 10); err != nil || len(r) != 0 {
 			t.Fatalf("search: %v %v", r, err)
@@ -204,7 +212,7 @@ func TestEnsureOnAnEmptyDatabaseAndTwiceInParallel(t *testing.T) {
 		t.Fatalf("dimensions: %d", dims)
 	}
 	// and once more: nothing to do
-	must(t, New(pool, store, f, chunking.Options{}, quiet).Ensure(bg))
+	build(t, New(pool, store, f, chunking.Options{}, quiet))
 	if calls, _ := f.counts(); calls != 0 {
 		t.Fatalf("embedded for an empty database: %d calls", calls)
 	}
@@ -214,7 +222,7 @@ func TestSyncEmbedsOnlyWhatChangedAndRemovesWhatIsGone(t *testing.T) {
 	pool, store := filled(t, false)
 	f := newFake()
 	ix := New(pool, store, f, chunking.Options{}, quiet)
-	must(t, ix.Ensure(bg))
+	build(t, ix)
 	all := expected(t, store, chunking.Default())
 	if n := chunkCount(t, pool, ""); n != all || n == 0 {
 		t.Fatalf("parts after the first build: %d, want %d", n, all)
@@ -280,11 +288,11 @@ func TestSyncEmbedsOnlyWhatChangedAndRemovesWhatIsGone(t *testing.T) {
 func TestAPartThatIsGoneIsRemoved(t *testing.T) {
 	pool, store := filled(t, false)
 	ix := New(pool, store, newFake(), chunking.Options{}, quiet)
-	must(t, ix.Ensure(bg))
+	build(t, ix)
 	before := chunkCount(t, pool, `where doc_id = 'request-gcp-project'`)
 	// only the summary and the steps
 	only := New(pool, store, newFake(), chunking.Options{Parts: []string{"summary"}, MaxChars: 2000}, quiet)
-	must(t, only.Ensure(bg)) // other settings: everything again
+	build(t, only) // other settings: everything again
 	if n := chunkCount(t, pool, `where doc_id = 'request-gcp-project'`); n != 1 || n >= before {
 		t.Fatalf("summary only: %d parts (before %d)", n, before)
 	}
@@ -296,12 +304,12 @@ func TestAPartThatIsGoneIsRemoved(t *testing.T) {
 func TestOtherSettingsRebuildEverything(t *testing.T) {
 	pool, store := filled(t, false)
 	f := newFake()
-	must(t, New(pool, store, f, chunking.Options{}, quiet).Ensure(bg))
+	build(t, New(pool, store, f, chunking.Options{}, quiet))
 	all := expected(t, store, chunking.Default())
 
 	// the same settings: nothing
 	f.reset()
-	must(t, New(pool, store, f, chunking.Options{}, quiet).Ensure(bg))
+	build(t, New(pool, store, f, chunking.Options{}, quiet))
 	if calls, _ := f.counts(); calls != 0 {
 		t.Fatalf("the same settings embedded again: %d calls", calls)
 	}
@@ -310,8 +318,8 @@ func TestOtherSettingsRebuildEverything(t *testing.T) {
 		g := newFake()
 		g.dims = f.dims
 		change(g)
-		must(t, New(pool, store, g, chunking.Options{}, quiet).Ensure(bg))
-		if _, texts := g.counts(); texts != all {
+		build(t, New(pool, store, g, chunking.Options{}, quiet))
+		if _, texts := g.counts(); texts != all+1 { // and one probe
 			t.Fatalf("after a change of settings %d texts embedded, want %d", texts, all)
 		}
 		f = g
@@ -332,7 +340,7 @@ func TestAProviderFailureLeavesTheOldPartsAndIsTriedAgain(t *testing.T) {
 	pool, store := filled(t, false)
 	f := newFake()
 	ix := New(pool, store, f, chunking.Options{}, quiet)
-	must(t, ix.Ensure(bg))
+	build(t, ix)
 	before := chunkCount(t, pool, `where doc_id = 'secure-logging'`)
 
 	f.setFail(true)
@@ -381,7 +389,7 @@ func TestRetryEveryCatchesUp(t *testing.T) {
 	pool, store := filled(t, false)
 	f := newFake()
 	ix := New(pool, store, f, chunking.Options{}, quiet)
-	must(t, ix.Ensure(bg))
+	build(t, ix)
 	f.setFail(true)
 	edit(t, store, docs.Process, "request-gcp-project", `"status": "active"`, `"status": "draft"`)
 	_ = ix.Sync(bg, docs.Process, "request-gcp-project") // a draft needs no provider: it works
@@ -412,7 +420,7 @@ func TestSearchGroupsByDocumentAndNeverReturnsADraft(t *testing.T) {
 	pool, store := filled(t, false)
 	f := newFake()
 	ix := New(pool, store, f, chunking.Options{}, quiet)
-	must(t, ix.Ensure(bg))
+	build(t, ix)
 
 	results, err := ix.Search(bg, "secrets passwords tokens logs", 50)
 	must(t, err)
@@ -505,7 +513,7 @@ func TestSnippet(t *testing.T) {
 func TestSnippetsAreTheReadableTextOfAPart(t *testing.T) {
 	pool, store := filled(t, false)
 	ix := New(pool, store, newFake(), chunking.Options{}, quiet)
-	must(t, ix.Ensure(bg))
+	build(t, ix)
 	lists, _ := store.Lists(bg)
 	for _, kind := range []string{docs.Process, docs.Standard} {
 		list, _ := store.List(bg, kind)
@@ -585,9 +593,16 @@ func TestEnsureWorksWhileTheProviderIsDown(t *testing.T) {
 	if _, err := ix.CatchUp(bg); !errors.Is(err, ErrProvider) {
 		t.Fatalf("catch up while down: %v", err)
 	}
+	if err := ix.Ready(bg); !errors.Is(err, ErrNotSetUp) {
+		t.Fatalf("ready while it is being built: %v", err)
+	}
+	if _, err := ix.Search(bg, "project", 5); !errors.Is(err, ErrNotSetUp) {
+		t.Fatalf("search while it is being built: %v", err)
+	}
 	f.setFail(false)
 	r, err := ix.CatchUp(bg)
 	must(t, err)
+	must(t, ix.Ready(bg))
 	if r.Documents != 10 || r.Embedded == 0 || r.Failed != 0 {
 		t.Fatalf("catch up: %+v", r)
 	}

@@ -155,9 +155,10 @@ export interface Me {
   devUsers?: { email: string; name: string; about: string }[];
   /**
    * Search by meaning: whether the server offers it, and whether what is searched for is sent to
-   * an outside service (Google Cloud) to be compared. Missing from an older server: not offered.
+   * an outside service (Google Cloud) to be compared, and which provider compares (absent when
+   * it is off, and from an older server). Missing from an older server: not offered.
    */
-  search?: { meaning: boolean; outside: boolean };
+  search?: { meaning: boolean; outside: boolean; provider?: "builtin" | "vertex" };
 }
 
 export type Role = "admin" | "catalog-manager" | "process-editor" | "standards-editor" | "owner" | "platform-owner" | "practice-owner";
