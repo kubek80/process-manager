@@ -175,7 +175,7 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
       </Modal>
     );
   }
-  if (loadTheirs) {
+  if (loadTheirs && c.exists) {
     return (
       <Modal title={who.you ? "You saved the draft in another window first" : "Somebody else saved the draft first"}
         subtitle={`${who.you ? "You" : who.name} saved the unpublished changes ${c.updatedAt ? `at ${when(c.updatedAt)}` : ""}${who.you ? " in another window or tab" : ""}, after you started editing here.`} onClose={d.dismissConflict}

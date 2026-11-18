@@ -241,7 +241,10 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
   const status = statusOf(stored);
   // text in the JSON that has problems is a change too, only not one that can be saved yet
   const unsaved = d.dirty || jsonPending;
-  const state = editState({ status: stored.status, version, working: !!working, dirty: unsaved });
+  // deleted by somebody else: readers no longer see it, whatever it was before
+  const state = isGone
+    ? { key: "draft" as const, pill: "Deleted", sentence: "Readers no longer see it. Saving brings it back as a draft" }
+    : editState({ status: stored.status, version, working: !!working, dirty: unsaved });
   const leaveJson = async () => {
     if (jsonPending && !(await confirmDialog({
       title: "Leave the JSON without its changes?", body: "The JSON has changes with problems, so they are not part of the draft. If you go back to the editor now they are lost.",
