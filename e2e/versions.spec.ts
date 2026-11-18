@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { ALEX, DANA, SAM, answer, meaningReady, open, readProcess, save, signIn, watchErrors } from "./helpers";
+import { ALEX, DANA, SAM, answer, editState, fields, meaningReady, more, open, openEditor, outline, publish, readProcess, readWorkingDraft, saveDraft, signIn, watchErrors } from "./helpers";
 
 const CSRF = { "X-Requested-With": "process-manager" };
 
@@ -19,21 +19,24 @@ async function otherPersonRenames(request: APIRequestContext, email: string, id:
   expect(res.ok(), "the other person's save").toBeTruthy();
 }
 
+/** On the editing screen: the first step gets another name (not saved yet). */
 const renameFirstStep = async (page: Page, title: string) => {
-  await page.locator(".block-main").first().click();
-  await page.getByRole("button", { name: "Edit step" }).click();
-  await page.locator(".drawer").getByLabel("What happens", { exact: true }).fill(title);
+  await outline(page, /^1 /);
+  await fields(page).getByLabel(/^What happens/).fill(title);
 };
+const firstBlock = (page: Page) => page.locator(".edit-preview .block").first();
 
-test("every save is a version with a note, and everyone can see what changed", async ({ page }) => {
+test("every publish is a version with a note, and everyone can see what changed", async ({ page }) => {
   await signIn(page, ALEX);
   await copyOf(page, "versions-demo", "Versions demo");
   await open(page, "/p/versions-demo/flow");
   await expect(page.getByRole("button", { name: "Version 1" })).toBeVisible();
 
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
   await renameFirstStep(page, "Ask for a namespace");
-  await page.getByLabel("What changed? (optional)").fill("Plainer wording for the first step");
-  await save(page);
+  await publish(page, "Plainer wording for the first step");
+  await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 2.");
+  await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
   await expect(page.getByRole("button", { name: "Version 2" })).toBeVisible();
 
   await page.getByRole("button", { name: "Version 2" }).click();
@@ -44,13 +47,17 @@ test("every save is a version with a note, and everyone can see what changed", a
   await expect(versions.locator("li").first()).toContainText(ALEX);
   await versions.locator("li").first().getByRole("button", { name: "What changed" }).click();
   await expect(versions.locator(".history-detail")).toContainText("Step “Ask for a namespace” changed: title");
+  // the reader's page restores nothing: that is done on the editing screen
+  await expect(versions.getByRole("button", { name: "Restore" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 
-  // an editor can bring the earlier version back; it only becomes real with a save
-  await versions.getByRole("button", { name: "Restore" }).click();
-  await expect(page.locator(".block").first()).toContainText("Request a registry namespace");
-  await page.getByLabel("What changed? (optional)").fill("Back to the old wording");
-  await save(page);
-  await expect(page.getByRole("button", { name: "Version 3" })).toBeVisible();
+  // an editor brings the earlier version back into the draft; it becomes real with Publish
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await more(page, "Versions");
+  await page.getByRole("dialog", { name: /Versions of/ }).getByRole("button", { name: "Restore" }).click();
+  await expect(firstBlock(page)).toContainText("Request a registry namespace");
+  await publish(page, "Back to the old wording");
+  await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 3.");
 
   // a reader sees the versions and the notes, but cannot restore
   await signIn(page, SAM);
@@ -62,113 +69,114 @@ test("every save is a version with a note, and everyone can see what changed", a
   await expect(forReaders.getByRole("button", { name: "Restore" })).toHaveCount(0);
 });
 
-test("when somebody else saved first, nothing is overwritten without a decision", async ({ page, playwright }) => {
+test("a draft that was never published: when somebody else saved first, nothing is overwritten without a decision", async ({ page, playwright }) => {
   const errors = watchErrors(page);
   await signIn(page, ALEX);
-  await copyOf(page, "conflict-demo", "Conflict demo");
-  await open(page, "/p/conflict-demo/flow");
+  await copyOf(page, "conflict-demo", "Conflict demo", "draft");
+  await openEditor(page, "process", "conflict-demo");
   await renameFirstStep(page, "My wording");
 
   const other = await playwright.request.newContext({ baseURL: new URL(page.url()).origin });
   await otherPersonRenames(other, DANA, "conflict-demo", "Renamed by Dana");
 
-  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.locator(".edit-bar").getByRole("button", { name: "Save draft" }).click();
   const dialog = page.getByRole("dialog", { name: "Somebody else saved first" });
-  await expect(dialog).toContainText(`${DANA} saved version 2`);
+  await expect(dialog).toContainText(/(dana@example\.com|Dana Admin) saved version 2/);
   await expect(dialog).toContainText("Title changed");
   expect((await readProcess(page, "conflict-demo"))!.title).toBe("Renamed by Dana"); // theirs is untouched
 
   // continue from their version: their title is there, my change is one Undo away
   await dialog.getByRole("button", { name: "Use their version" }).click();
-  await expect(page.locator("h1")).toHaveText("Renamed by Dana");
-  await expect(page.locator(".block").first()).toContainText("Request a registry namespace");
-  await page.getByRole("button", { name: "Undo", exact: true }).click();
-  await expect(page.locator(".block").first()).toContainText("My wording");
+  await expect(page.locator(".eb-title h1")).toHaveText("Renamed by Dana");
+  await expect(firstBlock(page)).toContainText("Request a registry namespace");
+  await page.locator(".edit-bar").getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(firstBlock(page)).toContainText("My wording");
 
   // this time keep mine: it is saved on top of theirs, and theirs stays in the versions
   await otherPersonRenames(other, DANA, "conflict-demo", "Renamed by Dana again");
-  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.locator(".edit-bar").getByRole("button", { name: "Save draft" }).click();
   await page.getByRole("dialog", { name: "Somebody else saved first" }).getByRole("button", { name: "Save mine over theirs" }).click();
-  await expect(page.locator(".saved")).toBeVisible();
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Draft\. Readers do not see this yet\.$/);
   const now = (await readProcess(page, "conflict-demo"))!;
   expect(now.steps[0].title).toBe("My wording");
-  await page.getByRole("button", { name: "Version 4" }).click();
+  expect(now.status).toBe("draft");
+  await more(page, "Versions");
   await expect(page.getByRole("dialog", { name: /Versions of/ })).toContainText("Saved over version 3");
   await other.dispose();
   expect(errors).toEqual([]);
 });
 
-test("leaving with unsaved changes asks first, whichever way out is taken", async ({ page }) => {
+test("leaving the editing screen with unsaved changes asks first, whichever way out is taken", async ({ page }) => {
   await signIn(page, ALEX);
   await copyOf(page, "leave-demo", "Leave demo");
   await open(page, "/processes");
   await page.locator(".card", { hasText: "Leave demo" }).click();
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
   await renameFirstStep(page, "Not saved yet");
-  const mine = page.getByText("Not saved yet").first();
+  const mine = firstBlock(page);
 
-  // moving around inside the process keeps the changes and does not ask
-  await page.getByRole("tab", { name: "Checklist" }).click();
-  await expect(mine).toBeVisible();
+  // moving around inside the editing screen keeps the changes and does not ask
+  await outline(page, "About");
+  await outline(page, /^2 /);
+  await expect(mine).toContainText("Not saved yet");
   await expect(page.getByRole("dialog", { name: "Leave without saving?" })).toHaveCount(0);
-  await expect(page.locator(".drawer")).toBeVisible(); // the open step stays open across the tabs
 
-  for (const leave of [
-    () => page.getByRole("link", { name: "Guide" }).click(),
-    () => page.getByRole("button", { name: "All processes" }).click(),
-  ]) {
-    await leave();
-    await answer(page, "Leave without saving?", "Stay");
-    await expect(page).toHaveURL(/#\/p\/leave-demo\/list/);
-    await expect(mine).toBeVisible();
+  await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
+  await answer(page, "Leave without saving?", "Stay");
+  await expect(page).toHaveURL(/#\/p\/leave-demo\/edit/);
+  await expect(mine).toContainText("Not saved yet");
+
+  // the browser's Back button: the steps chosen inside the screen first, then out of it, which asks
+  for (let i = 0; i < 5 && !(await page.getByRole("dialog", { name: "Leave without saving?" }).isVisible()); i++) {
+    await page.goBack();
+    await page.waitForTimeout(200);
   }
-  // the Back button: back through the checklist and the open step it stays inside the process; the next one would leave
-  await page.goBack();
-  await page.goBack();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.goBack();
   await answer(page, "Leave without saving?", "Stay");
-  await expect(page).toHaveURL(/#\/p\/leave-demo\//);
-  await expect(mine).toBeVisible();
+  await expect(page).toHaveURL(/#\/p\/leave-demo\/edit/);
+  await expect(mine).toContainText("Not saved yet");
 
-  // signing out is a way out too
-  await page.getByRole("button", { name: "Your account" }).click();
-  await page.getByRole("button", { name: "Switch user" }).click();
-  await answer(page, "Leave without saving?", "Stay");
-  await expect(mine).toBeVisible();
-
-  await page.getByRole("link", { name: "Guide" }).click();
+  await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
   await answer(page, "Leave without saving?", "Leave without saving");
-  await expect(page).toHaveURL(/#\/guide/);
+  await expect(page).toHaveURL(/#\/p\/leave-demo\/flow/);
   expect((await readProcess(page, "leave-demo"))!.steps[0].title).toBe("Request a registry namespace");
+  expect(await readWorkingDraft(page, "process", "leave-demo")).toBeUndefined(); // nothing was kept behind the reader's back
 });
 
-test("changes can be undone step by step, including a deleted step and Discard", async ({ page }) => {
+test("changes can be undone step by step, including a deleted step and Discard changes", async ({ page }) => {
   await signIn(page, ALEX);
   await copyOf(page, "undo-demo", "Undo demo");
-  await open(page, "/p/undo-demo/flow");
-  const blocks = page.locator(".block");
+  await openEditor(page, "process", "undo-demo");
+  const blocks = page.locator(".edit-preview .block");
   await expect(blocks.first()).toBeVisible();
   const all = await blocks.count();
-  await page.locator(".block-main").first().click();
-  await page.locator(".drawer").getByRole("button", { name: "Delete step" }).click();
+  const bar = page.locator(".edit-bar");
+  await outline(page, /^1 /);
+  await fields(page).getByRole("button", { name: "Delete step" }).click();
   await answer(page, "Delete this step?", "Delete step");
   await expect(blocks).toHaveCount(all - 1);
 
-  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await bar.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(blocks).toHaveCount(all);
-  await expect(page.locator(".saved")).toBeVisible(); // back to what is saved
-  await page.getByRole("button", { name: "Redo" }).click();
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Published\./); // back to what is saved
+  await bar.getByRole("button", { name: "Redo" }).click();
   await expect(blocks).toHaveCount(all - 1);
 
-  // Discard goes back to the saved version - and can be undone like any other change
-  await page.getByRole("button", { name: "Discard" }).click();
+  // Discard changes goes back to the saved version - and can be undone like any other change
+  await bar.getByRole("button", { name: "Discard changes" }).click();
   await expect(blocks).toHaveCount(all);
-  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await bar.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(blocks).toHaveCount(all - 1);
   // the keyboard works too, outside text fields
-  await page.locator("h1").click();
+  await page.locator(".eb-title h1").click();
   await page.keyboard.press("Control+z");
   await expect(blocks).toHaveCount(all);
+  await page.keyboard.press("Control+Shift+z");
+  await expect(blocks).toHaveCount(all - 1);
+  // and Ctrl+S saves the draft, here as unpublished changes
+  await page.keyboard.press("Control+s");
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\. Readers still see version 1\.$/);
+  expect((await readWorkingDraft(page, "process", "undo-demo"))!.doc.steps).toHaveLength(all - 1);
+  expect((await readProcess(page, "undo-demo"))!.steps).toHaveLength(all);
 });
 
 test("a link can point at one step or one requirement", async ({ page }) => {
@@ -192,11 +200,11 @@ test("a link can point at one step or one requirement", async ({ page }) => {
 test("when the session ends in the middle of an edit, the edit survives signing in again", async ({ page, context }) => {
   await signIn(page, ALEX);
   await copyOf(page, "session-demo", "Session demo");
-  await open(page, "/p/session-demo/flow");
+  await openEditor(page, "process", "session-demo");
   await renameFirstStep(page, "Typed before the session ended");
 
   await context.clearCookies(); // the session is gone, as after some hours
-  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.locator(".edit-bar").getByRole("button", { name: "Save draft" }).click();
   const dialog = page.getByRole("dialog", { name: "You are signed out" });
   await expect(dialog).toContainText("Nothing on this page is lost");
   await dialog.getByRole("button", { name: "I have signed in" }).click();
@@ -206,8 +214,8 @@ test("when the session ends in the middle of an edit, the edit survives signing 
   await page.request.post("/auth/dev/login", { data: { email: ALEX }, headers: CSRF });
   await dialog.getByRole("button", { name: "I have signed in" }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(page.locator(".block").first()).toContainText("Typed before the session ended");
-  await save(page);
+  await expect(firstBlock(page)).toContainText("Typed before the session ended");
+  await publish(page);
   expect((await readProcess(page, "session-demo"))!.steps[0].title).toBe("Typed before the session ended");
 });
 
@@ -220,9 +228,9 @@ test("a new process starts with its name, as a draft that readers cannot reach",
   await dialog.getByLabel("Name of the process").fill("Request a database");
   await expect(dialog).toContainText("Address: …/request-a-database");
   await dialog.getByRole("button", { name: "Create process" }).click();
-  await expect(page).toHaveURL(/#\/p\/request-a-database\/flow/);
-  await expect(page.locator("h1")).toHaveText("Request a database");
-  await expect(page.locator(".banner", { hasText: "Draft." })).toBeVisible();
+  await expect(page).toHaveURL(/#\/p\/request-a-database\/edit/);
+  await expect(page.locator(".eb-title h1")).toHaveText("Request a database");
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Draft\. Readers do not see this yet/);
   expect((await readProcess(page, "request-a-database"))!.status).toBe("draft");
 
   // a reader does not get it from the server at all: not in the list, not by its link
@@ -240,13 +248,32 @@ test("the app runs under a strict security policy", async ({ page }) => {
   await page.addInitScript(() => document.addEventListener("securitypolicyviolation", (e) => console.error(`CSP: ${e.violatedDirective} ${e.blockedURI}`)));
   await meaningReady(page.request); // the pages below search by meaning too
   await signIn(page, DANA);
-  const res = await page.goto("/#/p/request-gcp-project/json");
+  const res = await page.goto("/#/p/request-gcp-project/edit");
   const csp = res!.headers()["content-security-policy"];
   expect(csp).toContain("script-src 'self'");
   expect(csp).not.toContain("unsafe-eval");
   expect(res!.headers()["x-frame-options"]).toBe("DENY");
+  // the editing screen of a process: the editable map with its tool icons, the fields, the JSON with its checker
+  await expect(page.locator(".edit-preview .block").first()).toBeVisible();
+  await expect(page.locator(".edit-preview img.entry-icon").first()).toBeVisible();
+  await outline(page, /^2 /);
+  await expect(fields(page).locator(".fields-head h2")).toBeVisible();
+  await more(page, "JSON");
   await expect(page.locator(".cm-editor")).toBeVisible(); // the code editor and the checker both work under it
-  await expect(page.locator(".status.good")).toBeVisible();
+  await expect(page.locator(".json-side .check.good")).toBeVisible();
+  // and of a standard, with its Publish dialog
+  await open(page, "/s/secure-logging/edit/SEC-LOG-02");
+  await expect(fields(page).locator(".fields-head h2")).toBeVisible();
+  await fields(page).getByLabel(/^Short name/).fill("No personal data in the logs");
+  await page.locator(".edit-bar").getByRole("button", { name: "Publish…" }).click();
+  await expect(page.getByRole("dialog", { name: "Publish your changes" })).toContainText("SEC-LOG-02");
+  await page.getByRole("dialog", { name: "Publish your changes" }).getByRole("button", { name: "Not yet" }).click();
+  await page.locator(".edit-bar").getByRole("button", { name: "Discard changes" }).click();
+  // the icons on the reader's pages
+  await open(page, "/catalog");
+  await page.getByRole("tab", { name: /Tools/ }).click();
+  await expect(page.locator("img.entry-icon").first()).toBeVisible();
+  expect(await page.locator("img.entry-icon").first().evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(0);
   for (const hash of ["/", "/search?q=gcp", "/processes", "/standards", "/s/secure-logging/doc", "/catalog", "/guide", "/admin/skills", "/requests", "/requests?state=all", "/admin/statistics"]) {
     await open(page, hash);
     await expect(page.locator("h1").first()).toBeVisible();
@@ -262,7 +289,7 @@ test("the app runs under a strict security policy", async ({ page }) => {
   // a process page with the share dialog open
   await open(page, "/p/request-gcp-project/flow");
   await page.getByRole("button", { name: "Share" }).click();
-  await expect(page.getByRole("dialog", { name: /^Share/ })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: /^Share “/ }).getByRole("textbox", { name: "Link" })).toBeVisible();
   // the request form
   await open(page, "/requests");
   await page.getByRole("button", { name: "Ask for a process or standard" }).first().click();
@@ -304,17 +331,19 @@ test("Back with unsaved changes leaves the history as it was, whatever the answe
   await page.getByRole("link", { name: "Standards" }).click();
   await page.getByRole("link", { name: "Processes" }).click();
   await page.locator(".card", { hasText: "History demo" }).click();
-  await page.getByRole("button", { name: "Details", exact: true }).click();
-  await page.locator(".modal").getByLabel("Summary").fill("Changed and not saved, to see what Back does.");
-  await page.locator(".modal").getByRole("button", { name: "Done" }).click();
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await outline(page, "About");
+  await fields(page).getByLabel(/^Summary/).fill("Changed and not saved, to see what Back does.");
 
   await page.goBack();
   await answer(page, "Leave without saving?", "Stay");
-  await expect(page).toHaveURL(/#\/p\/history-demo\/flow/);
-  await expect(page.locator(".lead")).toHaveText("Changed and not saved, to see what Back does.");
+  await expect(page).toHaveURL(/#\/p\/history-demo\/edit/);
+  await expect(page.locator(".edit-preview .preview-head p")).toHaveText("Changed and not saved, to see what Back does.");
   // the same Back again asks again, and leaving goes exactly one step back - not further, not nowhere
   await page.goBack();
   await answer(page, "Leave without saving?", "Leave without saving");
+  await expect(page).toHaveURL(/#\/p\/history-demo\/flow/);
+  await page.goBack();
   await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/#\/standards/);
@@ -338,56 +367,65 @@ test("what others change shows up when coming back to the tab; unsaved changes a
   await expect(page.locator("h1")).toHaveText("Renamed while Alex was away");
   await expect(page.getByRole("button", { name: "Version 2" })).toBeVisible();
 
-  // a page with changes keeps them and says that there is a newer version
+  // on the editing screen, unsaved changes are kept when somebody else saves the shared draft meanwhile
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
   await renameFirstStep(page, "Alex's unsaved wording");
-  await otherPersonRenames(other, DANA, "refresh-demo", "Renamed a second time");
+  await other.post("/auth/dev/login", { data: { email: DANA }, headers: CSRF });
+  const doc = (await readProcess(other, "refresh-demo"))!;
+  expect((await other.put("/api/processes/refresh-demo/draft?rev=0", { data: { ...doc, title: "Renamed in Dana's draft" }, headers: CSRF })).ok()).toBeTruthy();
   await comeBackLater(page);
-  const banner = page.locator(".banner", { hasText: "saved a newer version of this process" });
-  await expect(banner).toContainText(DANA);
-  await expect(page.locator(".block").first()).toContainText("Alex's unsaved wording");
-  await expect(page.locator("h1")).toHaveText("Renamed while Alex was away"); // still the version the changes are based on
+  const banner = page.locator(".banner", { hasText: "saved the unpublished changes" });
+  await expect(banner).toContainText(/dana@example\.com|Dana Admin/);
+  await expect(firstBlock(page)).toContainText("Alex's unsaved wording");
   // "Compare and decide" shows what they changed without trying to save
   await banner.getByRole("button", { name: "Compare and decide" }).click();
-  await expect(page.getByRole("dialog", { name: "Somebody else saved first" })).toContainText("Title changed");
-  await page.getByRole("dialog", { name: "Somebody else saved first" }).getByRole("button", { name: "Keep editing" }).click();
-  // going back to what was saved (Discard) is going to the newest version
-  await page.getByRole("button", { name: "Discard" }).click();
-  await expect(page.locator("h1")).toHaveText("Renamed a second time");
+  await expect(page.getByRole("dialog", { name: "Somebody else saved the draft first" })).toContainText("Title changed");
+  await page.getByRole("dialog", { name: "Somebody else saved the draft first" }).getByRole("button", { name: "Keep editing" }).click();
+  // going back to what was saved (Discard changes) is going to their draft
+  await page.locator(".edit-bar").getByRole("button", { name: "Discard changes" }).click();
+  await expect(page.locator(".eb-title h1")).toHaveText("Renamed in Dana's draft");
+  // readers still see the published title
+  expect((await readProcess(page, "refresh-demo"))!.title).toBe("Renamed while Alex was away");
   await other.dispose();
 });
 
-test("something deleted by somebody else stays on screen while it has unsaved changes", async ({ page, playwright }) => {
-  await page.clock.install();
-  await signIn(page, ALEX);
-  await copyOf(page, "deleted-demo", "Deleted demo");
-  await open(page, "/p/deleted-demo/flow");
-  await renameFirstStep(page, "Hours of careful work");
+for (const status of ["draft", "active"] as const) {
+  test(`something deleted by somebody else stays on screen while it has unsaved changes (${status === "draft" ? "never published" : "published"})`, async ({ page, playwright }) => {
+    await page.clock.install();
+    await signIn(page, ALEX);
+    const id = `deleted-demo-${status}`;
+    await copyOf(page, id, "Deleted demo", status);
+    await openEditor(page, "process", id);
+    await renameFirstStep(page, "Hours of careful work");
 
-  const other = await playwright.request.newContext({ baseURL: "http://127.0.0.1:8090" });
-  await other.post("/auth/dev/login", { data: { email: DANA }, headers: CSRF });
-  expect((await other.delete("/api/processes/deleted-demo", { headers: CSRF })).ok()).toBeTruthy();
-  await comeBackLater(page);
-  await expect(page.locator(".block").first()).toContainText("Hours of careful work"); // not "Process not found"
+    const other = await playwright.request.newContext({ baseURL: "http://127.0.0.1:8090" });
+    await other.post("/auth/dev/login", { data: { email: DANA }, headers: CSRF });
+    expect((await other.delete(`/api/processes/${id}`, { headers: CSRF })).ok()).toBeTruthy();
+    await comeBackLater(page);
+    await expect(firstBlock(page)).toContainText("Hours of careful work"); // not "Process not found"
 
-  await page.getByRole("button", { name: "Save changes" }).click();
-  const dialog = page.getByRole("dialog", { name: /was deleted/ });
-  await expect(dialog).toContainText("Your changes are still here");
-  await dialog.getByRole("button", { name: "Save mine and bring it back" }).click();
-  await expect(page.locator(".saved")).toBeVisible();
-  expect((await readProcess(page, "deleted-demo"))!.steps[0].title).toBe("Hours of careful work");
-  await other.dispose();
-});
+    await page.locator(".edit-bar").getByRole("button", { name: "Save draft" }).click();
+    const dialog = page.getByRole("dialog", { name: /was deleted/ });
+    await expect(dialog).toContainText("Your changes are still here");
+    await dialog.getByRole("button", { name: "Save mine and bring it back" }).click();
+    await expect(editState(page)).not.toHaveAttribute("aria-label", /not saved yet/);
+    expect((await readProcess(page, id))!.steps[0].title).toBe("Hours of careful work");
+    await other.dispose();
+    await page.request.delete(`/api/processes/${id}`, { headers: CSRF });
+  });
+}
 
 test("deleting is refused when somebody else changed it since it was opened", async ({ page, playwright }) => {
   await signIn(page, ALEX);
   await copyOf(page, "stale-delete-demo", "Stale delete demo");
   await open(page, "/p/stale-delete-demo/flow");
   await expect(page.locator("h1")).toHaveText("Stale delete demo"); // Alex has it open before Dana changes it
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await expect(page.locator(".edit-preview .block").first()).toBeVisible();
   const other = await playwright.request.newContext({ baseURL: "http://127.0.0.1:8090" });
   await otherPersonRenames(other, DANA, "stale-delete-demo", "Dana still needs this");
 
-  await page.getByRole("button", { name: "Details", exact: true }).click();
-  await page.locator(".modal").getByRole("button", { name: "Delete process" }).click();
+  await more(page, "Delete…");
   await answer(page, "Delete this process?", "Delete process");
   await expect(page.locator(".toast", { hasText: "could not be deleted" })).toContainText("changed this process in the meantime");
   expect((await readProcess(page, "stale-delete-demo"))!.title).toBe("Dana still needs this");
@@ -397,10 +435,10 @@ test("deleting is refused when somebody else changed it since it was opened", as
 test("deleting something with unsaved changes does not ask about them afterwards", async ({ page }) => {
   await signIn(page, ALEX);
   await copyOf(page, "delete-dirty-demo", "Delete dirty demo");
-  await open(page, "/p/delete-dirty-demo/flow");
-  await page.getByRole("button", { name: "Details", exact: true }).click();
-  await page.locator(".modal").getByLabel("Summary").fill("A change that goes down with the process.");
-  await page.locator(".modal").getByRole("button", { name: "Delete process" }).click();
+  await openEditor(page, "process", "delete-dirty-demo");
+  await outline(page, "About");
+  await fields(page).getByLabel(/^Summary/).fill("A change that goes down with the process.");
+  await more(page, "Delete…");
   await answer(page, "Delete this process?", "Delete process");
   await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
