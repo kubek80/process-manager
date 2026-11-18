@@ -114,7 +114,7 @@ func run(log *slog.Logger, o options) error {
 	if err != nil {
 		return fmt.Errorf("configuration: %w", err)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := startContext()
 	defer stop()
 
 	pool, err := connect(ctx, cfg.DatabaseURL, log)
@@ -266,6 +266,11 @@ func run(log *slog.Logger, o options) error {
 
 // indexRetry is how often documents that could not be indexed are tried again.
 const indexRetry = 5 * time.Minute
+
+// startContext ends when the server is asked to stop; tests replace it.
+var startContext = func() (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+}
 
 // newEmbedder makes the embeddings provider; tests replace it.
 var newEmbedder = embedding.New
