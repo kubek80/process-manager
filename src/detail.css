@@ -112,3 +112,4 @@
 .before-side .res-text > span { display: none; }
 .before-side .res-icon { width: 28px; height: 28px; }
 .share-copied { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--good-bg); color: var(--good); font-style: normal; font-size: 11.5px; font-weight: 650; }
+@media (max-width: 520px) { .before-toggle span + span::before { content: none; } .before-toggle { gap: 4px 12px; } }

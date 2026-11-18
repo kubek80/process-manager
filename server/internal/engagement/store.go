@@ -1,16 +1,18 @@
 // Package engagement stores how processes and standards are used: views, bookmarks, upvotes
 // and skill downloads, and reads the counts back for the app and for the statistics.
 //
-// Who viewed what on which day is stored only to count views and different people; nothing
-// here ever returns it per person.
+// Who viewed what, and who downloaded which skill, on which day is stored only to count each
+// person once a day and to count different people; nothing here ever returns it per person.
 package engagement
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -26,6 +28,9 @@ const (
 	ViaDownload = "download"
 	ViaExport   = "export"
 )
+
+// ErrNoDocument: what was to be counted is not (or no longer) a stored process or standard.
+var ErrNoDocument = errors.New("the document does not exist")
 
 // Key names one process or standard.
 type Key struct{ Kind, ID string }
@@ -52,6 +57,12 @@ type Ref struct {
 	ID   string `json:"id"`
 }
 
+// Draft is a document that only some people may see, with what decides who.
+type Draft struct {
+	Key
+	Owner, Platform, Practice string
+}
+
 type Store struct{ Pool *pgxpool.Pool }
 
 // Norm is how emails are stored: trimmed, in lower case.
@@ -68,11 +79,85 @@ func Day(t time.Time) time.Time {
 // documents never contain "@".
 const retired = "@deleted-"
 
-// RecordView counts one view; the same person, document and day count once.
-func (s *Store) RecordView(ctx context.Context, kind, id, email string, at time.Time) error {
-	_, err := s.Pool.Exec(ctx, `insert into document_views (kind, id, day, email) values ($1, $2, $3, $4) on conflict do nothing`,
-		kind, id, Day(at), Norm(email))
+// held takes the row of the document for the rest of the transaction, so that a delete either
+// comes first (and nothing is counted for what no longer exists) or waits until this is stored
+// (and then takes it along).
+func held(ctx context.Context, tx pgx.Tx, kind, id string) error {
+	var one int
+	err := tx.QueryRow(ctx, `select 1 from documents where kind = $1 and id = $2 for share`, kind, id).Scan(&one)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNoDocument
+	}
 	return err
+}
+
+// RecordView counts one view; the same person, document and day count once. It answers the
+// all-time views and people of the document afterwards.
+func (s *Store) RecordView(ctx context.Context, kind, id, email string, at time.Time) (views, people int, err error) {
+	email, day := Norm(email), Day(at)
+	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if err := held(ctx, tx, kind, id); err != nil {
+			return err
+		}
+		// one person and document at a time, so that "first view ever" is decided once
+		if _, err := tx.Exec(ctx, `select pg_advisory_xact_lock(hashtextextended($1, 7463))`, kind+"/"+id+"/"+email); err != nil {
+			return err
+		}
+		tag, err := tx.Exec(ctx, `insert into document_views (kind, id, email, day) values ($1, $2, $3, $4) on conflict do nothing`, kind, id, email, day)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 1 {
+			var before bool
+			if err := tx.QueryRow(ctx, `select exists (select 1 from document_views where kind = $1 and id = $2 and email = $3 and day <> $4)`,
+				kind, id, email, day).Scan(&before); err != nil {
+				return err
+			}
+			first := 1
+			if before {
+				first = 0
+			}
+			if _, err := tx.Exec(ctx, `insert into document_counts (kind, id, views, people) values ($1, $2, 1, $3)
+				on conflict (kind, id) do update set views = document_counts.views + 1, people = document_counts.people + excluded.people`, kind, id, first); err != nil {
+				return err
+			}
+		}
+		return tx.QueryRow(ctx, `select coalesce((select views from document_counts where kind = $1 and id = $2), 0),
+			coalesce((select people from document_counts where kind = $1 and id = $2), 0)`, kind, id).Scan(&views, &people)
+	})
+	return views, people, err
+}
+
+// ViewCounts returns the all-time views and people of one document.
+func (s *Store) ViewCounts(ctx context.Context, kind, id string) (views, people int, err error) {
+	err = s.Pool.QueryRow(ctx, `select coalesce((select views from document_counts where kind = $1 and id = $2), 0),
+		coalesce((select people from document_counts where kind = $1 and id = $2), 0)`, kind, id).Scan(&views, &people)
+	return views, people, err
+}
+
+// CountDownload counts a skill or review agent that reached a repository. A download counts at
+// most once per person, skill and day; an export (no person) counts every time. counted says
+// whether this one was counted. Nothing is counted for a document that does not exist.
+func (s *Store) CountDownload(ctx context.Context, skillID, kind, id, email, via string, at time.Time) (counted bool, err error) {
+	email = Norm(email)
+	if via == ViaExport {
+		email = ""
+	}
+	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if err := held(ctx, tx, kind, id); err != nil {
+			return err
+		}
+		tag, err := tx.Exec(ctx, `insert into skill_downloads (skill_id, source_kind, source_id, via, at, email, day) values ($1, $2, $3, $4, $5, $6, $7)
+			on conflict do nothing`, skillID, kind, id, via, at, email, Day(at))
+		if err != nil || tag.RowsAffected() == 0 {
+			return err
+		}
+		counted = true
+		_, err = tx.Exec(ctx, `insert into document_counts (kind, id, downloads) values ($1, $2, 1)
+			on conflict (kind, id) do update set downloads = document_counts.downloads + 1`, kind, id)
+		return err
+	})
+	return counted, err
 }
 
 // SetBookmark keeps or drops a document for one person. Repeating it changes nothing.
@@ -99,35 +184,32 @@ func (s *Store) SetUpvote(ctx context.Context, email, kind, id string, on bool) 
 	return n, err
 }
 
-// CountDownload counts one skill or review agent that reached a repository.
-func (s *Store) CountDownload(ctx context.Context, skillID, kind, id, via string, at time.Time) error {
-	_, err := s.Pool.Exec(ctx, `insert into skill_downloads (skill_id, source_kind, source_id, via, at) values ($1, $2, $3, $4, $5)`,
-		skillID, kind, id, via, at)
-	return err
-}
-
 // Execer is a pool or a transaction.
 type Execer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
-// DeleteByTargetIn removes the bookmarks and upvotes of a document that is deleted, in the
-// transaction that deletes it. Its views and downloads stay, as part of the totals of the past,
-// but are marked as belonging to a deleted document (see retired), so that a new document under
-// the same id starts from nothing.
+// DeleteByTargetIn removes the bookmarks, upvotes and all-time numbers of a document that is
+// deleted, in the transaction that deletes it. Its views and downloads stay, as part of the
+// totals of the past, but are marked as belonging to a deleted document (see retired), so that a
+// new document under the same id starts from nothing.
 func DeleteByTargetIn(ctx context.Context, q Execer, kind, id string) error {
 	mark := fmt.Sprintf("%s%s%d", id, retired, time.Now().UnixNano())
-	for _, sql := range []string{
-		`delete from bookmarks where kind = $1 and id = $2`,
-		`delete from upvotes where kind = $1 and id = $2`,
-		`update document_views set id = $3 where kind = $1 and id = $2`,
-		`update skill_downloads set source_id = $3 where source_kind = $1 and source_id = $2`,
+	for _, step := range []struct {
+		sql  string
+		mark bool
+	}{
+		{`delete from bookmarks where kind = $1 and id = $2`, false},
+		{`delete from upvotes where kind = $1 and id = $2`, false},
+		{`delete from document_counts where kind = $1 and id = $2`, false},
+		{`update document_views set id = $3 where kind = $1 and id = $2`, true},
+		{`update skill_downloads set source_id = $3 where source_kind = $1 and source_id = $2`, true},
 	} {
 		args := []any{kind, id}
-		if strings.Contains(sql, "$3") {
+		if step.mark {
 			args = append(args, mark)
 		}
-		if _, err := q.Exec(ctx, sql, args...); err != nil {
+		if _, err := q.Exec(ctx, step.sql, args...); err != nil {
 			return err
 		}
 	}
@@ -170,80 +252,64 @@ func (s *Store) Mine(ctx context.Context, email string) ([]Bookmark, []Ref, erro
 	return bookmarks, upvotes, rows.Err()
 }
 
-// each runs a query whose rows start with kind and id, and hands the rest to fn.
-func (s *Store) each(ctx context.Context, sql string, args []any, fn func(k Key, vals []int)) error {
-	rows, err := s.Pool.Query(ctx, sql, args...)
+// Drafts lists the processes and standards that are drafts, read from the columns the database
+// keeps of every body (no body is read).
+func (s *Store) Drafts(ctx context.Context) ([]Draft, error) {
+	rows, err := s.Pool.Query(ctx, `select kind, id, owner, platform, practice from documents where status = 'draft' and kind in ('process', 'standard')`)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer rows.Close()
+	out := []Draft{}
 	for rows.Next() {
-		raw, err := rows.Values()
-		if err != nil {
-			return err
-		}
-		k := Key{Kind: raw[0].(string), ID: raw[1].(string)}
-		vals := make([]int, 0, len(raw)-2)
-		for _, v := range raw[2:] {
-			vals = append(vals, toInt(v))
-		}
-		fn(k, vals)
-	}
-	return rows.Err()
-}
-
-func toInt(v any) int {
-	switch n := v.(type) {
-	case int64:
-		return int(n)
-	case int32:
-		return int(n)
-	case int:
-		return n
-	}
-	return 0
-}
-
-// Counts returns the all-time numbers of every document that has any, by the documents as they
-// exist now (views and downloads of a deleted document under the same id do not count).
-func (s *Store) Counts(ctx context.Context) (map[Key]*Counts, error) {
-	out := map[Key]*Counts{}
-	get := func(k Key) *Counts {
-		if out[k] == nil {
-			out[k] = &Counts{}
-		}
-		return out[k]
-	}
-	queries := []struct {
-		sql string
-		set func(c *Counts, v []int)
-	}{
-		{`select kind, id, count(*), count(distinct email) from document_views group by kind, id`,
-			func(c *Counts, v []int) { c.Views, c.People = v[0], v[1] }},
-		{`select source_kind, source_id, count(*) from skill_downloads group by source_kind, source_id`,
-			func(c *Counts, v []int) { c.Downloads = v[0] }},
-		{`select kind, id, count(*) from upvotes group by kind, id`,
-			func(c *Counts, v []int) { c.Upvotes = v[0] }},
-		{`select target_kind, target_id, count(*) from feedback where resolved_at is not null group by target_kind, target_id`,
-			func(c *Counts, v []int) { c.Handled = v[0] }},
-	}
-	for _, q := range queries {
-		if err := s.each(ctx, q.sql, nil, func(k Key, v []int) { q.set(get(k), v) }); err != nil {
+		var d Draft
+		if err := rows.Scan(&d.Kind, &d.ID, &d.Owner, &d.Platform, &d.Practice); err != nil {
 			return nil, err
 		}
+		out = append(out, d)
 	}
-	return out, nil
+	return out, rows.Err()
+}
+
+// Counts returns the all-time numbers of every stored process and standard that has any. Views,
+// people and downloads come from the numbers kept per document; upvotes and handled feedback are
+// counted through their indexes. It does not depend on how many views were ever recorded.
+func (s *Store) Counts(ctx context.Context) (map[Key]Counts, error) {
+	rows, err := s.Pool.Query(ctx, `select d.kind, d.id, coalesce(c.views, 0), coalesce(c.people, 0), coalesce(c.downloads, 0),
+		(select count(*) from upvotes u where u.kind = d.kind and u.id = d.id),
+		(select count(*) from feedback f where f.target_kind = d.kind and f.target_id = d.id and f.resolved_at is not null)
+		from documents d left join document_counts c on c.kind = d.kind and c.id = d.id
+		where d.kind in ('process', 'standard')`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[Key]Counts{}
+	for rows.Next() {
+		var k Key
+		var c Counts
+		if err := rows.Scan(&k.Kind, &k.ID, &c.Views, &c.People, &c.Downloads, &c.Upvotes, &c.Handled); err != nil {
+			return nil, err
+		}
+		if c != (Counts{}) {
+			out[k] = c
+		}
+	}
+	return out, rows.Err()
 }
 
 // Period is everything the statistics need about the days from a given date (UTC) until now.
 type Period struct {
 	// per document as it exists now, within the period
 	Docs map[Key]*PeriodCounts
-	// the people who viewed each document within the period: to count different people per group
-	Viewers map[Key]map[string]bool
+	// per platform, practice and owning team ("" for documents without one): views, people and
+	// downloads within the period of the documents as they exist now
+	Groups map[string]map[string]*GroupCounts
 	// everything recorded within the period, deleted documents included
 	Views, People, Downloads, Upvotes, FeedbackOpened, FeedbackHandled, Requests int
-	Weeks                                                                        []Week
+	// the part of Views and Downloads that belongs to documents deleted since
+	DeletedViews, DeletedDownloads int
+	Weeks                          []Week
 }
 
 // PeriodCounts are the numbers of one document: within the period, except UpvotesTotal and
@@ -252,9 +318,13 @@ type PeriodCounts struct {
 	Views, People, Downloads, Upvotes, UpvotesTotal, FeedbackOpen, FeedbackHandled int
 }
 
-// Week is one week of the trend, starting on Monday.
+// GroupCounts are the views and different people of a group of documents within the period.
+type GroupCounts struct{ Views, People int }
+
+// Week is one week of the trend, starting on Monday. Days is how many of its days fall in the period.
 type Week struct {
 	Week      time.Time
+	Days      int
 	Views     int
 	People    int
 	Downloads int
@@ -266,7 +336,7 @@ func (s *Store) Earliest(ctx context.Context, now time.Time) (time.Time, error) 
 	var first *time.Time
 	err := s.Pool.QueryRow(ctx, `select least(
 		(select min(day)::timestamp from document_views),
-		(select min(at at time zone 'UTC') from skill_downloads),
+		(select min(day)::timestamp from skill_downloads),
 		(select min(created_at at time zone 'UTC') from upvotes),
 		(select min(created_at at time zone 'UTC') from feedback),
 		(select min(created_at at time zone 'UTC') from requests))`).Scan(&first)
@@ -279,73 +349,139 @@ func (s *Store) Earliest(ctx context.Context, now time.Time) (time.Time, error) 
 	return Day(*first), nil
 }
 
+// viewsBySet aggregates the views of a period in the database, in one pass: per document, per
+// platform, practice and owning team, the part of deleted documents, and in all. A view of a
+// deleted document has no row in documents (its id is marked).
+const viewsBySet = `with pairs as (
+	select kind, id, email, count(*) as n from document_views where day >= $1 group by kind, id, email
+), joined as (
+	select p.kind, p.id, p.email, p.n, d.kind is null as deleted,
+		coalesce(d.platform, '') as platform, coalesce(d.practice, '') as practice, coalesce(d.owner, '') as owner
+	from pairs p left join documents d on d.kind = p.kind and d.id = p.id
+)
+select grouping(deleted), grouping(kind), grouping(platform), grouping(practice), grouping(owner),
+	coalesce(bool_or(deleted), false), coalesce(min(kind), ''), coalesce(min(id), ''),
+	coalesce(min(platform), ''), coalesce(min(practice), ''), coalesce(min(owner), ''),
+	coalesce(sum(n), 0)::bigint, count(distinct email)
+from joined
+group by grouping sets ((deleted, kind, id), (deleted, platform), (deleted, practice), (deleted, owner), (deleted), ())`
+
 // PeriodFrom collects the statistics from the start of the day from (UTC) until now.
-func (s *Store) PeriodFrom(ctx context.Context, from time.Time) (*Period, error) {
-	from = Day(from)
-	p := &Period{Docs: map[Key]*PeriodCounts{}, Viewers: map[Key]map[string]bool{}}
+func (s *Store) PeriodFrom(ctx context.Context, from, now time.Time) (*Period, error) {
+	from, today := Day(from), Day(now)
+	p := &Period{Docs: map[Key]*PeriodCounts{}, Groups: map[string]map[string]*GroupCounts{"platform": {}, "practice": {}, "team": {}}}
 	get := func(k Key) *PeriodCounts {
 		if p.Docs[k] == nil {
 			p.Docs[k] = &PeriodCounts{}
 		}
 		return p.Docs[k]
 	}
-	everyone := map[string]bool{}
-	// views: per document and person, so that people can be counted per document, per group and in all
-	rows, err := s.Pool.Query(ctx, `select kind, id, email, count(*) from document_views where day >= $1 group by kind, id, email`, from)
+	rows, err := s.Pool.Query(ctx, viewsBySet, from)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
-		var k Key
-		var email string
-		var views int
-		if err := rows.Scan(&k.Kind, &k.ID, &email, &views); err != nil {
+		var gDeleted, gKind, gPlatform, gPractice, gOwner int
+		var deleted bool
+		var kind, id, platform, practice, owner string
+		var views, people int
+		if err := rows.Scan(&gDeleted, &gKind, &gPlatform, &gPractice, &gOwner, &deleted, &kind, &id, &platform, &practice, &owner, &views, &people); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		p.Views += views
-		everyone[email] = true
-		if !strings.Contains(k.ID, retired) {
-			c := get(k)
-			c.Views += views
-			c.People++
-			if p.Viewers[k] == nil {
-				p.Viewers[k] = map[string]bool{}
+		switch {
+		case gDeleted == 1: // ()
+			p.Views, p.People = views, people
+		case gKind == 0:
+			if !deleted {
+				c := get(Key{kind, id})
+				c.Views, c.People = views, people
 			}
-			p.Viewers[k][email] = true
+		case gPlatform == 0:
+			if !deleted {
+				p.Groups["platform"][platform] = &GroupCounts{views, people}
+			}
+		case gPractice == 0:
+			if !deleted {
+				p.Groups["practice"][practice] = &GroupCounts{views, people}
+			}
+		case gOwner == 0:
+			if !deleted {
+				p.Groups["team"][owner] = &GroupCounts{views, people}
+			}
+		default: // (deleted)
+			if deleted {
+				p.DeletedViews = views
+			}
 		}
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	p.People = len(everyone)
+
+	// downloads per document; those of deleted documents have no row in documents
+	rows, err = s.Pool.Query(ctx, `select s.source_kind, s.source_id, d.kind is null, count(*) from skill_downloads s
+		left join documents d on d.kind = s.source_kind and d.id = s.source_id where s.day >= $1 group by 1, 2, 3`, from)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var k Key
+		var deleted bool
+		var n int
+		if err := rows.Scan(&k.Kind, &k.ID, &deleted, &n); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		p.Downloads += n
+		if deleted {
+			p.DeletedDownloads += n
+		} else {
+			get(k).Downloads = n
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	perDoc := []struct {
 		sql string
-		set func(c *PeriodCounts, v []int)
+		set func(c *PeriodCounts, a, b int)
 	}{
-		{`select source_kind, source_id, count(*) from skill_downloads where at >= $1 group by source_kind, source_id`,
-			func(c *PeriodCounts, v []int) { c.Downloads = v[0] }},
 		{`select kind, id, count(*) filter (where created_at >= $1), count(*) from upvotes group by kind, id`,
-			func(c *PeriodCounts, v []int) { c.Upvotes, c.UpvotesTotal = v[0], v[1] }},
+			func(c *PeriodCounts, a, b int) { c.Upvotes, c.UpvotesTotal = a, b }},
 		{`select target_kind, target_id, count(*) filter (where resolved_at is null), count(*) filter (where resolved_at >= $1)
 		  from feedback group by target_kind, target_id`,
-			func(c *PeriodCounts, v []int) { c.FeedbackOpen, c.FeedbackHandled = v[0], v[1] }},
+			func(c *PeriodCounts, a, b int) { c.FeedbackOpen, c.FeedbackHandled = a, b }},
 	}
 	for _, q := range perDoc {
-		if err := s.each(ctx, q.sql, []any{from}, func(k Key, v []int) { q.set(get(k), v) }); err != nil {
+		rows, err := s.Pool.Query(ctx, q.sql, from)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var k Key
+			var a, b int
+			if err := rows.Scan(&k.Kind, &k.ID, &a, &b); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			q.set(get(k), a, b)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
 			return nil, err
 		}
 	}
 
 	err = s.Pool.QueryRow(ctx, `select
-		(select count(*) from skill_downloads where at >= $1),
 		(select count(*) from upvotes where created_at >= $1),
 		(select count(*) from feedback where created_at >= $1),
 		(select count(*) from feedback where resolved_at >= $1),
 		(select count(*) from requests where created_at >= $1)`, from).
-		Scan(&p.Downloads, &p.Upvotes, &p.FeedbackOpened, &p.FeedbackHandled, &p.Requests)
+		Scan(&p.Upvotes, &p.FeedbackOpened, &p.FeedbackHandled, &p.Requests)
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +512,7 @@ func (s *Store) PeriodFrom(ctx context.Context, from time.Time) (*Period, error)
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	rows, err = s.Pool.Query(ctx, `select date_trunc('week', at at time zone 'UTC'), count(*) from skill_downloads where at >= $1 group by 1`, from)
+	rows, err = s.Pool.Query(ctx, `select date_trunc('week', day::timestamp), count(*) from skill_downloads where day >= $1 group by 1`, from)
 	if err != nil {
 		return nil, err
 	}
@@ -394,8 +530,14 @@ func (s *Store) PeriodFrom(ctx context.Context, from time.Time) (*Period, error)
 		return nil, err
 	}
 	// every week of the period, quiet ones included, oldest first
-	for monday := Monday(from); !monday.After(Day(time.Now())); monday = monday.AddDate(0, 0, 7) {
-		p.Weeks = append(p.Weeks, *week(monday))
+	for monday := Monday(from); !monday.After(today); monday = monday.AddDate(0, 0, 7) {
+		w := week(monday)
+		for d := 0; d < 7; d++ {
+			if day := monday.AddDate(0, 0, d); !day.Before(from) && !day.After(today) {
+				w.Days++
+			}
+		}
+		p.Weeks = append(p.Weeks, *w)
 	}
 	return p, nil
 }
@@ -414,4 +556,11 @@ func (s *Store) Empty(ctx context.Context) (bool, error) {
 	err := s.Pool.QueryRow(ctx, `select exists (select 1 from document_views) or exists (select 1 from bookmarks) or exists (select 1 from upvotes)
 		or exists (select 1 from skill_downloads) or exists (select 1 from requests)`).Scan(&some)
 	return !some, err
+}
+
+// Reset removes every view, bookmark, upvote, download and the numbers kept of them. Local
+// development only.
+func (s *Store) Reset(ctx context.Context) error {
+	_, err := s.Pool.Exec(ctx, `truncate document_views, document_counts, bookmarks, upvotes, skill_downloads`)
+	return err
 }

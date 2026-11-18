@@ -8,38 +8,25 @@ import (
 
 	"github.com/kubek80/process-manager/server/internal/docs"
 	"github.com/kubek80/process-manager/server/internal/engagement"
+	"github.com/kubek80/process-manager/server/internal/rbac"
 )
 
-// seen is what one request knows about the processes and standards: every one that exists,
-// and whether the caller may see it.
-type seen struct {
-	targets map[engagement.Key]docs.Target
-	visible map[engagement.Key]bool
-}
+// hidden is the set of drafts the caller may not see: everything else that exists is for
+// everyone who is signed in. Only drafts can be hidden, so only they are read - from the columns
+// the database keeps of each body, without reading any body.
+type hidden map[engagement.Key]bool
 
-func (v seen) exists(kind, id string) bool {
-	_, ok := v.targets[engagement.Key{Kind: kind, ID: id}]
-	return ok
-}
+func (h hidden) has(kind, id string) bool { return h[engagement.Key{Kind: kind, ID: id}] }
 
-func (v seen) canSee(kind, id string) bool { return v.visible[engagement.Key{Kind: kind, ID: id}] }
-
-// documents reads every process and standard once and works out which the caller may see.
-func (a *api) documents(ctx context.Context, s session) (seen, error) {
-	out := seen{targets: map[engagement.Key]docs.Target{}, visible: map[engagement.Key]bool{}}
-	for _, kind := range []string{docs.Process, docs.Standard} {
-		list, err := a.Docs.List(ctx, kind)
-		if err != nil {
-			return out, err
-		}
-		for _, d := range list {
-			t, ok := docs.TargetOf(d)
-			if !ok {
-				continue
-			}
-			k := engagement.Key{Kind: kind, ID: d.ID}
-			out.targets[k] = t
-			out.visible[k] = canSee(s, kind, d.Body)
+func (a *api) hiddenFor(ctx context.Context, s session) (hidden, error) {
+	drafts, err := a.Engagement.Drafts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := hidden{}
+	for _, d := range drafts {
+		if !s.CanManageFeedback(d.Kind, rbac.Belongs{Owner: d.Owner, Platform: d.Platform, Practice: d.Practice}) {
+			out[d.Key] = true
 		}
 	}
 	return out, nil
@@ -66,10 +53,11 @@ func (a *api) visibleDoc(r *http.Request) (docs.Doc, error) {
 }
 
 // getEngagement: the all-time counts of every process and standard the caller may see, and
-// their own bookmarks and upvotes. A document with nothing yet is left out.
+// their own bookmarks and upvotes. A document with nothing yet is left out. The work does not
+// depend on how many views were ever recorded: the numbers are kept per document.
 func (a *api) getEngagement(w http.ResponseWriter, r *http.Request) {
 	s := who(r)
-	known, err := a.documents(r.Context(), s)
+	hide, err := a.hiddenFor(r.Context(), s)
 	if err != nil {
 		a.fail(w, r, err)
 		return
@@ -81,8 +69,8 @@ func (a *api) getEngagement(w http.ResponseWriter, r *http.Request) {
 	}
 	counts := map[string]map[string]engagement.Counts{docs.Process: {}, docs.Standard: {}}
 	for k, c := range all {
-		if known.visible[k] {
-			counts[k.Kind][k.ID] = *c
+		if !hide[k] {
+			counts[k.Kind][k.ID] = c
 		}
 	}
 	bookmarks, upvotes, err := a.Engagement.Mine(r.Context(), s.Email)
@@ -90,15 +78,16 @@ func (a *api) getEngagement(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	// bookmarks and upvotes go with their document, so what is left exists; drafts are filtered
 	myBookmarks := []engagement.Bookmark{}
 	for _, b := range bookmarks {
-		if known.canSee(b.Kind, b.ID) {
+		if !hide.has(b.Kind, b.ID) {
 			myBookmarks = append(myBookmarks, b)
 		}
 	}
 	myUpvotes := []engagement.Ref{}
 	for _, u := range upvotes {
-		if known.canSee(u.Kind, u.ID) {
+		if !hide.has(u.Kind, u.ID) {
 			myUpvotes = append(myUpvotes, u)
 		}
 	}
@@ -108,22 +97,27 @@ func (a *api) getEngagement(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// recordView counts a view: once per person, document and day. It must never get in the way of
-// reading: a failure to store it is logged and the answer is the same.
+// recordView counts a view: once per person, document and day. It answers the all-time views
+// and people of the document, so that the page can show its own view at once. It must never get
+// in the way of reading: a failure to store it is logged and the numbers are answered as they are.
 func (a *api) recordView(w http.ResponseWriter, r *http.Request) {
 	d, err := a.visibleDoc(r)
-	switch {
-	case errors.Is(err, docs.ErrNotFound):
+	if errors.Is(err, docs.ErrNotFound) {
 		writeError(w, 404, "That does not exist.")
 		return
-	case err != nil:
+	}
+	kind, id := r.PathValue("kind"), r.PathValue("id")
+	var views, people int
+	if err == nil {
+		views, people, err = a.Engagement.RecordView(r.Context(), d.Kind, d.ID, who(r).Email, time.Now())
+	}
+	if err != nil {
 		a.Log.Warn("view not counted", "path", r.URL.Path, "error", err)
-	default:
-		if err := a.Engagement.RecordView(r.Context(), d.Kind, d.ID, who(r).Email, time.Now()); err != nil {
-			a.Log.Warn("view not counted", "path", r.URL.Path, "error", err)
+		if views, people, err = a.Engagement.ViewCounts(r.Context(), kind, id); err != nil {
+			views, people = 0, 0
 		}
 	}
-	w.WriteHeader(http.StatusNoContent)
+	writeJSON(w, 200, map[string]int{"views": views, "people": people})
 }
 
 // bookmark keeps or drops a process or standard for the caller. Dropping always works, also
@@ -149,16 +143,31 @@ func (a *api) bookmark(on bool) http.HandlerFunc {
 }
 
 // upvote gives or takes back the caller's "this is useful" and answers with the number of votes.
+// Taking it back always works, like dropping a bookmark; for a document the caller cannot see
+// (any more) the answer is 204 without the number.
 func (a *api) upvote(on bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		d, err := a.visibleDoc(r)
+		kind, id := r.PathValue("kind"), r.PathValue("id")
+		_, err := a.visibleDoc(r)
+		visible := err == nil
+		switch {
+		case on && err != nil:
+			a.fail(w, r, err)
+			return
+		case !on && !visible && (!countedKind(kind) || !docs.ValidID(id)):
+			writeError(w, 404, "That does not exist.")
+			return
+		case !on && !visible && !errors.Is(err, docs.ErrNotFound):
+			a.fail(w, r, err)
+			return
+		}
+		n, err := a.Engagement.SetUpvote(r.Context(), who(r).Email, kind, id, on)
 		if err != nil {
 			a.fail(w, r, err)
 			return
 		}
-		n, err := a.Engagement.SetUpvote(r.Context(), who(r).Email, d.Kind, d.ID, on)
-		if err != nil {
-			a.fail(w, r, err)
+		if !visible {
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		writeJSON(w, 200, map[string]int{"upvotes": n})

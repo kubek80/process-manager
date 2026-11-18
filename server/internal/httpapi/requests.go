@@ -32,6 +32,7 @@ type requestView struct {
 	StateBy     string    `json:"stateBy"`
 	StateAt     string    `json:"stateAt"` // RFC 3339, or "" while the state was never changed
 	LinkedID    string    `json:"linkedId"`
+	LinkedGone  bool      `json:"linkedGone"` // the document that answered it was deleted since
 	Votes       int       `json:"votes"`
 	VotedByMe   bool      `json:"votedByMe"`
 	Mine        bool      `json:"mine"`
@@ -44,19 +45,19 @@ func canManageRequest(s session, q requests.Request) bool {
 	return s.CanEdit(q.Kind, rbac.Belongs{Platform: q.Platform, Practice: q.Practice})
 }
 
-func viewRequest(s session, q requests.Request, known seen) requestView {
+func viewRequest(s session, q requests.Request, hide hidden) requestView {
 	out := requestView{
 		ID: q.ID, Kind: q.Kind, Title: q.Title, Description: q.Description, Platform: q.Platform, Practice: q.Practice,
 		RequestedBy: author{q.ByName, q.ByEmail}, CreatedAt: q.CreatedAt, State: q.State, StateNote: q.StateNote, StateBy: q.StateBy,
-		LinkedID: q.LinkedID, Votes: q.Votes, VotedByMe: q.VotedByMe,
+		LinkedID: q.LinkedID, LinkedGone: q.LinkedGone, Votes: q.Votes, VotedByMe: q.VotedByMe,
 		Mine: strings.EqualFold(q.ByEmail, s.Email), CanManage: canManageRequest(s, q),
 	}
 	if q.StateAt != nil {
 		out.StateAt = q.StateAt.UTC().Format(time.RFC3339)
 	}
-	// The document that answers it may have become a draft: its id is not passed on to people
-	// who cannot see it. A document that was deleted keeps its id: the list shows it as text.
-	if q.LinkedID != "" && known.exists(q.Kind, q.LinkedID) && !known.canSee(q.Kind, q.LinkedID) {
+	// The document that answers it may have become a draft again: its id is not passed on to
+	// people who cannot see it. (A deleted one is no longer linked: LinkedGone says so.)
+	if q.LinkedID != "" && hide.has(q.Kind, q.LinkedID) {
 		out.LinkedID = ""
 	}
 	return out
@@ -77,14 +78,14 @@ func (a *api) listRequests(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	known, err := a.documents(r.Context(), s)
+	hide, err := a.hiddenFor(r.Context(), s)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	out := make([]requestView, 0, len(list))
 	for _, q := range list {
-		out = append(out, viewRequest(s, q, known))
+		out = append(out, viewRequest(s, q, hide))
 	}
 	writeJSON(w, 200, map[string]any{"requests": out})
 }
@@ -92,12 +93,12 @@ func (a *api) listRequests(w http.ResponseWriter, r *http.Request) {
 // writeRequest answers with one request as the caller sees it.
 func (a *api) writeRequest(w http.ResponseWriter, r *http.Request, status int, q requests.Request) {
 	s := who(r)
-	known, err := a.documents(r.Context(), s)
+	hide, err := a.hiddenFor(r.Context(), s)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	writeJSON(w, status, viewRequest(s, q, known))
+	writeJSON(w, status, viewRequest(s, q, hide))
 }
 
 func (a *api) createRequest(w http.ResponseWriter, r *http.Request) {
@@ -112,18 +113,23 @@ func (a *api) createRequest(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	in.Title = strings.TrimSpace(in.Title)
-	in.Description = strings.TrimSpace(in.Description)
 	in.Platform = strings.TrimSpace(in.Platform)
 	in.Practice = strings.TrimSpace(in.Practice)
-	title, text := utf8.RuneCountInString(in.Title), utf8.RuneCountInString(in.Description)
-	switch {
-	case !countedKind(in.Kind):
+	if !countedKind(in.Kind) {
 		writeError(w, 400, "Say whether a process or a standard is requested.")
 		return
-	case !docs.Storable(in.Title) || !docs.Storable(in.Description):
-		writeError(w, 400, "The text contains characters that cannot be stored.")
+	}
+	var problem string
+	if in.Title, problem = docs.CheckText(in.Title, "The title", false); problem != "" {
+		writeError(w, 400, problem)
 		return
+	}
+	if in.Description, problem = docs.CheckText(in.Description, "The description", true); problem != "" {
+		writeError(w, 400, problem)
+		return
+	}
+	title, text := utf8.RuneCountInString(in.Title), utf8.RuneCountInString(in.Description)
+	switch {
 	case title < 5 || title > 120:
 		writeError(w, 400, "Give the request a title of 5 to 120 characters.")
 		return
@@ -145,18 +151,16 @@ func (a *api) createRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s := who(r)
-	// a brake on a script (or a very bad day), like the one on feedback
-	if n, err := a.Requests.CountSince(r.Context(), s.Email, time.Now().Add(-time.Hour)); err != nil {
-		a.fail(w, r, err)
-		return
-	} else if n >= maxRequestsPerHour {
-		writeError(w, 429, "You have made a lot of requests in the last hour. Please try again later.")
-		return
-	}
+	// a brake on a script (or a very bad day), like the one on feedback: checked and stored in one
+	// step per person, and counting what was withdrawn in the hour as well
 	q, err := a.Requests.Create(r.Context(), requests.New{
 		Kind: in.Kind, Title: in.Title, Description: in.Description, Platform: in.Platform, Practice: in.Practice,
 		ByEmail: s.Email, ByName: s.Name,
-	})
+	}, maxRequestsPerHour)
+	if errors.Is(err, requests.ErrTooMany) {
+		writeError(w, 429, "You have made a lot of requests in the last hour. Please try again later.")
+		return
+	}
 	if err != nil {
 		a.fail(w, r, err)
 		return
@@ -215,15 +219,17 @@ func (a *api) setRequestState(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "Only admins, "+editors+" and the owners of the platform or practice it names can change the state of this request.")
 		return
 	}
-	in.Note = strings.TrimSpace(in.Note)
 	in.LinkedID = strings.TrimSpace(in.LinkedID)
-	switch {
-	case !requests.ValidState(in.State):
+	if !requests.ValidState(in.State) {
 		writeError(w, 400, "The state must be open, planned, done or declined.")
 		return
-	case !docs.Storable(in.Note):
-		writeError(w, 400, "The text contains characters that cannot be stored.")
+	}
+	var problem string
+	if in.Note, problem = docs.CheckText(in.Note, "The note", true); problem != "" {
+		writeError(w, 400, problem)
 		return
+	}
+	switch {
 	case utf8.RuneCountInString(in.Note) > 1000:
 		writeError(w, 400, "Keep the note under 1000 characters.")
 		return
@@ -236,7 +242,8 @@ func (a *api) setRequestState(w http.ResponseWriter, r *http.Request) {
 	}
 	detail := fmt.Sprintf("“%s”: %s", q.Title, stateWords[in.State])
 	if in.State == requests.Done {
-		// an existing document of the same kind that the person marking it done can see
+		// an existing, published document of the same kind: everyone who reads the request can
+		// follow the link. A retired one is published too (it is still there to read).
 		var d docs.Doc
 		err := docs.ErrNotFound
 		if docs.ValidID(in.LinkedID) {
@@ -248,6 +255,10 @@ func (a *api) setRequestState(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			a.fail(w, r, err)
+			return
+		}
+		if _, status := headOf(d.Body); status == "draft" {
+			writeError(w, 400, "Only a published "+noun[q.Kind]+" can answer a request. Publish it first.")
 			return
 		}
 		title := in.LinkedID

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -236,10 +237,13 @@ func (a *api) downloadSkill(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte(content))
-	// Counted for the process or standard it comes from (a skill and a review agent alike). Only
+	// Counted for the process or standard it comes from (a skill and a review agent alike), unless
+	// that no longer exists. Only
 	// this, the latest text as a file, is a download; reading an older version in the app is not.
 	// A failure to count never fails the download.
-	if err := a.Engagement.CountDownload(context.WithoutCancel(r.Context()), sk.ID, sk.SourceKind, sk.SourceID, engagement.ViaDownload, time.Now()); err != nil {
+	// At most once per person, skill and day: downloading again and again adds nothing.
+	_, err = a.Engagement.CountDownload(context.WithoutCancel(r.Context()), sk.ID, sk.SourceKind, sk.SourceID, who(r).Email, engagement.ViaDownload, time.Now())
+	if err != nil && !errors.Is(err, engagement.ErrNoDocument) {
 		a.Log.Warn("download not counted", "skill", sk.ID, "error", err)
 	}
 }

@@ -136,7 +136,8 @@ func (a *api) createFeedback(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	in.Text = strings.TrimSpace(in.Text)
+	var problem string
+	in.Text, problem = docs.CheckText(in.Text, "The text", true)
 	if in.TargetKind == "" {
 		in.TargetKind = docs.Process
 	}
@@ -160,8 +161,8 @@ func (a *api) createFeedback(w http.ResponseWriter, r *http.Request) {
 	case !feedback.ValidKind(in.Kind):
 		writeError(w, 400, "Choose what kind of feedback this is: "+strings.Join(feedback.Kinds, ", ")+".")
 		return
-	case !docs.Storable(in.Text):
-		writeError(w, 400, "The text contains characters that cannot be stored.")
+	case problem != "":
+		writeError(w, 400, problem)
 		return
 	case utf8.RuneCountInString(in.Text) < 3:
 		writeError(w, 400, "Say in a sentence what happened.")
