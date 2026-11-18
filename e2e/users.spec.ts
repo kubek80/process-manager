@@ -102,6 +102,27 @@ test("Edit adds a second platform and takes a role away in one save; the summary
   await expect(page.locator(".activity li").first()).toContainText("added Platform owner for the platform Azure; removed Practice owner for the practice Engineering");
 });
 
+test("on a small laptop the roles dialog keeps its summary, Cancel and Save in view, with many lines", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await signIn(page, DANA);
+  await open(page, "/admin/access");
+  await page.getByRole("button", { name: "Edit Jordan Platform" }).click();
+  const dialog = page.getByRole("dialog", { name: "Roles of Jordan Platform" });
+  for (const [n, name] of [[2, "Azure"], [3, "Akamai"]] as const) {
+    await dialog.getByRole("button", { name: "Another platform" }).click();
+    await dialog.getByRole("combobox", { name: `Platform owner: platform ${n}` }).selectOption({ label: name });
+  }
+  await dialog.getByRole("button", { name: "Another practice" }).click();
+  await expect(dialog.getByRole("heading", { name: "Roles of Jordan Platform" })).toBeInViewport();
+  for (const part of [dialog.locator(".roles-summary"), dialog.getByRole("button", { name: "Cancel" }), dialog.getByRole("button", { name: "Save" })]) await expect(part).toBeInViewport({ ratio: 1 });
+  await expect(dialog.locator(".roles-summary")).toHaveText("Gives: Platform owner for Akamai, Platform owner for Azure");
+  // Save with an unfinished line: the reason, and the buttons still in view
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog.locator(".roles-problems")).toBeInViewport();
+  await expect(dialog.getByRole("button", { name: "Save" })).toBeInViewport({ ratio: 1 });
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+});
+
 test("Delete asks, removes every role, and the person can still read", async ({ page, request }) => {
   await as(request, DANA);
   expect((await request.put(`/api/admin/users/${SAM}`, { data: { roles: [{ role: "standards-editor", scope: "" }, { role: "owner", scope: "dns-team" }] }, headers: CSRF })).ok()).toBeTruthy();

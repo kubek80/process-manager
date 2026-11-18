@@ -31,8 +31,8 @@ export function StepDrawer({ process, all, step, onClose, onSelect, feedback, re
           <h3 id={titleId}>{step.title}</h3>
           {(step.tool || step.duration) && (
             <p className="step-facts">
-              {step.tool && <span className="step-fact-tool"><span className="label">Done in</span><StepTool id={step.tool} link size={16} /></span>}
-              {step.duration && <span className="step-fact-time"><Clock size={13} aria-hidden="true" /><span className="label">Takes</span>{step.duration}</span>}
+              {step.tool && <span className="step-fact-tool"><span className="label">Done in</span>{" "}<StepTool id={step.tool} link size={16} /></span>}
+              {step.duration && <span className="step-fact-time"><Clock size={13} aria-hidden="true" /><span className="label">Takes</span>{" "}{step.duration}</span>}
             </p>
           )}
         </div>

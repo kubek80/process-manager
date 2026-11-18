@@ -222,6 +222,8 @@
   .eb-back, .more-menu .eb-btn { padding: 0 10px; }
   /* the bar takes a second row when its parts do not fit on one */
   .edit-bar { flex-wrap: wrap; }
+  /* when the actions wrap, More starts the second row at the left edge: its menu opens to the right */
+  .more-menu .menu-pop { right: auto; left: 0; }
   .edit-body { grid-template-columns: minmax(0, 1fr) 340px; }
 }
 /* a phone: the fields slide over too, the bar takes two rows */

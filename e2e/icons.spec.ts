@@ -92,10 +92,36 @@ test("a lists manager uploads a PNG and an SVG made here; readers see them on th
   // and next to the step's Tool field on the editing screen
   await open(page, "/p/publish-internal-library/edit/create-namespace");
   await expect(page.locator(".edit-fields .with-icon").locator(`img.entry-icon[src="/api/icons/${sha(image)}"]`)).toBeVisible();
+  // the step's panel says which tool it is done in, with its icon and, where the tool has an
+  // address, a link that opens it; the checklist shows the icon too
+  await block.locator(".block-main").click();
+  await expect(r.locator(".drawer .step-fact-tool")).toContainText("Artifact registry");
+  await expect(r.locator(`.drawer .step-fact-tool img.entry-icon[src="/api/icons/${sha(image)}"]`)).toBeVisible();
+  await expect(r.locator(".drawer a.step-tool")).toHaveCount(0); // no address in the lists: no link
+  await r.locator(".drawer").getByRole("button", { name: "Close" }).click();
+  await r.locator(".block", { hasText: "Add the release workflow" }).locator(".block-main").click();
+  const github = r.locator(".drawer .step-fact-tool").getByRole("link", { name: /GitHub/ });
+  await expect(github).toHaveAttribute("href", "https://github.example.com");
+  await expect(github).toHaveAttribute("target", "_blank");
+  await expect(github).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(github.locator("img.entry-icon")).toBeVisible();
+  await expect(r.locator(".drawer .step-fact-time")).toHaveText(/^Takes \S/); // words a screen reader reads apart
+  await expect(r.locator(".drawer .step-fact-tool")).toHaveText(/^Done in \S/);
+  await open(r, "/p/publish-internal-library/list");
+  await expect(r.locator("#step-create-namespace .step-kicker .step-tool").locator(`img.entry-icon[src="/api/icons/${sha(image)}"]`)).toBeVisible();
+  await expect(r.locator("#step-create-namespace .step-kicker a")).toHaveCount(0);
   // a language icon on a card
   await open(r, "/processes");
   await expect(r.locator('li.card[data-id="publish-internal-library"] .card-entry img.entry-icon').first()).toBeVisible();
   await ctx.close();
+
+  // the activity log says what was added in words, without the id
+  await signIn(page, DANA);
+  await open(page, "/admin/activity");
+  const entry = page.locator(".activity li", { hasText: "added an icon" }).filter({ hasText: "PNG image, 32 × 32" }).first();
+  await expect(entry).toContainText("Alex Editor added an icon · PNG image, 32 × 32");
+  await expect(entry).not.toContainText(sha(image));
+  await expect(page.locator(".activity li", { hasText: "added an icon" }).filter({ hasText: "SVG" }).first()).toBeVisible();
 });
 
 test("refusals are shown as the server says them, and “Remove icon” takes it away", async ({ page }) => {

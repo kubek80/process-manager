@@ -116,7 +116,7 @@ export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openF
             <div key={l.key} className={`card-line ${l.warn ? "warn" : ""}`.trim()} data-line={l.key}>
               <dt>{l.name}:</dt>
               <dd>{l.items?.some((x) => x.icon) ? l.items.map((x, i) => (
-                <span key={i} className="card-entry">{i > 0 && ", "}<EntryIcon icon={x.icon} size={14} />{x.name}</span>
+                <Fragment key={i}><span className="card-entry"><EntryIcon icon={x.icon} size={14} />{x.name}{i < l.items!.length - 1 && ","}</span>{" "}</Fragment>
               )) : l.value}</dd>
             </div>
           ))}

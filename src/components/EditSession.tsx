@@ -144,7 +144,12 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
   const gone = useRef(false);
   const [isGone, setGone] = useState(false);
   const markGone = () => { gone.current = true; setGone(true); };
-  const recreate = (doc: T, note: string) => opts.current.onSave({ ...doc, status: "draft" }, 0, note || "Restored after it was deleted");
+  const recreate = async (doc: T, note: string) => {
+    const v = await opts.current.onSave({ ...doc, status: "draft" }, 0, note || "Restored after it was deleted");
+    // it is back: a draft again (one that was never published does not start the screen afresh)
+    gone.current = false; setGone(false);
+    return v;
+  };
   const d = useDraft<T>({
     docKey: `${kind}/${id}`, what: `this ${noun}`, tidy: o.tidy, stamp: o.stamp,
     saved: working?.doc ?? o.doc,

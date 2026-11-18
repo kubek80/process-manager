@@ -240,6 +240,24 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
+test("the editing bar reads “Back” and “More” on a tablet, and keeps their full names for screen readers", async ({ page }) => {
+  await signIn(page, DANA);
+  for (const [width, words] of [[1440, ["Back to reading", "More"]], [900, ["Back", "More"]], [700, ["", ""]]] as const) {
+    await page.setViewportSize({ width, height: 800 });
+    await open(page, "/p/request-gcp-project/edit");
+    const back = page.locator(".edit-bar").getByRole("button", { name: "Back to reading", exact: true });
+    const more = page.locator(".edit-bar").getByRole("button", { name: "More", exact: true });
+    await expect(back).toBeInViewport({ ratio: 1 });
+    await expect(more).toBeInViewport({ ratio: 1 });
+    expect((await back.innerText()).trim(), `Back at ${width}px`).toBe(words[0]);
+    expect((await more.innerText()).trim(), `More at ${width}px`).toBe(words[1]);
+    // its menu opens on the screen, wherever the button ended up on the bar
+    await more.click();
+    for (const it of await page.getByRole("menu", { name: "More" }).getByRole("menuitem").all()) await expect(it, `menu at ${width}px`).toBeInViewport({ ratio: 1 });
+    await page.keyboard.press("Escape");
+  }
+});
+
 for (const theme of ["light", "dark"] as const) {
   test(`Home, Access with its roles dialog, and the icon field fit every width in the ${theme} theme`, async ({ page }) => {
     test.setTimeout(60_000);

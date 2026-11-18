@@ -393,6 +393,7 @@ test("More > Versions restores an old version into the draft; readers keep the p
   await more(page, "Versions");
   const versions = page.getByRole("dialog", { name: /Versions of/ });
   await expect(versions.locator(".history > li").first()).toContainText("Second summary");
+  await expect(versions).toContainText("Restoring one puts it into your draft on this screen: nothing is kept until you save the draft, and readers see nothing until you publish.");
   await versions.locator(".history > li").nth(1).getByRole("button", { name: "Restore" }).click();
   await expect(page.locator(".toast", { hasText: "Version 1 is now in your draft" })).toBeVisible();
   await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\. Readers still see version 2\./);

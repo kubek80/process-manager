@@ -19,6 +19,10 @@ From both, the portal generates **skills for AI coding assistants** and, for sta
 
 ![Map view](docs/map.png)
 
+![The editing screen](docs/editing.png)
+
+![Publishing a change](docs/publish.png)
+
 ## Run it locally
 
 You need Node 22, Go 1.26 and Docker.
@@ -88,6 +92,8 @@ React + Vite frontend; Go server; Postgres. Everything people change lives in th
 
 ![Requests for what is missing](docs/requests.png)
 
+![Sharing a process](docs/share.png)
+
 The in-app **Guide** (top bar) is the main documentation and describes all of this, with flow charts drawn by the app's own map.
 
 ![Guide](docs/guide.png)
@@ -114,7 +120,11 @@ The first admins are named in the server setting `PM_ADMINS`.
 
 ![Admin panel](docs/admin.png)
 
+![The roles of one person](docs/roles.png)
+
 ![A platform and its members](docs/platforms.png)
+
+![Tools with their icons](docs/tools.png)
 
 ![Statistics](docs/statistics.png)
 
