@@ -1,10 +1,10 @@
 import { Boxes, CalendarCheck, Code2, Compass, Gauge, Layers, Server, Tag, TriangleAlert } from "lucide-react";
-import type { Governed, Rigour, Status, TargetKind } from "../types";
+import type { Governed, Rigour, TargetKind } from "../types";
 import { categoryName, environmentLabel, languageLabel, platformName, practiceName, tierLabel, useCatalog } from "../lib/catalog";
 import { belongsChoice, belongsRefused, wouldLoseEdit, type Belongs, type BelongsField } from "../lib/rights";
 import { usePerms } from "../lib/session";
 import type { Profile } from "../lib/edit";
-import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
+import { reviewInfo, statusOf } from "../lib/lifecycle";
 import { Field } from "./ui";
 
 type Dims = { tiers?: string[]; languages?: string[]; environments?: string[] };
@@ -71,32 +71,25 @@ export function ProfileFilter({ value, onChange }: { value: Profile; onChange: (
   );
 }
 
-/** Status and review rhythm, the same for processes and standards. */
-export function LifecycleEditor<T extends Governed>({ doc, others, onChange }: {
+/**
+ * How often the owner reviews it and, for a retired one, what readers should use instead. The
+ * status itself is not edited here: Publish, Retire and Unpublish on the editing screen set it.
+ */
+export function ReviewEditor<T extends Governed>({ doc, others, onChange }: {
   doc: T; others: { id: string; title: string }[]; onChange: (patch: Partial<Governed>) => void;
 }) {
-  const status = statusOf(doc);
   const choices = [3, 6, 12, 24];
   return (
-    <div className="grid3">
-      <div className="field">
-        <span className="field-label">Status</span>
-        <div className="chips" role="group" aria-label="Status">
-          {(["draft", "active", "deprecated"] as Status[]).map((s) => (
-            <button key={s} className={`chip ${status === s ? "on" : ""}`} aria-pressed={status === s} onClick={() => onChange({ status: s })}
-              title={s === "draft" ? "Only editors see it" : s === "active" ? "In use, visible to everyone" : "Kept for reference, marked as retired"}>{STATUS_LABEL[s]}</button>
-          ))}
-        </div>
-      </div>
-      <Field label="Owner reviews it every">
+    <div className="grid2">
+      <Field label="Owner reviews it every" hint="The owning team is reminded when a review is due">
         <select value={doc.review?.intervalMonths ?? ""} onChange={(e) => onChange({ review: e.target.value ? { ...doc.review, intervalMonths: Number(e.target.value) } : undefined })}>
           <option value="">Never (not recommended)</option>
           {choices.map((m) => <option key={m} value={m}>{m} months</option>)}
           {doc.review && !choices.includes(doc.review.intervalMonths) && <option value={doc.review.intervalMonths}>{doc.review.intervalMonths} months</option>}
         </select>
       </Field>
-      {status === "deprecated" && (
-        <Field label="Use instead">
+      {statusOf(doc) === "deprecated" && (
+        <Field label="Use instead" hint="Where readers of the retired one are sent">
           <select value={doc.replacedBy ?? ""} onChange={(e) => onChange({ replacedBy: e.target.value || undefined })}>
             <option value="">Nothing replaces it</option>
             {others.filter((p) => p.id !== doc.id).map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
@@ -156,7 +149,7 @@ export function useBelongsWarning(kind: TargetKind, saved: Belongs, now: Belongs
   if (refused.length) {
     const name = (f: BelongsField, id?: string) => (id ? `“${f === "platform" ? platformName(catalog, id) : practiceName(catalog, id)}”` : "none");
     const parts = refused.map((f) => `the ${f} (it was ${name(f, saved[f])}, now ${name(f, now[f])})`);
-    return `Only the owners of a platform or practice, or an editor, can change ${parts.join(" and ")}. Put it back as it was in Details.`;
+    return `Only the owners of a platform or practice, or an editor, can change ${parts.join(" and ")}. Put it back as it was under About.`;
   }
   if (!wouldLoseEdit(perms, kind, saved, now)) return "";
   const yours = [...perms.platforms.map((id) => `the platform ${platformName(catalog, id)}`), ...perms.practices.map((id) => `the practice ${practiceName(catalog, id)}`)];

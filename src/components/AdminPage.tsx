@@ -131,7 +131,9 @@ function HealthSection({ processes, standards, feedback }: { processes: Process[
 
 const ACTION: Record<string, string> = {
   "process.save": "saved the process", "process.delete": "deleted the process", "standard.save": "saved the standard", "standard.delete": "deleted the standard",
-  "lists.save": "changed the lists", "access.grant": "gave a role to", "access.revoke": "removed a role from", "access.set": "set the roles of", "access.delete": "removed every role of", "user.roles": "set the roles of", "user.delete": "removed every role of", "icon.upload": "added an icon", "skill.guidance": "changed the extra guidance of",
+  "lists.save": "changed the lists", "access.grant": "gave a role to", "access.revoke": "removed a role from", "access.change": "changed the roles of", "access.remove": "removed every role of", "icon.upload": "added an icon",
+  "process.discard": "threw away the unpublished changes of the process", "standard.discard": "threw away the unpublished changes of the standard",
+  "process.publish": "published the changes of the process", "standard.publish": "published the changes of the standard", "skill.guidance": "changed the extra guidance of",
   "content.import": "imported", "process.review": "confirmed the review of the process", "standard.review": "confirmed the review of the standard", "feedback.fixed": "marked feedback as fixed on the", "feedback.reopen": "reopened feedback on the",
   "feedback.delete": "deleted feedback on the",
   "content.convert": "brought stored content up to date for this version:",
