@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Lock, Pencil, Plus, Search, Trash2, UserPlus, X } from "lucide-react";
 import type { Role } from "../types";
 import { useCatalog } from "../lib/catalog";
@@ -115,6 +115,7 @@ function RolesDialog({ user, users, groups, me, onClose, onSaved }: {
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState("");
+  const said = useRef<HTMLDivElement>(null); // the problems or the refusal: brought into view, the body scrolls
   const problems = roleProblems({ email, choices, user, users, groups, me });
   const before = normalRoles(user?.roles ?? []);
   const after = rolesOf(choices);
@@ -125,8 +126,10 @@ function RolesDialog({ user, users, groups, me, onClose, onSaved }: {
 
   const set = (role: Role, next: Partial<RoleChoices[Role]>) => { setRefused(""); setChoices((c) => ({ ...c, [role]: { ...c[role], ...next } })); };
   const toggle = (role: Role, on: boolean) => set(role, { on, scopes: on && groupKindOf(role) && choices[role].scopes.length === 0 ? [""] : choices[role].scopes });
+  const [asked, setAsked] = useState(0);
+  useEffect(() => { if (asked) said.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [asked, refused]);
   const save = () => {
-    setTried(true);
+    setTried(true); setAsked((n) => n + 1);
     if (problems.length || busy || !changed) return;
     const address = user?.email ?? email.trim().toLowerCase();
     setBusy(true); setRefused("");
@@ -186,12 +189,14 @@ function RolesDialog({ user, users, groups, me, onClose, onSaved }: {
           })}
         </fieldset>
         {user && !user.bootstrap && after.length === 0 && problems.length === 0 && <p className="muted small">With no roles, {who} can still sign in and read like every colleague.</p>}
-        {tried && problems.length > 0 && (
-          <div className="check bad roles-problems" role="alert">
-            <ul>{problems.map((p) => <li key={p}>{p}</li>)}</ul>
-          </div>
-        )}
-        {refused && <LoadError what="The roles were not saved." error={refused} />}
+        <div ref={said}>
+          {tried && problems.length > 0 && (
+            <div className="check bad roles-problems" role="alert">
+              <ul>{problems.map((p) => <li key={p}>{p}</li>)}</ul>
+            </div>
+          )}
+          {refused && <LoadError what="The roles were not saved." error={refused} />}
+        </div>
       </div>
     </Modal>
   );

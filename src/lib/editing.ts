@@ -19,9 +19,14 @@ export type DraftKind = "unpublished" | "working";
 export const draftKindOf = (status: Status | undefined): DraftKind => (status === "draft" ? "unpublished" : "working");
 
 /** The calls behind "Save draft" and "Publish". */
-export type SaveCall = "save-version" | "save-working-draft";
+export type SaveCall = "save-version" | "save-working-draft" | "recreate-as-draft";
 export type PublishCall = "save-version-as-active" | "publish-working-draft";
-export const saveCallOf = (kind: DraftKind): SaveCall => (kind === "unpublished" ? "save-version" : "save-working-draft");
+/**
+ * `gone`: the document was deleted by somebody else while it was open. Bringing it back is the
+ * ordinary save that creates something new, as a draft readers do not see until it is published.
+ */
+export const saveCallOf = (kind: DraftKind, gone = false): SaveCall =>
+  (gone ? "recreate-as-draft" : kind === "unpublished" ? "save-version" : "save-working-draft");
 export const publishCallOf = (kind: DraftKind): PublishCall => (kind === "unpublished" ? "save-version-as-active" : "publish-working-draft");
 
 export type StateKey = "draft" | "published" | "changes" | "retired";
@@ -122,18 +127,20 @@ export const issueTarget = (kind: TargetKind, doc: Process | Standard, path: str
   kind === "process" ? processIssueTarget(doc as Process, path) : standardIssueTarget(doc as Standard, path);
 
 /** How many errors and warnings belong to each section and each item: "about", "steps", "steps/<id>". */
-export interface IssueCount { errors: number; warnings: number }
+/** `examples`: how many of the errors are example texts still to be replaced (see exampleIssues). */
+export interface IssueCount { errors: number; warnings: number; examples: number }
 export function issuesByPlace(kind: TargetKind, doc: Process | Standard, issues: Issue[]): Map<string, IssueCount> {
   const out = new Map<string, IssueCount>();
-  const add = (key: string, level: Issue["level"]) => {
-    const c = out.get(key) ?? { errors: 0, warnings: 0 };
-    if (level === "error") c.errors++; else c.warnings++;
+  const add = (key: string, issue: Issue) => {
+    const c = out.get(key) ?? { errors: 0, warnings: 0, examples: 0 };
+    if (issue.level === "error") c.errors++; else c.warnings++;
+    if (issue.level === "error" && isExampleIssue(issue)) c.examples++;
     out.set(key, c);
   };
   for (const issue of issues) {
     const t = issueTarget(kind, doc, issue.path);
-    add(t.section, issue.level);
-    if (t.item) add(`${t.section}/${t.item}`, issue.level);
+    add(t.section, issue);
+    if (t.item) add(`${t.section}/${t.item}`, issue);
   }
   return out;
 }
@@ -191,6 +198,8 @@ export const selectionKey = (sel: Selection) => (sel.item ? `${sel.section}/${se
 export function checkerSummary(issues: Issue[]): { level: "bad" | "warn" | "good"; text: string } {
   const errors = issues.filter((i) => i.level === "error").length;
   const hints = issues.length - errors;
+  // only example texts still to be replaced (something new): calmer than real problems
+  if (errors && issues.filter((i) => i.level === "error").every((i) => isExampleIssue(i))) return { level: "warn", text: `${errors} to fill in` };
   if (errors) return { level: "bad", text: `${errors} problem${errors > 1 ? "s" : ""}` };
   if (hints) return { level: "warn", text: `${hints} hint${hints > 1 ? "s" : ""}` };
   return { level: "good", text: "No problems" };

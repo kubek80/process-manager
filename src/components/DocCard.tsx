@@ -4,6 +4,7 @@ import type { DocMeta, Process, Rigour, Standard, TargetKind } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { cardLines, tiersText } from "../lib/cardLines";
 import { statusOf } from "../lib/lifecycle";
+import { author } from "../lib/editing";
 import { matchRanges, NO_CATEGORY_LABEL, type Hit } from "../lib/search";
 import { href } from "../lib/store";
 import { BookmarkButton, UpvoteButton } from "./Engage";
@@ -103,7 +104,7 @@ export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openF
         <div className="card-marks">
           {status === "draft" && <span className="card-mark draft">Draft</span>}
           {status === "deprecated" && <span className="card-mark retired">Retired</span>}
-          {changes && <span className="card-mark changes" title={`Saved by ${meta!.draft!.updatedBy}, not yet published`}><PencilLine size={12} aria-hidden="true" />Unpublished changes</span>}
+          {changes && <span className="card-mark changes" title={`Saved by ${author(meta!.draft).name}, not yet published`}><PencilLine size={12} aria-hidden="true" />Unpublished changes</span>}
           {fix && <span className="card-mark bad"><CircleAlert size={12} aria-hidden="true" />Needs fixing</span>}
         </div>
       )}

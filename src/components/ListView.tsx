@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { ArrowUpRight, Check, Plus, ChevronDown, ChevronRight, Clock, CornerDownRight, ExternalLink, Flag, RotateCcw, Workflow, Wrench } from "lucide-react";
+import { ArrowUpRight, Check, Plus, ChevronDown, ChevronRight, Clock, CornerDownRight, ExternalLink, Flag, RotateCcw, Workflow } from "lucide-react";
 import type { Feedback, Process, Step } from "../types";
-import { toolName, useCatalog } from "../lib/catalog";
 import { openCount } from "./Feedback";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import { go } from "../lib/store";
 import { TypeIcon } from "./ui";
 import { Resources } from "./Resources";
+import { StepTool } from "./StepTool";
 
 export function StepBody({ step, process, all, onSelect, compact }: {
   step: Step; process: Process; all: Process[]; onSelect?: (id: string) => void; compact?: boolean;
@@ -77,7 +77,6 @@ export function ListView({ process, all, done, toggle, reset, selectedId, onSele
   selectedId: string | null; onSelect: (id: string) => void;
 }) {
   const [onlyMine, setOnlyMine] = useState(false);
-  const { catalog } = useCatalog();
   const mine = process.steps.filter((s) => s.actor === "me");
   const mineDone = mine.filter((s) => done.has(s.id)).length;
   const laneIdx = (id: string) => Math.max(0, process.actors.findIndex((a) => a.id === id));
@@ -114,7 +113,7 @@ export function ListView({ process, all, done, toggle, reset, selectedId, onSele
                     <span className="step-kicker">
                       <span className="who">{isMine ? "You" : actor?.name}</span>
                       <span>{meta.label}</span>
-                      {s.tool && <span><Wrench size={11} />{toolName(catalog, s.tool)}</span>}
+                      {s.tool && <StepTool id={s.tool} size={13} />}
                       {s.duration && <span><Clock size={11} />{s.duration}</span>}
                     </span>
                     <span className="step-title">{s.title}</span>

@@ -1,10 +1,11 @@
 import { useId, useRef } from "react";
-import { Flag, X } from "lucide-react";
+import { Clock, Flag, X } from "lucide-react";
 import type { Feedback, Process, Step } from "../types";
 import { FeedbackForm, FeedbackItem, processTarget } from "./Feedback";
 import { STEP_META } from "../lib/stepMeta";
 import { TypeIcon, useLayer } from "./ui";
 import { StepBody } from "./ListView";
+import { StepTool } from "./StepTool";
 
 /** The side panel of the reader's page: one step, what to do, and its feedback. Changing it is done on the editing screen. */
 export function StepDrawer({ process, all, step, onClose, onSelect, feedback, reporting, setReporting }: {
@@ -28,6 +29,12 @@ export function StepDrawer({ process, all, step, onClose, onSelect, feedback, re
         <div className="drawer-title">
           <span className="step-kicker"><span className="who">{actor?.name ?? step.actor}</span><span>Step {index + 1}</span><span>{meta.label}</span></span>
           <h3 id={titleId}>{step.title}</h3>
+          {(step.tool || step.duration) && (
+            <p className="step-facts">
+              {step.tool && <span className="step-fact-tool"><span className="label">Done in</span><StepTool id={step.tool} link size={16} /></span>}
+              {step.duration && <span className="step-fact-time"><Clock size={13} aria-hidden="true" /><span className="label">Takes</span>{step.duration}</span>}
+            </p>
+          )}
         </div>
         <button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
       </header>

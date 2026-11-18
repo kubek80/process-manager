@@ -85,6 +85,14 @@ describe("“My application” as dropdowns", () => {
     expect(out.language).toEqual([]); // an empty list: no dropdown
     expect(chosenSummary(out.tier)).toBe("Any");
   });
+  it("offers every entry of the list, also one that would give nothing (a fact about the reader)", () => {
+    const out = profileOptions({ processes: [proc("top", { tiers: ["t0"] })], standards: [], catalog, drafts: false });
+    expect(out.tier.map((x) => [x.label, x.count])).toEqual([["Any tier", 1], ["Tier 0", 1], ["Tier 3", 0]]);
+    // and when nothing is left at all, every entry is still there, with 0
+    const none = profileOptions({ processes: [], standards: [], catalog, drafts: false, profile: { tier: "t3" } });
+    expect(none.tier.map((x) => [x.label, x.count, x.chosen])).toEqual([["Any tier", 0, false], ["Tier 0", 0, false], ["Tier 3", 0, true]]);
+    expect(none.environment.map((x) => x.label)).toEqual(["Any environment", "Production"]);
+  });
   it("counts with the other choices, and keeps a chosen value the list no longer has", () => {
     const out = profileOptions({ processes, standards: [], catalog, drafts: false, profile: { tier: "t0", language: "cobol" } });
     expect(out.tier.find((x) => x.chosen)?.label).toBe("Tier 0");

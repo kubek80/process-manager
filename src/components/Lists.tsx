@@ -12,8 +12,12 @@ import "../lists.css";
 // The pieces the three lists share (Processes, Standards, the search results): the filter panel
 // on the left, the chosen filters above the results, and the pages under them.
 
-/** Long lists leave out what would give nothing; short ones (type, rigour) show it greyed. */
-const HIDE_EMPTY: string[] = ["category", "practice", "platform", "owner", "tier", "environment", "language"];
+/**
+ * Long lists leave out what would give nothing; short ones (type, rigour) show it greyed. The
+ * choices of "My application" (`single`) are facts about the reader, not ways to narrow a list:
+ * they always offer every entry, also one that would give nothing.
+ */
+const HIDE_EMPTY: string[] = ["category", "practice", "platform", "owner"];
 
 /** What one dropdown says it holds: "Any", the one name, or the names (cut by the layout). */
 export function chosenSummary(options: Option[]): string {
@@ -73,8 +77,8 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast, single
   const button = useRef<HTMLButtonElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const title = label ?? (FILTER_LABEL as Record<string, string>)[name] ?? name;
-  const dead = nothingToChoose(options);
-  const shown = dead ? [] : HIDE_EMPTY.includes(name) ? options.filter((o) => o.count > 0 || o.chosen || (single && o.value === "")) : options;
+  const dead = !single && nothingToChoose(options);
+  const shown = dead ? [] : HIDE_EMPTY.includes(name) ? options.filter((o) => o.count > 0 || o.chosen) : options;
   const boxes = () => [...(box.current?.querySelectorAll<HTMLInputElement>("input:not(:disabled)") ?? [])];
   const focusAt = (i: number) => { const all = boxes(); all[(i + all.length) % all.length]?.focus(); };
   // the down arrow on the button opens the list and goes to its first option
@@ -112,7 +116,7 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast, single
           {hint && !dead && <p className="filter-dd-hint">{hint}</p>}
           {dead && <p className="filter-none">{empty ?? "Nothing to choose with the other filters."}</p>}
           {shown.map((o) => {
-            const off = o.count === 0 && !o.chosen;
+            const off = !single && o.count === 0 && !o.chosen;
             return (
               <label key={o.value} className={`filter-option ${o.chosen ? "on" : ""} ${off ? "off" : ""}`.trim()}>
                 <input type={single ? "radio" : "checkbox"} name={single ? id : undefined} checked={o.chosen} disabled={off} onChange={() => onToggle(o.value)}

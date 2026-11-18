@@ -36,3 +36,13 @@
 .roles-problems ul { margin: 0; padding-left: 18px; color: var(--text); }
 .roles-summary { min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 520px) { .role-scopes { padding-left: 0; } .modal-foot .roles-summary { flex-basis: 100%; } }
+/* the roles dialog is often taller than a laptop screen: its body scrolls, the title and the
+   summary with Save and Cancel stay in view */
+.modal:has(> .modal-body > .roles-dialog) { display: flex; flex-direction: column; max-height: calc(100dvh - 10vh); }
+.modal:has(> .modal-body > .roles-dialog) > .modal-head, .modal:has(> .modal-body > .roles-dialog) > .modal-foot { flex: none; }
+.modal:has(> .modal-body > .roles-dialog) > .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+@media (max-width: 520px) {
+  .modal:has(> .modal-body > .roles-dialog) > .modal-foot { flex-wrap: wrap; padding: 10px 16px; }
+  .modal:has(> .modal-body > .roles-dialog) > .modal-body { padding: 14px 16px; }
+}
+.roles-dialog > div:empty { display: none; }
