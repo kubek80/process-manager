@@ -23,7 +23,8 @@
     "db:import": "node scripts/dev.mjs --import",
     "db:demo": "node scripts/dev.mjs --import demo",
     "db:migrate": "node scripts/dev.mjs --migrate",
-    "export": "node scripts/dev.mjs --export"
+    "export": "node scripts/dev.mjs --export",
+    "mcp": "node scripts/mcp.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",

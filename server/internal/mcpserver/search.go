@@ -89,7 +89,7 @@ func resolve(list []docs.Named, value, what, plural string) (string, error) {
 			return n.ID, nil
 		}
 	}
-	return "", fmt.Errorf("There is no %s “%s”. Use get_catalog to see the %s.", what, value, plural)
+	return "", problemf("There is no %s “%s”. Use get_catalog to see the %s.", what, value, plural)
 }
 
 // rigourOf accepts the rigours and the levels of requirements.
@@ -104,7 +104,7 @@ func rigourOf(v string) (string, error) {
 	case "optional", "may":
 		return "optional", nil
 	}
-	return "", fmt.Errorf("There is no rigour “%s”. Use mandatory, recommended or optional (must, should or may).", v)
+	return "", problemf("There is no rigour “%s”. Use mandatory, recommended or optional (must, should or may).", v)
 }
 
 var levelRigour = map[string]string{"must": "mandatory", "should": "recommended", "may": "optional"}

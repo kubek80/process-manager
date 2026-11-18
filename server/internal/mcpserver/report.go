@@ -104,7 +104,7 @@ func (s *Server) report(ctx context.Context, who actor, in ReportInput) (Report,
 	case utf8.RuneCountInString(text) > 2000:
 		return Report{}, problem("Keep the text under 2000 characters.")
 	}
-	n, err := s.o.Feedback.CountSince(ctx, who.Email, s.o.Now().Add(-time.Hour))
+	n, err := s.o.Feedback.CountSince(ctx, who.Email, time.Now().Add(-time.Hour))
 	if err != nil {
 		return Report{}, err
 	}

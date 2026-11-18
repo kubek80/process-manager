@@ -55,7 +55,7 @@ const (
 
 // layout is the version of the tables below. A change of it rebuilds the index like a change
 // of settings does.
-const layout = 1
+const layout = 2
 
 // Hit is one part of a document that matched.
 type Hit struct {
@@ -305,7 +305,7 @@ func (ix *Index) ensureTables(ctx context.Context, vs string) (bool, error) {
 				item text not null,
 				seq int not null,
 				label text not null,
-				snippet text not null,
+				snippet text not null, -- the readable text of the part, without metadata
 				content_hash text not null,
 				status text not null,
 				embedding %s.vector(%d) not null,
@@ -426,6 +426,7 @@ func (ix *Index) syncDoc(ctx context.Context, kind, id string, lists *docs.Lists
 		}
 		published := err == nil && json.Unmarshal(body, &head) == nil && head.Status != "draft"
 		var chunks []chunking.Chunk
+		readable := readContent(kind, body)
 		if published {
 			if chunks, err = chunking.Chunks(kind, body, *lists, ix.opts); err != nil {
 				return fmt.Errorf("the %s %q could not be cut into parts: %w", kind, id, err)
@@ -495,7 +496,7 @@ func (ix *Index) syncDoc(ctx context.Context, kind, id string, lists *docs.Lists
 		keep := map[chunkKey]bool{}
 		for n, w := range all {
 			keep[w.key] = true
-			snippet := Snippet(w.c.Text, w.c.Label)
+			snippet := readable.of(w.key.part, w.key.item) // the readable text; cut to a snippet when searched
 			if v, ok := vectors[n]; ok {
 				if _, err := tx.Exec(ctx, fmt.Sprintf(`insert into search_chunks (kind, doc_id, part, item, seq, label, snippet, content_hash, status, embedding)
 					values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::%s.vector)
@@ -803,6 +804,7 @@ func (ix *Index) Search(ctx context.Context, query string, limit int) ([]Result,
 				return err
 			}
 			h.Score = score(distance)
+			h.Snippet = Snippet(h.Snippet, query)
 			key := [2]string{kind, id}
 			i, ok := at[key]
 			if !ok {
@@ -850,41 +852,6 @@ func (ix *Index) queryVector(ctx context.Context, query string) ([]float32, erro
 	}
 	ix.cache.put(query, got[0])
 	return got[0], nil
-}
-
-// ---------- snippets
-
-// SnippetLength is about the longest snippet, in characters.
-const SnippetLength = 200
-
-// Snippet is the text of a part as a person reads it under a search result: without its first
-// line (the kind and title of the document, which every part starts with) and without the label
-// of the part when the text repeats it, the lines joined, cut at a word near SnippetLength
-// characters.
-func Snippet(text, label string) string {
-	lines := strings.Split(strings.TrimSpace(text), "\n")
-	if len(lines) > 1 {
-		lines = lines[1:]
-	}
-	if label != "" && strings.HasPrefix(lines[0], label) {
-		lines[0] = strings.TrimLeft(lines[0][len(label):], " \t:.-–—")
-	}
-	kept := lines[:0]
-	for _, l := range lines {
-		if l = strings.Join(strings.Fields(l), " "); l != "" {
-			kept = append(kept, l)
-		}
-	}
-	s := strings.Join(kept, " · ")
-	r := []rune(s)
-	if len(r) <= SnippetLength {
-		return s
-	}
-	cut := string(r[:SnippetLength])
-	if i := strings.LastIndex(cut, " "); i > SnippetLength/2 {
-		cut = cut[:i]
-	}
-	return strings.TrimRight(cut, " ,;:.-–—·") + "…"
 }
 
 // ---------- the cache of question vectors

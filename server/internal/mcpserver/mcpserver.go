@@ -76,7 +76,7 @@ type Options struct {
 	Secret   string // shared secret; empty: calls from this machine only
 	Version  string // the server's version as agents see it
 	Log      *slog.Logger
-	Now      func() time.Time // tests
+	Now      func() time.Time // what "today" is for the review state; tests
 }
 
 // Server answers MCP calls.

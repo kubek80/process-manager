@@ -437,7 +437,7 @@ func TestSearchGroupsByDocumentAndNeverReturnsADraft(t *testing.T) {
 			t.Fatal("results not best first")
 		}
 		for _, h := range r.Hits {
-			if h.Label == "" || h.Snippet == "" || len([]rune(h.Snippet)) > SnippetLength+1 {
+			if h.Label == "" || len([]rune(h.Snippet)) > SnippetLength+1 {
 				t.Fatalf("hit: %+v", h)
 			}
 		}
@@ -486,19 +486,61 @@ func TestSearchGroupsByDocumentAndNeverReturnsADraft(t *testing.T) {
 }
 
 func TestSnippet(t *testing.T) {
-	for _, tc := range []struct{ text, label, want string }{
-		{"Process: Request a GCP project\nStep 1: Decide the details\nDone by: Requester\nPick a name.", "Step 1: Decide the details", "Done by: Requester · Pick a name."},
-		{"Standard: Secure logging\nScope: All services.", "Scope", "All services."},
-		{"Process: Request a GCP project\nGet a project.\nTags: gcp,   cloud", "Summary", "Get a project. · Tags: gcp, cloud"},
-		{"One line only", "", "One line only"},
+	for _, tc := range []struct{ text, query, want string }{
+		{"Pick a name. Choose the billing account. Wait for approval.", "which billing account", "Choose the billing account."},
+		{"Pick a name. Choose the billing account.", "nothing shared", "Pick a name."},
+		{"  One   sentence only ", "x", "One sentence only"},
+		{"", "x", ""},
 	} {
-		if got := Snippet(tc.text, tc.label); got != tc.want {
-			t.Errorf("Snippet(%q) = %q, want %q", tc.text, got, tc.want)
+		if got := Snippet(tc.text, tc.query); got != tc.want {
+			t.Errorf("Snippet(%q, %q) = %q, want %q", tc.text, tc.query, got, tc.want)
 		}
 	}
-	long := Snippet("Head\n"+strings.Repeat("word ", 100), "")
+	long := Snippet(strings.Repeat("word ", 100), "word")
 	if r := []rune(long); len(r) > SnippetLength+1 || !strings.HasSuffix(long, "word…") {
 		t.Fatalf("long: %q", long)
+	}
+}
+
+func TestSnippetsAreTheReadableTextOfAPart(t *testing.T) {
+	pool, store := filled(t, false)
+	ix := New(pool, store, newFake(), chunking.Options{}, quiet)
+	must(t, ix.Ensure(bg))
+	lists, _ := store.Lists(bg)
+	for _, kind := range []string{docs.Process, docs.Standard} {
+		list, _ := store.List(bg, kind)
+		for _, d := range list {
+			c := readContent(kind, d.Body)
+			cs, err := chunking.Chunks(kind, d.Body, lists, chunking.Default())
+			must(t, err)
+			for _, ch := range cs {
+				var stored string
+				must(t, pool.QueryRow(bg, `select snippet from search_chunks where kind = $1 and doc_id = $2 and part = $3 and item = $4`, kind, d.ID, ch.Part, ch.Item).Scan(&stored))
+				if stored != c.of(ch.Part, ch.Item) {
+					t.Fatalf("%s %s %s: %q", d.ID, ch.Part, ch.Item, stored)
+				}
+				for _, meta := range []string{"Tags:", "Category:", "Done by:", "Tool:", "Level:", "Why:", "Owned by:"} {
+					if strings.Contains(stored, meta) {
+						t.Fatalf("%s %s %s carries %q: %q", d.ID, ch.Part, ch.Item, meta, stored)
+					}
+				}
+			}
+		}
+	}
+	// a hit shows the summary sentence, the statement of a requirement
+	res, err := ix.Search(bg, "secrets passwords tokens logs", 50)
+	must(t, err)
+	for _, h := range res[0].Hits {
+		if h.Part == "requirement" && !strings.Contains(h.Snippet, " ") {
+			t.Fatalf("hit: %+v", h)
+		}
+		if strings.Contains(h.Snippet, "·") || strings.HasPrefix(h.Snippet, "Standard:") {
+			t.Fatalf("hit carries metadata: %+v", h)
+		}
+	}
+	d, _ := store.Get(bg, docs.Standard, "secure-logging")
+	if got := readContent(docs.Standard, d.Body).of("summary", ""); !strings.HasPrefix(got, "What services must") {
+		t.Fatalf("summary: %q", got)
 	}
 }
 
