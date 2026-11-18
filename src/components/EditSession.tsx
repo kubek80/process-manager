@@ -225,9 +225,8 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
     } catch (e) {
       const c = conflictOf(e);
       if (!c) { notify.error("The changes could not be published.", whyNot(e, noun)); return false; }
-      // refused because the draft changed (somebody saved it), or because the published version moved on
-      const now = await loadWorkingDraft<T>(kind, id).catch(() => w);
-      if (!now || now.revision !== w.revision) { d.raiseConflict(c.exists && now ? { ...c, version: now.revision } : c); return false; }
+      // refused because somebody else saved or discarded the draft, or because a newer version was published
+      if (c.draft) { d.raiseConflict(c); return false; }
       setPublishConflict({ c, note });
       return false;
     }
