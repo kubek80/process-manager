@@ -723,6 +723,8 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .activity li { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 12px; padding: 8px 0; font-size: 13.5px; }
 .activity time { color: var(--text-3); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .activity em { font-style: normal; color: var(--text-3); }
+/* an icon's id is 64 characters without a space: it wraps instead of widening the page */
+.activity code { overflow-wrap: anywhere; }
 .admin .cat-tabs { margin-top: 0; }
 .skills-split { grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); }
 .skills-split .cat-detail > * { max-width: none; }

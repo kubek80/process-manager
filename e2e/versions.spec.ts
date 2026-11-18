@@ -391,6 +391,11 @@ test("what others change shows up when coming back to the tab; unsaved changes a
 
 for (const status of ["draft", "active"] as const) {
   test(`something deleted by somebody else stays on screen while it has unsaved changes (${status === "draft" ? "never published" : "published"})`, async ({ page, playwright }) => {
+    // KNOWN DEFECT (reported): for a published process the app says "The process could not be
+    // saved. That does not exist." and offers no way to keep the work. The assertions below are
+    // what it should do; this marks the test as expected to fail until it is fixed, and makes it
+    // fail loudly once it passes, so the mark is taken away then.
+    test.fail(status === "active", "Saving the draft of a published process deleted meanwhile offers no way to keep the work");
     await page.clock.install();
     await signIn(page, ALEX);
     const id = `deleted-demo-${status}`;

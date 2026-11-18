@@ -128,7 +128,7 @@ test("a blank process starts as a draft whose example text must be replaced befo
   await fields(page).getByLabel(/^Summary/).fill("A laptop that is set up for work, delivered to your desk.");
   await outline(page, /^1 /);
   await fields(page).getByLabel(/^What happens/).fill("Fill in the laptop request");
-  await fields(page).getByLabel("Action a").fill("Choose the model and say where it should be delivered.");
+  await fields(page).getByLabel("Action a", { exact: true }).fill("Choose the model and say where it should be delivered.");
   await expect(page.locator(".eb-status.bad")).toHaveCount(0);
   await publish(page);
   expect((await readProcess(page, "order-a-laptop"))!.status).toBe("active");
