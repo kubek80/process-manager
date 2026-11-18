@@ -52,13 +52,22 @@ const FixBefore = createContext<(i: Issue) => "saving" | "publishing">(() => "pu
 export function ItemIssues({ issues }: { issues: Issue[] }) {
   const fixBefore = useContext(FixBefore);
   if (!issues.length) return null;
-  const errors = issues.filter((i) => i.level === "error").length;
-  const when = issues.some((i) => i.level === "error" && fixBefore(i) === "saving") ? "saving" : "publishing";
+  const errors = issues.filter((i) => i.level === "error");
+  const groups: { title: string; tone: "bad" | "warn"; list: Issue[] }[] = [
+    { list: errors.filter((i) => fixBefore(i) === "saving"), tone: "bad", title: "to fix before saving" },
+    { list: errors.filter((i) => fixBefore(i) !== "saving"), tone: "bad", title: "to fix before publishing" },
+    { list: issues.filter((i) => i.level !== "error"), tone: "warn", title: "" },
+  ];
   return (
-    <div className={`item-issues ${errors ? "bad" : "warn"}`} role="status">
-      <strong>{errors ? <CircleAlert size={15} /> : <TriangleAlert size={15} />}{errors ? `${errors} problem${errors > 1 ? "s" : ""} to fix before ${when}` : "Worth a look"}</strong>
-      <ul>{issues.map((i, k) => <li key={k} className={i.level}>{issueText(i)}</li>)}</ul>
-    </div>
+    <>
+      {groups.filter((g) => g.list.length).map((g) => (
+        <div key={g.title || "hints"} className={`item-issues ${g.tone}`} role="status">
+          <strong>{g.tone === "bad" ? <CircleAlert size={15} /> : <TriangleAlert size={15} />}
+            {g.title ? `${g.list.length} problem${g.list.length > 1 ? "s" : ""} ${g.title}` : "Worth a look"}</strong>
+          <ul>{g.list.map((i, k) => <li key={k} className={i.level}>{issueText(i)}</li>)}</ul>
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -101,7 +110,7 @@ export function Outline({ entries, selected, onSelect, issues, feedback, onAdd, 
           const at = e.item ? items.findIndex((x) => x.key === e.key) : -1;
           return (
             <li key={e.key} className={`outline-row depth-${e.depth} ${on ? "on" : ""}`}>
-              <button className="outline-item" aria-current={on ? "true" : undefined} onClick={() => onSelect(e)}
+              <button className={`outline-item ${(e.number?.length ?? 0) > 3 ? "long-n" : ""}`} aria-current={on ? "true" : undefined} onClick={() => onSelect(e)}
                 aria-label={`${e.number && e.depth === 1 ? `${e.number} ` : ""}${e.label}${c?.errors ? `, ${c.errors} problem${c.errors > 1 ? "s" : ""}` : c?.warnings ? `, ${c.warnings} hint${c.warnings > 1 ? "s" : ""}` : ""}${flags ? `, ${flags} open feedback` : ""}`}>
                 {e.depth === 1 && <span className="outline-n">{e.number}</span>}
                 <span className="outline-label">{e.label}</span>
@@ -288,7 +297,7 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
           {discard && !phone && <button className="eb-btn eb-discard" disabled={!!discard.blocked || discard.busy} onClick={discard.run} title={discard.blocked}>{discard.label}</button>}
           <button className="eb-btn eb-save" disabled={!!save.blocked || save.busy} onClick={save.run} title={save.blocked}>{save.busy ? "Saving…" : save.label}</button>
           <button className={`eb-btn eb-publish ${publish.unavailable ? "unavailable" : ""}`} disabled={!!publish.blocked || publish.busy} onClick={publish.run}
-            title={publish.blocked} aria-disabled={publish.unavailable ? true : undefined} aria-describedby={publish.unavailable && notice ? "edit-notice" : undefined}><Send size={15} />{publish.label}</button>
+            title={publish.blocked} aria-describedby={publish.unavailable && notice ? "edit-notice" : undefined}><Send size={15} />{publish.label}</button>
         </div>
       </header>
       {notice && (
