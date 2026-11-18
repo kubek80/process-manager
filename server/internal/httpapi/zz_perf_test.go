@@ -37,7 +37,7 @@ func TestZZPerf(t *testing.T) {
 		st, _, _ := c.raw("GET", "/api/engagement", nil, false)
 		t.Logf("engagement: %d %v", st, time.Since(s))
 	}
-	for _, p := range []string{"7", "30", "365", "all"} {
+	for _, p := range []string{"7", "30", "365", "all", "7", "30", "365", "all"} {
 		s := time.Now()
 		st, _, _ := d.raw("GET", "/api/admin/statistics?period="+p, nil, false)
 		t.Logf("statistics %s: %d %v", p, st, time.Since(s))

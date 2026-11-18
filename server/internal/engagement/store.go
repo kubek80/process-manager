@@ -355,7 +355,8 @@ func (s *Store) Earliest(ctx context.Context, now time.Time) (time.Time, error) 
 // again (hash aggregation), never by sorting every view. A view of a deleted document has no row
 // in documents (its id is marked).
 const viewsBySet = `with pairs as materialized (
-	select kind, id, email, count(*) as n from document_views where day >= $1 group by kind, id, email
+	select kind collate "C" as kind, id collate "C" as id, email collate "C" as email, count(*) as n
+	from document_views where day >= $1 group by 1, 2, 3
 )
 select 'document', p.kind, p.id, sum(p.n)::bigint, count(*) from pairs p join documents d on d.kind = p.kind and d.id = p.id group by p.kind, p.id
 union all
@@ -394,7 +395,7 @@ func (s *Store) PeriodFrom(ctx context.Context, from, now time.Time) (*Period, e
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `set local work_mem = '64MB'`); err != nil {
+	if _, err := tx.Exec(ctx, `set local work_mem = '64MB'; set local jit = off`); err != nil {
 		return nil, err
 	}
 	rows, err := tx.Query(ctx, viewsBySet, from)
@@ -527,7 +528,7 @@ func (s *Store) weeksFrom(ctx context.Context, from time.Time) (map[time.Time]*W
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `set local work_mem = '64MB'`); err != nil {
+	if _, err := tx.Exec(ctx, `set local work_mem = '64MB'; set local jit = off`); err != nil {
 		return nil, err
 	}
 	weeks := map[time.Time]*Week{}
@@ -538,7 +539,7 @@ func (s *Store) weeksFrom(ctx context.Context, from time.Time) (map[time.Time]*W
 		}
 		return weeks[t]
 	}
-	rows, err := tx.Query(ctx, `select week, sum(n)::bigint, count(*) from (select date_trunc('week', day::timestamp) as week, email, count(*) as n
+	rows, err := tx.Query(ctx, `select week, sum(n)::bigint, count(*) from (select date_trunc('week', day::timestamp) as week, email collate "C" as email, count(*) as n
 		from document_views where day >= $1 group by 1, 2) x group by week`, from)
 	if err != nil {
 		return nil, err
