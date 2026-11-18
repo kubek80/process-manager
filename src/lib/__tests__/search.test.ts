@@ -265,6 +265,18 @@ describe("addresses of home and search", () => {
       expect(parseRoute(`#/search?q=x&${bad}`)).toEqual({ page: "search", q: "x" });
     expect(parseRoute("#/search?page=7&size=12&owner=a,,a")).toEqual({ page: "search", pageNo: 7, size: 12, owner: ["a"] });
   });
+  it("carries the way of searching; by words is not written", () => {
+    const routes: Route[] = [
+      { page: "search", q: "gcp", mode: "meaning" },
+      { page: "search", q: "gcp", mode: "both", platform: ["azure"], pageNo: 2, size: 12 },
+      { page: "search", mode: "both" },
+    ];
+    for (const r of routes) expect(parseRoute(href(r))).toEqual(r);
+    expect(href({ page: "search", q: "x", mode: "meaning" })).toBe("#/search?q=x&mode=meaning");
+    expect(parseRoute("#/search?q=x&mode=words")).toEqual({ page: "search", q: "x" });
+    for (const bad of ["mode=", "mode=Meaning", "mode=vector", "mode=both,meaning"])
+      expect(parseRoute(`#/search?q=x&${bad}`)).toEqual({ page: "search", q: "x" });
+  });
   it("ignores what it does not know, and what is empty", () => {
     expect(parseRoute("#/search?q=&type=&foo=bar&rigour=often,mandatory&type=widget")).toEqual({ page: "search", rigour: ["mandatory"] });
     expect(parseRoute("#/search?q=%E0%A4%A&platform=azure,,azure")).toEqual({ page: "search", q: "%E0%A4%A", platform: ["azure"] });

@@ -106,3 +106,48 @@ func TestLoadRejects(t *testing.T) {
 		}
 	}
 }
+
+func TestEmbeddingSettings(t *testing.T) {
+	base := map[string]string{"PM_AUTH": "dev", "DATABASE_URL": "postgres://x"}
+	with := func(extra map[string]string) func(string) string {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return env(m)
+	}
+	c, err := Load(with(nil))
+	if err != nil || c.Embeddings.On() || c.Embeddings.Provider != "off" || c.Embeddings.Dimensions != 768 || c.Embeddings.MaxChars != 2000 || len(c.Embeddings.Parts) == 0 {
+		t.Fatalf("default: %v %+v", err, c.Embeddings)
+	}
+	c, err = Load(with(map[string]string{"PM_EMBEDDINGS": "builtin", "PM_EMBEDDINGS_DIMENSIONS": "256", "PM_CHUNK_MAX_CHARS": "1000"}))
+	if err != nil || !c.Embeddings.On() || c.Embeddings.Dimensions != 256 || c.Embeddings.ChunkOptions().MaxChars != 1000 {
+		t.Fatalf("builtin: %v %+v", err, c.Embeddings)
+	}
+	o := c.Embeddings.EmbeddingOptions()
+	if o.Provider != "builtin" || o.Dimensions != 256 {
+		t.Fatalf("options: %+v", o)
+	}
+	c, err = Load(with(map[string]string{"PM_EMBEDDINGS": "vertex", "PM_VERTEX_PROJECT": "p", "PM_VERTEX_LOCATION": "europe-west4"}))
+	if err != nil || c.Embeddings.Model != "gemini-embedding-001" || c.Embeddings.Project != "p" {
+		t.Fatalf("vertex: %v %+v", err, c.Embeddings)
+	}
+	for _, tc := range []struct {
+		env  map[string]string
+		want string
+	}{
+		{map[string]string{"PM_EMBEDDINGS": "vertex"}, "PM_VERTEX_PROJECT and PM_VERTEX_LOCATION are required"},
+		{map[string]string{"PM_EMBEDDINGS": "openai"}, `PM_EMBEDDINGS="openai" is not supported`},
+		{map[string]string{"PM_EMBEDDINGS": "builtin", "PM_EMBEDDINGS_DIMENSIONS": "4000"}, "must be a whole number from 8 to 2000"},
+		{map[string]string{"PM_EMBEDDINGS": "builtin", "PM_EMBEDDINGS_DIMENSIONS": "many"}, "must be a whole number from 8 to 2000"},
+		{map[string]string{"PM_EMBEDDINGS": "builtin", "PM_CHUNK_MAX_CHARS": "10"}, "PM_CHUNK_MAX_CHARS"},
+	} {
+		_, err := Load(with(tc.env))
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%v: %v, want %q", tc.env, err, tc.want)
+		}
+	}
+}

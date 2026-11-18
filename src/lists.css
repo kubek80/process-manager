@@ -162,3 +162,5 @@
   .pager-pages, .pager-word { display: none; }
   .pager-of { display: inline; padding: 0 6px; }
 }
+.card-found-by { position: relative; z-index: 1; margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.card-found-by.both { color: var(--accent); }

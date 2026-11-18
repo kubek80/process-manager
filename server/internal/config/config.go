@@ -7,7 +7,11 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"github.com/kubek80/process-manager/server/internal/chunking"
+	"github.com/kubek80/process-manager/server/internal/embedding"
 )
 
 // Auth providers.
@@ -38,6 +42,98 @@ type Config struct {
 
 	Notify     string // "log" or "webhook"
 	WebhookURL string
+
+	Embeddings Embeddings // search by meaning
+}
+
+// Embedding providers.
+const (
+	EmbeddingsOff     = "off"
+	EmbeddingsBuiltin = "builtin"
+	EmbeddingsVertex  = "vertex"
+)
+
+// Embeddings are the settings of search by meaning: which provider turns text into vectors and
+// how processes and standards are cut into parts. The portal server and the MCP command read
+// the same ones.
+type Embeddings struct {
+	Provider          string // "off" (default), "builtin" or "vertex"
+	Model             string // vertex only
+	Dimensions        int
+	Project, Location string   // vertex only
+	Parts             []string // which parts of a document are searched on their own
+	MaxChars          int      // the largest part, in characters
+}
+
+// On reports whether search by meaning is switched on.
+func (e Embeddings) On() bool { return e.Provider != EmbeddingsOff && e.Provider != "" }
+
+// EmbeddingOptions is what embedding.New needs.
+func (e Embeddings) EmbeddingOptions() embedding.Options {
+	return embedding.Options{Provider: e.Provider, Model: e.Model, Dimensions: e.Dimensions, Project: e.Project, Location: e.Location}
+}
+
+// ChunkOptions is what chunking needs.
+func (e Embeddings) ChunkOptions() chunking.Options {
+	return chunking.Options{Parts: e.Parts, MaxChars: e.MaxChars}
+}
+
+// Limits of the embedding settings. 2000 is the largest vector pgvector can index.
+const (
+	minDimensions = 8
+	maxDimensions = 2000
+	minChunkChars = 200
+	maxChunkChars = 20000
+)
+
+// LoadEmbeddings reads the settings of search by meaning. getenv is os.Getenv in production.
+func LoadEmbeddings(getenv func(string) string) (Embeddings, error) {
+	get := func(key, fallback string) string {
+		if v := strings.TrimSpace(getenv(key)); v != "" {
+			return v
+		}
+		return fallback
+	}
+	e := Embeddings{
+		Provider: strings.ToLower(get("PM_EMBEDDINGS", EmbeddingsOff)),
+		Model:    get("PM_EMBEDDINGS_MODEL", "gemini-embedding-001"),
+		Project:  get("PM_VERTEX_PROJECT", ""),
+		Location: get("PM_VERTEX_LOCATION", ""),
+	}
+	var problems []string
+	switch e.Provider {
+	case EmbeddingsOff, EmbeddingsBuiltin:
+	case EmbeddingsVertex:
+		if e.Project == "" || e.Location == "" {
+			problems = append(problems, "PM_VERTEX_PROJECT and PM_VERTEX_LOCATION are required when PM_EMBEDDINGS=vertex: the Google Cloud project and region (e.g. europe-west4) that run the embedding model")
+		}
+	default:
+		problems = append(problems, fmt.Sprintf("PM_EMBEDDINGS=%q is not supported: use off, builtin or vertex", e.Provider))
+	}
+	dims := get("PM_EMBEDDINGS_DIMENSIONS", "768")
+	n, err := strconv.Atoi(dims)
+	if err != nil || n < minDimensions || n > maxDimensions {
+		problems = append(problems, fmt.Sprintf("PM_EMBEDDINGS_DIMENSIONS=%q must be a whole number from %d to %d (768 is recommended)", dims, minDimensions, maxDimensions))
+	}
+	e.Dimensions = n
+	e.Parts = chunking.Default().Parts
+	if raw := get("PM_CHUNK_PARTS", ""); raw != "" {
+		parts, err := chunking.ParseParts(raw)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("PM_CHUNK_PARTS: %v", err))
+		}
+		e.Parts = parts
+	}
+	chars := get("PM_CHUNK_MAX_CHARS", "2000")
+	n, err = strconv.Atoi(chars)
+	if err != nil || n < minChunkChars || n > maxChunkChars {
+		problems = append(problems, fmt.Sprintf("PM_CHUNK_MAX_CHARS=%q must be a whole number from %d to %d", chars, minChunkChars, maxChunkChars))
+	}
+	e.MaxChars = n
+	if len(problems) > 0 {
+		return e, errors.New(strings.Join(problems, "; "))
+	}
+	return e, nil
 }
 
 // Load builds the configuration. getenv is os.Getenv in production.
@@ -148,6 +244,12 @@ func Load(getenv func(string) string) (Config, error) {
 	default:
 		problems = append(problems, fmt.Sprintf("PM_NOTIFY=%q is not supported: use log or webhook", c.Notify))
 	}
+
+	emb, err := LoadEmbeddings(getenv)
+	if err != nil {
+		problems = append(problems, err.Error())
+	}
+	c.Embeddings = emb
 
 	if len(problems) > 0 {
 		return c, errors.New(strings.Join(problems, "; "))

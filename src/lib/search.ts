@@ -8,7 +8,7 @@ import { appliesTo, type Profile } from "./edit";
 // give, so that the page can show the counts and leave out what gives nothing.
 
 /** The filters of the lists and the results page; the results page carries them in the address. */
-export type Filters = Omit<SearchState, "q" | "pageNo" | "size">;
+export type Filters = Omit<SearchState, "q" | "pageNo" | "size" | "mode">;
 export type FilterKey = keyof Filters;
 export const FILTER_KEYS: FilterKey[] = ["type", "category", "platform", "practice", "rigour", "owner"];
 export const FILTER_LABEL: Record<FilterKey, string> = { type: "Type", rigour: "Rigour", category: "Category", practice: "Practice", platform: "Platform", owner: "Owner" };
@@ -24,7 +24,7 @@ export const LEVEL_RIGOUR: Record<Level, Rigour> = { must: "mandatory", should: 
 
 /** A place inside a document where the query was found: a step, a requirement, a prerequisite, the scope. */
 export interface Hit {
-  where: "step" | "requirement" | "prerequisite" | "scope";
+  where: "step" | "requirement" | "prerequisite" | "scope" | "summary";
   /** The step id or requirement id, to open it directly. */
   item?: string;
   label: string;
@@ -42,6 +42,8 @@ export interface Result {
   hits: Hit[];
   /** For a standard: how many of its requirements apply (to the application chosen in `profile`). */
   rules: number;
+  /** With a `found` list: how it was found (by words, by meaning, or both). */
+  by?: ("words" | "meaning")[];
 }
 
 /**
@@ -66,6 +68,13 @@ export interface SearchInput {
   /** "My application": only what applies to it, and of a standard only the requirements that do. */
   profile?: Profile;
   flags?: Record<string, Flag>;
+  /**
+   * What was found some other way (search by meaning, or both ways together), best first: then
+   * the query is not searched for here; exactly these documents are found, in this order and with
+   * these places inside, and the filters, counts and flags work on them as on a word search.
+   * What is not among the documents the page has is ignored.
+   */
+  found?: { kind: TargetKind; id: string; score: number; hits: Hit[]; by?: ("words" | "meaning")[] }[];
 }
 
 export interface SearchOutput {
@@ -201,12 +210,18 @@ export function search(input: SearchInput): SearchOutput {
     ...input.standards.filter(visible("standard")).map((s) => index("standard", s, c, profile, flags)),
   ];
   // what the query finds, before the filters
-  const found = docs.map((d) => ({ d, score: words.length ? scoreOf(d, words) : 1 })).filter((x) => x.score > 0);
+  const given = input.found ? new Map(input.found.map((f, rank) => [`${f.kind}:${f.id}`, { f, rank }] as const)) : null;
+  const found = given
+    ? docs.flatMap((d) => {
+      const g = given.get(`${d.kind}:${d.doc.id}`);
+      return g ? [{ d, score: g.f.score, rank: g.rank, hits: g.f.hits, by: g.f.by }] : [];
+    }).sort((a, b) => a.rank - b.rank)
+    : docs.map((d) => ({ d, score: words.length ? scoreOf(d, words) : 1, rank: 0, hits: undefined, by: undefined })).filter((x) => x.score > 0);
 
   const results = found
     .filter(({ d }) => passes(d, filters, flags))
-    .map(({ d, score }): Result => ({ kind: d.kind, doc: d.doc, score, rigour: d.rigour, rules: d.rules, hits: hitsOf(d, words) }))
-    .sort((a, b) => b.score - a.score || byTitle(a, b));
+    .map(({ d, score, hits, by }): Result => ({ kind: d.kind, doc: d.doc, score, rigour: d.rigour, rules: d.rules, hits: hits ?? hitsOf(d, words), ...(by ? { by } : {}) }));
+  if (!given) results.sort((a, b) => b.score - a.score || byTitle(a, b));
 
   const counts = (k: FilterKey) => {
     const n = new Map<string, number>();

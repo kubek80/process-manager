@@ -30,7 +30,9 @@ export const KIND: Record<TargetKind, { word: string; Icon: typeof Workflow }> =
   process: { word: "Process", Icon: Workflow },
   standard: { word: "Standard", Icon: ShieldCheck },
 };
-const HIT_WORD: Record<Hit["where"], string> = { step: "Step", requirement: "Requirement", prerequisite: "Before you start", scope: "Scope" };
+const HIT_WORD: Record<Hit["where"], string> = { step: "Step", requirement: "Requirement", prerequisite: "Before you start", scope: "Scope", summary: "Summary" };
+/** Where a result was found, when it was searched for both ways. */
+const FOUND_BY: Record<string, string> = { words: "Found by words", meaning: "Found by meaning", "words,meaning": "Found by words and by meaning" };
 
 /** Where a process or standard opens; somebody who may fix a broken one gets its text. */
 export const docHref = (kind: TargetKind, id: string, fix = false) =>
@@ -58,6 +60,8 @@ export interface DocCardProps {
   usedBy?: number;
   /** The level of the title; 2 on the lists, 3 under a heading of their own (Home). */
   level?: 2 | 3;
+  /** Searched both ways: which of them found it. */
+  foundBy?: ("words" | "meaning")[];
 }
 
 /**
@@ -65,7 +69,7 @@ export interface DocCardProps {
  * is the link; it covers the whole card for the mouse, while the links and buttons inside stay
  * separate and reachable with the keyboard (no link inside a link).
  */
-export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openFeedback, mayEdit, broken, usedBy, level = 2 }: DocCardProps) {
+export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openFeedback, mayEdit, broken, usedBy, level = 2, foundBy }: DocCardProps) {
   const { catalog } = useCatalog();
   const known = engagementKnown(useEngagement());
   const status = statusOf(doc);
@@ -108,13 +112,16 @@ export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openF
           ))}
         </dl>
       )}
+      {foundBy && foundBy.length > 0 && (
+        <p className={`card-found-by ${foundBy.length > 1 ? "both" : foundBy[0]}`}>{FOUND_BY[[...foundBy].sort().join(",")]}</p>
+      )}
       {hits.length > 0 && (
         <ul className="card-hits" aria-label={`Found in ${title}`}>
           {hits.map((h, i) => (
             <li key={`${h.where}:${h.item ?? i}`}>
               <a href={hitHref(kind, doc.id, h)}>
                 <span className="card-hit-where">{HIT_WORD[h.where]}{h.where === "requirement" && h.item ? ` ${h.item}` : ""}</span>
-                {h.where !== "scope" && <span className="card-hit-label"><Marked text={h.label} words={words} /></span>}
+                {h.where !== "scope" && h.where !== "summary" && <span className="card-hit-label"><Marked text={h.label} words={words} /></span>}
               </a>
               {h.snippet && <span className="card-hit-snippet"><Marked text={h.snippet} words={words} /></span>}
             </li>

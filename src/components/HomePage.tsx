@@ -3,7 +3,8 @@ import { ArrowRight, LayoutGrid, ShieldCheck } from "lucide-react";
 import type { FeedbackByTarget, Process, Standard } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { sortBookmarks, useEngagement } from "../lib/engagement";
-import { useVisibleDrafts } from "../lib/session";
+import { useMe, useVisibleDrafts } from "../lib/session";
+import { rememberedMode } from "../lib/meaning";
 import { go, href } from "../lib/store";
 import { search, type FilterKey, type Result } from "../lib/search";
 import { SearchBox } from "./SearchPage";
@@ -30,6 +31,12 @@ export function HomePage({ processes, standards, feedback }: {
   const { catalog } = useCatalog();
   const drafts = useVisibleDrafts(); // drafts only count for those who may edit them, as they are only shown to them
   const [text, setText] = useState("");
+  const me = useMe();
+  // a new search is made the way this person chose last (by words, by meaning, or both)
+  const startSearch = () => {
+    const mode = me.search?.meaning ? rememberedMode(me.user?.email) : "words";
+    go({ page: "search", q: text, ...(mode === "words" ? {} : { mode }) });
+  };
   const out = useMemo(() => search({ processes, standards, catalog, drafts }), [processes, standards, catalog, drafts]);
   const count = (kind: string) => out.options.type.find((o) => o.value === kind)?.count ?? 0;
   const nProcesses = count("process");
@@ -48,7 +55,7 @@ export function HomePage({ processes, standards, feedback }: {
       <section className="home-search" aria-labelledby="home-title">
         <h1 id="home-title">Find a process or a standard</h1>
         <p className="lead">How to get something done, step by step, and the rules your work has to meet.</p>
-        <SearchBox big autoFocus value={text} onChange={setText} onSubmit={() => go({ page: "search", q: text })} />
+        <SearchBox big autoFocus value={text} onChange={setText} onSubmit={startSearch} />
       </section>
 
       <div className="home-all">

@@ -145,6 +145,20 @@ export const createRequest = (r: NewRequest) => call<DocRequest>("POST", "/api/r
 export const voteRequest = async (id: number, on: boolean) => (await call<{ votes: number }>(on ? "PUT" : "DELETE", `/api/requests/${id}/vote`)).votes;
 export const setRequestState = (id: number, s: { state: RequestState; note?: string; linkedId?: string }) => call<DocRequest>("PUT", `/api/requests/${id}/state`, s);
 export const withdrawRequest = (id: number) => call<void>("DELETE", `/api/requests/${id}`);
+/** One place inside a document that search by meaning found, best first. */
+export interface MeaningHit { part: string; item: string; label: string; snippet: string; score: number }
+/** One document search by meaning found, with up to three places inside it. */
+export interface MeaningResult { kind: TargetKind; id: string; score: number; hits: MeaningHit[] }
+/**
+ * Search by meaning on the server: published processes and standards, best first. Refused with
+ * 404 when it is switched off, 429 when one person searches very often, 502 when the service that
+ * compares the texts cannot be reached.
+ */
+export async function searchByMeaning(q: string, limit = 100): Promise<MeaningResult[]> {
+  const r = await call<{ results?: MeaningResult[] } | null>("GET", `/api/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+  return Array.isArray(r?.results) ? r!.results : [];
+}
+
 /** Use of processes and standards over a period, for admins. */
 export const loadStatistics = (period: Period) => call<Statistics>("GET", `/api/admin/statistics?period=${period}`);
 
@@ -196,6 +210,8 @@ export interface SearchState {
   pageNo?: number;
   /** How many results a page shows: 12, 24 or 48; left out, the person's own choice. */
   size?: number;
+  /** Search by meaning, or both ways; left out, by words. */
+  mode?: "meaning" | "both";
 }
 const SEARCH_LISTS = ["type", "rigour", "category", "practice", "platform", "owner"] as const;
 const SEARCH_SIZES = [12, 24, 48];
@@ -220,6 +236,7 @@ function parseSearch(query: string): Route {
     if (key === "q") { const q = decode(raw); if (q.trim()) r.q = q; continue; }
     if (key === "page") { if (/^[1-9]\d{0,5}$/.test(raw)) r.pageNo = Number(raw); continue; }
     if (key === "size") { if (SEARCH_SIZES.includes(Number(raw)) && /^\d+$/.test(raw)) r.size = Number(raw); continue; }
+    if (key === "mode") { if (raw === "meaning" || raw === "both") r.mode = raw; continue; }
     if (!(SEARCH_LISTS as readonly string[]).includes(key)) continue;
     const k = key as (typeof SEARCH_LISTS)[number];
     const values = [...new Set(raw.split(",").map((v) => decode(v).trim()).filter((v) => v && (!SEARCH_ALLOWED[k] || SEARCH_ALLOWED[k]!.includes(v))))];
@@ -233,6 +250,7 @@ function searchHref(r: SearchState): string {
   for (const k of SEARCH_LISTS) if (r[k]?.length) parts.push(`${k}=${(r[k] as string[]).map(encodeURIComponent).join(",")}`);
   if (r.pageNo && Number.isInteger(r.pageNo) && r.pageNo > 1) parts.push(`page=${r.pageNo}`);
   if (r.size && SEARCH_SIZES.includes(r.size)) parts.push(`size=${r.size}`);
+  if (r.mode === "meaning" || r.mode === "both") parts.push(`mode=${r.mode}`);
   return `#/search${parts.length ? `?${parts.join("&")}` : ""}`;
 }
 

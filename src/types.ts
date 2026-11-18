@@ -153,6 +153,11 @@ export interface Me {
   user?: { email: string; name: string };
   perms?: Perms;
   devUsers?: { email: string; name: string; about: string }[];
+  /**
+   * Search by meaning: whether the server offers it, and whether what is searched for is sent to
+   * an outside service (Google Cloud) to be compared. Missing from an older server: not offered.
+   */
+  search?: { meaning: boolean; outside: boolean };
 }
 
 export type Role = "admin" | "catalog-manager" | "process-editor" | "standards-editor" | "owner" | "platform-owner" | "practice-owner";
