@@ -26,7 +26,7 @@ const renameFirstStep = async (page: Page, title: string) => {
 };
 
 test("every save is a version with a note, and everyone can see what changed", async ({ page }) => {
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await copyOf(page, "versions-demo", "Versions demo");
   await open(page, "/p/versions-demo/flow");
   await expect(page.getByRole("button", { name: "Version 1" })).toBeVisible();
@@ -64,7 +64,7 @@ test("every save is a version with a note, and everyone can see what changed", a
 
 test("when somebody else saved first, nothing is overwritten without a decision", async ({ page, playwright }) => {
   const errors = watchErrors(page);
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await copyOf(page, "conflict-demo", "Conflict demo");
   await open(page, "/p/conflict-demo/flow");
   await renameFirstStep(page, "My wording");
@@ -99,7 +99,7 @@ test("when somebody else saved first, nothing is overwritten without a decision"
 });
 
 test("leaving with unsaved changes asks first, whichever way out is taken", async ({ page }) => {
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await copyOf(page, "leave-demo", "Leave demo");
   await open(page, "/processes");
   await page.locator(".card", { hasText: "Leave demo" }).click();
@@ -143,7 +143,7 @@ test("leaving with unsaved changes asks first, whichever way out is taken", asyn
 });
 
 test("changes can be undone step by step, including a deleted step and Discard", async ({ page }) => {
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await copyOf(page, "undo-demo", "Undo demo");
   await open(page, "/p/undo-demo/flow");
   const blocks = page.locator(".block");
@@ -190,7 +190,7 @@ test("a link can point at one step or one requirement", async ({ page }) => {
 });
 
 test("when the session ends in the middle of an edit, the edit survives signing in again", async ({ page, context }) => {
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await copyOf(page, "session-demo", "Session demo");
   await open(page, "/p/session-demo/flow");
   await renameFirstStep(page, "Typed before the session ended");
@@ -212,7 +212,7 @@ test("when the session ends in the middle of an edit, the edit survives signing 
 });
 
 test("a new process starts with its name, as a draft that readers cannot reach", async ({ page }) => {
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await open(page, "/processes");
   await page.getByRole("button", { name: "Blank process" }).click();
   const dialog = page.getByRole("dialog", { name: "New process" });
@@ -239,7 +239,7 @@ test("the app runs under a strict security policy", async ({ page }) => {
   // what the browser blocks under the policy is reported in the page as well as on the console
   await page.addInitScript(() => document.addEventListener("securitypolicyviolation", (e) => console.error(`CSP: ${e.violatedDirective} ${e.blockedURI}`)));
   await meaningReady(page.request); // the pages below search by meaning too
-  await signIn(page, DANA, { editor: true });
+  await signIn(page, DANA);
   const res = await page.goto("/#/p/request-gcp-project/json");
   const csp = res!.headers()["content-security-policy"];
   expect(csp).toContain("script-src 'self'");
@@ -298,7 +298,7 @@ test("the Back button closes a step and never opens again what was closed", asyn
 });
 
 test("Back with unsaved changes leaves the history as it was, whatever the answer", async ({ page }) => {
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await copyOf(page, "history-demo", "History demo");
   await open(page, "/guide");
   await page.getByRole("link", { name: "Standards" }).click();
@@ -326,7 +326,7 @@ test("Back with unsaved changes leaves the history as it was, whatever the answe
 
 test("what others change shows up when coming back to the tab; unsaved changes are kept and told about it", async ({ page, playwright }) => {
   await page.clock.install();
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await copyOf(page, "refresh-demo", "Refresh demo");
   const other = await playwright.request.newContext({ baseURL: "http://127.0.0.1:8090" });
 
@@ -358,7 +358,7 @@ test("what others change shows up when coming back to the tab; unsaved changes a
 
 test("something deleted by somebody else stays on screen while it has unsaved changes", async ({ page, playwright }) => {
   await page.clock.install();
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await copyOf(page, "deleted-demo", "Deleted demo");
   await open(page, "/p/deleted-demo/flow");
   await renameFirstStep(page, "Hours of careful work");
@@ -379,7 +379,7 @@ test("something deleted by somebody else stays on screen while it has unsaved ch
 });
 
 test("deleting is refused when somebody else changed it since it was opened", async ({ page, playwright }) => {
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await copyOf(page, "stale-delete-demo", "Stale delete demo");
   await open(page, "/p/stale-delete-demo/flow");
   await expect(page.locator("h1")).toHaveText("Stale delete demo"); // Alex has it open before Dana changes it
@@ -395,7 +395,7 @@ test("deleting is refused when somebody else changed it since it was opened", as
 });
 
 test("deleting something with unsaved changes does not ask about them afterwards", async ({ page }) => {
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await copyOf(page, "delete-dirty-demo", "Delete dirty demo");
   await open(page, "/p/delete-dirty-demo/flow");
   await page.getByRole("button", { name: "Details", exact: true }).click();

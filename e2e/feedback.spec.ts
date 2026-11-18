@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ALEX, answer, CASEY, clearFeedback, open, report, SAM, signIn } from "./helpers";
+import { ALEX, answer, CASEY, clearFeedback, fields, open, outline, publish, report, SAM, signIn } from "./helpers";
 
 const GCP = "request-gcp-project"; // owned by the Cloud Platform team (Casey)
 const REPO = "request-github-repository"; // owned by another team
@@ -108,17 +108,18 @@ test("the owner team closes feedback on its own process only", async ({ page, re
 
 test("a process editor closes feedback on any process; feedback on a step that changed is marked", async ({ page, request }) => {
   await report(request, SAM, { targetId: REPO, itemId: "finish-setup", text: "CODEOWNERS format changed." });
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await open(page, `/p/${REPO}/flow`);
 
-  // the owner rewrites the step the feedback is about
+  // the owner rewrites the step the feedback is about; the feedback is shown next to its fields
   await page.locator(".block", { hasText: "Finish the repository setup" }).click();
-  const drawer = page.locator(".drawer");
-  await expect(drawer.locator(".fb-stale")).toHaveCount(0);
-  await drawer.getByRole("button", { name: "Edit step" }).click();
-  await drawer.getByLabel("What happens", { exact: true }).fill("Finish setting up the repository");
-  await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.locator(".saved")).toBeVisible();
+  await expect(page.locator(".drawer .fb-stale")).toHaveCount(0);
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await outline(page, /Finish the repository setup, 1 open feedback$/);
+  await expect(fields(page).locator(".item-feedback")).toContainText("CODEOWNERS format changed.");
+  await fields(page).getByLabel(/^What happens/).fill("Finish setting up the repository");
+  await publish(page);
+  await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
 
   await page.getByRole("tab", { name: /Feedback/ }).click();
   const item = page.locator(".fb-item");

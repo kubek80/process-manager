@@ -125,7 +125,7 @@ test("Jordan, owner of Google Cloud, manages the requests that name it, and only
   await expect(item(page, gcp.title).locator(".req-actions")).toHaveCount(0);
   expect((await list(page.request)).find((r) => r.id === gcp.id)!.canManage).toBe(true); // the right is there all the same
 
-  await signIn(page, JORDAN, { editor: true });
+  await signIn(page, JORDAN);
   await open(page, "/requests");
 
   // nothing to do on the Azure one, and the server refuses it too
@@ -189,7 +189,7 @@ test("Jordan, owner of Google Cloud, manages the requests that name it, and only
 test("Alex, a process editor, manages process requests but not standard requests", async ({ page, request }) => {
   const process = await ask(request, RILEY, { kind: "process", title: title("Request a service mesh namespace") });
   const standard = await ask(request, RILEY, { kind: "standard", title: title("Retention of audit logs") });
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await open(page, "/requests");
   await expect(item(page, process.title).getByRole("button", { name: "Mark as planned" })).toBeVisible();
   await expect(item(page, standard.title).locator(".req-actions")).toHaveCount(0);
@@ -213,7 +213,7 @@ test("Alex, a process editor, manages process requests but not standard requests
   await expect(item(page, process.title)).toHaveClass(/state-open/);
 
   // an admin manages both
-  await signIn(page, DANA, { editor: true });
+  await signIn(page, DANA);
   await open(page, "/requests");
   await expect(item(page, standard.title).getByRole("button", { name: "Mark as planned" })).toBeVisible();
   await expect(item(page, process.title).getByRole("button", { name: "Mark as planned" })).toBeVisible();
@@ -314,7 +314,7 @@ test.describe("what answers a request", () => {
   test("only a published process answers a request; one removed later is said to be gone", async ({ page, request }) => {
     const a = await ask(request, CASEY, { kind: "process", title: title("Answered by a retired process") });
     const b = await ask(request, CASEY, { kind: "process", title: title("Answered by a process that goes") });
-    await signIn(page, DANA, { editor: true });
+    await signIn(page, DANA);
 
     // a draft is refused; a retired one is accepted
     const draft = await setState(page.request, a.id, { state: "done", linkedId: DRAFT });
@@ -367,7 +367,7 @@ test("an admin removes a request for good", async ({ page, request }) => {
   await open(page, "/requests?state=planned");
   await expect(item(page, r.title)).toBeVisible();
   await expect(item(page, r.title).getByRole("button", { name: "Remove" })).toHaveCount(0);
-  await signIn(page, DANA, { editor: true });
+  await signIn(page, DANA);
   await open(page, "/requests?state=planned");
   await item(page, r.title).getByRole("button", { name: "Remove", exact: true }).click();
   const confirm = page.getByRole("dialog", { name: "Remove this request?" });

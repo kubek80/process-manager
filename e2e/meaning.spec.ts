@@ -1,5 +1,5 @@
 import { expect, test, type APIResponse, type Page, type Route } from "@playwright/test";
-import { ALEX, CASEY, CSRF, DANA, JORDAN, RILEY, SAM, meaningReady, open, putDoc, readProcess, signIn, watchErrors } from "./helpers";
+import { ALEX, CASEY, CSRF, DANA, JORDAN, RILEY, SAM, discardWorkingDraft, fields, meaningReady, open, openEditor, pickFilter, publish, publishChange, putDoc, readProcess, saveDraft, signIn, watchErrors } from "./helpers";
 
 // Search by meaning: the switch Words / Meaning / Both on the search page. The browser tests'
 // server runs with the built-in embedder (it compares words and parts of words, nothing leaves
@@ -278,13 +278,13 @@ test("by meaning “My application” hides what does not apply", async ({ page 
   await expect(card(page, "onboard-api-to-apigee")).toBeVisible();
   const before = await results(page).count();
   // both apply to tiers 0 to 2 only
-  await page.locator(".profile-filter").getByLabel("Tier").selectOption({ label: "Tier 3" });
+  await pickFilter(page, "Tier", /^Tier 3, (at least )?\d+ results?$/);
   await expect(card(page, "onboard-site-to-akamai")).toHaveCount(0);
   await expect(card(page, "onboard-api-to-apigee")).toHaveCount(0);
   await expect(results(page)).toHaveCount(before - 2);
   const left = before - 2;
   await expect(count(page)).toHaveText(`${left === 0 ? "No results" : left === 1 ? "1 result" : `${left} results`} for “onboard a site or an api” with 1 filter`);
-  await page.locator(".profile-filter").getByLabel("Tier").selectOption({ label: "any tier" });
+  await pickFilter(page, "Tier", /^Any tier, (at least )?\d+ results?$/);
   await expect(results(page)).toHaveCount(before);
 });
 
@@ -432,7 +432,7 @@ test("what is published is found by meaning within a moment, and follows changes
     await expect(page.locator(".search-drafts-note")).toHaveCount(0); // a reader has no drafts to be told about
 
     // the editor who may change it finds the draft by words, not by meaning: drafts are not compared
-    await signIn(page, ALEX, { editor: true });
+    await signIn(page, ALEX);
     expect(await meaningIds(page, W)).not.toContain(`process:${id}`);
     await open(page, `/search?q=${encodeURIComponent(W)}`);
     await expect(card(page, id)).toBeVisible();
@@ -462,22 +462,27 @@ test("what is published is found by meaning within a moment, and follows changes
   }
 });
 
-test("a change made in the editor is found by meaning", async ({ page }) => {
-  await signIn(page, JORDAN, { editor: true });
+test("a change made on the editing screen is found by meaning once it is published, not before", async ({ page }) => {
+  await signIn(page, JORDAN);
   // the Google Cloud platform owner renames a step of the GCP process through the app
-  await open(page, "/p/request-gcp-project/flow");
   const before = (await readProcess(page, "request-gcp-project"))!;
   const first = before.steps[0];
   try {
-    const res = await putDoc(page, "process", "request-gcp-project", { ...before, steps: [{ ...first, title: "Agree the platypus naming rules" }, ...before.steps.slice(1)] });
-    expect(res.ok(), await res.text()).toBeTruthy();
+    await openEditor(page, "process", "request-gcp-project", first.id);
+    await fields(page).getByLabel(/^What happens/).fill("Agree the platypus naming rules");
+    await saveDraft(page);
+    // unpublished changes are never compared: readers and agents find the published version
+    await page.waitForTimeout(1500);
+    expect(await meaningIds(page, "platypus naming")).not.toContain("process:request-gcp-project");
+    await publish(page);
     await expect.poll(() => meaningIds(page, "platypus naming")).toContain("process:request-gcp-project");
     await load(page, "/search?q=platypus%20naming&mode=meaning");
     const hit = card(page, "request-gcp-project").locator("ul.card-hits a", { hasText: "Agree the platypus naming rules" });
     await expect(hit).toHaveAttribute("href", `#/p/request-gcp-project/flow/${first.id}`);
   } finally {
+    await discardWorkingDraft(page, "process", "request-gcp-project");
     const now = (await readProcess(page, "request-gcp-project"))!;
-    expect((await putDoc(page, "process", "request-gcp-project", { ...now, steps: [first, ...now.steps.slice(1)] })).ok()).toBeTruthy();
+    if (now.steps[0].title !== first.title) await publishChange(page, "process", "request-gcp-project", { ...now, steps: [first, ...now.steps.slice(1)] });
   }
 });
 
@@ -533,7 +538,7 @@ test("when the server sent only the closest of more, the page says so and the co
 
 test("a kept answer is used again only while nothing has changed", async ({ page }) => {
   await page.clock.install();
-  await signIn(page, JORDAN, { editor: true });
+  await signIn(page, JORDAN);
   const qs = asked(page);
   await open(page, "/search?q=budget&mode=meaning");
   await expect(results(page).first()).toHaveAttribute("data-id", "request-gcp-project");

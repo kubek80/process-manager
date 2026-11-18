@@ -109,7 +109,7 @@ test("a practice owner sees what belongs to the practice; somebody who owns noth
 });
 
 test("an admin adds and removes the members of a team on the team itself", async ({ page }) => {
-  await signIn(page, DANA, { editor: true });
+  await signIn(page, DANA);
   await open(page, "/admin/lists");
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   const members = page.locator(".cat-members");
@@ -130,7 +130,7 @@ test("an admin adds and removes the members of a team on the team itself", async
   await expect(page.getByRole("region", { name: /Everything that is yours/ }).locator("tr", { hasText: "Request a GCP project" })).toBeVisible();
 
   // and removing asks first, then takes it away again
-  await signIn(page, DANA, { editor: true });
+  await signIn(page, DANA);
   await open(page, "/admin/lists");
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   await page.locator(".cat-members").getByRole("button", { name: `Remove ${SAM} as Owner` }).click();
@@ -145,7 +145,7 @@ test("an admin adds and removes the members of a team on the team itself", async
 });
 
 test("a practice has members, each with the one role it gives; a new team needs saving first", async ({ page }) => {
-  await signIn(page, DANA, { editor: true });
+  await signIn(page, DANA);
   await open(page, "/admin/lists");
   // the team Cyber Security: Riley is its Owner
   await page.locator(".cat-item", { hasText: "Cyber Security" }).click();
@@ -182,7 +182,7 @@ test("a practice has members, each with the one role it gives; a new team needs 
 });
 
 test("who is a member is changed by admins only: somebody who only manages the lists sees them and is told who adds them", async ({ page }) => {
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await open(page, "/admin/lists");
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   const members = page.locator(".cat-members");

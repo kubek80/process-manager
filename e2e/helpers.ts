@@ -133,7 +133,10 @@ export async function more(page: Page, item: string) {
 /** The working draft of a published document, as the signed-in user sees it (undefined when there is none). */
 export async function readWorkingDraft(from: Page | APIRequestContext, kind: "process" | "standard", id: string): Promise<{ doc: Doc; base: number; revision: number; updatedBy: string } | undefined> {
   const res = await api(from).get(`${docPath(kind, id)}/draft`);
-  return res.status() === 404 ? undefined : res.json();
+  // 204 (or, for somebody who may not edit, 404): there is none
+  if (res.status() === 204 || res.status() === 404) return undefined;
+  expect(res.ok(), `read the draft of ${id}`).toBeTruthy();
+  return res.json();
 }
 
 /** Saves a working draft through the API: unpublished changes to a published document. */

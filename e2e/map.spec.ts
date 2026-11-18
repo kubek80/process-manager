@@ -42,8 +42,8 @@ test("the hint shows how to use the map until the person opened a step", async (
   await expect(hint).toHaveText("Select a step on the map to see what to do, who does it and with which tool.");
   // in the row of the tabs, above the map
   await expect(page.locator(".tabs-row .map-hint")).toBeVisible();
-  // how to move the map is said under it, and stays
-  await expect(page.locator(".flow-foot .map-pan-hint")).toHaveText("Drag the map to move around");
+  // how to move and zoom the map is said above it, and stays
+  await expect(page.locator(".flow-head .map-pan-hint")).toHaveText(/^Drag to move · Ctrl\s*\+ scroll to zoom$/);
   await block(page, "Approve the monthly budget").locator(".block-main").click();
   await expect(page.locator(".drawer h3")).toHaveText("Approve the monthly budget");
   await expect(hint).toHaveCount(0);
@@ -97,7 +97,9 @@ test("dragging the map with the mouse moves it and opens nothing; a plain click 
   const scroll = () => scroller.evaluate((el) => ({ left: el.scrollLeft, top: el.scrollTop }));
   expect(await scroll()).toEqual({ left: 0, top: 0 });
 
-  // from an empty place of a lane
+  // from an empty place of a lane (the legend and the zoom above the map push it down: it is brought into view first)
+  await page.locator(".lane").nth(1).scrollIntoViewIfNeeded();
+  const start = (await scroll()).left;
   const lane = (await page.locator(".lane").nth(1).boundingBox())!;
   const head = (await page.locator(".lane-head").nth(1).boundingBox())!;
   const fromX = head.x + head.width + 20, fromY = lane.y + 6;
@@ -106,7 +108,7 @@ test("dragging the map with the mouse moves it and opens nothing; a plain click 
   await page.mouse.move(fromX - 60, fromY, { steps: 4 });
   await page.mouse.move(fromX - 150, fromY, { steps: 6 });
   await page.mouse.up();
-  await expect.poll(async () => (await scroll()).left).toBeGreaterThanOrEqual(140);
+  await expect.poll(async () => (await scroll()).left).toBeGreaterThanOrEqual(start + 140);
   await expect(page.locator(".drawer")).toHaveCount(0);
 
   // starting on a step: the map moves back, and the step does not open
@@ -199,4 +201,59 @@ test("on a phone the map says nothing about dragging: a finger scrolls it", asyn
   await expect(page.locator(".map-hint")).toBeVisible();
   await expect(page.locator(".map-pan-hint")).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+});
+
+test("the legend and the zoom are above the map; Ctrl + scroll over the map zooms, a plain scroll scrolls the page", async ({ page }) => {
+  await page.setViewportSize({ width: 1300, height: 700 });
+  await signIn(page, SAM);
+  await page.addInitScript(() => { try { localStorage.setItem("pm:map-before", "closed"); } catch { /* ignore */ } });
+  await open(page, `/p/${GCP}/flow`);
+  const scroller = page.locator(".flow-scroll");
+  await expect(page.locator(".block").first()).toBeVisible();
+  // above the map, not in a bar below it
+  const legend = page.getByRole("group", { name: "Kinds of steps" });
+  const zoom = page.getByRole("group", { name: "Zoom" });
+  const map = (await scroller.boundingBox())!;
+  for (const part of [legend, zoom]) {
+    const b = (await part.boundingBox())!;
+    expect(b.y + b.height).toBeLessThanOrEqual(map.y + 1);
+  }
+  await expect(page.locator(".flow-foot")).toHaveCount(0);
+  for (const name of ["Zoom out", "Zoom in"]) await expect(zoom.getByRole("button", { name })).toBeVisible();
+  await expect(zoom.getByRole("button", { name: /^Fit/ })).toBeVisible();
+  const value = zoom.locator(".zoom-val");
+  const percent = async () => Number((await value.innerText()).replace("%", ""));
+  const pageScroll = () => page.evaluate(() => window.scrollY);
+
+  // Ctrl + wheel over the map zooms in, around the pointer, and the page stays where it is
+  await scroller.scrollIntoViewIfNeeded();
+  const box = (await scroller.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + Math.min(box.height, 300) / 2);
+  const [z0, y0] = [await percent(), await pageScroll()];
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -200);
+  await page.keyboard.up("Control");
+  await expect.poll(percent).toBeGreaterThan(z0);
+  expect(await pageScroll()).toBe(y0);
+  const z1 = await percent();
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, 200);
+  await page.keyboard.up("Control");
+  await expect.poll(percent).toBeLessThan(z1);
+  expect(await pageScroll()).toBe(y0);
+
+  // a plain scroll over the map scrolls the page and leaves the zoom alone
+  const z2 = await percent();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.mouse.move(box.x + box.width / 2, (await scroller.boundingBox())!.y + 40);
+  await page.mouse.wheel(0, 300);
+  await expect.poll(pageScroll).toBeGreaterThan(0);
+  expect(await percent()).toBe(z2);
+
+  // the buttons and Fit still work
+  await zoom.getByRole("button", { name: "Zoom in" }).click();
+  await expect.poll(percent).toBeGreaterThan(z2);
+  // and so does a click on a step
+  await page.locator(".block-main", { hasText: "Approve the monthly budget" }).click();
+  await expect(page.locator(".drawer h3")).toHaveText("Approve the monthly budget");
 });

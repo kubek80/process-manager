@@ -17,7 +17,7 @@ const PROCESS_DENIED = "Only process editors and the owners of its platform or p
 const details = (page: Page) => page.getByRole("button", { name: "Details", exact: true });
 
 test("a platform owner edits a process of the platform and a standard of the practice", async ({ page }) => {
-  await signIn(page, JORDAN, { editor: true });
+  await signIn(page, JORDAN);
   await expect.poll(async () => (await (await page.request.get("/api/me")).json()).perms).toMatchObject({ processes: false, standards: false, platforms: ["google-cloud"], practices: ["engineering"] });
 
   // a process that belongs to Google Cloud
@@ -44,7 +44,7 @@ test("a platform owner edits a process of the platform and a standard of the pra
 });
 
 test("a platform owner cannot change what belongs to neither of his groups; the server refuses it too", async ({ page }) => {
-  await signIn(page, JORDAN, { editor: true });
+  await signIn(page, JORDAN);
   await open(page, `/p/${AZURE}/flow`);
   await expect(page.locator(".block").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Add step" })).toHaveCount(0);
@@ -68,7 +68,7 @@ test("a platform owner cannot change what belongs to neither of his groups; the 
 });
 
 test("moving a document away from his platform is warned about, blocked, and refused by the server", async ({ page }) => {
-  await signIn(page, JORDAN, { editor: true });
+  await signIn(page, JORDAN);
   await open(page, `/p/${GCP}/flow`);
   await details(page).click();
   const modal = page.locator(".modal");
@@ -99,7 +99,7 @@ test("moving a document away from his platform is warned about, blocked, and ref
 
 test("a platform that is not his stays as it is on a document of his practice", async ({ page }) => {
   // "Publish an internal library" belongs to his practice Engineering and to the platform GitHub, which is not his
-  await signIn(page, JORDAN, { editor: true });
+  await signIn(page, JORDAN);
   const library = (await readProcess(page, LIBRARY))!;
   expect(library).toMatchObject({ practice: "engineering", platform: "github" });
   await open(page, `/p/${LIBRARY}/flow`);
@@ -131,7 +131,7 @@ test("a platform that is not his stays as it is on a document of his practice", 
 });
 
 test("a platform owner creates a process for his platform and a standard for his practice, and deletes them", async ({ page }) => {
-  await signIn(page, JORDAN, { editor: true });
+  await signIn(page, JORDAN);
   await open(page, "/processes");
   await expect(page.getByRole("button", { name: "Create from text with AI" })).toBeVisible();
   await page.getByRole("button", { name: "Blank process" }).click();
@@ -173,7 +173,7 @@ test("a platform owner creates a process for his platform and a standard for his
 });
 
 test("a reader can do none of it", async ({ page }) => {
-  await signIn(page, SAM, { editor: true });
+  await signIn(page, SAM);
   await open(page, `/p/${GCP}/flow`);
   await expect(page.locator(".block").first()).toBeVisible();
   await expect(page.locator(".mode-switch")).toHaveCount(0);
@@ -194,7 +194,7 @@ test("a reader can do none of it", async ({ page }) => {
 });
 
 test("a practice owner edits the standards of her practice, not those of another", async ({ page }) => {
-  await signIn(page, RILEY, { editor: true });
+  await signIn(page, RILEY);
   await open(page, `/s/${LOGGING}/doc`);
   await expect(page.locator('[aria-label^="Edit "]')).toHaveCount(5);
   await expect(details(page)).toBeVisible();
@@ -207,7 +207,7 @@ test("a practice owner edits the standards of her practice, not those of another
 });
 
 test("a team Owner still cannot edit, but confirms the review", async ({ page }) => {
-  await signIn(page, CASEY, { editor: true });
+  await signIn(page, CASEY);
   await open(page, `/p/${GCP}/flow`);
   await expect(page.locator(".block").first()).toBeVisible();
   await expect(page.locator(".mode-switch")).toHaveCount(0);

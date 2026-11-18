@@ -36,9 +36,9 @@ test("the Processes list in pages of 12: count, next, previous, the current page
   await signIn(page, SAM);
   await open(page, "/processes");
   // 24 a page unless chosen otherwise: two pages
-  await expect(page.getByRole("combobox", { name: "Items per page" })).toHaveValue("24");
+  await expect(page.getByRole("combobox", { name: "Items per page", exact: true })).toHaveValue("24");
   await expect(count(page)).toHaveText(`Showing 1–24 of ${TOTAL} processes`);
-  await page.getByRole("combobox", { name: "Items per page" }).selectOption("12");
+  await page.getByRole("combobox", { name: "Items per page", exact: true }).selectOption("12");
   await expect(count(page)).toHaveText(`Showing 1–12 of ${TOTAL} processes`);
   await expect(page.locator("li.card")).toHaveCount(12);
 
@@ -78,13 +78,13 @@ test("the Processes list in pages of 12: count, next, previous, the current page
   // the page size is remembered in this browser, for every list
   await page.getByRole("button", { name: "Clear all filters" }).first().click();
   await page.reload();
-  await expect(page.getByRole("combobox", { name: "Items per page" })).toHaveValue("12");
+  await expect(page.getByRole("combobox", { name: "Items per page", exact: true })).toHaveValue("12");
   await expect(count(page)).toHaveText(`Showing 1–12 of ${TOTAL} processes`);
   await open(page, "/search");
-  await expect(page.getByRole("combobox", { name: "Items per page" })).toHaveValue("12");
+  await expect(page.getByRole("combobox", { name: "Items per page", exact: true })).toHaveValue("12");
   await expect(count(page)).toHaveText(`Showing 1–12 of ${RESULTS} results`);
   // all on one page: no pages to choose
-  await page.getByRole("combobox", { name: "Items per page" }).selectOption("48");
+  await page.getByRole("combobox", { name: "Items per page", exact: true }).selectOption("48");
   await expect(count(page)).toHaveText(`${RESULTS} results`);
   await expect(page.getByRole("navigation", { name: /^Pages of/ })).toHaveCount(0);
 });
@@ -92,7 +92,7 @@ test("the Processes list in pages of 12: count, next, previous, the current page
 test("on the search page the page and its size are in the address, and Back goes to the page before", async ({ page }) => {
   await signIn(page, SAM);
   await open(page, "/search");
-  await page.getByRole("combobox", { name: "Items per page" }).selectOption("12");
+  await page.getByRole("combobox", { name: "Items per page", exact: true }).selectOption("12");
   await expect(page).toHaveURL(/#\/search\?size=12$/);
   await expect(count(page)).toHaveText(`Showing 1–12 of ${RESULTS} results`);
   const bottom = pager(page, "Pages of results, at the end");

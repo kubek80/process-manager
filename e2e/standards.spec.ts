@@ -105,7 +105,7 @@ test("feedback on a requirement goes to the people who answer for the standard",
   await expect(page.locator(".card", { hasText: "Secure logging" })).toContainText("1 open feedback");
 
   // a process editor has no say over a standard
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await open(page, `/s/${LOGGING}/feedback`);
   await expect(page.locator(".fb-item")).toContainText("SEC-LOG-02: No personal data in logs");
   await expect(page.getByRole("button", { name: "Mark as fixed" })).toHaveCount(0);
@@ -119,7 +119,7 @@ test("feedback on a requirement goes to the people who answer for the standard",
 });
 
 test("a practice owner edits the standards of the practice only", async ({ page }) => {
-  await signIn(page, RILEY, { editor: true });
+  await signIn(page, RILEY);
   await open(page, `/s/${REVIEW}/doc`); // belongs to another practice: reading only
   await expect(page.locator(".req").first()).toBeVisible();
   await expect(page.locator('[aria-label^="Edit "]')).toHaveCount(0);
@@ -141,7 +141,7 @@ test("a practice owner edits the standards of the practice only", async ({ page 
 test("changing a requirement gives the skill and the review agent a new version and marks old feedback", async ({ page, request }) => {
   await clearFeedback(request, "standard", LOGGING);
   await report(request, SAM, { targetKind: "standard", targetId: LOGGING, itemId: "SEC-LOG-05", text: "Which logger for Python?" });
-  await signIn(page, RILEY, { editor: true });
+  await signIn(page, RILEY);
   const before = await readSkill(page, `review-${LOGGING}`);
 
   await open(page, `/s/${LOGGING}/doc`);
@@ -178,7 +178,7 @@ test("changing a requirement gives the skill and the review agent a new version 
 });
 
 test("add and remove a requirement; the checker guards the format", async ({ page }) => {
-  await signIn(page, RILEY, { editor: true });
+  await signIn(page, RILEY);
   await open(page, `/s/${LOGGING}/doc`);
   await page.getByRole("button", { name: "Add requirement" }).click();
   const drawer = page.locator(".drawer");
@@ -210,7 +210,7 @@ test("add and remove a requirement; the checker guards the format", async ({ pag
 
 test("create a standard from a policy text with AI; it is a draft without skills until published", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await signIn(page, RILEY, { editor: true });
+  await signIn(page, RILEY);
   await open(page, "/standards");
   await page.getByRole("button", { name: "Create from text with AI" }).click();
   const modal = page.locator(".modal");
@@ -241,7 +241,7 @@ test("create a standard from a policy text with AI; it is a draft without skills
   await expect(page.locator(".card", { hasText: "Secure logging" })).toBeVisible();
   await expect(page.locator(".card", { hasText: "Dependency updates" })).toHaveCount(0);
 
-  await signIn(page, RILEY, { editor: true });
+  await signIn(page, RILEY);
   await open(page, "/s/dependency-updates/doc");
   await page.getByRole("button", { name: "Details", exact: true }).click();
   await page.locator(".modal").getByRole("button", { name: "Active" }).click();
@@ -270,7 +270,7 @@ test("create a standard from a policy text with AI; it is a draft without skills
 
 test("mark a standard as reviewed, look at its history, edit its JSON", async ({ page }) => {
   await page.clock.install({ time: new Date("2027-10-01T10:00:00Z") }); // more than a year after its last review
-  await signIn(page, RILEY, { editor: true });
+  await signIn(page, RILEY);
   await open(page, `/s/${LOGGING}/doc`);
   await expect(page.locator(".banner", { hasText: "Review overdue" })).toBeVisible();
   await page.getByRole("button", { name: "Mark as reviewed" }).click();

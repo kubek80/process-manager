@@ -213,12 +213,12 @@ test("a draft is found only by the people who may edit it, in editor mode, and i
 
     // Jordan is Owner of the team, so the draft reaches his browser, and he has an editor mode
     // for his platform Google Cloud - but he may not edit this draft, so it is not listed for him
-    await signIn(page, JORDAN, { editor: true });
+    await signIn(page, JORDAN);
     expect((await (await page.request.get("/api/processes")).json()).processes.some((p: { id: string }) => p.id === "search-draft-demo")).toBe(true);
     await open(page, "/search?q=zebra");
     await expect(page.locator(".search-empty h2")).toHaveText("Nothing found");
 
-    await signIn(page, ALEX, { editor: true });
+    await signIn(page, ALEX);
     await open(page, "/search?q=zebra");
     const hit = page.locator('li.card[data-id="search-draft-demo"]');
     await expect(hit).toBeVisible();

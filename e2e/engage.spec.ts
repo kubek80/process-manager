@@ -259,7 +259,7 @@ test("a standard shows its numbers, upvote and bookmark too", async ({ page }) =
 test("open and handled feedback follow reporting and “Mark as fixed”", async ({ page, request }) => {
   await report(request, SAM, { targetId: ID, text: "The budget form moved to another page." });
   await report(request, SAM, { targetId: ID, itemId: "approve-budget", text: "Who approves above 10,000?" });
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await open(page, `/p/${ID}/flow`);
   await expect(stats(page).locator(".engage-open")).toHaveText("2 pieces of feedback open");
   await expect(stats(page).locator(".engage-open")).toHaveClass(/\bhas\b/);
@@ -284,45 +284,38 @@ test("open and handled feedback follow reporting and “Mark as fixed”", async
 });
 
 test.describe("sharing", () => {
-  test("Copy link, Slack and Google Chat put the right text on the clipboard; Email fills in a mail", async ({ page, context }) => {
+  test("the link with its copy icon, “Copy link and title” and Email; no Slack or Google Chat", async ({ page, context }) => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await signIn(page, SAM);
     await open(page, `/p/${ID}/flow/approve-budget`); // a step is open: the link is still to the process itself
     await page.getByRole("button", { name: "Share" }).click();
     const dialog = page.getByRole("dialog", { name: `Share “${TITLE}”` });
     const url = `http://127.0.0.1:8090/#/p/${ID}`;
-    await expect(dialog.locator(".share-url")).toHaveText(url);
+    await expect(dialog.getByRole("textbox", { name: "Link" })).toHaveValue(url);
     const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
 
-    const options = dialog.locator(".share-option");
-    // each option says what it does in its own words
-    const hints = await options.locator(".share-text > span").allTextContents();
-    expect(new Set(hints).size).toBe(hints.length);
-    await dialog.getByRole("button", { name: /Copy link/ }).click();
+    // the copy icon sits right next to the link
+    const copyLink = dialog.getByRole("button", { name: "Copy link", exact: true });
+    const [field, icon] = [(await dialog.locator(".share-url").boundingBox())!, (await copyLink.boundingBox())!];
+    expect(Math.abs(icon.y + icon.height / 2 - (field.y + field.height / 2))).toBeLessThan(4);
+    expect(icon.x).toBeGreaterThanOrEqual(field.x + field.width - 2);
+    await copyLink.click();
     await expect(dialog.getByRole("status")).toHaveText("The link was copied. Paste it where you want to share it.");
-    await expect(options.nth(0).locator(".share-copied")).toHaveText("Copied");
-    await expect(dialog.getByRole("button", { name: /Copy link/ })).toBeFocused();
+    await expect(copyLink).toHaveClass(/\bcopied\b/);
     expect(await clipboard()).toBe(url);
 
-    await dialog.getByRole("button", { name: /Copy message for Slack/ }).click();
-    await expect(dialog.getByRole("status")).toHaveText("The message for Slack was copied. Paste it there.");
-    await expect(options.nth(1)).toHaveClass(/\bcopied\b/);
-    await expect(options.locator(".share-copied")).toHaveCount(1);
-    await expect(options.nth(0)).not.toHaveClass(/\bcopied\b/); // one at a time
-    expect(await clipboard()).toBe(`*${TITLE}*\n${SUMMARY}\n${url}`);
-    const html = await page.evaluate(async () => {
-      const [item] = await navigator.clipboard.read();
-      return item.types.includes("text/html") ? (await item.getType("text/html")).text() : "";
-    });
-    expect(html).toContain(`<b>${TITLE}</b>`);
-    expect(html).toContain("views &amp; upvotes");
-    expect(html).toContain(`<a href="${url}">`);
+    await dialog.getByRole("button", { name: /^Copy link and title/ }).click();
+    await expect(dialog.getByRole("status")).toHaveText("The link and title were copied. Paste them where you want to share them.");
+    await expect(dialog.locator(".share-option.copied")).toContainText("Copied");
+    await expect(copyLink).not.toHaveClass(/\bcopied\b/); // one at a time
+    expect(await clipboard()).toBe(`${TITLE}\n${url}`);
 
-    await page.evaluate(() => navigator.clipboard.writeText("")); // so that the next copy is seen
-    await dialog.getByRole("button", { name: /Copy message for Google Chat/ }).click();
-    await expect(dialog.getByRole("status")).toHaveText("The message for Google Chat was copied. Paste it there.");
-    await expect(options.nth(2)).toHaveClass(/\bcopied\b/);
-    expect(await clipboard()).toBe(`*${TITLE}*\n${SUMMARY}\n${url}`);
+    await expect(dialog.getByRole("button", { name: /Slack/ })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: /Google Chat/ })).toHaveCount(0);
+    await expect(dialog).not.toContainText("Slack");
+    // this browser has no share sheet of its own: no "Share…"
+    expect(await page.evaluate(() => typeof navigator.share)).toBe("undefined");
+    await expect(dialog.getByRole("button", { name: /^Share…/ })).toHaveCount(0);
 
     const mail = dialog.getByRole("link", { name: /Email/ });
     const href = (await mail.getAttribute("href"))!;
@@ -339,6 +332,40 @@ test.describe("sharing", () => {
     await expect(page.getByRole("button", { name: "Share" })).toBeFocused();
   });
 
+  test("“Share…” uses the device's own share sheet where the browser has one", async ({ page }) => {
+    await signIn(page, SAM);
+    // a browser with a share sheet; what it is asked to share is kept, and how it ends is set by the test
+    await page.addInitScript(() => {
+      const w = window as unknown as { shared: ShareData[]; shareEnds: string };
+      w.shared = []; w.shareEnds = "ok";
+      Object.defineProperty(navigator, "share", {
+        configurable: true,
+        value: (d: ShareData) => {
+          w.shared.push(d);
+          return w.shareEnds === "ok" ? Promise.resolve() : Promise.reject(new DOMException("No", w.shareEnds));
+        },
+      });
+    });
+    await open(page, `/p/${ID}/flow`);
+    await page.getByRole("button", { name: "Share" }).click();
+    const dialog = page.getByRole("dialog", { name: `Share “${TITLE}”` });
+    const device = dialog.getByRole("button", { name: /^Share…/ });
+    await device.click();
+    const shared = () => page.evaluate(() => (window as unknown as { shared: ShareData[] }).shared);
+    expect(await shared()).toEqual([{ title: TITLE, text: SUMMARY, url: `http://127.0.0.1:8090/#/p/${ID}` }]);
+    await expect(dialog.getByRole("status")).toHaveText("");
+
+    // the person closes the share sheet without choosing: nothing to say
+    await page.evaluate(() => { (window as unknown as { shareEnds: string }).shareEnds = "AbortError"; });
+    await device.click();
+    await expect.poll(async () => (await shared()).length).toBe(2);
+    await expect(dialog.getByRole("status")).toHaveText("");
+    // the device fails: the person is told, and pointed to the link
+    await page.evaluate(() => { (window as unknown as { shareEnds: string }).shareEnds = "DataError"; });
+    await device.click();
+    await expect(dialog.getByRole("status")).toHaveText("This device could not share it. Copy the link instead.");
+  });
+
   test("when the browser refuses to copy, the text is shown to copy by hand", async ({ page }) => {
     await signIn(page, SAM);
     await page.addInitScript(() => {
@@ -349,13 +376,13 @@ test.describe("sharing", () => {
     await open(page, "/s/secure-logging/doc");
     await page.getByRole("button", { name: "Share" }).click();
     const dialog = page.getByRole("dialog", { name: "Share “Secure logging”" });
-    await dialog.getByRole("button", { name: /Copy link/ }).click();
+    await dialog.getByRole("button", { name: "Copy link", exact: true }).click();
     const field = dialog.getByRole("textbox", { name: "Text to copy" });
     await expect(field).toHaveValue("http://127.0.0.1:8090/#/s/secure-logging");
     await expect(field).toBeFocused();
     await expect(dialog).toContainText("Your browser did not allow copying.");
     await expect(dialog.getByRole("status")).toHaveText("");
-    await dialog.getByRole("button", { name: /Copy message for Google Chat/ }).click();
-    await expect(field).toHaveValue(/^\*Secure logging\*\n.+\nhttp:\/\/127\.0\.0\.1:8090\/#\/s\/secure-logging$/);
+    await dialog.getByRole("button", { name: /^Copy link and title/ }).click();
+    await expect(field).toHaveValue("Secure logging\nhttp://127.0.0.1:8090/#/s/secure-logging");
   });
 });

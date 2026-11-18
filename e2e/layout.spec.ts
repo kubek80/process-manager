@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { CASEY, CSRF, DANA, JORDAN, RILEY, SAM, meaningReady, open, signIn } from "./helpers";
+import { ALEX, CASEY, CSRF, DANA, JORDAN, RILEY, SAM, fields, meaningReady, open, signIn } from "./helpers";
 
 // What a phone, a tablet and a small laptop show. A page that scrolls sideways hides controls
 // off screen, so no page may be wider than the screen.
 const PAGES = ["/", "/search?q=gcp", "/search?q=logging&type=standard&rigour=mandatory", "/processes", "/standards", "/p/request-gcp-project/flow", "/p/request-gcp-project/list", "/p/request-gcp-project/flow/raise-request",
   "/s/secure-logging/doc", "/s/secure-logging/doc/SEC-LOG-02", "/catalog", "/guide", "/mine", "/requests", "/requests?state=all"];
-const ADMIN = ["/p/request-gcp-project/json", "/admin/access", "/admin/lists", "/admin/skills", "/admin/health", "/admin/activity", "/admin/statistics", "/admin/system"];
+const ADMIN = ["/p/request-gcp-project/edit", "/p/request-gcp-project/edit/raise-request", "/s/secure-logging/edit", "/s/secure-logging/edit/SEC-LOG-02", "/admin/access", "/admin/lists", "/admin/skills", "/admin/health", "/admin/activity", "/admin/statistics", "/admin/system"];
 
 // the server listens before its index is complete: wait until search by meaning answers
 test.beforeAll(async ({ request }) => { await meaningReady(request); });
@@ -24,14 +24,14 @@ for (const [name, width] of [["a small phone", 360], ["a phone", 390], ["a table
     }
     // owners of a practice and of a platform: one more entry in the top bar, and a page with tables of its own
     for (const who of [RILEY, JORDAN]) {
-      await signIn(page, who, { editor: true });
+      await signIn(page, who);
       for (const hash of ["/", "/search?q=gcp", "/mine", "/s/secure-logging/doc", "/p/request-gcp-project/flow"]) {
         await open(page, hash);
         await expect(page.locator("h1").first()).toBeVisible();
         expect(await sideways(page), `${hash} as ${who} at ${width}px`).toBe(0);
       }
     }
-    await signIn(page, DANA, { editor: true });
+    await signIn(page, DANA);
     for (const hash of [...PAGES, ...ADMIN]) {
       await open(page, hash);
       await expect(page.locator("h1").first()).toBeVisible();
@@ -44,19 +44,19 @@ for (const width of [390, 360]) {
   test(`on a phone ${width} wide the top bar keeps every control within reach`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     // the longest top bar there can be: an admin who also answers for a team has eight links
-    await signIn(page, DANA, { editor: true });
+    await signIn(page, DANA);
     const role = { email: DANA, role: "owner", scope: "dns-team" };
     expect((await page.request.post("/api/admin/access", { data: role, headers: CSRF })).ok()).toBeTruthy();
     try {
       for (const who of [DANA, JORDAN]) {
-        await signIn(page, who, { editor: true });
+        await signIn(page, who);
         await open(page, "/");
         await expect(page.locator("h1").first()).toBeVisible();
         const nav = page.locator(".nav");
         const controls = [
           nav.getByRole("link", { name: "Home" }), nav.getByRole("link", { name: "Processes" }), nav.getByRole("link", { name: "Standards" }), nav.getByRole("link", { name: "Requests" }),
           nav.getByRole("link", { name: /My responsibilities/ }), nav.getByRole("link", { name: "Teams & tools" }), nav.getByRole("link", { name: "Guide" }),
-          page.getByRole("button", { name: "Consumer" }), page.getByRole("button", { name: "Editor", exact: true }), page.getByRole("button", { name: "Your account" }),
+          page.getByRole("button", { name: "Your account" }),
         ];
         if (who === DANA) controls.push(nav.getByRole("link", { name: "Admin" }));
         for (const control of controls) await expect(control, `${who} at ${width}px`).toBeInViewport({ ratio: 1 });
@@ -70,7 +70,7 @@ for (const width of [390, 360]) {
 }
 
 test("the longest top bar fits every width without scrolling sideways", async ({ page }) => {
-  await signIn(page, DANA, { editor: true });
+  await signIn(page, DANA);
   const role = { email: DANA, role: "owner", scope: "dns-team" };
   expect((await page.request.post("/api/admin/access", { data: role, headers: CSRF })).ok()).toBeTruthy();
   try {
@@ -102,7 +102,7 @@ test("a step opens as a panel that works with the keyboard alone", async ({ page
 
 for (const theme of ["light", "dark"] as const) {
   test(`requests, statistics and the share dialog fit a phone in the ${theme} theme`, async ({ page }) => {
-    await signIn(page, DANA, { editor: true });
+    await signIn(page, DANA);
     await page.addInitScript((t) => { try { localStorage.setItem("pm:theme", t); } catch { /* ignore */ } }, theme);
     for (const width of [360, 390, 768, 1024]) {
       await page.setViewportSize({ width, height: 844 });
@@ -122,8 +122,9 @@ for (const theme of ["light", "dark"] as const) {
 
       await open(page, "/p/request-gcp-project/flow");
       await page.getByRole("button", { name: "Share" }).click();
-      const share = page.getByRole("dialog", { name: /^Share/ });
-      for (const option of [/Copy link/, /Copy message for Slack/, /Copy message for Google Chat/]) await expect(share.getByRole("button", { name: option })).toBeInViewport({ ratio: 1 });
+      const share = page.getByRole("dialog", { name: /^Share “/ });
+      await expect(share.getByRole("textbox", { name: "Link" })).toBeInViewport({ ratio: 1 });
+      for (const option of ["Copy link", "Copy link and title"]) await expect(share.getByRole("button", { name: option, exact: option === "Copy link" ? true : undefined })).toBeInViewport({ ratio: 1 });
       await expect(share.getByRole("link", { name: /Email/ })).toBeInViewport({ ratio: 1 });
       expect(await sideways(page), `the share dialog at ${width}px, ${theme}`).toBe(0);
       // the numbers and the buttons near the top of the page fit as well
@@ -165,6 +166,112 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.locator(".search-problem button")).toBeInViewport({ ratio: 1 });
       expect(await sideways(page), `a problem at ${width}px, ${theme}`).toBe(0);
       await page.unroute(/\/api\/search\?/);
+    }
+  });
+}
+
+// ---------- the editing screen
+
+const SCREENS = [[1440, 900], [1366, 768], [1024, 768], [768, 1024], [390, 844], [360, 740]] as const;
+
+for (const theme of ["light", "dark"] as const) {
+  test(`the editing screen of a process and of a standard fits every screen in the ${theme} theme`, async ({ page }) => {
+    test.setTimeout(90_000);
+    await signIn(page, DANA);
+    await page.addInitScript((t) => { try { localStorage.setItem("pm:theme", t); } catch { /* ignore */ } }, theme);
+    for (const [width, height] of SCREENS) {
+      await page.setViewportSize({ width, height });
+      for (const [hash, item] of [["/p/request-gcp-project/edit", /^3 /], ["/s/secure-logging/edit", /^SEC-LOG-02 /]] as const) {
+        await open(page, hash);
+        const at = `${hash} at ${width}x${height}, ${theme}`;
+        const bar = page.locator(".edit-bar");
+        await expect(bar).toBeVisible();
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        await expect(page.locator(".topbar"), at).toHaveCount(0); // a screen of its own: the editing bar takes the place of the top bar
+        // every control of the editing bar is within reach
+        for (const control of [bar.getByRole("button", { name: /^Back to reading/ }), bar.getByRole("button", { name: "Undo" }), bar.getByRole("button", { name: "Redo" }),
+          bar.locator(".eb-status"), bar.getByRole("button", { name: /^More/ }), bar.getByRole("button", { name: "Save draft" }), bar.getByRole("button", { name: "Publish…" }), bar.locator(".eb-state")]) {
+          await expect(control, at).toBeInViewport({ ratio: 1 });
+        }
+        expect(await sideways(page), at).toBe(0);
+        const outline = page.locator(".edit-outline");
+        const middle = page.locator(".edit-middle");
+        const side = page.locator(".edit-fields");
+        if (width >= 1280) {
+          // three columns side by side, none crushed
+          const [o, m, f] = [(await outline.boundingBox())!, (await middle.boundingBox())!, (await side.boundingBox())!];
+          expect(o.x + o.width, at).toBeLessThanOrEqual(m.x + 1);
+          expect(m.x + m.width, at).toBeLessThanOrEqual(f.x + 1);
+          expect(m.width, at).toBeGreaterThan(500);
+          expect(o.width, at).toBeGreaterThan(200);
+          expect(f.width, at).toBeGreaterThan(300);
+          await expect(page.locator(".panel-strip"), at).toBeHidden();
+        } else {
+          // the outline slides over the page when asked for, and goes away again
+          await expect(page.getByRole("navigation", { name: /^Outline of the/ }), at).toBeHidden();
+          await page.locator(".panel-strip").getByRole("button", { name: "Outline" }).click();
+          await expect(page.getByRole("navigation", { name: /^Outline of the/ }), at).toBeInViewport();
+          expect(await sideways(page), `${at}, outline open`).toBe(0);
+          await page.getByRole("button", { name: "Close the outline" }).click();
+          await expect(page.getByRole("navigation", { name: /^Outline of the/ }), at).toBeHidden();
+          if (width > 760) {
+            // the fields stay a column of their own next to the map
+            const [m, f] = [(await middle.boundingBox())!, (await side.boundingBox())!];
+            expect(m.x + m.width, at).toBeLessThanOrEqual(f.x + 1);
+            await expect(side, at).toBeInViewport();
+          }
+        }
+        // selecting something shows its fields; on a phone they slide over and can be closed
+        await page.locator(".panel-strip").getByRole("button", { name: "Outline" }).or(page.getByRole("navigation", { name: /^Outline of the/ }).getByRole("button", { name: "About" })).first().click();
+        await page.getByRole("navigation", { name: /^Outline of the/ }).getByRole("button", { name: item }).click();
+        await expect(fields(page).locator(".fields-head h2"), at).toBeInViewport();
+        expect(await sideways(page), `${at}, fields open`).toBe(0);
+        if (width <= 760) {
+          await page.getByRole("button", { name: "Close the fields" }).click();
+          await expect(fields(page).locator(".fields-head h2"), at).toBeHidden();
+        }
+        // the More menu fits too
+        await bar.getByRole("button", { name: /^More/ }).click();
+        for (const it of await page.getByRole("menu", { name: "More" }).getByRole("menuitem").all()) await expect(it, at).toBeInViewport({ ratio: 1 });
+        await page.keyboard.press("Escape");
+        expect(await sideways(page), `${at}, menu`).toBe(0);
+      }
+    }
+  });
+}
+
+for (const theme of ["light", "dark"] as const) {
+  test(`Home, Access with its roles dialog, and the icon field fit every width in the ${theme} theme`, async ({ page }) => {
+    test.setTimeout(60_000);
+    await page.addInitScript((t) => { try { localStorage.setItem("pm:theme", t); } catch { /* ignore */ } }, theme);
+    for (const width of [360, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 844 });
+      const at = `${width}px, ${theme}`;
+      await signIn(page, ALEX); // somebody with bookmarks-free Home, the lists and something to create
+      await open(page, "/");
+      await expect(page.locator(".home-browse")).toBeVisible();
+      expect(await sideways(page), `Home at ${at}`).toBe(0);
+
+      await signIn(page, DANA);
+      await open(page, "/admin/access");
+      await expect(page.locator(".users-list > li").first()).toBeVisible();
+      expect(await sideways(page), `Access at ${at}`).toBe(0);
+      await page.getByRole("button", { name: "Edit Jordan Platform" }).click();
+      const dialog = page.getByRole("dialog", { name: "Roles of Jordan Platform" });
+      await dialog.getByRole("button", { name: "Another platform" }).click();
+      await expect(dialog.getByRole("combobox", { name: "Platform owner: platform 2" })).toBeVisible();
+      // the dialog is taller than a laptop screen: it scrolls, and its buttons can be reached
+      for (const b of [dialog.getByRole("button", { name: "Save" }), dialog.getByRole("button", { name: "Cancel" })]) { await b.scrollIntoViewIfNeeded(); await expect(b, at).toBeInViewport({ ratio: 0.9 }); }
+      expect(await sideways(page), `the roles dialog at ${at}`).toBe(0);
+      await dialog.getByRole("button", { name: "Cancel" }).click();
+
+      await open(page, "/admin/lists");
+      await page.getByRole("tab", { name: /Tools/ }).click();
+      await page.locator(".cat-item", { hasText: "GitHub" }).first().click();
+      const field = page.locator(".icon-field");
+      await field.scrollIntoViewIfNeeded();
+      await expect(field.getByRole("button", { name: "Choose image…" }), at).toBeInViewport({ ratio: 1 });
+      expect(await sideways(page), `the icon field at ${at}`).toBe(0);
     }
   });
 }

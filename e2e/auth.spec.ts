@@ -24,7 +24,7 @@ test("a reader signs in, sees no editing, and can switch user to an editor who d
 
   await page.getByRole("button", { name: "Your account" }).click();
   await expect(page.locator(".user-pop")).toContainText("sam@example.com");
-  await expect(page.locator(".user-pop")).toContainText("Consumer");
+  await expect(page.locator(".user-pop .user-role")).toHaveText("Reader");
   await page.getByRole("button", { name: "Switch user" }).click();
   await expect(page.locator(".login-users")).toBeVisible();
 

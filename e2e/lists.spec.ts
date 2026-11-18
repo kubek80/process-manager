@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ALEX, CSRF, DANA, JORDAN, open, pickFilter, putDoc, readCatalog, readProcess, SAM, save, signIn } from "./helpers";
+import { ALEX, CSRF, DANA, JORDAN, fields, more, open, openEditor, outline, pickFilter, publish, putDoc, readCatalog, readProcess, SAM, save, signIn } from "./helpers";
 
 // Categories, practices and platforms are lists of their own, next to the teams. A platform's
 // and a practice's members are their owners, who may change what belongs to them; everyone can
@@ -35,7 +35,7 @@ const item = (page: Page, name: string) => page.locator(".cat-item", { hasText: 
 test("an admin adds a platform, a practice and a category, uses them, and can remove them only when nothing uses them", async ({ page }) => {
   test.setTimeout(90_000);
   await copy(page, "lists-demo", "Lists demo");
-    await signIn(page, DANA, { editor: true });
+    await signIn(page, DANA);
     await open(page, "/admin/lists");
     for (const [list, noun, name] of [["Platforms", "platform", "Kubernetes"], ["Practices", "practice", "Data"], ["Categories", "category", "Containers"]]) {
       await tab(page, list).click();
@@ -53,14 +53,13 @@ test("an admin adds a platform, a practice and a category, uses them, and can re
     expect(catalog.categories).toContainEqual({ id: "containers", name: "Containers", description: "Running containers" });
 
     // the new entries can be picked in a process at once
-    await open(page, "/p/lists-demo/flow");
-    await page.getByRole("button", { name: "Details", exact: true }).click();
-    const modal = page.locator(".modal");
-    await modal.getByLabel(/^Category/).selectOption({ label: "Containers" });
-    await modal.getByLabel(/^Platform/).selectOption({ label: "Kubernetes" });
-    await modal.getByLabel(/^Practice/).selectOption({ label: "Data" });
-    await modal.getByRole("button", { name: "Done" }).click();
-    await save(page);
+    await openEditor(page, "process", "lists-demo");
+    await outline(page, "About");
+    const about = fields(page);
+    await about.getByLabel(/^Category/).selectOption({ label: "Containers" });
+    await about.getByLabel(/^Platform/).selectOption({ label: "Kubernetes" });
+    await about.getByLabel(/^Practice/).selectOption({ label: "Data" });
+    await publish(page);
     expect((await readProcess(page, "lists-demo"))!).toMatchObject({ category: "containers", platform: "kubernetes", practice: "data" });
 
     // while it is used, none of them can be removed
@@ -81,7 +80,7 @@ test("an admin adds a platform, a practice and a category, uses them, and can re
 
     // once nothing uses them, they go
     await remove(page, "lists-demo");
-    await signIn(page, DANA, { editor: true });
+    await signIn(page, DANA);
     await open(page, "/admin/lists");
     for (const [list, noun, name] of [["Platforms", "platform", "Kubernetes"], ["Practices", "practice", "Data"], ["Categories", "category", "Containers"]]) {
       await tab(page, list).click();
@@ -98,7 +97,7 @@ test("an admin adds a platform, a practice and a category, uses them, and can re
 });
 
 test("an admin makes somebody a member of a platform and of a practice, and takes it back", async ({ page }) => {
-  await signIn(page, DANA, { editor: true });
+  await signIn(page, DANA);
   await open(page, "/admin/lists");
   await tab(page, "Platforms").click();
   await item(page, "Azure").click();
@@ -109,28 +108,30 @@ test("an admin makes somebody a member of a platform and of a practice, and take
   await expect(members.locator("li", { hasText: SAM })).toContainText("Platform owner");
 
   // Sam can now change what belongs to Azure, and only that
-  await signIn(page, SAM, { editor: true });
+  await signIn(page, SAM);
   await open(page, "/p/request-azure-landing-zone/flow");
-  await expect(page.locator(".mode-switch")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Details", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Edit", exact: true })).toBeVisible();
   await open(page, "/p/request-gcp-project/flow");
   await expect(page.locator(".block").first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Details", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
+  // and the server agrees: the editing screen of the GCP process tells him so
+  await open(page, "/p/request-gcp-project/edit");
+  await expect(page.getByText("You may not change this process.")).toBeVisible();
 
   // a practice works the same way
-  await signIn(page, DANA, { editor: true });
+  await signIn(page, DANA);
   await open(page, "/admin/lists");
   await tab(page, "Practices").click();
   await item(page, "Service management").click();
   await members.getByLabel("Email of the new member").fill(SAM);
   await members.getByRole("button", { name: "Add member" }).click();
   await expect(members.locator("li", { hasText: SAM })).toContainText("Practice owner");
-  await signIn(page, SAM, { editor: true });
+  await signIn(page, SAM);
   await open(page, "/p/raise-servicenow-request/flow");
-  await expect(page.getByRole("button", { name: "Details", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Edit", exact: true })).toBeVisible();
 
   // taking it away again: the editing controls go with it
-  await signIn(page, DANA, { editor: true });
+  await signIn(page, DANA);
   await open(page, "/admin/lists");
   await tab(page, "Practices").click();
   await item(page, "Service management").click();
@@ -143,11 +144,10 @@ test("an admin makes somebody a member of a platform and of a practice, and take
   await page.getByRole("dialog", { name: "Remove this member?" }).getByRole("button", { name: "Remove", exact: true }).click();
   await expect(members.locator("li", { hasText: SAM })).toHaveCount(0);
 
-  await signIn(page, SAM, { editor: true });
+  await signIn(page, SAM);
   await open(page, "/p/request-azure-landing-zone/flow");
   await expect(page.locator(".block").first()).toBeVisible();
-  await expect(page.locator(".mode-switch")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Details", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
 });
 
 test("everyone sees who the members of a platform, a practice and a team are", async ({ page }) => {
@@ -208,13 +208,13 @@ test("My responsibilities lists what belongs to his platform, his practice and h
   await expect(row("Code review")).toHaveCount(0);
 });
 
-test("Details: an editor says what a process belongs to and its rigour; readers see it by name", async ({ page }) => {
+test("About: an editor says what a process belongs to and its rigour; readers see it by name", async ({ page }) => {
   test.setTimeout(60_000);
   await copy(page, "details-demo", "Details demo");
-    await signIn(page, ALEX, { editor: true });
-    await open(page, "/p/details-demo/flow");
-    await page.getByRole("button", { name: "Details", exact: true }).click();
-    const modal = page.locator(".modal");
+    await signIn(page, ALEX);
+    await openEditor(page, "process", "details-demo");
+    await outline(page, "About");
+    const modal = fields(page);
     await expect(modal.getByRole("heading", { name: /What it belongs to/ })).toBeVisible();
     const binding = modal.getByRole("group", { name: "Rigour" });
     await expect(modal.locator(".field", { has: page.getByRole("group", { name: "Rigour" }) }).locator(".field-label")).toHaveText(/^Rigourhow binding it is/);
@@ -224,17 +224,22 @@ test("Details: an editor says what a process belongs to and its rigour; readers 
     await modal.getByLabel(/^Platform/).selectOption({ label: "Akamai" });
     await modal.getByLabel(/^Practice/).selectOption({ label: "Service management" });
     await binding.getByRole("button", { name: "Recommended" }).click();
-    await modal.getByRole("button", { name: "Done" }).click();
-    await save(page);
+    await publish(page);
     expect((await readProcess(page, "details-demo"))!).toMatchObject({ category: "network", platform: "akamai", practice: "service-management", rigour: "recommended" });
 
-    await page.getByRole("button", { name: "Details", exact: true }).click();
+    await outline(page, "About");
     await modal.getByLabel(/^Platform/).selectOption({ label: "Azure" });
     await binding.getByRole("button", { name: "Mandatory" }).click();
-    await modal.getByRole("button", { name: "Done" }).click();
-    await save(page);
+    // Publish… says what changed before it is published
+    await page.locator(".edit-bar").getByRole("button", { name: "Publish…" }).click();
+    const publishing = page.getByRole("dialog", { name: "Publish your changes" });
+    await expect(publishing).toContainText("Platform changed from “Akamai” to “Azure”");
+    await expect(publishing).toContainText("Rigour changed from “Recommended” to “Mandatory”");
+    await publishing.getByRole("button", { name: "Publish", exact: true }).click();
+    await expect(page.locator(".eb-state")).toHaveAttribute("aria-label", /^Published\./);
 
     // the versions say what changed in words, with the names
+    await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
     await page.getByRole("button", { name: /^Version \d+$/ }).click();
     const versions = page.getByRole("dialog", { name: /Versions of/ });
     await versions.locator("li").nth(0).getByRole("button", { name: "What changed" }).click();
@@ -302,7 +307,7 @@ test("a process without a category is listed under Other", async ({ page }) => {
 });
 
 test("a platform that still has members cannot be removed until they are gone", async ({ page }) => {
-  await signIn(page, DANA, { editor: true });
+  await signIn(page, DANA);
   await open(page, "/admin/lists");
   await tab(page, "Platforms").click();
   await page.getByRole("button", { name: "New platform" }).click();
@@ -320,7 +325,7 @@ test("a platform that still has members cannot be removed until they are gone", 
   await expect(page.locator(".cat-danger")).toContainText("1 person is still a member of this platform. Remove them from the members first");
 
   // a lists manager who is not an admin sees the same, from the members everyone may read
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await open(page, "/admin/lists");
   await tab(page, "Platforms").click();
   await item(page, "Mainframe").click();
@@ -328,7 +333,7 @@ test("a platform that still has members cannot be removed until they are gone", 
   await expect(page.getByRole("button", { name: "Remove this platform" })).toBeDisabled();
   await expect(page.locator(".cat-danger")).toContainText("1 person is still a member of this platform");
 
-  await signIn(page, DANA, { editor: true });
+  await signIn(page, DANA);
   await open(page, "/admin/lists");
   await tab(page, "Platforms").click();
   // without its member it goes
@@ -344,7 +349,7 @@ test("a platform that still has members cannot be removed until they are gone", 
 for (const [width, theme] of [[1440, "light"], [390, "dark"]] as const) {
   test(`a message about a failed save never covers Save and Discard (${width} wide, ${theme})`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
-    await signIn(page, DANA, { editor: true });
+    await signIn(page, DANA);
     await page.addInitScript((t) => { try { localStorage.setItem("pm:theme", t); } catch { /* ignore */ } }, theme);
     await open(page, "/admin/lists");
     await item(page, "DNS team").click();
