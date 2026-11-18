@@ -119,7 +119,8 @@ function RolesDialog({ user, users, groups, me, onClose, onSaved }: {
   const before = normalRoles(user?.roles ?? []);
   const after = rolesOf(choices);
   const diff = rolesDiff(before, after);
-  const changed = !user || diff.added.length + diff.removed.length > 0;
+  // an unfinished line counts as a change: pressing Save then says what is missing
+  const changed = !user || diff.added.length + diff.removed.length > 0 || problems.length > 0;
   const who = user ? user.name || user.email : "";
 
   const set = (role: Role, next: Partial<RoleChoices[Role]>) => { setRefused(""); setChoices((c) => ({ ...c, [role]: { ...c[role], ...next } })); };
@@ -184,7 +185,7 @@ function RolesDialog({ user, users, groups, me, onClose, onSaved }: {
             );
           })}
         </fieldset>
-        {user && after.length === 0 && problems.length === 0 && <p className="muted small">With no roles, {who} can still sign in and read like every colleague.</p>}
+        {user && !user.bootstrap && after.length === 0 && problems.length === 0 && <p className="muted small">With no roles, {who} can still sign in and read like every colleague.</p>}
         {tried && problems.length > 0 && (
           <div className="check bad roles-problems" role="alert">
             <ul>{problems.map((p) => <li key={p}>{p}</li>)}</ul>

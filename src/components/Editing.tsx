@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, GitCompare, History, Redo2, RotateCcw, Save, TriangleAlert, Undo2 } from "lucide-react";
-import type { DocMeta, DocVersion, TargetKind } from "../types";
+import { ArrowLeft, Check, GitCompare, History, PencilLine, Redo2, RotateCcw, Save, TriangleAlert, Undo2, Wrench } from "lucide-react";
+import type { DocMeta, DocVersion, Status, TargetKind } from "../types";
 import type { Draft } from "../lib/draft";
 import { compare, describeChange, summarize, type Change } from "../lib/diff";
 import { ApiError, loadHistory, loadVersion } from "../lib/store";
@@ -10,6 +10,56 @@ import { LoadError, Modal } from "./ui";
 /** Shared by the pages that edit something: processes, standards and the lists. */
 
 const when = (iso?: string) => (iso ? iso.slice(0, 16).replace("T", " ") : "");
+
+/** "today at 14:02", "on 2026-11-17 at 09:30": when something was saved, in words. */
+export function savedWhen(iso?: string, now = new Date()): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  return `${day === today ? "today" : `on ${day}`} at ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
+ * On the reader's page: a never-published draft is marked as one, and its editors are told,
+ * calmly, when there are unpublished changes (`meta.draft` is only sent to them).
+ */
+export function DraftLine({ meta, status, editHref, noun }: { meta?: DocMeta; status: Status; editHref?: string; noun: string }) {
+  if (status === "draft") {
+    return (
+      <p className="draft-line never" role="note">
+        <PencilLine size={16} aria-hidden="true" />
+        <span><b>Draft</b> · Readers do not see this {noun} yet. Only the people who may change or look after it can open it.</span>
+        {editHref && <a href={editHref}>Continue editing</a>}
+      </p>
+    );
+  }
+  if (!meta?.draft || !editHref) return null;
+  return (
+    <p className="draft-line" role="note">
+      <PencilLine size={16} aria-hidden="true" />
+      <span>There are unpublished changes by {meta.draft.updatedBy || "an editor"} from {savedWhen(meta.draft.updatedAt)}. Readers see the published version.</span>
+      <a href={editHref}>Continue editing</a>
+    </p>
+  );
+}
+
+/** A process or standard that was stored with problems and cannot be shown. */
+export function NotShown({ kind, title, editHref, back, problems }: { kind: TargetKind; title: string; editHref?: string; back: () => void; problems: number }) {
+  return (
+    <div className="page">
+      <button className="back" onClick={back}><ArrowLeft size={16} />All {kind === "process" ? "processes" : "standards"}</button>
+      <h1>{title}</h1>
+      <div className="check warn banner" role="alert">
+        <TriangleAlert size={16} />
+        <span>This {kind} cannot be shown: what is stored has {problems || "some"} problem{problems === 1 ? "" : "s"}. {editHref ? "Repair it on the editing screen." : "Its owners have been told through the health check."}</span>
+        {editHref && <a className="btn small" href={editHref}><Wrench size={14} />Repair it</a>}
+      </div>
+    </div>
+  );
+}
 
 /** "Version 7" - opens the list of versions. For everyone, not only editors. */
 export function VersionTag({ meta, onOpen }: { meta?: DocMeta; onOpen: () => void }) {
@@ -67,7 +117,8 @@ export function BehindBanner<T>({ d, meta, noun }: { d: Draft<T>; meta?: DocMeta
   );
 }
 
-function ChangeList({ changes }: { changes: Change[] }) {
+/** Changes between two versions, in plain words. */
+export function ChangeList({ changes }: { changes: Change[] }) {
   if (!changes.length) return <p className="muted">Nothing that readers see is different.</p>;
   return (
     <ul className="change-list">
@@ -80,10 +131,15 @@ function ChangeList({ changes }: { changes: Change[] }) {
  * Somebody else saved while this person was editing. Nothing is overwritten without a
  * decision: look at what they changed, then continue from their version or keep your own.
  */
-export function ConflictDialog<T>({ d, kind, id, noun, blocked }: {
+export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadTheirs }: {
   d: Draft<T>; kind: TargetKind | "catalog"; id: string; noun: string;
   /** Why saving is not possible right now, e.g. the checker found problems. */
   blocked?: string;
+  /**
+   * The edits are a working draft (unpublished changes) that somebody else saved first: loads
+   * what they saved. Without it the conflict is about versions of the document.
+   */
+  theirs?: () => Promise<unknown>;
 }) {
   const c = d.conflict;
   const { catalog } = useCatalog();
@@ -94,12 +150,40 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked }: {
     setTheirs(null);
     if (!c?.exists || !c.version || kind === "catalog") return;
     let live = true;
-    loadVersion<unknown>(kind, id, c.version).then((doc) => { if (live) setTheirs(compare(kind, d.saved, doc, catalog)); }, () => { if (live) setTheirs("failed"); });
+    (loadTheirs ? loadTheirs() : loadVersion<unknown>(kind, id, c.version)).then((doc) => { if (live) setTheirs(compare(kind, d.saved, doc, catalog)); }, () => { if (live) setTheirs("failed"); });
     return () => { live = false; };
   }, [c?.version, c?.exists, kind, id, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!c) return null;
   const run = (fn: () => Promise<unknown>) => async () => { setBusy(true); try { await fn(); } finally { setBusy(false); } };
 
+  if (!c.exists && loadTheirs) {
+    return (
+      <Modal title="The unpublished changes were discarded" subtitle="Somebody else threw the shared draft away while you were editing." onClose={d.dismissConflict}
+        footer={<><span className="spacer" /><button className="btn" onClick={d.dismissConflict}>Keep editing</button>
+          <button className="btn primary" disabled={busy} onClick={run(() => d.keepMine())}>Save mine as a new draft</button></>}>
+        <p>Your changes are still here. Readers still see the published version. Saving starts a new draft with your changes.</p>
+      </Modal>
+    );
+  }
+  if (loadTheirs) {
+    return (
+      <Modal title="Somebody else saved the draft first" subtitle={`${c.updatedBy ?? "Somebody else"} saved the unpublished changes ${c.updatedAt ? `at ${when(c.updatedAt)}` : ""}, after you started editing.`} onClose={d.dismissConflict}
+        footer={<>
+          <button className="btn" onClick={d.dismissConflict}>Keep editing</button>
+          <span className="spacer" />
+          <button className="btn" disabled={busy} onClick={run(d.takeTheirs)} title="Continue from their draft. Your own changes stay one Undo away.">Use their draft</button>
+          <button className="btn primary danger" disabled={busy || !!blocked} onClick={run(() => d.keepMine())}
+            title={blocked ?? "Your version becomes the draft. Theirs is replaced."}>Save mine over theirs</button>
+        </>}>
+        <p>There is one shared draft of unpublished changes. Yours are still here and not saved. Nothing was overwritten.</p>
+        <h3 className="mini-title"><GitCompare size={14} />What their draft has that you started without</h3>
+        {theirs === "failed" ? <LoadError what="Their draft could not be loaded." onRetry={() => setAttempt(attempt + 1)} />
+          : theirs ? <ChangeList changes={theirs} /> : <p className="muted">Looking…</p>}
+        {blocked && <div className="check warn">{blocked} Until then you can only continue from their draft.</div>}
+        <p className="muted small">“Use their draft” continues from what they saved; Undo brings your own changes back. “Save mine over theirs” replaces their draft with yours.</p>
+      </Modal>
+    );
+  }
   if (!c.exists) {
     return (
       <Modal title={`${noun[0].toUpperCase()}${noun.slice(1)} was deleted`} subtitle="Somebody else deleted it while you were editing." onClose={d.dismissConflict}

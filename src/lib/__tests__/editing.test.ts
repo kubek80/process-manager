@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  checkerSummary, draftKindOf, editState, issuesByPlace, issuesFor, processIssueTarget, processOutline, publishCallOf, saveCallOf,
+  checkerSummary, issueText, draftKindOf, editState, issuesByPlace, issuesFor, processIssueTarget, processOutline, publishCallOf, saveCallOf,
   standardIssueTarget, standardOutline, statusChangeBlocked,
 } from "../editing";
 import { validateProcess } from "../validate";
@@ -97,5 +97,15 @@ describe("where the checker's problems are shown", () => {
     expect(checkerSummary([])).toEqual({ level: "good", text: "No problems" });
     expect(checkerSummary([{ level: "warning", path: "x", message: "m" }])).toEqual({ level: "warn", text: "1 hint" });
     expect(checkerSummary([{ level: "error", path: "x", message: "m" }, { level: "error", path: "y", message: "m" }, { level: "warning", path: "x", message: "m" }])).toEqual({ level: "bad", text: "2 problems" });
+  });
+});
+
+describe("a problem in words", () => {
+  it("names the field, not the path", () => {
+    expect(issueText({ level: "error", path: "steps[1].actor", message: "must be one of: me, boss" })).toBe("Who does it must be one of: me, boss");
+    expect(issueText({ level: "error", path: "title", message: "is too short (minimum 3 characters)" })).toBe("Name is too short (minimum 3 characters)");
+    expect(issueText({ level: "error", path: "steps[1].next[0].to", message: "points at a step that does not exist" })).toBe("Goes to points at a step that does not exist");
+    expect(issueText({ level: "warning", path: "steps[2]", message: "cannot be reached from the first step" })).toBe("Cannot be reached from the first step");
+    expect(issueText({ level: "error", path: "(root)", message: "is missing the required field \"id\"" })).toBe("Is missing the required field \"id\"");
   });
 });

@@ -89,7 +89,7 @@ func TestUpgradeReportsWhatItApplied(t *testing.T) {
 	}
 	wg.Wait()
 	sort.Strings(all)
-	if got := strings.Join(all, ","); got != "001_feedback.sql,002_content_roles_skills.sql,003_version_notes_sessions.sql,004_platform_practice_owners.sql,005_engagement_requests.sql,006_counts_and_limits.sql" {
+	if got := strings.Join(all, ","); got != "001_feedback.sql,002_content_roles_skills.sql,003_version_notes_sessions.sql,004_platform_practice_owners.sql,005_engagement_requests.sql,006_counts_and_limits.sql,007_working_drafts.sql,008_icons.sql" {
 		t.Fatalf("applied: %s", got)
 	}
 	if applied, err := db.Upgrade(ctx, pool); err != nil || len(applied) != 0 {

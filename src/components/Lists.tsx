@@ -238,10 +238,10 @@ export function ResultsBar({ page, noun, panelId, open, onOpen, chosen, size, on
   return (
     <div className="results-bar">
       <p className="list-count" role="status" aria-live="polite" aria-atomic="true">{showingText(page, noun)}{extra}</p>
+      <button type="button" className="btn small filter-toggle" aria-expanded={open} aria-controls={panelId} onClick={() => onOpen(!open)}>
+        <SlidersHorizontal size={14} aria-hidden="true" />Filters{chosen ? ` (${chosen})` : ""}
+      </button>
       <div className="results-tools">
-        <button type="button" className="btn small filter-toggle" aria-expanded={open} aria-controls={panelId} onClick={() => onOpen(!open)}>
-          <SlidersHorizontal size={14} aria-hidden="true" />Filters{chosen ? ` (${chosen})` : ""}
-        </button>
         <SortBy sort={sort} onSort={onSort} searched={searched} />
         <PageSize size={size} onSize={onSize} />
         {pager}

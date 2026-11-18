@@ -14,6 +14,8 @@ export interface CardLine {
   value: string;
   /** Something the reader (an editor) should act on. */
   warn?: boolean;
+  /** The entries the value names, with their icons (languages): for showing each with its icon. */
+  items?: { name: string; icon?: string }[];
 }
 
 export interface CardFacts {
@@ -62,6 +64,9 @@ export function cardLines(f: CardFacts): CardLine[] {
   // where else it applies, only when it is narrowed down (the tiers are in the corner)
   add("environments", "Environments", names(c.environments, doc.environments));
   add("languages", "Languages", names(c.languages, doc.languages));
+  const langs = out.find((l) => l.key === "languages");
+  if (langs) langs.items = (Array.isArray(doc.languages) ? doc.languages : []).filter((x) => typeof x === "string" && x)
+    .map((id) => { const l = (c.languages ?? []).find((x) => x.id === id); return { name: l?.name ?? id, ...(l?.icon ? { icon: l.icon } : {}) }; });
   if (f.kind === "process") {
     const p = doc as Process;
     add("lead", "Lead time", typeof p.estimatedDuration === "string" ? p.estimatedDuration.trim() : "");

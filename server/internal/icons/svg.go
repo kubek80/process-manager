@@ -182,7 +182,7 @@ func checkSVG(data []byte) (int, int, error) {
 		case xml.Comment:
 		case xml.CharData:
 			if depth == 0 {
-				if len(bytes.TrimSpace(t)) > 0 {
+				if len(bytes.Trim(t, " \t\r\n\uFEFF")) > 0 { // white space and a byte order mark
 					return 0, 0, refuse("The SVG file has text outside its drawing.")
 				}
 				continue

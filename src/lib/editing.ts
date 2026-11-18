@@ -1,4 +1,5 @@
 import type { Issue, Process, Standard, Status, TargetKind } from "../types";
+import { fieldName } from "./diff";
 
 /**
  * The editing screen, as plain functions: which kind of draft a document has, what its state is
@@ -192,4 +193,17 @@ export function checkerSummary(issues: Issue[]): { level: "bad" | "warn" | "good
   if (errors) return { level: "bad", text: `${errors} problem${errors > 1 ? "s" : ""}` };
   if (hints) return { level: "warn", text: `${hints} hint${hints > 1 ? "s" : ""}` };
   return { level: "good", text: "No problems" };
+}
+
+/**
+ * A problem in words: the field it is about, then what is wrong with it, e.g. "Who does it must
+ * be one of: me, boss". The place (which step) is shown by where the problem is listed.
+ */
+export function issueText(issue: Issue): string {
+  const keys = issue.path.match(/[A-Za-z$]+/g) ?? [];
+  // the last named part of the path, unless that is the list a step or requirement sits in
+  const key = keys.length > 1 || !["steps", "requirements"].includes(keys[0] ?? "") ? keys[keys.length - 1] : undefined;
+  if (!key || issue.path === "(root)") return `${issue.message[0]?.toUpperCase() ?? ""}${issue.message.slice(1)}`;
+  const words = key === "title" ? "name" : key === "to" ? "goes to" : key === "next" ? "what comes next" : key === "lookFor" ? "signs of a violation" : fieldName(key);
+  return `${words[0].toUpperCase()}${words.slice(1)} ${issue.message}`;
 }

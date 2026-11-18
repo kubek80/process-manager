@@ -7,6 +7,7 @@ import { statusOf } from "../lib/lifecycle";
 import { matchRanges, NO_CATEGORY_LABEL, type Hit } from "../lib/search";
 import { href } from "../lib/store";
 import { BookmarkButton, UpvoteButton } from "./Engage";
+import { EntryIcon } from "./EntryIcon";
 import { useEngagement } from "../lib/engagement";
 import { engagementKnown } from "./Lists";
 import "../lists.css";
@@ -112,7 +113,10 @@ export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openF
         <dl className="card-lines">
           {lines.map((l) => (
             <div key={l.key} className={`card-line ${l.warn ? "warn" : ""}`.trim()} data-line={l.key}>
-              <dt>{l.name}:</dt><dd>{l.value}</dd>
+              <dt>{l.name}:</dt>
+              <dd>{l.items?.some((x) => x.icon) ? l.items.map((x, i) => (
+                <span key={i} className="card-entry">{i > 0 && ", "}<EntryIcon icon={x.icon} size={14} />{x.name}</span>
+              )) : l.value}</dd>
             </div>
           ))}
         </dl>

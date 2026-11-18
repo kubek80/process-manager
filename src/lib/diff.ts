@@ -38,6 +38,8 @@ const FIELD: Record<string, string> = {
   processId: "helpful process",
 };
 const name = (key: string) => FIELD[key] ?? key;
+/** A field of a document, a step or a requirement in words, e.g. "who does it" for `actor`. */
+export const fieldName = name;
 
 /** Which of the given fields differ between two objects, by their readable names. */
 function changedFields(a: Doc, b: Doc, skip: string[]): string[] {

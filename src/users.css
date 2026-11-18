@@ -9,7 +9,7 @@
 .users-list .person strong { overflow-wrap: anywhere; }
 .user-you { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-style: normal; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); }
 .user-roles { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13px; color: var(--text-2); line-height: 1.45; }
-.user-roles li { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; border: 0; padding: 0; }
+.users-list .user-roles li { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; border: 0; padding: 0; }
 .user-fixed { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: 999px; font-size: 11px; color: var(--text-3); background: var(--surface-2); border: 1px solid var(--line); }
 .user-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .user-note { grid-column: 2 / -1; }

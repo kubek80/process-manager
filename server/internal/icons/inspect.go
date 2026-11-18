@@ -109,8 +109,8 @@ func Sniff(data []byte) string {
 	// SVG is text: after an optional byte order mark and white space, an XML declaration, a
 	// comment or the svg element itself
 	text := bytes.TrimLeft(bytes.TrimPrefix(data, []byte("\xEF\xBB\xBF")), " \t\r\n")
-	for _, start := range []string{"<?xml", "<svg", "<!--"} {
-		if bytes.HasPrefix(text, []byte(start)) {
+	for _, start := range []string{"<?xml", "<svg", "<!--", "<!doctype svg"} {
+		if len(text) >= len(start) && strings.EqualFold(string(text[:len(start)]), start) {
 			return SVG
 		}
 	}
