@@ -7,7 +7,7 @@ import { useEditor } from "../lib/mode";
 import { pageOf, sizeOf, usePageSize } from "../lib/paging";
 import { useProfile, useRemembered } from "../lib/profile";
 import { canEdit, useMe, usePerms, useVisibleDrafts } from "../lib/session";
-import { fromMeaning, fuse, modeOf, nextAsked, needsServer, planOf, rememberMode, SEARCH_MODES, useMeaningSearch, type AskEvent, type Found, type SearchMode } from "../lib/meaning";
+import { fromMeaning, fuse, markedWords, modeOf, nextAsked, needsServer, planOf, rememberMode, SEARCH_MODES, useMeaningSearch, type AskEvent, type Found, type SearchMode } from "../lib/meaning";
 import { go, href, type SearchState } from "../lib/store";
 import { FILTER_LABEL, filterCount, filtersOf, search, toggleFilter, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
 import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
@@ -144,7 +144,7 @@ export function SearchPage({ route, processes, standards, feedback }: {
   };
   const plan = planOf(mode, q, asked, offered, meaning);
   const shownQ = plan.q;
-  const words = useMemo(() => wordsOf(shownQ), [shownQ]);
+  const words = useMemo(() => (plan.show === "words" ? wordsOf(shownQ) : markedWords(wordsOf(shownQ))), [shownQ, plan.show]);
   // by meaning, and both ways: what was found, in its order; the filters, counts and pages work on it as on a word search
   const found = useMemo((): Found[] | undefined => {
     if (plan.show === "words") return undefined;
@@ -228,14 +228,14 @@ export function SearchPage({ route, processes, standards, feedback }: {
                       : plan.show === "words" ? "Search by meaning is not available right now, so these results are found by words only."
                       : "Search by meaning is not available right now."}
                   </p>
-                  {plan.problem.kind === "unavailable" && (
+                  {(plan.problem.kind === "unavailable" || plan.show === "none") && (
                     <button type="button" className="btn small" onClick={() => setMode("words")}>{plan.show === "words" ? "Search by words" : "Search by words instead"}</button>
                   )}
                 </div>
               )}
             </div>
           )}
-          {plan.show === "none" ? null : n === 0 ? (
+          {plan.show === "none" || (plan.busy && n === 0) ? null : n === 0 ? (
             <div className="list-empty search-empty">
               <h2>Nothing found</h2>
               {processes.length + standards.length === 0 ? <p className="muted">There are no processes or standards yet.</p> : (

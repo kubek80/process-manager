@@ -385,7 +385,7 @@ type Actor struct {
 	Team        *Ref   `json:"team,omitempty"`
 }
 
-// Link is the way from one step to the next.
+// Next is the way from one step to the next.
 type Next struct {
 	To    string `json:"to" jsonschema:"id of the following step"`
 	Label string `json:"label,omitempty" jsonschema:"the condition for this path"`

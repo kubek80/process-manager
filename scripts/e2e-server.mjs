@@ -18,7 +18,8 @@ if (!fs.existsSync(path.join(root, "dist", "index.html"))) {
 ensureDatabase();
 if (!buildServer()) process.exit(1);
 
-// a clean slate: drop everything the server created, it is rebuilt on start
+// a clean slate: drop everything the server created, it is rebuilt on start (also the pgvector
+// extension when it lived in public: the server creates it again)
 const wipe = spawnSync("psql", [db(database).replace("?sslmode=disable", ""), "-q", "-v", "ON_ERROR_STOP=1", "-c", "drop schema public cascade; create schema public;"], { stdio: "inherit" });
 if (wipe.status !== 0) {
   console.error("Could not reset the end-to-end database. Is `psql` installed and the database reachable?");
@@ -33,6 +34,8 @@ const env = {
   PM_STATIC_DIR: path.join(root, "dist"),
   PM_ADDR: `127.0.0.1:${port}`,
   PM_BASE_URL: `http://127.0.0.1:${port}`,
+  // search by meaning with the built-in embedder: the browser tests never call an outside service
+  PM_EMBEDDINGS: "builtin",
 };
 const server = run(serverBin, [], { env });
 const stop = () => { server.kill(); process.exit(0); };

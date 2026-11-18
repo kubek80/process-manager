@@ -12,6 +12,7 @@ flowchart LR
   server --> db[("Postgres<br/>content + versions, roles,<br/>feedback, skills, activity,<br/>views, votes, requests")]
   server <-. "sign-in" .-> idp["Entra ID or Google"]
   server -. "notifications" .-> chat["Team channel"]
+  server -. "search by meaning (only with PM_EMBEDDINGS=vertex)" .-> vertex["Vertex AI embeddings"]
   seed["Files in git<br/>processes/ standards/ catalog/"] -. "first fill, import, export" .-> server
 ```
 
@@ -29,6 +30,7 @@ flowchart LR
 | Skills | After a save or delete, the skills of that process or standard are regenerated from what is stored, and so are the skills of every document that names it. A new version is stored only when the text changed; it records the version of its source. A pointer to the skill of another document is only written when that document is active. A skill names the owning team and, when they are set, the category, practice and platform (by name) and, for a process, its rigour in plain words. Changing the lists regenerates everything, because names appear in the text. Regeneration runs one at a time and does not depend on the browser that saved staying connected; the answer to the save waits for it for up to 20 seconds, after which it finishes on its own. |
 | Feedback | About a step of a process or a requirement of a standard. Anyone signed in can report and say "I hit this too". The text is checked like the text of a request (line breaks allowed): "The text contains control characters. Remove them and try again.", "The text contains characters that change the reading direction. Remove them and try again.", "The text has no visible characters." |
 | Stale feedback | Each item remembers a fingerprint of the step or requirement it was written about. When that changes or disappears, the item is flagged "may already be fixed". |
+| Search by meaning | Off unless `PM_EMBEDDINGS` is set. Published processes and standards are cut into parts, each part is turned into a vector, and `GET /api/search` finds the parts closest in meaning to a question and returns their documents. See [Search by meaning](#search-by-meaning). |
 | Notifications | New feedback is announced to the owning team (name and contact from the lists); a fix is announced to the reporter. `PM_NOTIFY=log` writes them to the server log, `webhook` posts `{"text": …}` plus the event fields (`type`, `targetKind`, `processId`, `processTitle`, `stepTitle`, …) to a URL (a Slack incoming webhook accepts this as is). The webhook is called in the background, up to three times, and what people typed is escaped so that it cannot become chat markup. A brake keeps one person at about 30 stored items an hour; it is a courtesy limit against a script gone wrong, not a hard quota. |
 | Views | Opening a process or standard counts a view (`POST /api/views/…`), at most once per person, document and day (the server's date in UTC). The server stores who viewed what on which day only to count views and different people ("people"); nobody is ever shown who viewed something. The all-time views, people and downloads of each document are kept in `document_counts`, updated in the transaction that records a view or download, so reading them does not depend on how many were ever recorded. A failure to count is logged and the page is answered with the numbers as they are. |
 | Bookmarks and upvotes | Anyone signed in can bookmark a process or standard (kept per person on the server, so it follows them to another device) and upvote it ("this is useful"): one vote per person, which can be taken back. |
@@ -77,12 +79,13 @@ All under the same origin as the app. JSON in and out; errors are `{"error": "�
 
 | Method and path | Purpose | Who |
 | --- | --- | --- |
-| `GET /api/me` | Who is signed in, their rights, the provider. `perms` is `{admin, catalog, processes, standards, owns, platforms, practices}`: the last three are lists of team, platform and practice ids (empty lists, never null) | anyone |
+| `GET /api/me` | Who is signed in, their rights, the provider. `perms` is `{admin, catalog, processes, standards, owns, platforms, practices}`: the last three are lists of team, platform and practice ids (empty lists, never null). `search` is `{"meaning": true\|false, "outside": true\|false}`: whether search by meaning is switched on, and whether the text of a search is sent to an outside service (Vertex AI) | anyone |
 | `GET /auth/login`, `GET /auth/callback` | Sign-in with Entra ID or Google | anyone |
 | `POST /auth/dev/login` | Local development only: `{"email": "sam@example.com"}` | anyone |
 | `POST /auth/logout` | End every session of the person | signed in |
 | `GET /api/processes`, `GET /api/standards` | `{"processes": […], "meta": {id: {version, updatedAt, updatedBy}}}` (or `standards`); drafts only for those who may see them | signed in |
 | `GET /api/catalog` | The lists (tiers, environments, languages, teams, practices, platforms, categories, tools); their version is in the header `X-Document-Version` | signed in |
+| `GET /api/search?q=&limit=` | Search by meaning: `{"results": [{"kind", "id", "score", "hits": [{"part", "item", "label", "snippet", "score"}]}]}`, best first, at most `limit` documents (1-100, default 50; anything else `400`). Only published documents (active and retired), never a draft, also not for those who may see it. `score` is 0 to 1, higher is closer; a document's score is that of its best part; up to 3 hits each, best first. `part` is `summary`, `step`, `prerequisite`, `requirement` or `scope`; `item` the step or requirement id (`""` for summary and scope, the position `"0"`, `"1"`… for a prerequisite). An empty `q` gives `{"results": []}`; one longer than 1000 characters `400`. `404` "Search by meaning is not switched on." when it is off; `429` "You have searched very often in the last minute. Wait a moment, then try again." after 60 searches of one person in a minute; `502` "Search by meaning is not available right now. Try again in a moment, or search by words." when the provider cannot be reached; `503` "Search by meaning is not ready yet. …" when the index has not been built. The page applies its filters, counts and paging itself. | signed in |
 | `GET /api/members` | `{"members": [{"email", "role", "scope"}]}`: every assignment of `owner`, `platform-owner` and `practice-owner`, sorted by role, scope and email | signed in |
 | `PUT /api/processes/{id}?base=&note=`, `DELETE /api/processes/{id}?base=` | Save or delete a process. Answers `{ok, changed, version, updatedAt, updatedBy}`, or `409` with `{"error", "conflict": {exists, version, updatedBy, updatedAt}}`. A save that is not allowed is `403`: "You can only save a process that belongs to a platform or practice you own." for a platform or practice owner whose new content is not theirs, otherwise "Only process editors and the owners of its platform or practice can change this process." | process editors, owners of its platform or practice |
 | `PUT /api/standards/{id}?base=&note=`, `DELETE /api/standards/{id}?base=` | The same for a standard | standards editors, owners of its platform or practice |
@@ -117,7 +120,7 @@ All under the same origin as the app. JSON in and out; errors are `{"error": "�
 | `GET /api/admin/statistics.csv?period=…` | The same rows as a CSV file | admins |
 | `GET /healthz`, `GET /readyz` | The process runs; it also reaches the database | anyone |
 
-There is no machine-to-machine access yet: every call needs a browser session. Repositories get skills by download or through `npm run export`.
+Every call needs a browser session. Agents read through the separate MCP server (`server/cmd/mcp`, see `docs/mcp.md`); repositories get skills by download or through `npm run export`.
 
 ## Statistics
 
@@ -159,6 +162,12 @@ Periods are counted in days by the server's clock in UTC. `period=7` is today an
 | `PM_STATIC_DIR`, `PM_ADDR` | The built app and the listen address; set by the `Dockerfile` and by `npm run dev` |
 | `PM_NOTIFY`, `PM_NOTIFY_WEBHOOK_URL` | `log` (default) or `webhook` |
 | `PM_LOG_FORMAT` | `text` (default) or `json` |
+| `PM_EMBEDDINGS` | Search by meaning: `off` (default: the app works as without it), `builtin` (no network, the same vectors every time; used by `npm run dev`, the tests and CI) or `vertex` (Vertex AI: document text and questions are sent to Google Cloud). Needs pgvector, see [Search by meaning](#search-by-meaning). |
+| `PM_EMBEDDINGS_MODEL` | With `vertex`: the model. Default `gemini-embedding-001`. |
+| `PM_EMBEDDINGS_DIMENSIONS` | The size of a vector, 8 to 2000 (the largest pgvector can index). Default 768. |
+| `PM_VERTEX_PROJECT`, `PM_VERTEX_LOCATION` | With `vertex`, required: the Google Cloud project and region that run the model. The server signs in to Google with Application Default Credentials (workload identity on Google Cloud, or `GOOGLE_APPLICATION_CREDENTIALS` pointing at a key file); no key is ever stored in the repository. |
+| `PM_CHUNK_PARTS` | Which parts of a document are searched on their own, comma-separated: `summary`, `step`, `prerequisite`, `requirement`, `scope`. Default: all. |
+| `PM_CHUNK_MAX_CHARS` | The longest part, in characters (200 to 20000); longer text is cut. Default 2000. |
 | `PM_DEV_AUTH_ON_NETWORK` | `i-understand` lets `PM_AUTH=dev` listen on an address that others can reach. For a demo on a private network only: with the picker anyone can sign in as anyone, including the admin. |
 
 Who somebody is: with Entra ID only the sign-in name (`preferred_username`, then `upn`) is used, never the `email` claim, because the sign-in name is set by the tenant and the email can be edited. With Google the `email` claim is used, and refused when Google says the address is not verified. Emails are compared case-insensitively. Calls to the provider are given 10 seconds. When a sign-in fails, the person sees a short reason; the provider's own answer goes to the server log only.
@@ -177,6 +186,8 @@ Database migration
 Done.
 ```
 
+With search by meaning switched on, the account has one more line, `Search:`, with what was embedded and removed (or "already up to date"), and `-migrate` builds the index when it is new or its settings changed.
+
 `Tables` names the migration files applied in this run, `Content` says what the conversion did or "nothing to convert: the content already fits this version", and `Skills` how many skills got a new version (and how many were withdrawn). The details of a conversion (each role converted, each category made) go to the log. A failure exits with a non-zero code and the reason, e.g. `migration failed: database setup: …`.
 
 | Table | Holds |
@@ -194,6 +205,7 @@ Done.
 | `skill_downloads` | One row per download that counts or exported skill: the skill, its process or standard, `download` or `export`, when and the day, and for a download the person (only to count once a day; `""` for exports and for downloads stored before the person was kept). Kept and marked like views when the document is deleted |
 | `requests`, `request_votes` | Requests with their state, and one vote per person; votes go with their request. Platform, practice and the answering document are ids without a reference, so a request outlives what it names; `linked_gone` records that the answering document was deleted |
 | `requests_removed` | Who made a request that was withdrawn or removed, and when it was made: the brake counts it for that hour. Rows older than a day are dropped |
+| `search_settings`, `search_chunks`, `search_pending` | The index of search by meaning, only when it is switched on; not made by the migrations, see [Search by meaning](#search-by-meaning) |
 | `documents` columns `status`, `owner`, `platform`, `practice` | Kept by the database from the body of each document, with an index of drafts: who may see what is decided without reading bodies |
 
 Emails are stored in lower case. A person's sessions ending (sign-out, expiry) changes nothing in these tables.
@@ -222,26 +234,41 @@ Emails are stored in lower case. A person's sessions ending (sign-out, expiry) c
 | dana@example.com | admin |
 
 - **Samples (`-seed`, used by `npm run dev`):** adds three feedback items when there is no feedback. With `PM_AUTH=dev`, and only when there are no views, bookmarks, upvotes, downloads and requests at all, it also adds twelve weeks of believable use (`server/cmd/server/seed.go`): views of every published process and standard by the built-in users and 30 made-up colleagues (`colleague-01@example.com` …), more on working days and a little more each week; upvotes and bookmarks of the built-in users and upvotes of colleagues; a few downloads of each skill by the same people; five requests in every state, with votes (the one that is done points to `onboard-site-to-akamai`, or stays planned when that process is not there). The numbers are random but the same for the same content. It never adds to what is there. The end-to-end tests start the server without `-seed`, so they see none of this.
-- **Every start:** the skills are brought in line with the content.
+- **Every start:** the skills are brought in line with the content, and with search by meaning on, the search index too (only what changed is embedded).
 
 | Command | Does |
 | --- | --- |
 | `server -import <folder>` (`npm run db:import`) | Loads the files over what is stored: each changed file becomes a new version. Files get the same checks as a save in the portal (the format, and that the parts fit together); those that fail are reported and skipped. Nothing is deleted. |
 | `server -export <folder>` (`npm run export -- <folder>`) | Writes content to `processes/`, `standards/`, `catalog/` and the active skills to `.claude/`. Files of deleted documents and of withdrawn skills are removed (a skill file only if it carries the footer of a generated file). Use it as a backup or to commit. |
 | `server -migrate` (`npm run db:migrate`) | Upgrades the tables, converts content stored by an earlier version and regenerates the skills, prints what it did (or "Nothing to do") and exits. Fills nothing, gives no development roles, starts no web server; see [Database](#database). |
+| `server -reindex` | Brings the index of search by meaning up to date with everything stored and prints `Search index (builtin)` and a line like `110 documents, 12 parts embedded, 340 unchanged, 3 removed`, then exits. Parts that did not change are not embedded again; when the settings of the index changed, it is built anew. Refuses when `PM_EMBEDDINGS=off`. Safe while servers run. |
 | `npm run db:demo` | Loads the demo data set in `demo/` over what is stored (`server -import demo`): more processes, standards and list entries for trying the app; the lists are replaced by the demo lists, nothing is deleted. Running `db:import` afterwards puts the smaller sample lists back, which leaves the demo documents naming entries that are no longer listed; run `db:demo` again to repair that. |
 | `server -reset [-seed]` (`npm run db:reset`) | Deletes all feedback, views, bookmarks, upvotes, skill downloads and requests (with their votes); `-seed` adds the samples again, all of them. Only with `PM_AUTH=dev`. |
 
+## Search by meaning
+
+Switched on with `PM_EMBEDDINGS=builtin` or `vertex`; off by default. Code: `server/internal/chunking` (the parts), `server/internal/embedding` (the providers), `server/internal/retrieval` (the index and the search).
+
+**What is stored.** Every published process and standard (active or retired) is cut into parts: its summary, each step, each prerequisite, each requirement and, for a standard, its scope (`PM_CHUNK_PARTS`). Each part's text starts with the kind and title of its document, so it can stand on its own, and is turned into one vector. `search_chunks` holds one row per part: the kind and id of the document, the part, the step or requirement id, the label a person reads ("Step 3: Approve the budget"), a short snippet of the text, a fingerprint of the text, the document's status and the vector, with an HNSW index for cosine distance. `search_settings` records the provider and model, the size of the vectors and the parts settings the index was built with; `search_pending` the documents whose last update failed. A draft or deleted document has no rows. Nothing else is stored: no question, and nobody's searches.
+
+**When it is updated.** After every save, publish, retire, restore and delete in the portal, together with the skills: the document is cut again, the fingerprints are compared, only new or changed parts are embedded (in one call), parts that are gone are removed, all in one transaction. A change of the lists goes through every document (their names appear in the text). At every start, after `-import` and by `-migrate` and `-reindex` everything is caught up the same way. When the provider, the model, the size or the parts settings change, the whole index is dropped and built again at the next start. When embedding fails (the provider cannot be reached), the save still succeeds, the earlier parts stay searchable, the server logs "search by meaning: the search index could not be brought up to date after a change …" and marks the document in `search_pending`; the server tries the marked documents again every 5 minutes, and every start does too. Several servers may start at once: building the tables and a rebuild each run under a database lock.
+
+**Searching.** The question is embedded (the vectors of recent questions are kept for 5 minutes, at most 500 of them, so the same question does not call the provider again), the nearest parts are read, and they are grouped by document: a document's score is its best part's, with up to 3 parts each. A search checks the current state of every document it returns, so a document that just became a draft or was deleted is never returned, not even before its parts are removed. Parts below a floor of similarity are not matches at all: even unrelated texts are a little similar. For `builtin` the floor is 0.20, measured on the sample and demo content (`MEASURE_FLOOR=1 go test -run MeasureFloor -v ./internal/retrieval/`): the best part for a sensible question scores 0.30 to 0.77, for questions that have nothing to do with the content ("chocolate cake recipe") mostly 0.06 to 0.17. For `vertex` it is 0.60, a starting point that has not been measured on real content (the tests never call Google). One person may search 60 times a minute (`429` after that; in memory, per server).
+
+**The pgvector extension.** The index needs pgvector 0.5 or later in the database; the plain migrations do not, so a database without it works as long as search by meaning is off. At start the server looks for the extension in any schema. When it is missing, the server tries `create extension if not exists vector with schema public`; when it is not allowed to, it stops with a message that names the statement a database administrator has to run (`CREATE EXTENSION IF NOT EXISTS vector;`). Where: in `docker-compose.yml` and CI the image `pgvector/pgvector:pg16` has it, and `docker/init-databases.sql` creates it in `pm_dev`, `pm_test` and `pm_e2e`; on Cloud SQL for PostgreSQL and Azure Database for PostgreSQL an administrator enables it once per database (on Azure, allow `vector` in the server parameter `azure.extensions` first). The tables refer to the extension by its schema, wherever it lives.
+
+**What leaves the company.** With `builtin`, nothing: the vectors are computed in the server. With `vertex`, the text of every published process and standard (when it is indexed, and again when it changes) and every question somebody searches for are sent to Vertex AI in the configured Google Cloud project and region. The server says so in its log at every start, and the search page tells people (`/api/me` → `search.outside`). It is off unless an operator sets `PM_EMBEDDINGS=vertex`.
+
 ## Deploying
 
-`Dockerfile` builds one image with the server, the built app, the schemas and the sample content. It needs a Postgres database and the settings above; see `.env.example`. After the first start, changes are made in the portal and are live at once.
+`Dockerfile` builds one image with the server, the built app, the schemas and the sample content. It needs a Postgres database (with pgvector when search by meaning is on) and the settings above; see `.env.example`. After the first start, changes are made in the portal and are live at once.
 
-Not built yet: machine access for repositories and agents (API tokens, the MCP server in `docs/mcp.md`), mapping Entra or Google groups to roles, ending the sessions of one person from the Admin panel (their own sign-out does it; removing them at the provider takes effect when their session expires, after at most 12 hours), and per-person run tracking.
+Not built yet: sign-in of agents with their own tokens (the MCP server in `docs/mcp.md` accepts one shared secret), mapping Entra or Google groups to roles, ending the sessions of one person from the Admin panel (their own sign-out does it; removing them at the provider takes effect when their session expires, after at most 12 hours), and per-person run tracking.
 
 ## Code map
 
 ```
-server/cmd/server              start-up, seeding, flags (-migrate, -import, -export, -seed, -reset)
+server/cmd/server              start-up, seeding, flags (-migrate, -reindex, -import, -export, -seed, -reset)
 server/internal/config         settings from the environment
 server/internal/db             migrations, the start-up lock; dbtest gives tests a real database
 server/internal/upgrade        converts content stored by an earlier version, at start and by -migrate
@@ -256,5 +283,8 @@ server/internal/engagement     views, bookmarks, upvotes, skill downloads; the c
 server/internal/requests       requests and their votes
 server/internal/audit          activity log
 server/internal/notify         log and webhook notifiers
-server/internal/httpapi        routes, permissions, views, statistics and the CSV file
+server/internal/chunking       cuts a process or standard into the parts search by meaning compares
+server/internal/embedding      turns text into vectors: built-in or Vertex AI
+server/internal/retrieval      the search index in pgvector: keeping it up to date, searching it
+server/internal/httpapi        routes, permissions, views, statistics, the CSV file, search
 ```

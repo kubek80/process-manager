@@ -53,11 +53,18 @@ export function meaningHits(kind: TargetKind, doc: Process | Standard, hits: Mea
     }
     if (!hit) continue;
     // the summary is on the card already: its snippet would say it twice
-    if (snippet && !(hit.where === "summary" && str(doc.summary).replace(/\s+/g, " ").includes(snippet.replace(/^…|…$/g, "")))) hit.snippet = snippet;
+    if (snippet && !(hit.where === "summary" && repeatsSummary(str(doc.summary), snippet))) hit.snippet = snippet;
     if (!out.some((o) => sameHit(o, hit!))) out.push(hit);
     if (out.length >= MAX_HITS) break;
   }
   return out;
+}
+
+/** Whether a piece of text says what the summary on the card says already (perhaps with more after it). */
+function repeatsSummary(summary: string, snippet: string): boolean {
+  const sum = summary.replace(/\s+/g, " ").trim();
+  const bit = snippet.replace(/^…\s*|\s*…$/g, "").trim();
+  return !!sum && !!bit && (sum.includes(bit) || bit.startsWith(sum));
 }
 
 const hitKey = (h: Hit) => `${h.where}:${h.item ?? h.label}`;
@@ -205,10 +212,7 @@ export function useMeaningSearch(asked: string, enabled: boolean, attempt: numbe
     const had = fresh(q);
     if (had) { setState({ for: q, loading: null, answer: { query: q, results: had }, problem: null }); return; }
     setState((s) => ({ ...s, for: q, loading: q, problem: null }));
-    searchByMeaning(q).then((results) => {
-      answers.delete(q);
-      answers.set(q, { at: Date.now(), results });
-      while (answers.size > KEEP_N) answers.delete(answers.keys().next().value as string);
+    asking(q).then((results) => {
       if (current.current !== q) return; // a newer search was asked meanwhile
       setState({ for: q, loading: null, answer: { query: q, results }, problem: null });
     }, (e: unknown) => {
@@ -221,6 +225,22 @@ export function useMeaningSearch(asked: string, enabled: boolean, attempt: numbe
     run(asked);
   }, [asked, enabled, attempt, run]);
   return state;
+}
+
+/** One request per query at a time, however often it is asked meanwhile. */
+const pending = new Map<string, Promise<MeaningResult[]>>();
+function asking(q: string): Promise<MeaningResult[]> {
+  let p = pending.get(q);
+  if (!p) {
+    p = searchByMeaning(q).then((results) => {
+      answers.delete(q);
+      answers.set(q, { at: Date.now(), results });
+      while (answers.size > KEEP_N) answers.delete(answers.keys().next().value as string);
+      return results;
+    }).finally(() => pending.delete(q));
+    pending.set(q, p);
+  }
+  return p;
 }
 
 function fresh(q: string): MeaningResult[] | null {
@@ -267,3 +287,11 @@ export function planOf(mode: SearchMode, q: string, asked: string, offered: bool
   if (st.answer) return { q: st.answer.query, show: mode, meaning: st.answer.results, busy: true, problem: null };
   return { q: a, show: mode === "meaning" ? "none" : "words", meaning: [], busy: true, problem: null };
 }
+
+const LITTLE = new Set(["the", "and", "for", "with", "how", "what", "who", "when", "can", "are", "was", "you", "your", "our", "from", "into", "that", "this", "not", "but", "has", "have", "its", "all", "any", "out", "get", "use"]);
+/**
+ * The words marked on the cards of a search by meaning: a result need not contain every word,
+ * so marking "a" or "the" wherever they occur would only add noise. Short and common words are
+ * left unmarked.
+ */
+export const markedWords = (words: string[]) => words.filter((w) => w.length >= 3 && !LITTLE.has(w));

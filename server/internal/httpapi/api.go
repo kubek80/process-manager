@@ -26,6 +26,7 @@ import (
 	"github.com/kubek80/process-manager/server/internal/notify"
 	"github.com/kubek80/process-manager/server/internal/rbac"
 	"github.com/kubek80/process-manager/server/internal/requests"
+	"github.com/kubek80/process-manager/server/internal/retrieval"
 	"github.com/kubek80/process-manager/server/internal/schema"
 	"github.com/kubek80/process-manager/server/internal/skills"
 )
@@ -68,9 +69,14 @@ type Deps struct {
 	Requests   *requests.Store
 	Notifier   notify.Notifier
 	Log        *slog.Logger
+	// Index is search by meaning; nil or switched off: GET /api/search answers 404.
+	Index *retrieval.Index
 }
 
-type api struct{ Deps }
+type api struct {
+	Deps
+	searches *brake
+}
 
 type ctxKey struct{}
 
@@ -81,7 +87,7 @@ type session struct {
 
 // New builds the handler.
 func New(d Deps) http.Handler {
-	a := &api{d}
+	a := &api{Deps: d, searches: newBrake(searchesPerMinute, time.Minute)}
 	mux := http.NewServeMux()
 
 	// healthz: the process is alive. readyz: it can also reach the database, so it may get traffic.
@@ -162,6 +168,9 @@ func New(d Deps) http.Handler {
 	mux.Handle("GET /api/skills/{id}/versions/{version}", user(a.getSkillVersion))
 	mux.Handle("GET /api/skills/{id}/download", user(a.downloadSkill))
 	mux.Handle("PUT /api/skills/{id}/extra", user(a.putSkillExtra))
+
+	// search by meaning
+	mux.Handle("GET /api/search", user(a.search))
 
 	// who belongs to which team, platform and practice
 	mux.Handle("GET /api/members", user(a.listMembers))
@@ -362,7 +371,7 @@ func (a *api) record(r *http.Request, action, target, detail string) {
 // ---------- sign-in
 
 func (a *api) me(w http.ResponseWriter, r *http.Request) {
-	out := map[string]any{"provider": a.Cfg.Auth}
+	out := map[string]any{"provider": a.Cfg.Auth, "search": map[string]bool{"meaning": a.Index.Enabled(), "outside": a.Index.Outside()}}
 	s, err := a.signedIn(r)
 	if errors.Is(err, errUnavailable) {
 		writeError(w, 503, "The server cannot reach its database right now. Try again in a moment.")

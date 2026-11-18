@@ -24,12 +24,14 @@ import (
 	"github.com/kubek80/process-manager/server/internal/config"
 	"github.com/kubek80/process-manager/server/internal/db"
 	"github.com/kubek80/process-manager/server/internal/docs"
+	"github.com/kubek80/process-manager/server/internal/embedding"
 	"github.com/kubek80/process-manager/server/internal/engagement"
 	"github.com/kubek80/process-manager/server/internal/feedback"
 	"github.com/kubek80/process-manager/server/internal/httpapi"
 	"github.com/kubek80/process-manager/server/internal/notify"
 	"github.com/kubek80/process-manager/server/internal/rbac"
 	"github.com/kubek80/process-manager/server/internal/requests"
+	"github.com/kubek80/process-manager/server/internal/retrieval"
 	"github.com/kubek80/process-manager/server/internal/schema"
 	"github.com/kubek80/process-manager/server/internal/skills"
 	"github.com/kubek80/process-manager/server/internal/upgrade"
@@ -44,6 +46,7 @@ type options struct {
 	importDir string // load files into the database, then exit
 	exportDir string // write the database to files, then exit
 	migrate   bool   // upgrade the tables, convert older content, regenerate the skills, then exit
+	reindex   bool   // bring the search index up to date, then exit
 }
 
 func main() {
@@ -52,6 +55,7 @@ func main() {
 	flag.BoolVar(&o.reset, "reset", false, "delete all feedback, views, bookmarks, upvotes, skill downloads and requests, then exit (combine with -seed to refill; local development only)")
 	flag.StringVar(&o.importDir, "import", "", "load processes/, standards/ and catalog/ from this folder into the database, then exit")
 	flag.BoolVar(&o.migrate, "migrate", false, "upgrade the tables, convert content stored by an earlier version and regenerate the skills, print what was done, then exit")
+	flag.BoolVar(&o.reindex, "reindex", false, "bring the index of search by meaning up to date (all of it again when its settings changed), print what was done, then exit")
 	flag.StringVar(&o.exportDir, "export", "", "write processes, standards, lists and generated skills to this folder, then exit")
 	flag.Parse()
 	// PM_LOG_FORMAT=json gives one JSON object per line, which log collectors prefer
@@ -101,6 +105,7 @@ type stores struct {
 	// views, bookmarks, upvotes, downloads; requests
 	engagement *engagement.Store
 	requests   *requests.Store
+	index      *retrieval.Index                     // search by meaning; switched off when PM_EMBEDDINGS=off
 	validate   func(kind string, body []byte) error // the format check for imported files
 }
 
@@ -122,11 +127,20 @@ func run(log *slog.Logger, o options) error {
 		skills: &skills.Store{Pool: pool}, feedback: &feedback.Store{Pool: pool}, audit: &audit.Log{Pool: pool},
 		engagement: &engagement.Store{Pool: pool}, requests: &requests.Store{Pool: pool},
 	}
+	embedder, err := embedding.New(ctx, cfg.Embeddings.EmbeddingOptions())
+	if err != nil {
+		return fmt.Errorf("search by meaning: %w", err)
+	}
+	st.index = retrieval.New(pool, st.docs, embedder, cfg.Embeddings.ChunkOptions(), log)
+	logSearch(log, cfg.Embeddings, st.index)
 	if o.migrate {
 		return migrateCommand(ctx, pool, st, log, stdout)
 	}
 	if _, _, err := upgradeDatabase(ctx, pool, log); err != nil {
 		return err
+	}
+	if o.reindex {
+		return reindexCommand(ctx, st, stdout)
 	}
 
 	// the schemas are read when they are first needed: one-off commands that import nothing
@@ -167,7 +181,10 @@ func run(log *slog.Logger, o options) error {
 		if err := importFiles(ctx, st, o.importDir, log); err != nil {
 			return err
 		}
-		return st.skills.SyncAll(ctx, st.docs)
+		if err := st.skills.SyncAll(ctx, st.docs); err != nil {
+			return err
+		}
+		return catchUpIndex(ctx, st, log)
 	}
 	if o.exportDir != "" {
 		return exportFiles(ctx, st, o.exportDir, log)
@@ -194,14 +211,25 @@ func run(log *slog.Logger, o options) error {
 	if o.reset {
 		return nil
 	}
+	if err := catchUpIndex(ctx, st, log); err != nil {
+		return err
+	}
+	var background sync.WaitGroup
+	if st.index.Enabled() {
+		// documents whose sync failed (the provider could not be reached) are tried again
+		background.Add(1)
+		go func() {
+			defer background.Done()
+			st.index.RetryEvery(ctx, indexRetry)
+		}()
+	}
 
 	if _, err := loadSchemas(); err != nil {
 		return err
 	}
 	sessions := auth.NewSessions(cfg.SessionSecret, cfg.Secure())
-	var background sync.WaitGroup
 	deps := httpapi.Deps{Background: &background, Cfg: cfg, Sessions: sessions, SignOuts: &auth.SignOuts{Pool: pool}, Ready: pool.Ping, Docs: st.docs, Schemas: schemas, Roles: st.roles, Audit: st.audit,
-		Skills: st.skills, Feedback: st.feedback, Engagement: st.engagement, Requests: st.requests, Log: log, Notifier: notify.Log{Logger: log}}
+		Skills: st.skills, Feedback: st.feedback, Engagement: st.engagement, Requests: st.requests, Log: log, Notifier: notify.Log{Logger: log}, Index: st.index}
 	var hook *notify.Webhook
 	if cfg.Notify == "webhook" {
 		hook = notify.NewWebhook(cfg.WebhookURL, log)
@@ -230,6 +258,61 @@ func run(log *slog.Logger, o options) error {
 			hook.Wait()
 		}
 	}, "addr", cfg.Addr, "auth", cfg.Auth, "admins", len(cfg.Admins))
+}
+
+// indexRetry is how often documents that could not be indexed are tried again.
+const indexRetry = 5 * time.Minute
+
+// logSearch says at start whether search by meaning is on, and whether text leaves the company.
+func logSearch(log *slog.Logger, e config.Embeddings, ix *retrieval.Index) {
+	switch {
+	case !ix.Enabled():
+		log.Info("search by meaning is off (PM_EMBEDDINGS=off): people search by words only")
+	case ix.Outside():
+		log.Warn("search by meaning is on with Vertex AI: the text of published processes and standards and every search query is sent to Google Cloud",
+			"project", e.Project, "location", e.Location, "model", e.Model, "dimensions", e.Dimensions)
+	default:
+		log.Info("search by meaning is on with the built-in embedder: nothing leaves this server", "dimensions", e.Dimensions)
+	}
+}
+
+// catchUpIndex makes the search index usable and brings it up to date with everything stored:
+// after an import, a conversion of older content, or saves made while the provider could not be
+// reached. Parts that did not change are not embedded again. Only a database problem (or a
+// missing pgvector) stops the server; when the provider cannot be reached the documents are
+// tried again later.
+func catchUpIndex(ctx context.Context, st stores, log *slog.Logger) error {
+	if !st.index.Enabled() {
+		return nil
+	}
+	r, err := st.index.CatchUp(ctx)
+	switch {
+	case errors.Is(err, retrieval.ErrProvider):
+		log.Warn("search by meaning: the embeddings provider cannot be reached; searches use what is indexed, and what is missing is tried again in a few minutes", "error", err)
+	case err != nil:
+		return fmt.Errorf("search by meaning: %w", err)
+	case r.Embedded > 0 || r.Removed > 0:
+		log.Info("search index brought up to date", "result", r.String())
+	}
+	return nil
+}
+
+// reindexCommand is -reindex: it brings the search index up to date and writes a short account.
+func reindexCommand(ctx context.Context, st stores, out io.Writer) error {
+	if !st.index.Enabled() {
+		return errors.New("search by meaning is switched off (PM_EMBEDDINGS=off): there is no index to rebuild. Set PM_EMBEDDINGS to builtin or vertex")
+	}
+	r, err := st.index.CatchUp(ctx)
+	if err != nil && !errors.Is(err, retrieval.ErrProvider) {
+		return fmt.Errorf("search by meaning: %w", err)
+	}
+	fmt.Fprintln(out, "Search index ("+st.index.Provider()+")")
+	fmt.Fprintln(out, "  "+r.String())
+	if err != nil {
+		return fmt.Errorf("the search index is not complete: %w", err)
+	}
+	fmt.Fprintln(out, "Done.")
+	return nil
 }
 
 // upgradeDatabase creates or upgrades the tables and then converts content stored by an
@@ -287,6 +370,19 @@ func migrateCommand(ctx context.Context, pool *pgxpool.Pool, st stores, log *slo
 		}
 	}
 
+	searchLine, searchChanged := "", false
+	if st.index.Enabled() {
+		r, err := st.index.CatchUp(ctx)
+		if err != nil {
+			return fmt.Errorf("migration failed: the tables, content and skills are up to date, but the search index could not be brought up to date (%s): %w", r.String(), err)
+		}
+		searchChanged = r.Embedded > 0 || r.Removed > 0
+		searchLine = "already up to date"
+		if searchChanged {
+			searchLine = r.String()
+		}
+	}
+
 	tables := "already up to date"
 	if len(applied) > 0 {
 		tables = fmt.Sprintf("%d applied: %s", len(applied), strings.Join(applied, ", "))
@@ -302,7 +398,10 @@ func migrateCommand(ctx context.Context, pool *pgxpool.Pool, st stores, log *slo
 	fmt.Fprintln(out, "  Tables:  "+tables)
 	fmt.Fprintln(out, "  Content: "+report.String())
 	fmt.Fprintln(out, "  Skills:  "+skillsLine)
-	if len(applied) == 0 && !report.Converted && regenerated == 0 && withdrawn == 0 {
+	if searchLine != "" {
+		fmt.Fprintln(out, "  Search:  "+searchLine)
+	}
+	if len(applied) == 0 && !report.Converted && regenerated == 0 && withdrawn == 0 && !searchChanged {
 		fmt.Fprintln(out, "Nothing to do: the database was already up to date.")
 	} else {
 		fmt.Fprintln(out, "Done.")

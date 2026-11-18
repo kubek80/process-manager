@@ -32,7 +32,7 @@ export const KIND: Record<TargetKind, { word: string; Icon: typeof Workflow }> =
 };
 const HIT_WORD: Record<Hit["where"], string> = { step: "Step", requirement: "Requirement", prerequisite: "Before you start", scope: "Scope", summary: "Summary" };
 /** Where a result was found, when it was searched for both ways. */
-const FOUND_BY: Record<string, string> = { words: "Found by words", meaning: "Found by meaning", "words,meaning": "Found by words and by meaning" };
+const FOUND_BY: Record<string, string> = { words: "Found by words", meaning: "Found by meaning", "meaning,words": "Found by words and by meaning" };
 
 /** Where a process or standard opens; somebody who may fix a broken one gets its text. */
 export const docHref = (kind: TargetKind, id: string, fix = false) =>

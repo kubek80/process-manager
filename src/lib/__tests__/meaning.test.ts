@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Catalog, Process, Standard } from "../../types";
-import { fromMeaning, fuse, meaningHits, mergeHits, modeOf, needsServer, nextAsked, planOf, problemOf, type Found, type MeaningState } from "../meaning";
+import { fromMeaning, fuse, markedWords, meaningHits, mergeHits, modeOf, needsServer, nextAsked, planOf, problemOf, type Found, type MeaningState } from "../meaning";
 import { search } from "../search";
 import { ApiError, type MeaningResult } from "../store";
 
@@ -41,6 +41,7 @@ describe("the places search by meaning found", () => {
   it("leaves out what the document does not have, and does not repeat the summary on the card", () => {
     expect(meaningHits("process", gcp, [hit("step", "gone"), hit("prerequisite", "7"), hit("prerequisite", "x"), hit("requirement", "SEC-LOG-01"), hit("scope"), hit("other")])).toEqual([]);
     expect(meaningHits("process", gcp, [hit("summary", "", "Summary of Request a GCP project.")])).toEqual([{ where: "summary", label: "Summary" }]);
+    expect(meaningHits("process", gcp, [hit("summary", "", "Summary of Request a GCP project. · Tags: gcp · Category: Cloud…")])).toEqual([{ where: "summary", label: "Summary" }]);
     expect(meaningHits("process", gcp, undefined)).toEqual([]);
     expect(meaningHits("process", gcp, [hit("step", "decide"), hit("step", "decide"), null as never])).toHaveLength(1);
   });
@@ -153,5 +154,11 @@ describe("what the page shows", () => {
     expect(planOf("both", "gcp", "gcp", true, st({ for: "gcp", problem: { kind: "unavailable", message: "x" } }))).toMatchObject({ q: "gcp", show: "words", problem: { kind: "unavailable" } });
     // a problem with an earlier query does not stand for a new one
     expect(planOf("meaning", "logs", "logs", true, st({ for: "gcp", problem: busy }))).toMatchObject({ busy: true, problem: null });
+  });
+});
+
+describe("the words marked on cards found by meaning", () => {
+  it("leaves out short and common words", () => {
+    expect(markedWords(["put", "a", "secret", "in", "the", "log"])).toEqual(["put", "secret", "log"]);
   });
 });

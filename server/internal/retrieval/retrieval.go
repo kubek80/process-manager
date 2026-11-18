@@ -220,29 +220,47 @@ func (ix *Index) ensureExtension(ctx context.Context) (string, error) {
 // removed and built again. Several servers may run it at once. A provider that cannot be
 // reached does not make it fail: what could not be embedded is tried again later.
 func (ix *Index) Ensure(ctx context.Context) error {
-	if !ix.Enabled() {
+	_, _, err := ix.ensure(ctx)
+	if errors.Is(err, ErrProvider) {
+		ix.log.Warn("search by meaning: the search index could not be filled because the embeddings provider cannot be reached; it is tried again in a few minutes", "error", err)
 		return nil
 	}
-	rebuild := false
+	return err
+}
+
+// CatchUp is Ensure followed by a rebuild: the index is usable and holds everything that is
+// published now. The report covers both. An ErrProvider means the index is usable but not
+// complete; what is missing is tried again later.
+func (ix *Index) CatchUp(ctx context.Context) (Report, error) {
+	r, built, err := ix.ensure(ctx)
+	if err != nil || built {
+		return r, err
+	}
+	return ix.Rebuild(ctx)
+}
+
+// ensure is Ensure that says whether it built the index anew, and what that did.
+func (ix *Index) ensure(ctx context.Context) (Report, bool, error) {
+	if !ix.Enabled() {
+		return Report{}, false, nil
+	}
+	fresh := false
 	err := db.WithLock(ctx, ix.pool, lockEnsure, func() error {
 		vs, err := ix.ensureExtension(ctx)
 		if err != nil {
 			return err
 		}
-		rebuild, err = ix.ensureTables(ctx, vs)
+		fresh, err = ix.ensureTables(ctx, vs)
 		return err
 	})
-	if err != nil {
-		return err
+	if err != nil || !fresh {
+		return Report{}, false, err
 	}
-	if rebuild {
-		r, err := ix.Rebuild(ctx)
-		if err != nil {
-			return err
-		}
+	r, err := ix.Rebuild(ctx)
+	if err == nil {
 		ix.log.Info("search index built", "provider", ix.emb.Name(), "result", r.String())
 	}
-	return nil
+	return r, true, err
 }
 
 // ensureTables creates the tables, or drops and creates them when the settings changed. It
@@ -688,9 +706,16 @@ func (ix *Index) RetryEvery(ctx context.Context, every time.Duration) {
 
 // ---------- searching
 
-// Floor is the lowest similarity at which a part counts as a match at all, per provider. Even
-// unrelated texts have some similarity; below the floor a part is noise. See docs/backend.md
-// for how the numbers were measured.
+// floors are the lowest similarity at which a part counts as a match at all, per provider: even
+// unrelated texts have some similarity.
+//
+// builtin: measured on the sample and demo content (TestMeasureFloor). The best part for a
+// sensible question scores 0.30 to 0.77; for questions that have nothing to do with the content
+// ("chocolate cake recipe", "weather in paris tomorrow", ...) the best part mostly scores 0.06 to
+// 0.17, a few unlucky ones about 0.3. 0.20 drops almost all of the noise and keeps the weaker
+// but still sensible second and third documents (0.20 to 0.30).
+// vertex: not measured here (tests never call Google). gemini-embedding-001 gives unrelated
+// texts a similarity of about 0.5 to 0.6; 0.60 is a starting point to check on real content.
 var floors = map[string]float64{
 	"builtin": 0.20,
 	"vertex":  0.60,

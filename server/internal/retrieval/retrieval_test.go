@@ -530,3 +530,26 @@ func TestSupportedVersions(t *testing.T) {
 		}
 	}
 }
+
+func TestEnsureWorksWhileTheProviderIsDown(t *testing.T) {
+	pool, store := filled(t, false)
+	f := newFake()
+	f.setFail(true)
+	ix := New(pool, store, f, chunking.Options{}, quiet)
+	must(t, ix.Ensure(bg)) // the server starts all the same
+	if n, _ := ix.Pending(bg); n != 10 {
+		t.Fatalf("pending: %d", n)
+	}
+	if _, err := ix.CatchUp(bg); !errors.Is(err, ErrProvider) {
+		t.Fatalf("catch up while down: %v", err)
+	}
+	f.setFail(false)
+	r, err := ix.CatchUp(bg)
+	must(t, err)
+	if r.Documents != 10 || r.Embedded == 0 || r.Failed != 0 {
+		t.Fatalf("catch up: %+v", r)
+	}
+	if n, _ := ix.Pending(bg); n != 0 {
+		t.Fatalf("pending after catching up: %d", n)
+	}
+}

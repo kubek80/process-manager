@@ -21,6 +21,8 @@ const env = {
   PM_SEED_DIR: root, // processes/, standards/, catalog/ fill an empty database; schema/ is read from here too
   PM_ADDR: "127.0.0.1:8080",
   PM_BASE_URL: "http://localhost:5173",
+  // search by meaning with the built-in embedder: nothing leaves this machine
+  PM_EMBEDDINGS: process.env.PM_EMBEDDINGS ?? "builtin",
 };
 
 ensureDatabase();

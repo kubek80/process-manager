@@ -104,7 +104,7 @@ func TestStillInUseSaysOnlyWhatTheCallerMayKnow(t *testing.T) {
 
 func TestSkillsFollowASaveEvenWhenTheClientIsGone(t *testing.T) {
 	e := setup(t, nil)
-	a := &api{e.deps}
+	a := &api{Deps: e.deps}
 	_, _, err := e.deps.Docs.Put(bg, docs.Process, repoP, []byte(e.body(docs.Process, repoP, "Request a repository", "Get a repository")), alex)
 	must(t, err)
 	gone, cancel := context.WithCancel(bg)

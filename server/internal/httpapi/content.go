@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -186,24 +187,30 @@ func baseOf(r *http.Request) (*int, bool) {
 	return &n, true
 }
 
-// syncSkills regenerates what depends on a changed document. A failure is logged: the save
-// itself has already happened and the next save or restart regenerates again.
+// syncSkills regenerates what depends on a changed document - its skills and its parts in the
+// search index. A failure is logged: the save itself has already happened; the next save or
+// restart regenerates the skills again, and the index tries the document again by itself.
 func (a *api) syncSkills(ctx context.Context, kind, id string) {
 	// The save has happened. Whether the person who made it is still connected, or how long
 	// their request has been running, must not decide whether the skills follow: the work runs
 	// on its own. The answer waits for it a while - normally it is done in a moment - but not
 	// for ever: other regenerations may be ahead of it in the queue.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), syncTimeout)
-	done := make(chan struct{})
-	if a.Background != nil {
-		a.Background.Add(1)
-	}
-	go func() {
-		defer close(done)
-		defer cancel()
+	var work sync.WaitGroup
+	start := func(fn func()) {
+		work.Add(1)
 		if a.Background != nil {
-			defer a.Background.Done()
+			a.Background.Add(1)
 		}
+		go func() {
+			defer work.Done()
+			if a.Background != nil {
+				defer a.Background.Done()
+			}
+			fn()
+		}()
+	}
+	start(func() {
 		var err error
 		if kind == docs.Catalog {
 			err = a.Skills.SyncAll(ctx, a.Docs) // names of teams and tools appear in the text
@@ -213,11 +220,26 @@ func (a *api) syncSkills(ctx context.Context, kind, id string) {
 		if err != nil {
 			a.Log.Error("skills not regenerated", "kind", kind, "id", id, "error", err)
 		}
+	})
+	if a.Index.Enabled() {
+		start(func() {
+			// the catalog goes through every document: names of the lists appear in the parts
+			if err := a.Index.Sync(ctx, kind, id); err != nil {
+				a.Log.Warn("search by meaning: the search index could not be brought up to date after a change; the earlier text stays searchable and it is tried again in a few minutes",
+					"kind", kind, "id", id, "error", err)
+			}
+		})
+	}
+	done := make(chan struct{})
+	go func() {
+		work.Wait()
+		cancel()
+		close(done)
 	}()
 	select {
 	case <-done:
 	case <-time.After(syncWait):
-		a.Log.Warn("skills are still being regenerated; the save is answered", "kind", kind, "id", id)
+		a.Log.Warn("skills or the search index are still being brought up to date; the save is answered", "kind", kind, "id", id)
 	}
 }
 
