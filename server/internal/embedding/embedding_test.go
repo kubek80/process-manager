@@ -325,6 +325,7 @@ func TestVertexErrorsSayWhatToFix(t *testing.T) {
 func hanging(calls *atomic.Int32) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
+		_, _ = io.Copy(io.Discard, r.Body) // only then does the server notice the client leaving
 		<-r.Context().Done()
 	}))
 }

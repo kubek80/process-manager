@@ -156,7 +156,7 @@ func TestOnlyPeopleOfTheSignInDomainsAndTheirNamesTamed(t *testing.T) {
 		}
 	}
 	// a header cannot hold a line break; the name check refuses control characters anyway
-	if personName("Sam\nCEO", "sam@example.com") != "sam" {
+	if personName("Sam\nCEO", "sam@example.com") != "sam" || personName("Sam\u0007", "sam@example.com") != "sam" {
 		t.Fatal("a line break was kept")
 	}
 	if got := e.notes.events[0].Author; got != "Sam Consumer" {
