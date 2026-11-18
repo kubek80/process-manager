@@ -159,6 +159,8 @@ export function SearchPage({ route, processes, standards, feedback }: {
   const out = search({ processes, standards, catalog, q: shownQ, filters, drafts, profile, flags, found });
   const anyChosen = filterCount(filters) > 0 || bookmarked || due || !!(profile.tier || profile.environment || profile.language);
   const withoutFilters = anyChosen && !out.results.length ? search({ processes, standards, catalog, q: shownQ, drafts, found }).results.length : 0;
+  // drafts are not searched by meaning: an editor with drafts of their own is told where to find them
+  const ownDrafts = !!drafts && (processes.some((d) => d.status === "draft" && drafts("process", d)) || standards.some((d) => d.status === "draft" && drafts("standard", d)));
   // the results are of an earlier search than what is in the box now
   const earlier = mode !== "words" && offered && !plan.busy && text.trim() !== shownQ.trim();
 
@@ -221,6 +223,7 @@ export function SearchPage({ route, processes, standards, feedback }: {
                   {text.trim() ? ` Press Enter or Search to search for “${text.trim()}”.` : " Press Enter or Search to show everything."}
                 </p>
               )}
+              {ownDrafts && plan.show === "meaning" && <p className="search-drafts-note">Drafts are not searched by meaning. Use Words or Both to find your drafts too.</p>}
               {plan.problem && (
                 <div className={`search-problem ${plan.problem.kind}`}>
                   <p>

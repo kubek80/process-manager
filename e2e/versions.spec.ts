@@ -251,6 +251,13 @@ test("the app runs under a strict security policy", async ({ page }) => {
     await expect(page.locator("h1").first()).toBeVisible();
   }
   await expect(page.locator(".stat-totals")).toBeVisible(); // the statistics, with the chart drawn by hand
+  // search by meaning and both ways, with their answers drawn
+  for (const mode of ["meaning", "both"]) {
+    await open(page, `/search?q=cloud&mode=${mode}`);
+    await expect(page.locator(".search-page ol.cards > li.card").first()).toBeVisible();
+    await expect(page.locator("section.list-results")).not.toHaveAttribute("aria-busy", "true");
+    await expect(page.getByRole("radio", { name: mode === "meaning" ? "Meaning" : "Both", exact: true })).toHaveAttribute("aria-checked", "true");
+  }
   // a process page with the share dialog open
   await open(page, "/p/request-gcp-project/flow");
   await page.getByRole("button", { name: "Share" }).click();

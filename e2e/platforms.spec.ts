@@ -162,6 +162,7 @@ test("a platform owner creates a process for his platform and a standard for his
   await details(page).click();
   await page.locator(".modal").getByRole("button", { name: "Delete standard" }).click();
   await answer(page, "Delete this standard?", "Delete standard");
+  await expect(page.getByRole("heading", { name: "What must I meet?" })).toBeVisible(); // deleted: back to the list
   expect(await readStandard(page, "pull-request-templates")).toBeUndefined();
 
   // the server will not let him create one for somebody else's platform

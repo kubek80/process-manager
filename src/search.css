@@ -64,7 +64,7 @@
 .search-state:empty { display: none; }
 .search-state { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .search-state p { margin: 0; }
-.search-busy, .search-earlier { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
+.search-busy, .search-earlier, .search-drafts-note { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
 .search-earlier { padding: 8px 12px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--line); }
 .search-spinner { flex: none; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--accent); animation: search-spin .8s linear infinite; }
 @keyframes search-spin { to { transform: rotate(360deg); } }

@@ -195,3 +195,33 @@ test("on a phone the panel ends with a button that shows the results", async ({ 
   await page.locator("#search-filters button.filter-done").click();
   await expect(page.locator("#search-filters")).toBeHidden();
 });
+
+test("search by meaning comes in pages as well, in the order the server gave", async ({ page }) => {
+  await signIn(page, SAM);
+  const asked: string[] = [];
+  page.on("request", (r) => { if (new URL(r.url()).pathname === "/api/search") asked.push(r.url()); });
+  // the 18 made here are copies of the repository process: all close to "repository"
+  await open(page, "/search?q=repository&size=12&mode=meaning");
+  await expect(page.locator("section.list-results")).not.toHaveAttribute("aria-busy", "true");
+  await expect(count(page)).toHaveText(/^Showing 1–12 of \d+ results for “repository”$/);
+  const total = Number((await count(page).innerText()).match(/of (\d+)/)![1]);
+  expect(total).toBeGreaterThanOrEqual(N + 1);
+  const cards = page.locator(".search-page ol.cards > li.card");
+  const ids = () => cards.evaluateAll((li) => li.map((l) => l.getAttribute("data-id")!));
+  await expect(cards).toHaveCount(12);
+  const first = await ids();
+  const bottom = pager(page, "Pages of results, at the end");
+  await bottom.getByRole("button", { name: "Next page" }).click();
+  await expect(page).toHaveURL(/[?&]page=2(&|$)/);
+  await expect(page).toHaveURL(/[?&]mode=meaning$/);
+  await expect(count(page)).toHaveText(`Showing 13–${Math.min(24, total)} of ${total} results for “repository”`);
+  const second = await ids();
+  expect(second.filter((id) => first.includes(id)), "no result on two pages").toEqual([]);
+  expect(new Set([...first, ...second]).size).toBe(Math.min(24, total));
+  expect([...first, ...second].filter((id) => IDS.includes(id)).length, "the copies made here are found").toBe(Math.min(N, 24 - 1));
+  await page.goBack();
+  await expect(count(page)).toHaveText(`Showing 1–12 of ${total} results for “repository”`);
+  expect(await ids()).toEqual(first);
+  // the pages are of one answer: the server was asked once
+  expect(asked).toHaveLength(1);
+});

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { CSRF, DANA, JORDAN, RILEY, SAM, open, signIn } from "./helpers";
+import { CASEY, CSRF, DANA, JORDAN, RILEY, SAM, open, signIn } from "./helpers";
 
 // What a phone, a tablet and a small laptop show. A page that scrolls sideways hides controls
 // off screen, so no page may be wider than the screen.
@@ -7,6 +7,7 @@ const PAGES = ["/", "/search?q=gcp", "/search?q=logging&type=standard&rigour=man
   "/s/secure-logging/doc", "/s/secure-logging/doc/SEC-LOG-02", "/catalog", "/guide", "/mine", "/requests", "/requests?state=all"];
 const ADMIN = ["/p/request-gcp-project/json", "/admin/access", "/admin/lists", "/admin/skills", "/admin/health", "/admin/activity", "/admin/statistics", "/admin/system"];
 
+const box = (page: import("@playwright/test").Page) => page.getByRole("searchbox", { name: "Search processes and standards" });
 const sideways = (page: import("@playwright/test").Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
 for (const [name, width] of [["a small phone", 360], ["a phone", 390], ["a tablet", 768], ["a small laptop", 1024]] as const) {
@@ -129,6 +130,38 @@ for (const theme of ["light", "dark"] as const) {
         const box = (await b.boundingBox())!;
         expect(box.x + box.width, `${await b.getAttribute("aria-label") ?? await b.innerText()} at ${width}px`).toBeLessThanOrEqual(width);
       }
+    }
+  });
+}
+
+for (const theme of ["light", "dark"] as const) {
+  test(`the search page with Words, Meaning and Both fits every width in the ${theme} theme`, async ({ page }) => {
+    await signIn(page, CASEY);
+    await page.addInitScript((t) => { try { localStorage.setItem("pm:theme", t); } catch { /* ignore */ } }, theme);
+    for (const width of [360, 390, 768, 1024]) {
+      await page.setViewportSize({ width, height: 844 });
+      for (const hash of ["/search?q=gcp", "/search?q=cloud&mode=meaning", "/search?q=cloud&mode=both"]) {
+        await open(page, hash);
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        await expect(page.locator(".search-page ol.cards > li.card").first()).toBeVisible();
+        const modes = page.getByRole("radiogroup", { name: "Search by" });
+        for (const name of ["Words", "Meaning", "Both"]) await expect(modes.getByRole("radio", { name, exact: true }), `${name} at ${width}px`).toBeInViewport({ ratio: 1 });
+        for (const line of await page.locator("#search-mode-help li").all()) {
+          const rect = (await line.boundingBox())!;
+          expect(rect.x + rect.width, `${await line.innerText()} at ${width}px`).toBeLessThanOrEqual(width);
+        }
+        expect(await sideways(page), `${hash} at ${width}px, ${theme}`).toBe(0);
+      }
+      // the notices of the second status line fit as well: an earlier search, and a problem
+      await box(page).fill("a much longer question about cloud projects and their budgets");
+      await expect(page.locator("p.search-earlier")).toBeVisible();
+      expect(await sideways(page), `the earlier-search notice at ${width}px, ${theme}`).toBe(0);
+      await page.route(/\/api\/search\?/, (route) => route.fulfill({ status: 502, contentType: "application/json", body: '{"error":"x"}' }));
+      await box(page).press("Enter");
+      await expect(page.locator(".search-problem")).toBeVisible();
+      await expect(page.locator(".search-problem button")).toBeInViewport({ ratio: 1 });
+      expect(await sideways(page), `a problem at ${width}px, ${theme}`).toBe(0);
+      await page.unroute(/\/api\/search\?/);
     }
   });
 }

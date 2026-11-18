@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import { expect, test, type APIResponse, type Page, type Route } from "@playwright/test";
 import { ALEX, CASEY, CSRF, DANA, JORDAN, RILEY, SAM, open, putDoc, readProcess, signIn, watchErrors } from "./helpers";
 
 // Search by meaning: the switch Words / Meaning / Both on the search page. The browser tests'
@@ -263,7 +263,8 @@ test("by meaning “My application” hides what does not apply", async ({ page 
   await expect(card(page, "onboard-site-to-akamai")).toHaveCount(0);
   await expect(card(page, "onboard-api-to-apigee")).toHaveCount(0);
   await expect(results(page)).toHaveCount(before - 2);
-  await expect(count(page)).toHaveText(`${before - 2} ${before - 2 === 1 ? "result" : "results"} for “onboard a site or an api” with 1 filter`);
+  const left = before - 2;
+  await expect(count(page)).toHaveText(`${left === 0 ? "No results" : left === 1 ? "1 result" : `${left} results`} for “onboard a site or an api” with 1 filter`);
   await page.locator(".profile-filter").getByLabel("Tier").selectOption({ label: "any tier" });
   await expect(results(page)).toHaveCount(before);
 });
@@ -365,33 +366,34 @@ test("Both shows what either way finds, says how each was found, and a place fou
 
 test("what is published is found by meaning at once, and follows changes, drafts and deletion", async ({ page }) => {
   const id = "meaning-follow-demo";
-  await makeProcess(page, id, { title: "Island wildlife survey", summary: "Count the quokkas living on Rottnest island every spring.", status: "active" });
+  await makeProcess(page, id, { title: "Wildlife survey", summary: "Count the quokkas living on Rottnest island every spring.", status: "active" });
   try {
     await signIn(page, SAM);
     // through the API: the index has it straight away
-    await expect.poll(() => meaningIds(page, "quokkas rottnest")).toContain(`process:${id}`);
-    await load(page, "/search?q=quokkas%20rottnest&mode=meaning");
+    await expect.poll(() => meaningIds(page, "quokkas on rottnest island")).toContain(`process:${id}`);
+    await load(page, "/search?q=quokkas%20on%20rottnest%20island&mode=meaning");
     await expect(results(page).first()).toHaveAttribute("data-id", id);
 
     // a new summary: found by its new words, no longer by the old ones
-    await makeProcess(page, id, { title: "Island wildlife survey", summary: "Measure the wombat burrows in the national park.", status: "active" });
+    await makeProcess(page, id, { title: "Wildlife survey", summary: "Measure the wombat burrows in the national park.", status: "active" });
     await signIn(page, SAM);
     await expect.poll(() => meaningIds(page, "wombat burrows")).toContain(`process:${id}`);
-    expect(await meaningIds(page, "quokkas rottnest")).not.toContain(`process:${id}`);
+    expect(await meaningIds(page, "quokkas on rottnest island")).not.toContain(`process:${id}`);
     await load(page, "/search?q=wombat%20burrows&mode=meaning");
     await expect(results(page).first()).toHaveAttribute("data-id", id);
-    await load(page, "/search?q=quokkas%20rottnest&mode=meaning");
+    await load(page, "/search?q=quokkas%20on%20rottnest%20island&mode=meaning");
     await settled(page);
     await expect(card(page, id)).toHaveCount(0);
 
     // back to a draft: gone for readers at once
-    await makeProcess(page, id, { title: "Island wildlife survey", summary: "Measure the wombat burrows in the national park.", status: "draft" });
+    await makeProcess(page, id, { title: "Wildlife survey", summary: "Measure the wombat burrows in the national park.", status: "draft" });
     await signIn(page, SAM);
     expect(await meaningIds(page, "wombat burrows")).not.toContain(`process:${id}`);
-    expect(await meaningIds(page, "Island wildlife survey")).not.toContain(`process:${id}`);
+    expect(await meaningIds(page, "Wildlife survey")).not.toContain(`process:${id}`);
     await load(page, "/search?q=wombat%20burrows&mode=meaning");
     await settled(page);
     await expect(card(page, id)).toHaveCount(0);
+    await expect(page.locator(".search-drafts-note")).toHaveCount(0); // a reader has no drafts to be told about
 
     // the editor who may change it finds the draft by words, not by meaning: drafts are not compared
     await signIn(page, ALEX, { editor: true });
@@ -403,13 +405,14 @@ test("what is published is found by meaning at once, and follows changes, drafts
     await settled(page);
     await expect(card(page, id)).toHaveCount(0);
     // what the page says then must not claim that nothing like it exists: the draft is there, by words
-    await expect(page.locator(".search-page"), "Meaning in editor mode hides drafts without saying so").toContainText(/draft/i);
+    await expect(page.locator(".search-drafts-note")).toHaveText("Drafts are not searched by meaning. Use Words or Both to find your drafts too.");
     await choice(page, "Both").click();
     await settled(page);
     await expect(card(page, id).locator("p.card-found-by")).toHaveText("Found by words");
+    await expect(page.locator(".search-drafts-note")).toHaveCount(0);
 
     // published again, then deleted: gone
-    await makeProcess(page, id, { title: "Island wildlife survey", summary: "Measure the wombat burrows in the national park.", status: "active" });
+    await makeProcess(page, id, { title: "Wildlife survey", summary: "Measure the wombat burrows in the national park.", status: "active" });
     await signIn(page, SAM);
     await expect.poll(() => meaningIds(page, "wombat burrows")).toContain(`process:${id}`);
     await removeProcess(page, id);
@@ -507,8 +510,6 @@ test("search by meaning not ready yet: the server's sentence, Words offered", as
   await box(page).press("Enter");
   await expect(results(page).first()).toHaveAttribute("data-id", "request-gcp-project");
   await expect(page.locator(".search-problem")).toHaveCount(0);
-  await choice(page, "Words").click();
-  await page.locator(".search-page").getByRole("button", { name: "Search by words" }).count();
 });
 
 test("search by meaning switched off on the server since the page was loaded: the switch goes, Words stays", async ({ page }) => {
@@ -625,7 +626,7 @@ test("search by meaning needs a signed-in person, never gives a draft, and refus
 test("one person searching unusually often is asked to wait, in the API and on the page", async ({ page }) => {
   await signIn(page, RILEY);
   let ok = 0;
-  let refused: Awaited<ReturnType<typeof page.request.get>> | undefined;
+  let refused: APIResponse | undefined;
   for (let i = 0; i < 61 && !refused; i++) {
     const r = await page.request.get(`/api/search?q=limit${i}`);
     if (r.status() === 429) refused = r;
