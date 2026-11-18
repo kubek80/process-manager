@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Check, Link2, Mail, MessageSquare, MessagesSquare } from "lucide-react";
-import { appBase, googleChatMessage, mailtoLink, shareUrl, slackMessage, type ShareInfo } from "../lib/share";
+import { appBase, copiedStatus, SHARE_HINT, googleChatMessage, mailtoLink, shareUrl, slackMessage, type ShareInfo } from "../lib/share";
 import { copyText } from "../lib/store";
 import { Modal } from "./ui";
 import "../detail.css";
@@ -45,7 +45,7 @@ export function ShareDialog({ info, onClose }: { info: ShareInfo; onClose: () =>
   const option = (what: What, icon: React.ReactNode, label: string, hint: string) => (
     <button key={what} type="button" className={`share-option ${copied === what ? "copied" : ""}`} onClick={() => copy(what)}>
       <span className="share-icon" aria-hidden="true">{copied === what ? <Check size={17} /> : icon}</span>
-      <span className="share-text"><strong>{copied === what ? "Copied" : label}</strong><span>{hint}</span></span>
+      <span className="share-text"><strong>{label}{copied === what && <em className="share-copied" aria-hidden="true">Copied</em>}</strong><span>{hint}</span></span>
     </button>
   );
   return (
@@ -53,15 +53,15 @@ export function ShareDialog({ info, onClose }: { info: ShareInfo; onClose: () =>
       <div className="share-dialog">
         <div className="share-url"><Link2 size={14} aria-hidden="true" /><span>{url}</span></div>
         <div className="share-options">
-          {option("link", <Link2 size={17} />, "Copy link", "Only the address")}
-          {option("slack", <MessageSquare size={17} />, "Copy message for Slack", "Title in bold, the summary and the link")}
-          {option("chat", <MessagesSquare size={17} />, "Copy message for Google Chat", "Title in bold, the summary and the link")}
+          {option("link", <Link2 size={17} />, "Copy link", SHARE_HINT.link)}
+          {option("slack", <MessageSquare size={17} />, "Copy message for Slack", SHARE_HINT.slack)}
+          {option("chat", <MessagesSquare size={17} />, "Copy message for Google Chat", SHARE_HINT.chat)}
           <a className="share-option" href={mailtoLink(info, url)}>
             <span className="share-icon" aria-hidden="true"><Mail size={17} /></span>
             <span className="share-text"><strong>Email</strong><span>Opens your mail program with the message filled in</span></span>
           </a>
         </div>
-        <p className="share-status" role="status" aria-live="polite">{copied ? "Copied. Paste it where you want to share it." : ""}</p>
+        <p className="share-status" role="status" aria-live="polite">{copied ? copiedStatus(copied) : ""}</p>
         {manual && (
           <div className="share-manual">
             <p>Your browser did not allow copying. Select the text below and copy it (Ctrl+C, or ⌘C on a Mac).</p>

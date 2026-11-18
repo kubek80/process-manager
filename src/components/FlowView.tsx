@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, Clock, Flag, Hand, Maximize2, Minus, MousePointerClick, Plus, User, Workflow, Wrench } from "lucide-react";
+import { Check, Clock, Flag, Hand, Maximize2, Minus, Plus, User, Workflow, Wrench } from "lucide-react";
 import type { Feedback, Process, StepType } from "../types";
 import { diamondPoints, L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
@@ -18,12 +18,10 @@ const NO_PAN = "button:not(.block-main), a, input, select, textarea, label, .qui
 /** How far the pointer moves before a press becomes a drag of the map (and no longer a click). */
 const PAN_START = 5;
 
-export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, hint, editable = true, bare }: {
+export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, editable = true, bare }: {
   editable?: boolean; bare?: boolean;
   /** Opens the report form for one step, without opening the step. */
   onReport?: (stepId: string) => void;
-  /** Shows the line that says a step can be opened. */
-  hint?: boolean;
   process: Process; selectedId: string | null; done: Set<string>; feedback: Feedback[];
   onSelect: (id: string) => void;
   onInsert?: (at: InsertAt, spec: { title: string; type: StepType; actor: string }) => void;
@@ -110,10 +108,6 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
 
   return (
     <div className={`flow-wrap ${bare ? "bare" : ""}`}>
-      {!bare && hint && (
-        <p className="map-hint"><MousePointerClick size={15} aria-hidden="true" /><span><b>Select a step</b> to see what to do, who does it and with which tool.</span>
-          <span className="map-hint-pan"><Hand size={14} aria-hidden="true" />Drag the map to move around.</span></p>
-      )}
       <div className={`flow-scroll ${bare ? "" : "pannable"} ${panning ? "panning" : ""}`} ref={scroller}>
         <div className={`flow-canvas ${drag ? "dragging" : ""}`} style={{ width: layout.width, height, zoom }} onMouseDown={() => setAdding(null)}>
           {layout.lanes.map((lane) => {
@@ -231,6 +225,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
           ))}
           <span className="legend-item"><svg width="26" height="8"><path d="M0,4 H26" className="edge back" /></svg>Loop back</span>
         </div>
+        {!bare && <span className="map-pan-hint"><Hand size={14} aria-hidden="true" />Drag the map to move around</span>}
         {!bare && <div className="zoom">
           <button className="btn small ghost" onClick={fit}><Maximize2 size={14} />Fit</button>
           <button className="icon-btn" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(1)))} aria-label="Zoom out"><Minus size={16} /></button>

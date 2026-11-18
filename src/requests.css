@@ -67,7 +67,7 @@
 .stat-kind { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .stat-kind svg { color: var(--text-3); }
 .stat-none td:first-child { color: var(--text-3); font-style: italic; }
-.stat-trend { width: 100%; overflow: hidden; }
+.stat-trend { position: relative; width: 100%; overflow: hidden; }
 .stat-trend svg { display: block; }
 .stat-grid { stroke: var(--line); stroke-width: 1; }
 .stat-baseline { stroke: var(--line-strong); stroke-width: 1; }
@@ -75,7 +75,7 @@
 .stat-bar { fill: var(--accent); }
 .stat-bar:hover { fill: color-mix(in srgb, var(--accent) 80%, var(--text)); }
 .stat-nodata { padding: 24px 0; text-align: center; }
-.stat-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.stat-sr-only { position: absolute; left: 0; top: 0; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .stat-about { display: grid; gap: 4px; }
 .stat-deleted { margin-top: -8px; }
 .stat-bar.partial { fill: color-mix(in srgb, var(--accent) 40%, var(--surface)); stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 2; }

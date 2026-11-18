@@ -71,3 +71,19 @@ export function mailtoLink(s: ShareInfo, url: string): string {
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
+
+/** What each way of sharing gives the person when they paste it. */
+export const SHARE_HINT = {
+  link: "Only the address, to paste anywhere",
+  slack: "Pastes into Slack with the title in bold, the summary and a link",
+  chat: "Pastes into Google Chat; the title shows in bold once sent, with the summary and a link",
+} as const;
+
+/** The line that confirms a copy, naming what was copied and where it goes. */
+export function copiedStatus(what: "link" | "slack" | "chat"): string {
+  switch (what) {
+    case "link": return "The link was copied. Paste it where you want to share it.";
+    case "slack": return "The message for Slack was copied. Paste it there.";
+    case "chat": return "The message for Google Chat was copied. Paste it there.";
+  }
+}

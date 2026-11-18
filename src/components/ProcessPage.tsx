@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Braces, CalendarCheck, Check, ChevronDown, ChevronRight, Flag, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Settings2, Sparkles, TriangleAlert, Users, Workflow, Bot, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, MousePointerClick, Braces, CalendarCheck, Check, ChevronDown, ChevronRight, Flag, CircleAlert, CircleCheck, Clock, ListChecks, Plus, Settings2, Sparkles, TriangleAlert, Users, Workflow, Bot, ShieldCheck } from "lucide-react";
 import type { DocMeta, Feedback, Process, Step } from "../types";
 import { addStepAfter, deleteStep, insertStep, moveStep, prerequisiteKeys, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
 import { isDrawableProcess, validateProcess } from "../lib/validate";
@@ -206,6 +206,9 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
               onClick={() => go({ page: "process", id: process.id, tab: id, ...(selected && (id === "flow" || id === "list") ? { item: selected } : {}) })}><Icon size={16} />{label}{id === "feedback" && openCount(feedback) > 0 && <span className="tab-count">{openCount(feedback)}</span>}</button>
           ))}
         </div>
+        {view === "flow" && renderable && hint.show && (
+          <p className="map-hint"><MousePointerClick size={15} aria-hidden="true" /><span><b>Select a step</b> on the map to see what to do, who does it and with which tool.</span></p>
+        )}
         <span className="spacer" />
         {editor && <button className={`status ${errors ? "bad" : issues.length ? "warn" : "good"}`} onClick={() => setShowIssues(!showIssues)} disabled={!issues.length}>
           {errors ? <CircleAlert size={15} /> : issues.length ? <TriangleAlert size={15} /> : <CircleCheck size={15} />}
@@ -244,7 +247,6 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
           {extras && (
             <div id="before-body" className={`before-body ${draft.prerequisites.length ? "" : "no-pre"}`}>
               {draft.prerequisites.length > 0 && <div className="before-main">
-                <p className="before-intro">Have these ready, then start with step 1. Tick what you have.</p>
                 {prereqGrid(true)}
               </div>}
               {(!!draft.resources?.length || !!draft.standards?.length) && <div className="before-side">
@@ -277,7 +279,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
         </section>
       )}
       {view === "flow" && renderable && <FlowView editable={editor} process={draft} selectedId={selected} done={done} feedback={feedback} onSelect={select}
-        onReport={setFlagging} hint={hint.show}
+        onReport={setFlagging}
         onInsert={(at, spec) => { const r = insertStep(draft, at, spec); setDraft(r.process); setSelected(r.id); setEditing(true); }}
         onMoveToLane={(id, actor) => setDraft(updateStep(draft, id, { actor }))} />}
       {view === "list" && renderable && <ListView process={draft} all={all} done={done} toggle={toggle} reset={reset} selectedId={selected} onSelect={select}

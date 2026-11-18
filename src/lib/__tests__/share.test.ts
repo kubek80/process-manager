@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escapeHtml, googleChatMessage, mailtoLink, oneLine, plainMessage, shareUrl, slackMessage } from "../share";
+import { copiedStatus, SHARE_HINT, escapeHtml, googleChatMessage, mailtoLink, oneLine, plainMessage, shareUrl, slackMessage } from "../share";
 
 const gcp = { kind: "process" as const, id: "request-gcp-project", title: "Request a GCP project", summary: "Get a new Google Cloud project\n created by the project factory." };
 const URL_ = "https://pm.example.com/#/p/request-gcp-project";
@@ -59,5 +59,14 @@ describe("messages", () => {
   });
   it("escapes HTML", () => {
     expect(escapeHtml(`<a href="x">'&'</a>`)).toBe("&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;");
+  });
+});
+
+describe("the share dialog's words", () => {
+  it("each way of sharing has its own hint and its own confirmation", () => {
+    expect(new Set(Object.values(SHARE_HINT)).size).toBe(3);
+    expect(copiedStatus("slack")).toBe("The message for Slack was copied. Paste it there.");
+    expect(copiedStatus("chat")).toBe("The message for Google Chat was copied. Paste it there.");
+    expect(copiedStatus("link")).toMatch(/^The link was copied/);
   });
 });
