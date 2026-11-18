@@ -114,7 +114,8 @@ export async function loadEngagement(): Promise<EngagementData> {
     mine: { bookmarks: r?.mine?.bookmarks ?? [], upvotes: r?.mine?.upvotes ?? [] },
   };
 }
-export const recordViewOn = (kind: TargetKind, id: string) => call<void>("POST", `/api/views/${kind}/${encodeURIComponent(id)}`);
+/** Records a view; the answer is the document's numbers after it (an older server answers with nothing). */
+export const recordViewOn = (kind: TargetKind, id: string) => call<{ views?: number; people?: number } | undefined>("POST", `/api/views/${kind}/${encodeURIComponent(id)}`);
 export const setBookmark = (kind: TargetKind, id: string, on: boolean) => call<void>(on ? "PUT" : "DELETE", `/api/bookmarks/${kind}/${encodeURIComponent(id)}`);
 export const setUpvote = (kind: TargetKind, id: string, on: boolean) => call<{ upvotes: number }>(on ? "PUT" : "DELETE", `/api/upvotes/${kind}/${encodeURIComponent(id)}`);
 

@@ -4,7 +4,7 @@ import { href } from "../lib/store";
 import type { Profile } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
 import { FILTER_LABEL, type FilterKey, type Option } from "../lib/search";
-import { pageNumbers, PAGE_SIZES, showingText, type Page } from "../lib/paging";
+import { pageNumbers, PAGE_SIZES, showingText, storedPage, type Page, type StoredPage } from "../lib/paging";
 import "../lists.css";
 
 // The pieces the three lists share (Processes, Standards, the search results): the filter panel
@@ -85,7 +85,11 @@ export function FilterDropdown({ name, label, options, onToggle }: { name: Filte
 }
 
 /** A yes/no filter of the panel: "Only my bookmarks", "Only what needs a review". */
-export interface FlagControl { key: string; label: string; count: number; on: boolean; onChange: (on: boolean) => void }
+export interface FlagControl {
+  key: string; label: string; count: number; on: boolean; onChange: (on: boolean) => void;
+  /** Why it cannot be used yet (e.g. the bookmarks are still loading): no count is shown, it cannot be switched on. */
+  unknown?: string;
+}
 
 /** "My application": the selects for tier, environment and language. */
 function ProfileSelects({ value, onChange }: { value: Profile; onChange: (p: Profile) => void }) {
@@ -124,10 +128,12 @@ export interface FilterPanelProps {
   flags: FlagControl[];
   profile: Profile;
   onProfile: (p: Profile) => void;
+  /** On a narrow screen, the button at the end of the open panel: "Show 12 processes". */
+  done?: { label: string; onClick: () => void };
 }
 
 /** The filters on the left of a list. */
-export function FilterPanel({ id, open, text, keys, labels, options, onToggle, flags, profile, onProfile }: FilterPanelProps) {
+export function FilterPanel({ id, open, text, keys, labels, options, onToggle, flags, profile, onProfile, done }: FilterPanelProps) {
   return (
     <aside id={id} className={`filter-panel ${open ? "open" : ""}`.trim()} aria-label="Filters">
       {text && (
@@ -139,10 +145,11 @@ export function FilterPanel({ id, open, text, keys, labels, options, onToggle, f
       {flags.length > 0 && (
         <div className="filter-group filter-flags">
           {flags.map((f) => (
-            <label key={f.key} className={`filter-option flag ${f.on ? "on" : ""}`.trim()} data-flag={f.key}>
-              <input type="checkbox" checked={f.on} onChange={(e) => f.onChange(e.target.checked)} aria-label={`${f.label}, ${f.count} ${f.count === 1 ? "result" : "results"}`} />
-              <span className="filter-option-name">{f.label}</span>
-              <span className="filter-option-count" aria-hidden="true">{f.count}</span>
+            <label key={f.key} className={`filter-option flag ${f.on ? "on" : ""} ${f.unknown && !f.on ? "off" : ""}`.trim()} data-flag={f.key}>
+              <input type="checkbox" checked={f.on} disabled={!!f.unknown && !f.on} onChange={(e) => f.onChange(e.target.checked)}
+                aria-label={f.unknown ? `${f.label}: ${f.unknown}` : `${f.label}, ${f.count} ${f.count === 1 ? "result" : "results"}`} />
+              <span className="filter-option-name">{f.label}{f.unknown && <span className="filter-option-why" aria-hidden="true">{f.unknown}</span>}</span>
+              {!f.unknown && <span className="filter-option-count" aria-hidden="true">{f.count}</span>}
             </label>
           ))}
         </div>
@@ -151,6 +158,7 @@ export function FilterPanel({ id, open, text, keys, labels, options, onToggle, f
         {keys.map((k) => <FilterDropdown key={k} name={k} label={labels?.[k]} options={options[k]} onToggle={(v) => onToggle(k, v)} />)}
       </div>
       <ProfileSelects value={profile} onChange={onProfile} />
+      {done && <button type="button" className="btn primary filter-done" onClick={done.onClick}>{done.label}</button>}
     </aside>
   );
 }
@@ -211,6 +219,8 @@ export function PageSize({ size, onSize }: { size: number; onSize: (n: number) =
   );
 }
 
+export { bookmarksUnknown, engagementKnown } from "../lib/known";
+
 /** The way to the requests: what is missing can be asked for. */
 export function AskForIt({ className = "" }: { className?: string }) {
   return (
@@ -252,15 +262,29 @@ export function Pager({ page, onPage, label, compact }: {
 
 /**
  * The page of a list that is shown. Any change of `what` (the search, a filter) goes back to the
- * first page.
+ * first page. With `key`, the page is remembered in this browser tab together with what it was
+ * the page of, so that coming back to the list (Back, a reload) shows the page that was left; a
+ * page that no longer exists shows the last one (`pageOf` takes care of that).
  */
-export function usePaging(what: string): [number, (n: number) => void] {
-  const [at, setAt] = useState({ what, page: 1 });
+export function usePaging(what: string, key?: string): [number, (n: number) => void] {
+  const [at, setAt] = useStoredPage(key, { what, page: 1 });
   // forget the old page as soon as the search or a filter changes, so that undoing the change
   // does not bring the old page back
   if (at.what !== what) setAt({ what, page: 1 });
   const page = at.what === what ? at.page : 1;
   return [page, (n: number) => setAt({ what, page: n })];
+}
+
+function useStoredPage(key: string | undefined, initial: StoredPage): [StoredPage, (v: StoredPage) => void] {
+  const [at, setAt] = useState<StoredPage>(() => {
+    if (!key) return initial;
+    try { return storedPage(sessionStorage.getItem(key)) ?? initial; } catch { return initial; }
+  });
+  const change = (v: StoredPage) => {
+    setAt(v);
+    if (key) try { sessionStorage.setItem(key, JSON.stringify(v)); } catch { /* private mode: it lasts for this page */ }
+  };
+  return [at, change];
 }
 
 /** After going to another page: the start of the results is where reading continues. */

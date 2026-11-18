@@ -7,6 +7,8 @@ import { statusOf } from "../lib/lifecycle";
 import { matchRanges, NO_CATEGORY_LABEL, type Hit } from "../lib/search";
 import { href } from "../lib/store";
 import { BookmarkButton, UpvoteButton } from "./Engage";
+import { useEngagement } from "../lib/engagement";
+import { engagementKnown } from "./Lists";
 import "../lists.css";
 
 /** The text with the searched words marked; built as elements, never as HTML. */
@@ -65,6 +67,7 @@ export interface DocCardProps {
  */
 export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openFeedback, mayEdit, broken, usedBy, level = 2 }: DocCardProps) {
   const { catalog } = useCatalog();
+  const known = engagementKnown(useEngagement());
   const status = statusOf(doc);
   const fix = !!broken && mayEdit;
   const lines = cardLines({ kind, doc, catalog, rigour, rules, mayEdit, usedBy });
@@ -100,7 +103,7 @@ export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openF
         <dl className="card-lines">
           {lines.map((l) => (
             <div key={l.key} className={`card-line ${l.warn ? "warn" : ""}`.trim()} data-line={l.key}>
-              <dt>{l.name}</dt><dd>{l.value}</dd>
+              <dt>{l.name}:</dt><dd>{l.value}</dd>
             </div>
           ))}
         </dl>
@@ -121,7 +124,8 @@ export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openF
       {openFeedback > 0 && <p className="card-feedback"><MessageSquare size={14} aria-hidden="true" />{openFeedback} open feedback</p>}
       <div className="card-foot">
         <a className="card-give" href={feedbackHref} aria-label={`Give feedback on ${title}`}><MessageSquarePlus size={14} aria-hidden="true" />Give feedback</a>
-        <span className="card-engage">
+        {/* until the upvotes and bookmarks are known, a 0 would look like a fact: kept in place, not shown */}
+        <span className={`card-engage ${known ? "" : "pending"}`.trim()}>
           <UpvoteButton kind={kind} id={doc.id} title={title} />
           <BookmarkButton kind={kind} id={doc.id} title={title} />
         </span>

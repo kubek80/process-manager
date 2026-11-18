@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../../types";
 import { EMPTY_CATALOG } from "../catalog";
-import { chartScale, csvHref, fillWeeks, groupTotals, labelEvery, short, sortRows, weekLabel, type StatRow } from "../statistics";
+import { chartScale, csvHref, deletedNote, fillWeeks, groupTotals, labelEvery, partialWeek, short, sortRows, weekLabel, weekName, type StatRow } from "../statistics";
 
 const row = (id: string, p: Partial<StatRow> = {}): StatRow => ({
   kind: "process", id, title: id, status: "active", owner: "", platform: "", practice: "", category: "",
@@ -28,9 +28,9 @@ describe("totals by platform, practice or team", () => {
   it("are added up from the rows when the server sent none, with None last", () => {
     expect(groupTotals({ rows }, "platform", catalog)).toEqual([
       { id: "gcp", name: "Google Cloud", documents: 2, views: 7, people: 3, downloads: 0, upvotes: 0, feedbackHandled: 0 },
-      { id: "", name: "None", documents: 1, views: 10, people: 1, downloads: 0, upvotes: 0, feedbackHandled: 0 },
+      { id: "", name: "No platform", documents: 1, views: 10, people: 1, downloads: 0, upvotes: 0, feedbackHandled: 0 },
     ]);
-    expect(groupTotals({ rows }, "team", catalog).map((g) => g.name)).toEqual(["DNS team", "None"]);
+    expect(groupTotals({ rows }, "team", catalog).map((g) => g.name)).toEqual(["DNS team", "No owning team"]);
   });
   it("use the server's groups, naming those it left without a name", () => {
     const groups = { platform: [{ id: "gcp", name: "", documents: 1, views: 1, people: 1, downloads: 0, upvotes: 0, feedbackHandled: 0 }, { id: "aws", name: "Amazon", documents: 1, views: 5, people: 1, downloads: 0, upvotes: 0, feedbackHandled: 0 }] };
@@ -64,5 +64,30 @@ describe("the trend chart", () => {
     expect(short(950)).toBe("950");
     expect(short(1200)).toBe("1.2k");
     expect(short(25_000)).toBe("25k");
+  });
+});
+
+describe("the server's None entry, partial weeks and deleted documents", () => {
+  const catalog: Catalog = { ...EMPTY_CATALOG };
+  it("names the entry for documents without a group after the grouping, and puts it last", () => {
+    const g = (id: string, name: string, views: number) => ({ id, name, documents: 1, views, people: 1, downloads: 0, upvotes: 0, feedbackHandled: 0 });
+    const groups = { practice: [g("", "None", 50), g("security", "Cyber security", 2)] };
+    expect(groupTotals({ rows: [], groups }, "practice", catalog).map((x) => [x.id, x.name])).toEqual([["security", "Cyber security"], ["", "No practice"]]);
+  });
+  it("tells a week only partly inside the period", () => {
+    expect(partialWeek({ week: "2026-11-16", views: 1, people: 1, downloads: 0, days: 3 })).toBe(true);
+    expect(partialWeek({ week: "2026-11-16", views: 1, people: 1, downloads: 0, days: 7 })).toBe(false);
+    expect(partialWeek({ week: "2026-11-16", views: 1, people: 1, downloads: 0 })).toBe(false);
+    expect(weekName({ week: "2026-11-09", views: 1, people: 1, downloads: 0, days: 5 })).toBe("Week of 9 Nov, 5 days");
+    expect(weekName({ week: "2026-11-09", views: 1, people: 1, downloads: 0, days: 1 })).toBe("Week of 9 Nov, 1 day");
+    expect(weekName({ week: "2026-11-09", views: 1, people: 1, downloads: 0 })).toBe("Week of 9 Nov");
+    // a week filled in between two others is a whole week
+    expect(fillWeeks([{ week: "2026-10-26", views: 1, people: 1, downloads: 0, days: 2 }, { week: "2026-11-09", views: 1, people: 1, downloads: 0, days: 3 }])[1].days).toBe(7);
+  });
+  it("explains totals that include deleted documents", () => {
+    expect(deletedNote({})).toBe("");
+    expect(deletedNote({ deletedViews: 0, deletedDownloads: 0 })).toBe("");
+    expect(deletedNote({ deletedViews: 12, deletedDownloads: 1 })).toBe("The totals include 12 views and 1 skill download of processes and standards that were deleted since; the table below shows only those that still exist.");
+    expect(deletedNote({ deletedViews: 1 })).toMatch(/^The totals include 1 view of/);
   });
 });

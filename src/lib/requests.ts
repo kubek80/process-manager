@@ -1,4 +1,4 @@
-import type { TargetKind } from "../types";
+import type { Status, TargetKind } from "../types";
 
 /**
  * Requests for a process or standard that does not exist yet. Everyone signed in sees them, can
@@ -24,6 +24,8 @@ export interface DocRequest {
   stateAt: string;
   /** The process or standard (of the same kind) that answers it, once done. */
   linkedId: string;
+  /** Done, but what answered it was deleted since (`linkedId` is then empty). An older server leaves it out. */
+  linkedGone?: boolean;
   votes: number;
   votedByMe: boolean;
   mine: boolean;
@@ -125,3 +127,30 @@ export function requestsQuery(v: RequestsView): string {
 export function toggledVote(r: DocRequest): DocRequest {
   return { ...r, votedByMe: !r.votedByMe, votes: Math.max(0, r.votes + (r.votedByMe ? -1 : 1)) };
 }
+
+// ---------- what answers a done request
+
+/** What a done request shows as its answer. */
+export type Answer =
+  | { kind: "doc"; id: string; title: string }   // a process or standard the app has: a link
+  | { kind: "gone" }                             // it was deleted since
+  | { kind: "unknown"; id: string }              // an id the app does not have (deleted, or not visible): text only
+  | { kind: "none" };                            // done without a link (an older entry)
+
+export function answerOf(r: Pick<DocRequest, "linkedId" | "linkedGone">, docs: { id: string; title: string }[]): Answer {
+  if (r.linkedGone) return { kind: "gone" };
+  if (!r.linkedId) return { kind: "none" };
+  const doc = docs.find((d) => d.id === r.linkedId);
+  return doc ? { kind: "doc", id: doc.id, title: doc.title } : { kind: "unknown", id: r.linkedId };
+}
+
+/** What may answer a request: published processes or standards only (not drafts, not retired ones), by title. */
+export function answerChoices<T extends { id: string; title: string; status?: Status }>(docs: T[]): T[] {
+  return docs.filter((d) => (d.status ?? "active") === "active").sort((a, b) => a.title.localeCompare(b.title));
+}
+
+/** One wording per action: the button and the title of its dialog say the same. */
+export const ACTION_LABEL = {
+  planned: "Mark as planned", done: "Mark as done", declined: "Decline request", open: "Back to open",
+  withdraw: "Withdraw", remove: "Remove",
+} as const;

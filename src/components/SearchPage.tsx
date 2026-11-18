@@ -13,7 +13,7 @@ import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
 import { openCount } from "./Feedback";
 import { DocCard, Marked } from "./DocCard";
 import { needsReview } from "./DocList";
-import { AskForIt, ChosenFilters, FilterPanel, Pager, profileChosen, ResultsBar, toResults, type Chosen, type FlagControl } from "./Lists";
+import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, Pager, profileChosen, ResultsBar, toResults, type Chosen, type FlagControl } from "./Lists";
 import "../search.css";
 
 export { Marked };
@@ -51,6 +51,7 @@ export function SearchPage({ route, processes, standards, feedback }: {
   const perms = usePerms();
   const editing = useEditor();
   const eng = useEngagement();
+  const known = engagementKnown(eng);
   const drafts = useVisibleDrafts(); // in editor mode, the drafts the person may edit
   const filters = useMemo(() => filtersOf(route), [route]);
   const q = route.q ?? "";
@@ -77,7 +78,8 @@ export function SearchPage({ route, processes, standards, feedback }: {
   const toFirst = () => { if (route.pageNo) go({ page: "search", q, ...filters, ...keep }, { replace: true }); };
 
   const flags: Record<string, Flag> = {
-    bookmarked: { on: bookmarked, test: (k, d) => eng.isBookmarked(k, d.id) },
+    // while the bookmarks are not known, "only my bookmarks" waits instead of showing nothing
+    bookmarked: { on: bookmarked && known, test: (k, d) => eng.isBookmarked(k, d.id) },
     ...(editing ? { review: { on: due, test: (k: "process" | "standard", d: Process | Standard) => mayEdit(k, d) && needsReview(d) } } : {}),
   };
   const words = useMemo(() => wordsOf(q), [q]);
@@ -102,7 +104,7 @@ export function SearchPage({ route, processes, standards, feedback }: {
   const usedBy = (id: string) => processes.filter((p) => Array.isArray(p.steps) && p.steps.some((s) => s && s.subProcessId === id)).length;
 
   const flagControls: FlagControl[] = [
-    { key: "bookmarked", label: "Only my bookmarks", count: out.flags.bookmarked ?? 0, on: bookmarked, onChange: (v) => { setBookmarked(v); toFirst(); } },
+    { key: "bookmarked", label: "Only my bookmarks", count: out.flags.bookmarked ?? 0, on: bookmarked, onChange: (v) => { setBookmarked(v); toFirst(); }, unknown: bookmarksUnknown(eng) },
   ];
   if (editing && ((out.flags.review ?? 0) > 0 || due)) flagControls.push({ key: "review", label: "Only what needs a review", count: out.flags.review ?? 0, on: due, onChange: (v) => { setDue(v); toFirst(); } });
   const changeProfile = (p: typeof profile) => { setProfile(p); toFirst(); };
@@ -131,7 +133,8 @@ export function SearchPage({ route, processes, standards, feedback }: {
           <Pager page={page} onPage={goTo} label="Pages of results" compact />
         </div>
         <FilterPanel id="search-filters" open={open} keys={KEYS} options={out.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}
-          flags={flagControls} profile={profile} onProfile={changeProfile} />
+          flags={flagControls} profile={profile} onProfile={changeProfile}
+          done={{ label: `Show ${plural(n, "result")}`, onClick: () => { setOpen(false); toResults(results.current); } }} />
         <section className="list-results" aria-label="Results" ref={results} tabIndex={-1}>
           {n === 0 ? (
             <div className="list-empty search-empty">

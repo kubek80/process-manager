@@ -105,3 +105,23 @@ describe("the lines of a card", () => {
     expect(lines(cardLines({ kind: "process", doc: odd, catalog, rigour: {}, rules: 0, mayEdit: false }))).toEqual(["Owner: Cloud team", "Platform: Google Cloud", "Lead time: 2 days"]);
   });
 });
+
+describe("what is remembered and what is known", () => {
+  it("remembers the page of a list only in a form it can use", async () => {
+    const { storedPage } = await import("../paging");
+    expect(storedPage(JSON.stringify({ what: "[\"q\"]", page: 3 }))).toEqual({ what: "[\"q\"]", page: 3 });
+    for (const bad of [null, "", "{", "3", JSON.stringify({ what: "x", page: 0 }), JSON.stringify({ what: "x", page: 1.5 }), JSON.stringify({ page: 2 })])
+      expect(storedPage(bad)).toBeNull();
+  });
+  it("does not take bookmarks and upvotes for facts before they are in", async () => {
+    const { bookmarksUnknown, engagementKnown } = await import("../known");
+    expect(engagementKnown({ ready: false })).toBe(false);
+    expect(engagementKnown({ ready: true, failed: true })).toBe(false);
+    expect(engagementKnown({ ready: true })).toBe(true);
+    expect(engagementKnown({ ready: true, known: false, failed: false })).toBe(false);
+    expect(engagementKnown({ ready: true, known: true, failed: false })).toBe(true);
+    expect(bookmarksUnknown({ ready: false })).toBe("loading your bookmarks…");
+    expect(bookmarksUnknown({ ready: true, failed: true })).toBe("your bookmarks could not be loaded");
+    expect(bookmarksUnknown({ ready: true })).toBeUndefined();
+  });
+});

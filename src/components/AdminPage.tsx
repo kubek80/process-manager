@@ -252,6 +252,8 @@ const ACTION: Record<string, string> = {
   "lists.save": "changed the lists", "access.grant": "gave a role to", "access.revoke": "removed a role from", "skill.guidance": "changed the extra guidance of",
   "content.import": "imported", "process.review": "confirmed the review of the process", "standard.review": "confirmed the review of the standard", "feedback.fixed": "marked feedback as fixed on the", "feedback.reopen": "reopened feedback on the",
   "feedback.delete": "deleted feedback on the",
+  "content.convert": "brought stored content up to date for this version:",
+  "request.create": "asked for something new:", "request.state": "changed the state of", "request.delete": "removed",
 };
 
 function ActivitySection() {

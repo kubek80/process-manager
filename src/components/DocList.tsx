@@ -11,7 +11,7 @@ import { FILTER_LABEL, search, toggleFilter, wordsOf, type FilterKey, type Filte
 import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
 import { openCount } from "./Feedback";
 import { DocCard } from "./DocCard";
-import { AskForIt, ChosenFilters, FilterPanel, Pager, profileChosen, ResultsBar, toResults, usePaging, type Chosen, type FlagControl } from "./Lists";
+import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, Pager, profileChosen, ResultsBar, toResults, usePaging, type Chosen, type FlagControl } from "./Lists";
 
 const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "owner"];
 const NOUN: Record<TargetKind, { one: string; many: string }> = { process: { one: "process", many: "processes" }, standard: { one: "standard", many: "standards" } };
@@ -41,10 +41,11 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
   const editing = useEditor();
   const drafts = useVisibleDrafts();
   const eng = useEngagement();
+  const known = engagementKnown(eng);
   const [q, setQ] = useRemembered(`pm:${kind === "process" ? "processes" : "standards"}:q`, "");
   const [filters, setFilters] = useRemembered<Filters>(`pm:${kind === "process" ? "processes" : "standards"}:filters`, {});
   const [bookmarked, setBookmarked] = useRemembered(`pm:${kind === "process" ? "processes" : "standards"}:bookmarked`, false);
-  const [due, setDue] = useState(false);
+  const [due, setDue] = useRemembered(`pm:${kind === "process" ? "processes" : "standards"}:review`, false);
   const [profile, setProfile] = useProfile();
   const [size, setSize] = usePageSize();
   const [open, setOpen] = useState(false);
@@ -52,7 +53,8 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
   const mayEdit = (d: Process | Standard) => editing && canEdit(perms, kind, d);
 
   const flags: Record<string, Flag> = {
-    bookmarked: { on: bookmarked, test: (k, d) => eng.isBookmarked(k, d.id) },
+    // while the bookmarks are not known, "only my bookmarks" waits instead of showing nothing
+    bookmarked: { on: bookmarked && known, test: (k, d) => eng.isBookmarked(k, d.id) },
     ...(editing ? { review: { on: due, test: (_k: TargetKind, d: Process | Standard) => mayEdit(d) && needsReview(d) } } : {}),
   };
   const out = search({
@@ -61,7 +63,8 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
   });
   const words = useMemo(() => wordsOf(q), [q]);
   const what = JSON.stringify([q, filters, profile, bookmarked, due]);
-  const [at, setAt] = usePaging(what);
+  // the page is remembered with the search and filters, so that Back and a reload come back to it
+  const [at, setAt] = usePaging(what, `pm:${kind === "process" ? "processes" : "standards"}:page`);
   const page = pageOf(out.results.length, at, size);
   const goTo = (n: number) => { setAt(n); toResults(results.current); };
 
@@ -70,7 +73,7 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
   const usedBy = (id: string) => processes.filter((p) => Array.isArray(p.steps) && p.steps.some((s) => s && s.subProcessId === id)).length;
 
   const flagControls: FlagControl[] = [
-    { key: "bookmarked", label: "Only my bookmarks", count: out.flags.bookmarked ?? 0, on: bookmarked, onChange: setBookmarked },
+    { key: "bookmarked", label: "Only my bookmarks", count: out.flags.bookmarked ?? 0, on: bookmarked, onChange: setBookmarked, unknown: bookmarksUnknown(eng) },
   ];
   if (editing && ((out.flags.review ?? 0) > 0 || due)) flagControls.push({ key: "review", label: "Only what needs a review", count: out.flags.review ?? 0, on: due, onChange: setDue });
 
@@ -96,7 +99,8 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
       </div>
       <FilterPanel id={panelId} open={open} keys={KEYS} options={out.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}
         text={{ value: q, onChange: setQ, placeholder: PLACEHOLDER[kind], label: kind === "process" ? "Search processes" : "Search standards" }}
-        flags={flagControls} profile={profile} onProfile={setProfile} />
+        flags={flagControls} profile={profile} onProfile={setProfile}
+        done={{ label: `Show ${out.results.length} ${out.results.length === 1 ? NOUN[kind].one : NOUN[kind].many}`, onClick: () => { setOpen(false); toResults(results.current); } }} />
       <section className="list-results" aria-label="Results" ref={results} tabIndex={-1}>
         {out.results.length === 0 ? (
           <div className="list-empty">

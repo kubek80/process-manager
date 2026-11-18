@@ -426,7 +426,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
           </div>
         </div>
         {renderable && <DocEngagement kind="standard" id={standard.id} title={draft.title} summary={draft.summary}
-          open={openCount(feedback)} handled={feedback.length - openCount(feedback)}
+          open={openCount(feedback)} resolvedHere={feedback.length - openCount(feedback)}
           onFeedback={() => { setFocusFeedback(true); go({ page: "standard", id: standard.id, tab: "feedback" }); }} />}
       </div>
 

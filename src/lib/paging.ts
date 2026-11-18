@@ -59,6 +59,16 @@ export function showingText(p: Page, noun: { one: string; many: string }): strin
   return `Showing ${p.first}–${p.last} of ${of}`;
 }
 
+/** The page of a list as it is remembered, with what (search and filters) it was the page of. */
+export interface StoredPage { what: string; page: number }
+/** A remembered page as it was stored, or null when there is none or it cannot be used. */
+export function storedPage(raw: string | null): StoredPage | null {
+  try {
+    const v = JSON.parse(raw ?? "null") as Partial<StoredPage> | null;
+    return v && typeof v === "object" && typeof v.what === "string" && Number.isInteger(v.page) && (v.page as number) >= 1 ? { what: v.what, page: v.page as number } : null;
+  } catch { return null; }
+}
+
 const SIZE_KEY = "pm:page-size";
 const SIZE_CHANGED = "pm:page-size-changed";
 const readSize = () => { try { return sizeOf(localStorage.getItem(SIZE_KEY)); } catch { return DEFAULT_PAGE_SIZE; } };

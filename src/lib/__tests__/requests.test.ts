@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  filterRequests, parseRequestsQuery, requestProblems, requestsQuery, similarTitles, sortRequests, stateCounts, titleWords, toggledVote, type DocRequest,
+  ACTION_LABEL, answerChoices, answerOf, filterRequests, parseRequestsQuery, requestProblems, requestsQuery, similarTitles, sortRequests, stateCounts, titleWords, toggledVote, type DocRequest,
 } from "../requests";
 import { href, pageTitle, parseRoute } from "../store";
 
@@ -81,5 +81,23 @@ describe("the address of the requests", () => {
     expect(parseRoute("#/admin/statistics")).toEqual({ page: "admin", section: "statistics" });
     expect(href({ page: "admin", section: "statistics" })).toBe("#/admin/statistics");
     expect(pageTitle({ page: "admin", section: "statistics" })).toBe("Statistics · Admin · Process Manager");
+  });
+});
+
+describe("what answers a done request", () => {
+  const docs = [{ id: "request-gcp-project", title: "Request a GCP project" }];
+  it("links only to a document the app has", () => {
+    expect(answerOf({ linkedId: "request-gcp-project" }, docs)).toEqual({ kind: "doc", id: "request-gcp-project", title: "Request a GCP project" });
+    expect(answerOf({ linkedId: "deleted-one" }, docs)).toEqual({ kind: "unknown", id: "deleted-one" });
+    expect(answerOf({ linkedId: "", linkedGone: true }, docs)).toEqual({ kind: "gone" });
+    expect(answerOf({ linkedId: "" }, docs)).toEqual({ kind: "none" });
+  });
+  it("is chosen among published ones only", () => {
+    const all = [{ id: "b", title: "B", status: "active" as const }, { id: "d", title: "Draft", status: "draft" as const }, { id: "r", title: "Retired", status: "deprecated" as const }, { id: "a", title: "A" }];
+    expect(answerChoices(all).map((d) => d.id)).toEqual(["a", "b"]);
+  });
+  it("uses one wording per action", () => {
+    expect(ACTION_LABEL.planned).toBe("Mark as planned");
+    expect(new Set(Object.values(ACTION_LABEL)).size).toBe(Object.keys(ACTION_LABEL).length);
   });
 });

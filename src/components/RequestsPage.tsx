@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, Ban, CalendarClock, Check, ChevronUp, CircleCheck, Lightbulb, Plus, RotateCcw, ShieldCheck, Undo2, Workflow } from "lucide-react";
+import { ArrowUpRight, Ban, CalendarClock, Check, ChevronUp, CircleCheck, Lightbulb, Plus, RotateCcw, ShieldCheck, Trash2, Undo2, Workflow } from "lucide-react";
 import type { Process, Standard, TargetKind } from "../types";
 import { platformName, practiceName, useCatalog } from "../lib/catalog";
 import {
-  filterRequests, REQUEST_FILTERS, requestProblems, similarTitles, STATE_LABEL, stateCounts, TEXT_MAX, TITLE_MAX, toggledVote,
+  ACTION_LABEL, answerChoices, answerOf, filterRequests, REQUEST_FILTERS, requestProblems, similarTitles, STATE_LABEL, stateCounts, TEXT_MAX, TITLE_MAX, toggledVote,
   type DocRequest, type NewRequest, type RequestFilter, type RequestState,
 } from "../lib/requests";
 import { createRequest, go, href, loadRequests, setRequestState, voteRequest, withdrawRequest } from "../lib/store";
+import { useEditor } from "../lib/mode";
+import { usePerms } from "../lib/session";
 import { confirmDialog, Field, LoadError, Loading, Modal, notify } from "./ui";
 import "../requests.css";
 
@@ -63,6 +65,20 @@ export function RequestsPage({ state, kind, processes, standards }: {
     } catch (e) { notify.error("The request could not be withdrawn.", e); }
   };
 
+  // admins only, in any state: gone for good, with its votes
+  const remove = async (r: DocRequest) => {
+    const yes = await confirmDialog({
+      title: "Remove this request?", body: <>“{r.title}” is removed for everyone, together with its {r.votes} {r.votes === 1 ? "vote" : "votes"}. This cannot be undone.</>,
+      confirmLabel: "Remove request", danger: true,
+    });
+    if (!yes) return;
+    try {
+      await withdrawRequest(r.id);
+      setRequests((list) => list && list.filter((x) => x.id !== r.id));
+      notify.info("The request was removed.");
+    } catch (e) { notify.error("The request could not be removed.", e); }
+  };
+
   const reopen = async (r: DocRequest) => {
     try { put(await setRequestState(r.id, { state: "open" })); notify.info(`“${r.title}” is open again.`); } catch (e) { notify.error("The request could not be changed.", e); }
   };
@@ -112,7 +128,7 @@ export function RequestsPage({ state, kind, processes, standards }: {
         <ul className="req-list" aria-label="Requests">
           {shown.map((r) => (
             <RequestItem key={r.id} r={r} processes={processes} standards={standards}
-              onVote={() => vote(r)} onWithdraw={() => withdraw(r)} onReopen={() => reopen(r)} onChange={(to) => setChanging({ request: r, to })} />
+              onVote={() => vote(r)} onWithdraw={() => withdraw(r)} onRemove={() => remove(r)} onReopen={() => reopen(r)} onChange={(to) => setChanging({ request: r, to })} />
           ))}
         </ul>
       )}
@@ -133,12 +149,18 @@ export function RequestsPage({ state, kind, processes, standards }: {
   );
 }
 
-function RequestItem({ r, processes, standards, onVote, onWithdraw, onReopen, onChange }: {
+function RequestItem({ r, processes, standards, onVote, onWithdraw, onRemove, onReopen, onChange }: {
   r: DocRequest; processes: Process[]; standards: Standard[];
-  onVote: () => void; onWithdraw: () => void; onReopen: () => void; onChange: (to: RequestState) => void;
+  onVote: () => void; onWithdraw: () => void; onRemove: () => void; onReopen: () => void; onChange: (to: RequestState) => void;
 }) {
   const { catalog } = useCatalog();
-  const linked = r.linkedId ? (r.kind === "process" ? processes : standards).find((d) => d.id === r.linkedId) : undefined;
+  // Consumer mode shows what a reader sees: moving requests on is part of the Editor view
+  const editor = useEditor();
+  const admin = usePerms().admin;
+  const manage = editor && r.canManage;
+  const withdrawable = r.mine && r.state === "open";
+  const removable = editor && admin && !withdrawable;
+  const answer = r.state === "done" ? answerOf(r, r.kind === "process" ? processes : standards) : null;
   const titleId = `req-${r.id}-title`;
   return (
     <li className={`req-item state-${r.state}`} aria-labelledby={titleId}>
@@ -165,21 +187,25 @@ function RequestItem({ r, processes, standards, onVote, onWithdraw, onReopen, on
         )}
         {r.state === "done" && (
           <p className="req-outcome done"><CircleCheck size={15} aria-hidden="true" /><span><b>Done:</b>{" "}
-            {r.linkedId ? <a className="req-answer" href={docHref(r.kind, r.linkedId)}><KindIcon kind={r.kind} />{linked?.title ?? r.linkedId}<ArrowUpRight size={13} aria-hidden="true" /></a> : "made"}
+            {answer?.kind === "doc" && <a className="req-answer" href={docHref(r.kind, answer.id)}><KindIcon kind={r.kind} />{answer.title}<ArrowUpRight size={13} aria-hidden="true" /></a>}
+            {answer?.kind === "gone" && <span className="req-gone">the {NOUN[r.kind]} that answered it has been removed since.</span>}
+            {answer?.kind === "unknown" && <span className="req-gone">answered by “{answer.id}”, which is not available to you (it may have been removed).</span>}
+            {answer?.kind === "none" && "made"}
             {r.stateNote && <> · {r.stateNote}</>}{r.stateBy && <span className="muted"> · {r.stateBy}{r.stateAt && `, ${day(r.stateAt)}`}</span>}</span></p>
         )}
         {r.state === "declined" && (
           <p className="req-outcome declined"><Ban size={15} aria-hidden="true" /><span><b>Declined</b>{r.stateBy && <> by {r.stateBy}</>}{r.stateAt && <> on {day(r.stateAt)}</>}: {r.stateNote || "no reason given"}</span></p>
         )}
-        {(r.canManage || (r.mine && r.state === "open")) && (
+        {(manage || withdrawable || removable) && (
           <div className="req-actions">
-            {r.canManage && r.state === "open" && <button className="btn small" onClick={() => onChange("planned")}><CalendarClock size={14} />Plan</button>}
-            {r.canManage && (r.state === "open" || r.state === "planned") && <>
-              <button className="btn small" onClick={() => onChange("done")}><Check size={14} />Mark as done</button>
-              <button className="btn small" onClick={() => onChange("declined")}><Ban size={14} />Decline</button>
+            {manage && r.state === "open" && <button className="btn small" onClick={() => onChange("planned")}><CalendarClock size={14} />{ACTION_LABEL.planned}</button>}
+            {manage && (r.state === "open" || r.state === "planned") && <>
+              <button className="btn small" onClick={() => onChange("done")}><Check size={14} />{ACTION_LABEL.done}</button>
+              <button className="btn small" onClick={() => onChange("declined")}><Ban size={14} />{ACTION_LABEL.declined}</button>
             </>}
-            {r.canManage && r.state !== "open" && <button className="btn small ghost" onClick={onReopen}><RotateCcw size={14} />Back to open</button>}
-            {r.mine && r.state === "open" && <button className="btn small ghost danger" onClick={onWithdraw}><Undo2 size={14} />Withdraw</button>}
+            {manage && r.state !== "open" && <button className="btn small ghost" onClick={onReopen}><RotateCcw size={14} />{ACTION_LABEL.open}</button>}
+            {withdrawable && <button className="btn small ghost danger" onClick={onWithdraw}><Undo2 size={14} />{ACTION_LABEL.withdraw}</button>}
+            {removable && <button className="btn small ghost danger" onClick={onRemove} title="Admins only: removes the request for good, with its votes"><Trash2 size={14} />{ACTION_LABEL.remove}</button>}
           </div>
         )}
       </div>
@@ -299,9 +325,10 @@ function StateDialog({ request, to, processes, standards, onClose, onDone }: {
   request: DocRequest; to: RequestState; processes: Process[]; standards: Standard[];
   onClose: () => void; onDone: (r: DocRequest) => void;
 }) {
-  const docs = useMemo(() => [...(request.kind === "process" ? processes : standards)].sort((a, b) => a.title.localeCompare(b.title)), [request.kind, processes, standards]);
+  // only what is published can answer it: the server refuses a draft
+  const docs = useMemo(() => answerChoices<Process | Standard>(request.kind === "process" ? processes : standards), [request.kind, processes, standards]);
   const [note, setNote] = useState(to === "planned" ? request.stateNote : "");
-  const [linked, setLinked] = useState(() => request.linkedId || similarTitles(request.title, docs, 1)[0]?.item.id || "");
+  const [linked, setLinked] = useState(() => (docs.some((d) => d.id === request.linkedId) ? request.linkedId : similarTitles(request.title, docs, 1)[0]?.item.id || ""));
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState("");
   const ok = to === "declined" ? note.trim().length > 0 : to === "done" ? !!linked : true;
@@ -314,7 +341,7 @@ function StateDialog({ request, to, processes, standards, onClose, onDone }: {
       notify.info(to === "done" ? "Marked as done. Everyone sees what answers it." : to === "planned" ? "Marked as planned." : "Declined. Everyone sees the reason.");
     } catch (e) { setRefused(e instanceof Error ? e.message : String(e)); setBusy(false); }
   };
-  const label = { open: "Back to open", planned: "Mark as planned", done: "Mark as done", declined: "Decline request" }[to];
+  const label = ACTION_LABEL[to];
   return (
     <Modal title={label} subtitle={`“${request.title}”`} onClose={onClose}
       footer={<><span className="spacer" /><button className="btn" onClick={onClose}>Cancel</button><button className={`btn primary ${to === "declined" ? "danger" : ""}`} disabled={!ok || busy} onClick={save}>{label}</button></>}>
@@ -327,11 +354,11 @@ function StateDialog({ request, to, processes, standards, onClose, onDone }: {
             </select>
           </Field>
         )}
-        {to === "done" && !docs.length && <p className="muted small">There is no {noun} yet. Create it first, then come back and mark this request as done.</p>}
+        {to === "done" && <p className="muted small">{docs.length ? `Only published ${noun === "process" ? "processes" : "standards"} are offered: a draft cannot answer a request until it is published.` : `There is no published ${noun} yet. Create and publish it first, then come back and mark this request as done.`}</p>}
         <Field label={to === "declined" ? "Why not" : "Note"} hint={to === "declined" ? "required: the person who asked and everyone who voted read it" : "optional, for example when to expect it"}>
           <textarea data-autofocus={to !== "done" ? "" : undefined} rows={3} value={note} maxLength={TEXT_MAX} onChange={(e) => setNote(e.target.value)} />
         </Field>
-        {refused && <LoadError what="The request was not changed." error={refused} />}
+        {refused && <LoadError what={to === "done" ? "The request was not marked as done." : "The request was not changed."} error={refused} />}
       </form>
     </Modal>
   );

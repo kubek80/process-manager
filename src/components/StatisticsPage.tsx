@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Download, ShieldCheck, Workflow } from
 import type { TargetKind } from "../types";
 import { platformName, practiceName, teamName, useCatalog } from "../lib/catalog";
 import {
-  chartScale, csvHref, fillWeeks, firstDir, groupTotals, labelEvery, PERIODS, short, sortRows, weekLabel,
+  chartScale, csvHref, deletedNote, fillWeeks, firstDir, groupTotals, labelEvery, partialWeek, PERIODS, short, sortRows, weekLabel, weekName,
   type GroupBy, type Period, type SortDir, type SortKey, type Statistics, type StatWeek,
 } from "../lib/statistics";
 import { href, loadStatistics } from "../lib/store";
@@ -65,7 +65,10 @@ export function StatisticsSection() {
 
   return (
     <div className="admin-section statistics">
-      <p className="lead small">A view counts once per person per day, however often they open it; the portal counts views but nobody, admins included, can see who viewed what.</p>
+      <div className="lead small stat-about">
+        <p>A view counts once per person per day, however often they open it; the portal counts views but nobody, admins included, can see who viewed what. Views by admins and editors count like everyone else's. A skill download counts once per person per skill per day.</p>
+        <p>A day runs from midnight to midnight UTC, so for people in other time zones the day changes at another hour.</p>
+      </div>
       <div className="stat-toolbar">
         <div className="chips" role="group" aria-label="Period">
           {PERIODS.map((p) => <button key={p.id} className={`chip ${period === p.id ? "on" : ""}`} aria-pressed={period === p.id} onClick={() => choose(p.id)}>{p.label}</button>)}
@@ -77,6 +80,7 @@ export function StatisticsSection() {
       {!stats && !error && <Loading />}
       {stats && <>
         <p className="muted small stat-range">{stats.from ? `From ${stats.from} to ${stats.to}` : `Up to ${stats.to}`}</p>
+        {deletedNote(stats.totals) && <p className="muted small stat-deleted">{deletedNote(stats.totals)}</p>}
         <div className="stat-row stat-totals">
           <div className="stat"><strong>{n(stats.totals.views)}</strong><span>views</span></div>
           <div className="stat"><strong>{n(stats.totals.people)}</strong><span>different people</span></div>
@@ -197,8 +201,8 @@ function TrendChart({ weeks, period }: { weeks: StatWeek[]; period: string }) {
           const h = Math.max(w.views > 0 ? 2 : 0, (w.views / max) * plotH);
           return (
             <g key={w.week}>
-              <rect className="stat-bar" x={x} y={top + plotH - h} width={bar} height={h} rx={Math.min(4, bar / 2)}>
-                <title>{`Week of ${weekLabel(w.week)}: ${w.views} views, ${w.people} people, ${w.downloads} skill downloads`}</title>
+              <rect className={`stat-bar ${partialWeek(w) ? "partial" : ""}`} x={x} y={top + plotH - h} width={bar} height={h} rx={Math.min(4, bar / 2)}>
+                <title>{`${weekName(w)}: ${w.views} views, ${w.people} people, ${w.downloads} skill downloads`}</title>
               </rect>
               {(i % every === 0 || weeks.length === 1) && <text className="stat-axis" x={left + i * slot + slot / 2} y={height - 8} textAnchor="middle">{weekLabel(w.week)}</text>}
             </g>
@@ -206,10 +210,11 @@ function TrendChart({ weeks, period }: { weeks: StatWeek[]; period: string }) {
         })}
         <line className="stat-baseline" x1={left} x2={width - right} y1={top + plotH} y2={top + plotH} />
       </svg>
+      {weeks.some(partialWeek) && <p className="muted small stat-partial-note"><span className="stat-swatch partial" aria-hidden="true" />Lighter bars: weeks only partly inside the period (the first or the last).</p>}
       <table className="stat-sr-only">
         <caption>Views per week</caption>
-        <thead><tr><th>Week starting</th><th>Views</th><th>People</th><th>Skill downloads</th></tr></thead>
-        <tbody>{weeks.map((w) => <tr key={w.week}><td>{w.week}</td><td>{w.views}</td><td>{w.people}</td><td>{w.downloads}</td></tr>)}</tbody>
+        <thead><tr><th>Week</th><th>Views</th><th>People</th><th>Skill downloads</th></tr></thead>
+        <tbody>{weeks.map((w) => <tr key={w.week}><td>{weekName(w)}</td><td>{w.views}</td><td>{w.people}</td><td>{w.downloads}</td></tr>)}</tbody>
       </table>
     </div>
   );

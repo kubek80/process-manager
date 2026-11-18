@@ -7,7 +7,10 @@ export const PERIODS: { id: Period; label: string }[] = [
   { id: "7", label: "7 days" }, { id: "30", label: "30 days" }, { id: "90", label: "90 days" }, { id: "365", label: "A year" }, { id: "all", label: "All time" },
 ];
 
-export interface StatTotals { views: number; people: number; downloads: number; upvotes: number; feedbackOpened: number; feedbackHandled: number; requests: number }
+export interface StatTotals { views: number; people: number; downloads: number; upvotes: number; feedbackOpened: number; feedbackHandled: number; requests: number;
+  /** the part of views and downloads that belongs to processes and standards deleted since (not in the table) */
+  deletedViews?: number; deletedDownloads?: number;
+}
 export interface StatRow {
   kind: TargetKind; id: string; title: string; status: string; owner: string; platform: string; practice: string; category: string;
   /** within the period */
@@ -17,7 +20,13 @@ export interface StatRow {
 }
 export interface StatGroup { id: string; name: string; documents: number; views: number; people: number; downloads: number; upvotes: number; feedbackHandled: number }
 export type GroupBy = "platform" | "practice" | "team";
-export interface StatWeek { week: string; views: number; people: number; downloads: number }
+export interface StatWeek {
+  week: string; views: number; people: number; downloads: number;
+  /** how many days of this week (1-7) are inside the period; an older server leaves it out (a full week) */
+  days?: number;
+}
+/** Whether only part of this week is inside the period. */
+export const partialWeek = (w: StatWeek) => w.days !== undefined && w.days < 7;
 export interface Statistics {
   period: string; from: string; to: string;
   totals: StatTotals;
@@ -48,15 +57,18 @@ export const firstDir = (key: SortKey): SortDir => (key === "title" ? "asc" : "d
 // ---------- totals by platform, practice or team
 
 const NONE = "";
+/** What the documents that belong to no platform, practice or team are called in the totals. */
+export const NONE_LABEL: Record<GroupBy, string> = { platform: "No platform", practice: "No practice", team: "No owning team" };
 
 /**
  * Totals per platform, practice or owning team. The server's groups are used when it sent them
  * (with names from the lists where it left one out); otherwise they are added up from the rows.
- * Documents that belong to none come last, as "None".
+ * Documents that belong to none come last, as "No platform" (practice, owning team); the server
+ * sends them as an entry with an empty id.
  */
 export function groupTotals(stats: Pick<Statistics, "rows" | "groups">, by: GroupBy, catalog: Catalog): StatGroup[] {
   const list = by === "platform" ? catalog.platforms : by === "practice" ? catalog.practices : catalog.teams;
-  const nameOf = (id: string) => (id === NONE ? "None" : (list ?? []).find((x) => x.id === id)?.name ?? id);
+  const nameOf = (id: string) => (list ?? []).find((x) => x.id === id)?.name ?? id;
   let groups = stats.groups?.[by];
   if (!groups) {
     const sum = new Map<string, StatGroup>();
@@ -70,7 +82,7 @@ export function groupTotals(stats: Pick<Statistics, "rows" | "groups">, by: Grou
     }
     groups = [...sum.values()];
   }
-  return groups.map((g) => ({ ...g, name: g.name || nameOf(g.id || NONE) }))
+  return groups.map((g) => ({ ...g, id: g.id || NONE, name: !g.id ? NONE_LABEL[by] : g.name || nameOf(g.id) }))
     .sort((a, b) => Number(!a.id) - Number(!b.id) || b.views - a.views || a.name.localeCompare(b.name));
 }
 
@@ -88,7 +100,7 @@ export function fillWeeks(trend: StatWeek[]): StatWeek[] {
   const end = Date.parse(`${sorted[sorted.length - 1].week}T00:00:00Z`);
   for (let t = Date.parse(`${sorted[0].week}T00:00:00Z`); t <= end && out.length < 600; t += 7 * 86400_000) {
     const week = new Date(t).toISOString().slice(0, 10);
-    out.push(by.get(week) ?? { week, views: 0, people: 0, downloads: 0 });
+    out.push(by.get(week) ?? { week, views: 0, people: 0, downloads: 0, days: 7 });
   }
   return out;
 }
@@ -120,4 +132,20 @@ export function short(n: number): string {
   if (n >= 10_000) return `${Math.round(n / 1000)}k`;
   if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
   return String(n);
+}
+
+/** "Week of 9 Nov", with the number of days when only part of it is inside the period. */
+export function weekName(w: StatWeek): string {
+  return `Week of ${weekLabel(w.week)}${partialWeek(w) ? `, ${w.days} ${w.days === 1 ? "day" : "days"}` : ""}`;
+}
+
+/**
+ * The calm sentence that explains why the totals are higher than the table: views and downloads
+ * of processes and standards that were deleted since. Empty when there are none.
+ */
+export function deletedNote(t: Pick<StatTotals, "deletedViews" | "deletedDownloads">): string {
+  const v = t.deletedViews ?? 0, d = t.deletedDownloads ?? 0;
+  if (!v && !d) return "";
+  const parts = [v ? `${v.toLocaleString("en-GB")} ${v === 1 ? "view" : "views"}` : "", d ? `${d.toLocaleString("en-GB")} skill ${d === 1 ? "download" : "downloads"}` : ""].filter(Boolean);
+  return `The totals include ${parts.join(" and ")} of processes and standards that were deleted since; the table below shows only those that still exist.`;
 }

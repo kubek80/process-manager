@@ -195,7 +195,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onSave, 
           </div>
         </div>
         {renderable && <DocEngagement kind="process" id={process.id} title={draft.title} summary={draft.summary}
-          open={openCount(feedback)} handled={feedback.length - openCount(feedback)}
+          open={openCount(feedback)} resolvedHere={feedback.length - openCount(feedback)}
           onFeedback={() => { setFocusFeedback(true); go({ page: "process", id: process.id, tab: "feedback" }); }} />}
       </div>
 

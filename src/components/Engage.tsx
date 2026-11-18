@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { useMe } from "../lib/session";
 import { Bookmark, BookmarkCheck, CircleCheck, Download, Eye, Flag, MessageSquarePlus, Share2, ThumbsUp } from "lucide-react";
 import type { TargetKind } from "../types";
@@ -11,10 +11,13 @@ import "../detail.css";
 const stop = (e: MouseEvent) => { e.preventDefault(); e.stopPropagation(); };
 
 /** The name a screen reader announces and a test can find, e.g. "Bookmark Request a GCP project". */
-export const bookmarkLabel = (title: string, on: boolean) => (on ? `Remove bookmark from ${title}` : `Bookmark ${title}`);
-/** e.g. "Upvote Request a GCP project (12)" or "Take back your upvote of Request a GCP project (12)". */
-export const upvoteLabel = (title: string, on: boolean, count: number) =>
-  `${on ? "Take back your upvote of" : "Upvote"} ${title || "this"} (${count})`;
+export const bookmarkLabel = (title: string, on: boolean | undefined) => (on ? `Remove bookmark from ${title}` : `Bookmark ${title}`);
+/**
+ * e.g. "Upvote Request a GCP project (12)" or "Take back your upvote of Request a GCP project (12)";
+ * without the number while it is not known.
+ */
+export const upvoteLabel = (title: string, on: boolean | undefined, count?: number) =>
+  `${on ? "Take back your upvote of" : "Upvote"} ${title || "this"}${count === undefined ? "" : ` (${count})`}`;
 
 interface Props {
   kind: TargetKind;
@@ -26,15 +29,20 @@ interface Props {
   className?: string;
 }
 
+// While it is not known whether something is bookmarked or upvoted (the numbers are still loading,
+// or could not be loaded) the buttons show no state and no number; a click still works, and adds.
+const unknownHint = (failed: boolean) => (failed ? "Your bookmarks and upvotes could not be loaded right now." : "Loading…");
+
 export function BookmarkButton({ kind, id, title = "", size = "card", className = "" }: Props) {
   const eng = useEngagement();
-  const on = eng.isBookmarked(kind, id);
+  const on = eng.bookmarkState(kind, id);
   const Icon = on ? BookmarkCheck : Bookmark;
   return (
-    <button type="button" className={`engage-btn bookmark-btn engage-${size} ${on ? "on" : ""} ${className}`.trim()} aria-pressed={on}
-      aria-label={bookmarkLabel(title || "this", on)} title={on ? "Bookmarked: click to remove" : "Bookmark: find it again under Bookmarks"}
+    <button type="button" className={`engage-btn bookmark-btn engage-${size} ${on ? "on" : ""} ${on === undefined ? "unknown" : ""} ${className}`.replace(/\s+/g, " ").trim()}
+      aria-pressed={on} aria-label={bookmarkLabel(title || "this", on)}
+      title={on === undefined ? `${unknownHint(eng.failed)} Click to bookmark.` : on ? "Bookmarked: click to remove" : "Bookmark: find it again under Bookmarks"}
       onClick={(e) => { stop(e); void eng.toggleBookmark(kind, id); }}>
-      <Icon size={size === "page" ? 15 : 16} aria-hidden="true" fill={on ? "currentColor" : "none"} />
+      <Icon size={15} aria-hidden="true" fill={on ? "currentColor" : "none"} />
       {size === "page" && <span>{on ? "Bookmarked" : "Bookmark"}</span>}
     </button>
   );
@@ -42,14 +50,16 @@ export function BookmarkButton({ kind, id, title = "", size = "card", className 
 
 export function UpvoteButton({ kind, id, title = "", size = "card", className = "" }: Props) {
   const eng = useEngagement();
-  const on = eng.hasUpvoted(kind, id);
-  const count = eng.countsOf(kind, id).upvotes;
+  const on = eng.upvoteState(kind, id);
+  const count = eng.upvotesOf(kind, id);
   return (
-    <button type="button" className={`engage-btn upvote-btn engage-${size} ${on ? "on" : ""} ${className}`.trim()} aria-pressed={on}
-      aria-label={upvoteLabel(title, on, count)} title={on ? "You found this useful: click to take it back" : "Upvote: this is useful"}
+    <button type="button" className={`engage-btn upvote-btn engage-${size} ${on ? "on" : ""} ${on === undefined ? "unknown" : ""} ${className}`.replace(/\s+/g, " ").trim()}
+      aria-pressed={on} aria-label={upvoteLabel(title, on, count)}
+      title={on === undefined ? `${unknownHint(eng.failed)} Click to upvote.` : on ? "You found this useful: click to take it back" : "Upvote: this is useful"}
       onClick={(e) => { stop(e); void eng.toggleUpvote(kind, id); }}>
       <ThumbsUp size={15} aria-hidden="true" fill={on ? "currentColor" : "none"} />
-      <span className="engage-count">{count}</span>{size === "page" && <span className="engage-word">{count === 1 ? "upvote" : "upvotes"}</span>}
+      {count !== undefined && <span className="engage-count">{count}</span>}
+      {size === "page" && <>{count !== undefined && " "}<span className="engage-word">{count === undefined ? "Upvote" : count === 1 ? "upvote" : "upvotes"}</span></>}
     </button>
   );
 }
@@ -57,46 +67,57 @@ export function UpvoteButton({ kind, id, title = "", size = "card", className = 
 const times = (n: number) => (n === 1 ? "once" : `${n.toLocaleString("en-GB")} times`);
 const people = (n: number) => `${n.toLocaleString("en-GB")} ${n === 1 ? "person" : "people"}`;
 
-/** The numbers of a process or standard, in words for everyone; empty parts are left out or said plainly. */
-export function engagementLines(c: Counts, open: number, handled: number): string[] {
+/** The numbers of a process or standard, in words for everyone. `handled` is left out while it is not known. */
+export function engagementLines(c: Counts, open: number, handled?: number): string[] {
   const lines: string[] = [];
   lines.push(c.views ? `Viewed ${times(c.views)} by ${people(Math.max(1, c.people))}` : "Not viewed yet");
   lines.push(c.downloads ? `Skill downloaded ${times(c.downloads)}` : "Skill not downloaded yet");
   lines.push(open ? `${open} ${open === 1 ? "piece" : "pieces"} of feedback open` : "No feedback open");
-  lines.push(`${handled} ${handled === 1 ? "piece" : "pieces"} of feedback handled`);
+  if (handled !== undefined) lines.push(`${handled} ${handled === 1 ? "piece" : "pieces"} of feedback handled`);
   return lines;
 }
 
 /**
- * Near the top of a process or standard page: how much it is used, the feedback, and what a
- * reader can do - give feedback, upvote, bookmark, share.
+ * Near the top of a process or standard page, in one line: how much it is used, the feedback,
+ * and what a reader can do - give feedback, upvote, bookmark, share.
+ *
+ * "Handled" is the server's count (feedback marked as fixed that still exists), the same number
+ * the cards and the statistics show. `resolvedHere` is what the feedback on this page says; when it
+ * changes (marked as fixed, reopened, deleted) the numbers are fetched again, so they cannot drift.
  */
-export function DocEngagement({ kind, id, title, summary, open, handled, onFeedback }: {
+export function DocEngagement({ kind, id, title, summary, open, resolvedHere, onFeedback }: {
   kind: TargetKind; id: string; title: string; summary?: string;
-  /** Open and handled feedback, from the feedback the page shows. */
-  open: number; handled: number;
+  /** Open feedback, from the feedback the page shows. */
+  open: number;
+  /** Feedback marked as fixed, from the feedback the page shows. */
+  resolvedHere: number;
   onFeedback: () => void;
 }) {
   const eng = useEngagement();
   const [sharing, setSharing] = useState(false);
   const c = eng.countsOf(kind, id);
-  const [views, downloads, openLine, handledLine] = engagementLines(c, open, handled);
   const signedIn = useMe().authenticated;
   // counted once per page load and person (the server counts once a day); not on every tab or render
   useEffect(() => { if (signedIn) eng.recordView(kind, id); }, [kind, id, signedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+  const first = useRef(true);
+  useEffect(() => { if (first.current) { first.current = false; return; } eng.reload(); }, [resolvedHere]); // eslint-disable-line react-hooks/exhaustive-deps
+  const openLine = open ? `${open} ${open === 1 ? "piece" : "pieces"} of feedback open` : "No feedback open";
+  const [views, downloads, , handledLine] = engagementLines(c, open, c.handled);
   return (
     <div className="doc-engage" aria-label="Use and feedback" role="group">
-      <ul className="engage-stats">
-        <li><Eye size={14} aria-hidden="true" />{views}</li>
-        <li><Download size={14} aria-hidden="true" />{downloads}</li>
+      <ul className="engage-stats" aria-busy={!eng.ready}>
+        {eng.known ? <>
+          <li><Eye size={14} aria-hidden="true" />{views}</li>
+          <li><Download size={14} aria-hidden="true" />{downloads}</li>
+        </> : <li className="engage-unknown">{eng.failed ? "The numbers are not available right now." : <span aria-label="Loading the numbers">–</span>}</li>}
         <li className={open ? "engage-open has" : "engage-open"}><Flag size={14} aria-hidden="true" />{openLine}</li>
-        <li><CircleCheck size={14} aria-hidden="true" />{handledLine}</li>
+        {eng.known && <li className="engage-handled"><CircleCheck size={14} aria-hidden="true" />{handledLine}</li>}
       </ul>
       <div className="engage-actions">
-        <button type="button" className="btn accent-soft give-feedback" onClick={onFeedback}><MessageSquarePlus size={16} />Give feedback</button>
+        <button type="button" className="btn small accent-soft give-feedback" onClick={onFeedback}><MessageSquarePlus size={15} />Give feedback</button>
         <UpvoteButton kind={kind} id={id} title={title} size="page" />
         <BookmarkButton kind={kind} id={id} title={title} size="page" />
-        <button type="button" className="btn share-btn" onClick={() => setSharing(true)} aria-haspopup="dialog"><Share2 size={16} />Share</button>
+        <button type="button" className="btn small share-btn" onClick={() => setSharing(true)} aria-haspopup="dialog"><Share2 size={15} />Share</button>
       </div>
       {sharing && <ShareDialog info={{ kind, id, title, summary }} onClose={() => setSharing(false)} />}
     </div>

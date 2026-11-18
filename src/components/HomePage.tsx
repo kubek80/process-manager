@@ -9,7 +9,7 @@ import { search, type FilterKey, type Result } from "../lib/search";
 import { SearchBox } from "./SearchPage";
 import { DocCard } from "./DocCard";
 import { openCount } from "./Feedback";
-import { AskForIt } from "./Lists";
+import { AskForIt, engagementKnown } from "./Lists";
 import "../search.css";
 
 /** How many bookmarks Home shows before "Show all". */
@@ -40,6 +40,7 @@ export function HomePage({ processes, standards, feedback }: {
     const byKey = new Map<string, Result>(out.results.map((r) => [`${r.kind}:${r.doc.id}`, r]));
     return sortBookmarks(eng.bookmarks).map((b) => byKey.get(`${b.kind}:${b.id}`)).filter((r): r is Result => !!r);
   }, [eng.bookmarks, out]);
+  const known = engagementKnown(eng); // until the bookmarks are known, the section stays away
   const [allMarked, setAllMarked] = useState(false);
 
   return (
@@ -67,7 +68,7 @@ export function HomePage({ processes, standards, feedback }: {
 
       <AskForIt className="home-ask" />
 
-      {marked.length > 0 && (
+      {known && marked.length > 0 && (
         <section className="home-bookmarks" aria-labelledby="home-bookmarks">
           <h2 id="home-bookmarks">Your bookmarks</h2>
           <ol className="cards">
