@@ -45,7 +45,7 @@ It needs something the server does not have yet: access for machines (tokens tie
 
 ## Measuring use by agents
 
-Today the portal counts **skill downloads** as the use by AI assistants: every download of a skill or review agent from the portal, and every skill written by `npm run export`, counts one for its process or standard. The count is shown on each process and standard and in Admin › Statistics. It says how often a skill was fetched, not how often an assistant followed it afterwards.
+Today the portal counts **skill downloads** as the use by AI assistants: a download of a skill or review agent from the portal counts one for its process or standard, at most once per person, skill and day, and every run of `npm run export` counts one per skill it writes. The count is shown on each process and standard and in Admin › Statistics. It says how often a skill was fetched, not how often an assistant followed it afterwards.
 
 With the MCP server (planned, not built) every tool call names the process or standard it is about, so the portal could count what agents actually look up and follow, next to the views of people. Nothing of this is counted yet.
 

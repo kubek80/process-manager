@@ -42,7 +42,7 @@ Open http://localhost:5173 and pick who to be:
 
 | Command | Does |
 | --- | --- |
-| `npm run db:reset` | Empties the feedback and adds the sample feedback again (views, bookmarks, upvotes, downloads and requests stay) |
+| `npm run db:reset` | Empties the feedback, views, bookmarks, upvotes, skill downloads and requests, and adds all the samples again |
 | `npm run db:import` | Loads the files of the repository over what is in the database |
 | `npm run db:demo` | Loads a larger demo set (`demo/`: 15 more processes and 9 more standards, more teams, platforms and practices) the same way, to try search, filters and My responsibilities. Its lists replace the stored ones; `db:import` afterwards puts back the smaller sample lists |
 | `npm run db:migrate` | Upgrades the database and its content to this version, says what it did and exits |
@@ -66,8 +66,8 @@ React + Vite frontend; Go server; Postgres. Everything people change lives in th
 | **Life-cycle** | Draft (hidden from readers), active, retired; periodic reviews by the owner |
 | **Versions** | Every save is a version with who, when and a note; what changed between versions in plain words; restore; undo while editing; a warning before unsaved changes are left; a decision when somebody else saved first |
 | **Feedback** | On a step (straight from the map) or a requirement, or “Give feedback” on the whole; “I hit this too”, closed by the owner, flagged when the text changed since; open and handled shown on every page |
-| **Bookmarks, upvotes, sharing** | Bookmarks per person, kept on the server; one upvote per person; views (once per person per day) and skill downloads shown on every process and standard; Share copies a link or a message for Slack or Google Chat, or opens an e-mail |
-| **Requests** | `#/requests`: ask for a missing process or standard, vote; open, planned, done (linked to what answers it) or declined with a reason |
+| **Bookmarks, upvotes, sharing** | Bookmarks per person, kept on the server; one upvote per person; views and skill downloads (each once per person per day) shown on every process and standard; Share copies a link or a message for Slack or Google Chat, or opens an e-mail |
+| **Requests** | `#/requests`: ask for a missing process or standard, vote; open, planned, done (linked to the published process or standard that answers it) or declined with a reason; withdrawn by the requester while open, removed by an admin |
 | **My responsibilities** | For owners: reviews to do, feedback waiting, drafts, and everything of their teams, platforms and practices, on one page with a count in the top bar |
 | **Skills** | Generated per process and per standard, versioned automatically, with optional hand-written guidance |
 | **Admin panel** | Roles, the lists (teams, practices and platforms with their members, categories, tools, tiers, environments, languages), the skills registry, health, activity, statistics (`#/admin/statistics`: use per process and standard and per platform, practice and team, per period, as CSV) |
@@ -117,7 +117,7 @@ npm run test:all
 | --- | --- |
 | `npm test` | Frontend logic (Vitest): both checkers, editing helpers, undo and the rules for saving, comparing versions, layout, life-cycle, search, pages and cards, sharing, requests, statistics, prompts, rights and members, and that every sample file and the demo set are valid |
 | `npm run test:server` | Go server against a real Postgres: sign-in incl. a fake OpenID Connect provider, roles, content with versions and concurrent saves, skill generators, feedback, views, bookmarks, upvotes, requests, statistics, admin, start-up and shutdown |
-| `npm run test:e2e` | Playwright against the real server and database: consumer and editor journeys for processes and standards, versions and two people editing at once, feedback, the Admin panel, skills, AI import |
+| `npm run test:e2e` | Playwright against the real server and database: consumer and editor journeys for processes and standards, versions and two people editing at once, feedback, the Admin panel, skills, AI import, the list filters, cards and pages, the map, views, upvotes, bookmarks and sharing, requests, statistics |
 | `npm run typecheck`, `npm run validate` | Types; the sample files (or an exported folder) against the schemas and rules |
 
 The end-to-end tests use their own database, emptied at the start of every run. CI runs all of this (`.github/workflows/ci.yml`).

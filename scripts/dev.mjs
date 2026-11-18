@@ -4,7 +4,7 @@
  *   2. the Go server, rebuilt and restarted when a .go file changes
  *   3. Vite, serving the app with hot reload and forwarding /api and /auth to the server
  *
- * `npm run db:reset` (this script with --reset) empties the feedback tables and adds the samples again.
+ * `npm run db:reset` (this script with --reset) empties the feedback, views, bookmarks, upvotes, skill downloads and requests, and adds all the samples again.
  * `npm run db:import` loads the files of the repository over what is in the database;
  * `npm run db:demo` (--import demo) loads the larger demo set in demo/ the same way.
  * `npm run db:migrate` upgrades the database and its content to this version, then exits.

@@ -129,8 +129,8 @@ export const requestFlow = flow("guide-request", "Ask for a missing process or s
     s("ask", "Ask for what is missing", "me", "form", ["vote"], "name, what and why"),
     s("vote", "Vote for it", "others", "task", ["decide"], "one vote each"),
     s("decide", "Will it be made?", "maker", "decision", [["plan", "Yes"], ["decline", "No"]]),
-    s("plan", "Mark it as planned", "maker", "task", ["make"], "with a note"),
-    s("decline", "Decline it with the reason", "maker", "communication", []),
-    s("make", "Write it, then mark as done", "maker", "document", ["open"], "linked to the request"),
+    s("plan", "Mark as planned", "maker", "task", ["make"], "with a note"),
+    s("decline", "Decline request, with the reason", "maker", "communication", []),
+    s("make", "Publish it, then mark as done", "maker", "document", ["open"], "linked to the request"),
     s("open", "Open what answers it", "me", "task", []),
   ]);
