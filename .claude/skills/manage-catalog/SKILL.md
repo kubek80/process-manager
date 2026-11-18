@@ -46,12 +46,16 @@ A tool or a language may name a square icon: `"icon"` is the SHA-256 of the imag
 
 To add one by hand:
 
-1. Use a square PNG, JPEG, WebP or SVG of at most 64 KB (a bitmap at most 512 × 512). An SVG may only draw: no scripts, event handlers, `foreignObject`, links to other files, `data:` or `javascript:` values, animation or DOCTYPE (`server/internal/icons/svg.go` is the allow-list). Keep it small and give it a square `viewBox`.
+1. Use a square PNG, JPEG, WebP or SVG of at most 64 KB; a bitmap at most 512 × 512 and not animated. An SVG must be a plain drawing (`server/internal/icons/svg.go` is the allow-list):
+   - only the elements `svg`, `g`, `defs`, `title`, `desc`, `style`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`, `polygon`, `text`, `tspan`, `linearGradient`, `radialGradient`, `stop`, `clipPath`, `mask`;
+   - no `<use>`, `<symbol>`, `<pattern>`, `<marker>`, `<textPath>`, filters, images, links, scripts, event handlers, `foreignObject`, animation, DOCTYPE or editor metadata (Inkscape / Illustrator namespaces: export as "plain SVG" and strip them);
+   - no `href` or `xlink:href` on any element; `url(#id)` only to an id in the same file; no `data:` or `javascript:` values, no `@import` in styles;
+   - square by its `viewBox` (or `width`/`height`), numbers above 0 and at most 100000; at most 2000 elements and 32 levels deep.
 2. Compute its id and name the file by it: `sha256sum logo.svg` → `cp logo.svg catalog/icons/<id>.svg` (`.jpg` for JPEG).
 3. Set `"icon": "<id>"` on the entry in `catalog/catalog.json`, and the same in `demo/catalog/catalog.json` with a copy of the file in `demo/catalog/icons/`.
 4. Changing the image changes its id: rename the file and update `"icon"`; remove a file nothing names any more.
 
-`npm run validate` checks only the form of the id. The server checks the files when it imports them: a file whose name does not match its content, or that fails the checks, is skipped with a warning, and the entry is shown without an icon. The Go test `server/cmd/server/icons_test.go` imports the sample icons, so run `npm run test:server` after adding one.
+`npm run validate` checks only the form of the id. The server checks the files when it imports them: a file whose name does not match its content, that fails the checks, or that is a link rather than an ordinary file, is skipped with a warning, and the entry is shown without an icon. The Go test `server/cmd/server/icons_test.go` imports the sample icons, so run `npm run test:server` after adding one.
 
 ## Rules
 

@@ -106,12 +106,11 @@ test("edit a step in its fields; the checker blocks publishing until it is right
   await page.locator(".eb-status.bad").click();
   await expect(page.getByRole("dialog", { name: "What the checker found" })).toContainText("a decision needs at least two outgoing paths");
   await page.keyboard.press("Escape");
-  // Publish… says why it cannot publish
+  // Publish… says why it cannot publish, instead of opening
+  await expect(page.locator(".edit-bar").getByRole("button", { name: "Publish…" })).toHaveClass(/\bunavailable\b/);
   await page.locator(".edit-bar").getByRole("button", { name: "Publish…" }).click();
-  const dialog = page.getByRole("dialog", { name: "Publish your changes" });
-  await expect(dialog.getByRole("alert")).toContainText("Fix the problem the checker found first.");
-  await expect(dialog.getByRole("button", { name: "Publish", exact: true })).toBeDisabled();
-  await dialog.getByRole("button", { name: "Not yet" }).click();
+  await expect(page.getByRole("dialog", { name: "Publish your changes" })).toHaveCount(0);
+  await expect(page.locator("#edit-notice.bad")).toContainText("Publishing waits until the problem is fixed. First: ");
 
   await panel.locator(".type-opt", { hasText: "Check the result" }).click();
   await expect(page.locator(".eb-status.bad")).toHaveCount(0);
@@ -215,7 +214,7 @@ test("the JSON editor marks problems on the line and applies valid edits", async
   await expect(page.locator(".cm-lintRange-error")).toHaveText('"nobody"');
   expect(await page.evaluate(() => getSelection()?.toString())).toBe('"nobody"');
   // while the JSON has problems, nothing can be saved or published
-  await expect(page.locator(".edit-bar").getByRole("button", { name: "Publish…" })).toBeDisabled();
+  await expect(page.locator(".edit-bar").getByRole("button", { name: "Publish…" })).toHaveClass(/\bunavailable\b/);
 
   await replaceAll(original.replace('"title": "Request an Azure landing zone",', '"title": "Request an Azure landing zone"'));
   await expect(page.locator(".json-side .check.bad")).toContainText("Not valid JSON yet");

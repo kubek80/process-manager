@@ -521,7 +521,7 @@ function PublishConflict({ kind, id, c, base, onMine, onTheirs, onClose }: {
       footer={<>
         <button className="btn" onClick={onClose}>Keep editing</button>
         <span className="spacer" />
-        <button className="btn" disabled={busy} onClick={run(onTheirs)} title="Your draft is set aside; Undo brings your changes back.">Continue from theirs</button>
+        <button className="btn" disabled={busy} onClick={run(onTheirs)} title="Their version goes into the editor, not saved yet; Undo brings your changes back.">Continue from theirs</button>
         <button className="btn primary danger" disabled={busy} onClick={run(onMine)} title="Your version becomes the newest. Theirs stays in the list of versions.">Publish mine over theirs</button>
       </>}>
       <p>Nothing was published and nothing was overwritten. Your changes are still in the draft.</p>

@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test";
 import {
-  ALEX, CSRF, DANA, SAM, answer, discardWorkingDraft, editState, fields, meaningReady, more, open, openEditor, outline, publish, readProcess,
+  ALEX, CSRF, DANA, RILEY, SAM, answer, discardWorkingDraft, editState, fields, meaningReady, more, open, openEditor, outline, publish, readProcess,
   readSkill, readWorkingDraft, saveDraft, signIn,
 } from "./helpers";
 
@@ -127,7 +127,7 @@ test("unpublished changes: saved as a draft only editors see, published with a n
   await open(r, "/search?q=quokka");
   await expect(r.locator(".search-empty h2")).toHaveText("Nothing found");
   await r.waitForTimeout(1000); // the index would have had the time to follow, if it followed drafts
-  expect(await meaningText(r, "quokka repository")).not.toContain("quokka");
+  expect(await meaningText(r, "Ask for the quokka repository")).not.toContain("quokka");
   const history = await (await r.request.get(`/api/processes/${id}/history`)).json().catch(() => null);
   if (history) expect(JSON.stringify(history)).not.toContain("quokka");
   expect((await readSkill(r, `process-${id}`)).content).not.toContain("quokka");
@@ -154,7 +154,7 @@ test("unpublished changes: saved as a draft only editors see, published with a n
   await r.keyboard.press("Escape");
   await open(r, "/search?q=quokka");
   await expect(r.locator(`li.card[data-id="${id}"]`)).toBeVisible();
-  await expect.poll(() => meaningText(r, "quokka repository"), { timeout: 15_000 }).toContain("Ask for the quokka repository");
+  await expect.poll(() => meaningText(r, "Ask for the quokka repository"), { timeout: 15_000 }).toContain("Ask for the quokka repository");
   expect((await readSkill(r, `process-${id}`)).content).toContain("Ask for the quokka repository");
   // and the editors' marks are gone
   await open(page, "/processes");
@@ -178,23 +178,32 @@ test("an unfinished draft can be saved, but not published: the reason is given a
   await saveDraft(page);
   expect((await readWorkingDraft(page, "process", id))!.doc.steps[1].type).toBe("decision");
   expect((await readProcess(page, id))!.steps[1].type).not.toBe("decision");
-  // publishing is not, with the reason
-  await bar(page).getByRole("button", { name: "Publish…" }).click();
-  const dialog = page.getByRole("dialog", { name: "Publish your changes" });
-  await expect(dialog.getByRole("alert")).toHaveText("Fix the problem the checker found first.");
-  await expect(dialog.getByRole("button", { name: "Publish", exact: true })).toBeDisabled();
-  await expect(dialog).not.toContainText("Readers see it as soon as you publish.");
-  await dialog.getByRole("button", { name: "Not yet" }).click();
+  // publishing is not: it looks unavailable, the line under the bar says why, and pressing it says so again
+  const publishButton = bar(page).getByRole("button", { name: "Publish…" });
+  await expect(publishButton).toHaveClass(/\bunavailable\b/);
+  await expect(page.locator("#edit-notice.warn")).toContainText(/^Publishing waits until the (problem is|\d+ problems are) fixed\. First: /);
+  await outline(page, "About");
+  await publishButton.click();
+  await expect(page.getByRole("dialog", { name: "Publish your changes" })).toHaveCount(0);
+  const alert = page.locator("#edit-notice.bad");
+  await expect(alert).toHaveAttribute("role", "alert");
+  await expect(alert).toContainText("Publishing waits until");
+  // and the first problem is selected
+  await expect(nav.locator('[aria-current="true"]')).toContainText((await readProcess(page, id))!.steps[1].title);
+  await alert.getByRole("button", { name: "Close this message" }).click();
+  await expect(page.locator("#edit-notice.warn")).toBeVisible(); // the reason stays in view
   // the server refuses it as well
   const w = (await readWorkingDraft(page, "process", id))!;
   const refused = await page.request.post(`/api/processes/${id}/publish?rev=${w.revision}`, { headers: CSRF });
   expect(refused.status()).toBe(400);
   expect((await readProcess(page, id))!.steps[1].type).not.toBe("decision");
-  // the checker's list leads to the place
+  // the checker's list leads to the place, and says what must be fixed before publishing
   await outline(page, "About");
   await bar(page).locator(".eb-status.bad").click();
-  await page.getByRole("dialog", { name: "What the checker found" }).getByRole("button").first().click();
+  const found = page.getByRole("dialog", { name: "What the checker found" });
+  await found.getByRole("button").first().click();
   await expect(nav.locator('[aria-current="true"]')).toContainText((await readProcess(page, id))!.steps[1].title);
+  await expect(fields(page).locator(".item-issues.bad")).toContainText(/to fix before publishing/);
 });
 
 test("Discard changes goes back to the saved draft and can be undone; Discard draft… asks and leaves readers as they were", async ({ page, request }) => {
@@ -480,6 +489,7 @@ test.describe("two people", () => {
     /** Dana changes the summary and publishes it, as version `v`. */
     const danaPublishes = async (summary: string) => {
       await openEditor(d, "process", id);
+      await d.reload(); // what she starts from is what is published now
       await outline(d, "About");
       await fields(d).getByLabel(/^Summary/).fill(summary);
       await publish(d, "Dana's change");
@@ -552,5 +562,127 @@ test.describe("two people", () => {
     const now = (await readProcess(page, id))!;
     expect(stepTitle(now)).toBe("Changed while it was reviewed");
     expect(now.review.reviewedBy).toBe("Casey Owner");
+  });
+});
+
+test.describe("more of the editing screen", () => {
+  test("the draft published by somebody else while I edit: mine starts a new draft on my version, and Publish asks", async ({ page, browser, request }) => {
+    const id = `${PREFIX}published-under`;
+    await copyOf(request, id, "Editing demo published under me");
+    await signIn(page, ALEX);
+    await openEditor(page, "process", id, STEP);
+    await fields(page).getByLabel(/^What happens/).fill("Alex's part");
+    await saveDraft(page);
+    await fields(page).getByLabel(/^What happens/).fill("Alex's further part");
+
+    // Dana publishes the shared draft, with a summary of her own
+    const dana = await second(browser, DANA);
+    await openEditor(dana.page, "process", id);
+    await outline(dana.page, "About");
+    await fields(dana.page).getByLabel(/^Summary/).fill("Dana published this.");
+    await publish(dana.page);
+    await dana.close();
+
+    await bar(page).getByRole("button", { name: "Save draft" }).click();
+    await page.getByRole("dialog", { name: "The unpublished changes are gone" }).getByRole("button", { name: "Save mine as a new draft" }).click();
+    await expect(editState(page)).toHaveAttribute("aria-label", "Unpublished changes. Readers still see version 2.");
+    // the new draft is on the version his work came from, and the screen says so truthfully
+    expect((await readWorkingDraft(page, "process", id))!.base).toBe(1);
+    await expect(page.locator(".banner", { hasText: "Version 2 was published after these changes were started from version 1." })).toBeVisible();
+    // publishing it does not silently undo what Dana published
+    await bar(page).getByRole("button", { name: "Publish…" }).click();
+    await page.getByRole("dialog", { name: "Publish your changes" }).getByRole("button", { name: "Publish", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Somebody else published first" })).toBeVisible();
+    expect((await readProcess(page, id))!.summary).toBe("Dana published this.");
+  });
+
+  test("the same person in two windows is told it was them", async ({ page, browser, request }) => {
+    const id = `${PREFIX}two-windows`;
+    await copyOf(request, id, "Editing demo two windows");
+    await signIn(page, ALEX);
+    const other = await second(browser, ALEX);
+    await openEditor(page, "process", id, STEP);
+    await openEditor(other.page, "process", id, STEP);
+    await fields(other.page).getByLabel(/^What happens/).fill("From the other window");
+    await saveDraft(other.page);
+    await fields(page).getByLabel(/^What happens/).fill("From this window");
+    await bar(page).getByRole("button", { name: "Save draft" }).click();
+    const dialog = page.getByRole("dialog", { name: "You saved the draft in another window first" });
+    await expect(dialog).toContainText("in another window or tab");
+    await expect(page.getByRole("dialog", { name: "Somebody else saved the draft first" })).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Save mine over theirs" }).click();
+    expect(stepTitle((await readWorkingDraft(page, "process", id))!.doc)).toBe("From this window");
+    await other.close();
+  });
+
+  test("a blank standard must have its example text replaced before it is published; Save draft says why it cannot save", async ({ page }) => {
+    await signIn(page, RILEY);
+    await open(page, "/standards");
+    await page.getByRole("button", { name: "Blank standard" }).click();
+    const named = page.getByRole("dialog", { name: "New standard" });
+    await named.getByLabel("Name of the standard").fill("Editing demo standard");
+    await named.getByRole("button", { name: "Create standard" }).click();
+    await expect(page).toHaveURL(/#\/s\/editing-demo-standard\/edit/);
+    await expect(bar(page).locator(".eb-status.bad")).toHaveText(/^\d+ problems?$/);
+    await page.locator(".eb-status.bad").click();
+    await expect(page.getByRole("dialog", { name: "What the checker found" })).toContainText("example text");
+    await page.keyboard.press("Escape");
+    const publishButton = bar(page).getByRole("button", { name: "Publish…" });
+    await expect(publishButton).toHaveClass(/\bunavailable\b/);
+    await publishButton.click();
+    await expect(page.getByRole("dialog", { name: "Publish this standard" })).toHaveCount(0);
+    await expect(page.locator("#edit-notice.bad")).toContainText("Publishing waits until");
+    // a checker error that is not example text stops a never-published draft from being saved, with the reason
+    await outline(page, "About");
+    await fields(page).getByRole("textbox", { name: /^Name/ }).fill("");
+    await bar(page).getByRole("button", { name: "Save draft" }).click();
+    const notice = page.locator("#edit-notice.bad");
+    await expect(notice).toContainText("This draft cannot be saved yet: a standard that was never published is only saved when the checker finds no problems.");
+    await notice.getByRole("button", { name: "Show it" }).click();
+    await fields(page).getByRole("textbox", { name: /^Name/ }).fill("Editing demo standard");
+    await more(page, "Delete…");
+    await answer(page, "Delete this standard?", "Delete standard");
+    await expect(page.getByRole("heading", { name: "What must I meet?" })).toBeVisible();
+  });
+
+  test("the JSON with problems is not dropped by “Back to the editor” without asking", async ({ page, request }) => {
+    const id = `${PREFIX}json`;
+    await copyOf(request, id, "Editing demo json");
+    await signIn(page, ALEX);
+    await openEditor(page, "process", id);
+    await more(page, "JSON");
+    const editor = page.locator(".cm-content");
+    await expect(editor).toContainText('"schemaVersion"');
+    await editor.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.insertText("{ not json");
+    await expect(page.locator(".json-side .check.bad")).toBeVisible();
+    await expect(editState(page)).toHaveAttribute("aria-label", /Changes not saved yet\.$/);
+    await page.getByRole("button", { name: "Back to the editor" }).first().click();
+    await answer(page, "Leave the JSON without its changes?", "Stay");
+    await expect(editor).toContainText("{ not json");
+    await page.getByRole("button", { name: "Back to the editor" }).first().click();
+    await answer(page, "Leave the JSON without its changes?", "Leave without them");
+    await expect(page.locator(".edit-preview .block").first()).toBeVisible();
+    await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 1.");
+  });
+
+  test("a step selected in the outline is brought into view on the map", async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await signIn(page, ALEX);
+    await openEditor(page, "process", "request-gcp-project");
+    const scroller = page.locator(".edit-preview .flow-scroll");
+    await expect(scroller).toBeVisible();
+    const items = page.getByRole("navigation", { name: "Outline of the process" }).locator(".outline-row.depth-1 .outline-item");
+    const n = await items.count();
+    for (const i of [n - 1, 0, Math.floor(n / 2)]) {
+      await items.nth(i).click();
+      const block = page.locator(".edit-preview .block.selected");
+      await expect(block).toHaveCount(1);
+      await expect.poll(async () => {
+        const [b, m] = [(await block.boundingBox())!, (await scroller.boundingBox())!];
+        return b.x >= m.x - 1 && b.x + b.width <= m.x + m.width + 1 && b.y >= m.y - 1 && b.y + b.height <= m.y + m.height + 1;
+      }, { message: `step ${i + 1} is inside the visible map` }).toBe(true);
+    }
   });
 });

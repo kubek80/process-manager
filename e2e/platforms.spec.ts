@@ -93,10 +93,13 @@ test("moving a document away from his platform is warned about, blocked, and ref
   await modal.getByLabel(/^Practice/).selectOption({ label: "None" });
   await expect(modal.getByRole("alert")).toBeVisible();
   const bar = page.locator(".edit-bar");
-  for (const name of ["Save draft", "Publish…"]) {
-    await expect(bar.getByRole("button", { name })).toBeDisabled();
-    await expect(bar.getByRole("button", { name })).toHaveAttribute("title", "Keep it with a platform or practice of yours (under About).");
-  }
+  // both buttons say why when pressed, and nothing is sent
+  await expect(bar.getByRole("button", { name: "Publish…" })).toHaveClass(/\bunavailable\b/);
+  await bar.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.locator("#edit-notice.bad")).toHaveText(/This draft cannot be saved yet\. Keep it with a platform or practice of yours \(under About\)\./);
+  await bar.getByRole("button", { name: "Publish…" }).click();
+  await expect(page.locator("#edit-notice.bad")).toHaveText(/This cannot be published yet\. Keep it with a platform or practice of yours \(under About\)\./);
+  await expect(page.getByRole("dialog", { name: "Publish your changes" })).toHaveCount(0);
   await bar.getByRole("button", { name: "Discard changes" }).click();
   await expect(editState(page)).toHaveAttribute("aria-label", /^Published\./);
   // a draft that moves it away is refused by the server too
