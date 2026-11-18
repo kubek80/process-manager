@@ -391,11 +391,6 @@ test("what others change shows up when coming back to the tab; unsaved changes a
 
 for (const status of ["draft", "active"] as const) {
   test(`something deleted by somebody else stays on screen while it has unsaved changes (${status === "draft" ? "never published" : "published"})`, async ({ page, playwright }) => {
-    // KNOWN DEFECT (reported): for a published process the app says "The process could not be
-    // saved. That does not exist." and offers no way to keep the work. The assertions below are
-    // what it should do; this marks the test as expected to fail until it is fixed, and makes it
-    // fail loudly once it passes, so the mark is taken away then.
-    test.fail(status === "active", "Saving the draft of a published process deleted meanwhile offers no way to keep the work");
     await page.clock.install();
     await signIn(page, ALEX);
     const id = `deleted-demo-${status}`;
@@ -410,15 +405,51 @@ for (const status of ["draft", "active"] as const) {
     await expect(firstBlock(page)).toContainText("Hours of careful work"); // not "Process not found"
 
     await page.locator(".edit-bar").getByRole("button", { name: "Save draft" }).click();
-    const dialog = page.getByRole("dialog", { name: /was deleted/ });
+    const dialog = page.getByRole("dialog", { name: "This process was deleted" });
     await expect(dialog).toContainText("Your changes are still here");
+    await expect(dialog).toContainText(status === "active" ? "It comes back as a draft: readers see it again when you publish." : "readers see it when you publish.");
+    await expect(editState(page)).toHaveAttribute("aria-label", /^Deleted\. Readers no longer see it\. Saving brings it back as a draft/);
     await dialog.getByRole("button", { name: "Save mine and bring it back" }).click();
-    await expect(editState(page)).not.toHaveAttribute("aria-label", /not saved yet/);
+    await expect(editState(page)).toHaveAttribute("aria-label", "Draft. Readers do not see this yet.");
+    expect((await readProcess(page, id))!).toMatchObject({ status: "draft" });
     expect((await readProcess(page, id))!.steps[0].title).toBe("Hours of careful work");
+    await more(page, "Versions");
+    await expect(page.getByRole("dialog", { name: /Versions of/ }).locator(".history > li").first()).toContainText("Restored after it was deleted");
     await other.dispose();
     await page.request.delete(`/api/processes/${id}`, { headers: CSRF });
   });
 }
+
+test("a deleted process is not brought back while the checker finds a problem: the reason, the changes kept, then saved", async ({ page, playwright }) => {
+  await page.clock.install();
+  await signIn(page, ALEX);
+  const id = "deleted-problem-demo";
+  await copyOf(page, id, "Deleted problem demo");
+  await openEditor(page, "process", id);
+  await renameFirstStep(page, "x"); // too short: a problem
+  await expect(page.locator(".eb-status.bad")).toBeVisible();
+  const other = await playwright.request.newContext({ baseURL: "http://127.0.0.1:8090" });
+  await other.post("/auth/dev/login", { data: { email: DANA }, headers: CSRF });
+  expect((await other.delete(`/api/processes/${id}`, { headers: CSRF })).ok()).toBeTruthy();
+  await other.dispose();
+  await comeBackLater(page);
+
+  await page.locator(".edit-bar").getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("dialog", { name: "This process was deleted" }).getByRole("button", { name: "Save mine and bring it back" }).click();
+  const notice = page.locator("#edit-notice.bad");
+  await expect(notice).toContainText("This process cannot be brought back yet: it comes back as a draft, which is only saved when the checker finds no problems. Your changes are still here. The problem: ");
+  expect(await readProcess(page, id)).toBeUndefined();
+  await expect(firstBlock(page)).toContainText("x");
+  await notice.getByRole("button", { name: "Show it" }).click();
+  await fields(page).getByLabel(/^What happens/).fill("A name that is long enough");
+  await page.locator(".edit-bar").getByRole("button", { name: "Save draft" }).click();
+  const again = page.getByRole("dialog", { name: "This process was deleted" });
+  if (await again.isVisible().catch(() => false)) await again.getByRole("button", { name: "Save mine and bring it back" }).click();
+  await expect(editState(page)).toHaveAttribute("aria-label", "Draft. Readers do not see this yet.");
+  expect((await readProcess(page, id))!).toMatchObject({ status: "draft" });
+  expect((await readProcess(page, id))!.steps[0].title).toBe("A name that is long enough");
+  await page.request.delete(`/api/processes/${id}`, { headers: CSRF });
+});
 
 test("deleting is refused when somebody else changed it since it was opened", async ({ page, playwright }) => {
   await signIn(page, ALEX);

@@ -116,13 +116,23 @@ test("a blank process starts as a draft whose example text must be replaced befo
   await expect(page.locator(".eb-title h1")).toHaveText("Order a laptop");
   await expect(editState(page)).toHaveAttribute("aria-label", /^Draft\./);
   expect((await readProcess(page, "order-a-laptop"))!.status).toBe("draft");
-  // the example sentences count as problems: it cannot be published with them
-  await expect(page.locator(".eb-status.bad")).toBeVisible();
-  await page.locator(".eb-status.bad").click();
+  // the example sentences are to be filled in: calm (amber), not red, but it cannot be published with them
+  await expect(page.locator(".eb-status.warn")).toHaveText("3 to fill in");
+  await expect(page.locator(".eb-status.bad")).toHaveCount(0);
+  await expect(page.locator("#edit-notice.warn")).toContainText("Publishing waits until the 3 example texts are replaced. First: ");
+  await page.locator(".eb-status.warn").click();
   await expect(page.getByRole("dialog", { name: "What the checker found" })).toContainText("example text");
   await page.keyboard.press("Escape");
-  const about = page.getByRole("navigation", { name: "Outline of the process" }).getByRole("button", { name: /^About, \d+ problems?/ });
-  await expect(about.locator(".outline-mark.bad")).toBeVisible();
+  const nav = page.getByRole("navigation", { name: "Outline of the process" });
+  await expect(nav.locator(".outline-mark.warn").first()).toBeVisible();
+  await expect(nav.locator(".outline-mark.bad")).toHaveCount(0);
+  await outline(page, "About");
+  await expect(fields(page).locator(".item-issues.warn")).toContainText("1 example text to replace before publishing");
+  // a real problem among them turns it red
+  await fields(page).getByRole("textbox", { name: /^Name/ }).fill("");
+  await expect(page.locator(".eb-status.bad")).toHaveText(/^\d+ problems$/);
+  await fields(page).getByRole("textbox", { name: /^Name/ }).fill("Order a laptop");
+  await expect(page.locator(".eb-status.warn")).toHaveText("3 to fill in");
   // replaced, it can be published
   await outline(page, "About");
   await fields(page).getByLabel(/^Summary/).fill("A laptop that is set up for work, delivered to your desk.");

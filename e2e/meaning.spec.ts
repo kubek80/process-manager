@@ -277,11 +277,9 @@ test("by meaning “My application” hides what does not apply", async ({ page 
   await expect(card(page, "onboard-site-to-akamai")).toBeVisible();
   await expect(card(page, "onboard-api-to-apigee")).toBeVisible();
   const before = await results(page).count();
-  // both apply to tiers 0 to 2 only. Here every result is one of them, so "Tier 3" (which would
-  // leave nothing) is not offered: the application is described on the list, where it is
-  await open(page, "/processes");
-  await pickFilter(page, "Tier", "Tier 3");
-  await open(page, "/search?q=onboard%20a%20site%20or%20an%20api&mode=meaning");
+  // both apply to tiers 0 to 2 only. "Tier 3" is offered all the same, with its count: the
+  // application is what it is, even when nothing here applies to it
+  await pickFilter(page, "Tier", /^Tier 3, (at least )?\d+ results?$/);
   await expect(page.getByRole("button", { name: "Tier: Tier 3", exact: true })).toBeVisible();
   await expect(card(page, "onboard-site-to-akamai")).toHaveCount(0);
   await expect(card(page, "onboard-api-to-apigee")).toHaveCount(0);

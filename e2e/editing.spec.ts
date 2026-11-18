@@ -506,6 +506,7 @@ test.describe("two people", () => {
     await page.getByRole("dialog", { name: "Publish your changes" }).getByRole("button", { name: "Publish", exact: true }).click();
     const conflict = page.getByRole("dialog", { name: "Somebody else published first" });
     await expect(conflict).toContainText("Nothing was published and nothing was overwritten.");
+    await expect(conflict).toContainText("Nothing is merged: “Continue from theirs” starts from their version (Undo brings yours back as a whole), and “Publish mine over theirs” replaces theirs. A change of theirs you want to keep has to be made again in yours.");
     await expect(conflict.locator(".change-list")).toContainText("Summary");
     expect((await readProcess(page, id))!.summary).toBe("Dana's published summary.");
 
@@ -623,15 +624,15 @@ test.describe("more of the editing screen", () => {
     await named.getByLabel("Name of the standard").fill("Editing demo standard");
     await named.getByRole("button", { name: "Create standard" }).click();
     await expect(page).toHaveURL(/#\/s\/editing-demo-standard\/edit/);
-    await expect(bar(page).locator(".eb-status.bad")).toHaveText(/^\d+ problems?$/);
-    await page.locator(".eb-status.bad").click();
+    await expect(bar(page).locator(".eb-status.warn")).toHaveText(/^\d+ to fill in$/);
+    await page.locator(".eb-status.warn").click();
     await expect(page.getByRole("dialog", { name: "What the checker found" })).toContainText("example text");
     await page.keyboard.press("Escape");
     const publishButton = bar(page).getByRole("button", { name: "Publish…" });
     await expect(publishButton).toHaveClass(/\bunavailable\b/);
     await publishButton.click();
     await expect(page.getByRole("dialog", { name: "Publish this standard" })).toHaveCount(0);
-    await expect(page.locator("#edit-notice.bad")).toContainText("Publishing waits until");
+    await expect(page.locator("#edit-notice.bad")).toContainText(/Publishing waits until the \d+ example texts? (is|are) replaced/);
     // a checker error that is not example text stops a never-published draft from being saved, with the reason
     await outline(page, "About");
     await fields(page).getByRole("textbox", { name: /^Name/ }).fill("");
