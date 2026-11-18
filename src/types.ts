@@ -96,12 +96,13 @@ export interface Issue { level: "error" | "warning"; path: string; message: stri
 
 export interface Tier { id: string; name: string; description?: string }
 export interface Environment { id: string; name: string; description?: string }
-export interface Language { id: string; name: string; description?: string }
+/** `icon`: id of an uploaded square image (see `iconUrl` in the store). */
+export interface Language { id: string; name: string; icon?: string; description?: string }
 export interface Team { id: string; name: string; contact?: string; description?: string }
 export interface Practice { id: string; name: string; contact?: string; description?: string }
 export interface Platform { id: string; name: string; contact?: string; description?: string }
 export interface Category { id: string; name: string; description?: string }
-export interface Tool { id: string; name: string; url?: string; description?: string }
+export interface Tool { id: string; name: string; icon?: string; url?: string; description?: string }
 /** The lists. `practices`, `platforms` and `categories` are always present in the app (the loader fills in empty ones). */
 export interface Catalog {
   $schema?: string;
@@ -168,7 +169,13 @@ export interface Assignment { email: string; role: Role; scope: string; grantedB
 export interface AuditEntry { id: number; at: string; email: string; name: string; action: string; target: string; detail: string }
 export interface DocVersion { version: number; savedAt: string; savedBy: string; note: string; deleted: boolean }
 /** What the server knows about a document besides its content. */
-export interface DocMeta { version: number; updatedAt: string; updatedBy: string }
+export interface DocMeta {
+  version: number; updatedAt: string; updatedBy: string;
+  /** When the first version was saved. */
+  createdAt: string;
+  /** Unpublished changes exist. Only sent to people who may edit the process or standard. */
+  draft?: { updatedAt: string; updatedBy: string };
+}
 
 export interface Skill {
   id: string;

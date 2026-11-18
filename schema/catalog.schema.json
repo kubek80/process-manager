@@ -220,6 +220,11 @@
           "minLength": 1,
           "maxLength": 40
         },
+        "icon": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Id of a square image shown next to the name. It is the fingerprint the portal gives an image when it is uploaded in Admin, Lists; in files, the image itself lies in catalog/icons/ under that id."
+        },
         "url": {
           "type": "string",
           "pattern": "^https?://\\S+$"
@@ -245,6 +250,11 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 40
+        },
+        "icon": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Id of a square image shown next to the name. It is the fingerprint the portal gives an image when it is uploaded in Admin, Lists; in files, the image itself lies in catalog/icons/ under that id."
         },
         "description": {
           "type": "string",

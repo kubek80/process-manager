@@ -444,6 +444,9 @@ export function pageTitle(r: Route, names: { process?: string; standard?: string
   return here ? `${here} · ${APP}` : APP;
 }
 
+/** Where an uploaded icon (of a tool or a language) is served. */
+export const iconUrl = (id: string) => `/api/icons/${encodeURIComponent(id)}`;
+
 export async function copyText(text: string): Promise<boolean> {
   try { await navigator.clipboard.writeText(text); return true; } catch {
     const ta = document.createElement("textarea");
