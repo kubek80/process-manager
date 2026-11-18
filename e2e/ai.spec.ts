@@ -1,13 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { ALEX, answer, open, readProcess, save, SAM, signIn } from "./helpers";
+import { ALEX, answer, editState, fields, more, open, outline, publish, readProcess, readWorkingDraft, saveDraft, SAM, signIn } from "./helpers";
 
 const example = JSON.parse(fs.readFileSync(path.join(process.cwd(), "schema/example.process.json"), "utf8"));
 const draft = { ...example, status: "draft", review: { intervalMonths: 6 } };
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
-test.beforeEach(async ({ page }) => { await signIn(page, ALEX, { editor: true }); });
+test.beforeEach(async ({ page }) => { await signIn(page, ALEX); });
 
 test("create a process from text with any chat assistant", async ({ page }) => {
   await open(page, "/processes");
@@ -41,14 +41,15 @@ test("create a process from text with any chat assistant", async ({ page }) => {
   await expect(modal.locator(".check.good")).toContainText("Valid: Request VPN access - 6 steps, 3 participants, 1 prerequisites");
   await create.click();
 
-  // saved, opened on the map, and still a draft
-  await expect(page.getByRole("heading", { name: "Request VPN access" })).toBeVisible();
-  await expect(page.locator(".block")).toHaveCount(6);
-  await expect(page.locator(".banner", { hasText: "Draft." })).toBeVisible();
+  // saved, opened on the editing screen, and still a draft
+  await expect(page).toHaveURL(/#\/p\/request-vpn-access\/edit/);
+  await expect(page.locator(".eb-title h1")).toHaveText("Request VPN access");
+  await expect(page.locator(".edit-preview .block")).toHaveCount(6);
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Draft\. Readers do not see this yet/);
   expect((await readProcess(page, "request-vpn-access"))!).toMatchObject({ id: "request-vpn-access", status: "draft", $schema: "../schema/process.schema.json" });
 });
 
-test("a draft is invisible to consumers until it is set to active", async ({ page }) => {
+test("a draft is invisible to readers until it is published", async ({ page }) => {
   await open(page, "/processes");
   await expect(page.locator(".card", { hasText: "Request VPN access" })).toContainText("Draft");
 
@@ -57,13 +58,13 @@ test("a draft is invisible to consumers until it is set to active", async ({ pag
   await expect(page.locator(".card", { hasText: "Request a GCP project" })).toBeVisible();
   await expect(page.locator(".card", { hasText: "Request VPN access" })).toHaveCount(0);
 
-  await signIn(page, ALEX, { editor: true });
+  await signIn(page, ALEX);
   await open(page, "/p/request-vpn-access/flow");
-  await page.getByRole("button", { name: "Details", exact: true }).click();
-  await page.locator(".modal").getByRole("button", { name: "Active" }).click();
-  await page.locator(".modal").getByLabel("Owning team").selectOption({ label: "Service Management" });
-  await page.locator(".modal").getByRole("button", { name: "Done" }).click();
-  await save(page);
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await outline(page, "About");
+  await fields(page).getByLabel(/^Owning team/).selectOption({ label: "Service Management" });
+  await publish(page);
+  expect((await readProcess(page, "request-vpn-access"))!).toMatchObject({ status: "active", owner: "service-management" });
 
   await signIn(page, SAM);
   await open(page, "/processes");
@@ -71,8 +72,8 @@ test("a draft is invisible to consumers until it is set to active", async ({ pag
 });
 
 test("change an existing process with AI, then delete it", async ({ page }) => {
-  await open(page, "/p/request-vpn-access/flow");
-  await page.getByRole("button", { name: "Change with AI" }).click();
+  await open(page, "/p/request-vpn-access/edit");
+  await more(page, "Change with AI");
   const modal = page.locator(".modal");
   await modal.locator("textarea").nth(0).fill("Rename the last step to 'Connect and test the VPN'.");
   await modal.getByRole("button", { name: "Copy prompt" }).click();
@@ -88,14 +89,17 @@ test("change an existing process with AI, then delete it", async ({ page }) => {
   await modal.locator("textarea").nth(1).fill(JSON.stringify(changed));
   await expect(modal.locator(".check.warn")).toContainText("The current id “request-vpn-access” is kept");
   await modal.getByRole("button", { name: "Apply to draft" }).click();
-  await expect(page.locator(".block", { hasText: "Connect and test the VPN" })).toBeVisible();
-  await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.locator(".saved")).toBeVisible();
+  await expect(page.locator(".edit-preview .block", { hasText: "Connect and test the VPN" })).toBeVisible();
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\./);
+  // saved as unpublished changes: readers keep the published version until it is published
+  await saveDraft(page);
+  expect((await readWorkingDraft(page, "process", "request-vpn-access"))!.doc.steps.at(-1).title).toBe("Connect and test the VPN");
+  expect((await readProcess(page, "request-vpn-access"))!.steps.at(-1).title).not.toBe("Connect and test the VPN");
+  await publish(page);
   expect((await readProcess(page, "request-vpn-access"))!.steps.at(-1).title).toBe("Connect and test the VPN");
   expect(await readProcess(page, "get-vpn")).toBeUndefined();
 
-  await page.getByRole("button", { name: "Details", exact: true }).click();
-  await page.locator(".modal").getByRole("button", { name: "Delete process" }).click();
+  await more(page, "Delete…");
   await answer(page, "Delete this process?", "Delete process");
   await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
   await expect(page.locator(".card", { hasText: "Request VPN access" })).toHaveCount(0);
@@ -108,12 +112,12 @@ test("a blank process starts as a valid draft", async ({ page }) => {
   // it is named first: the name gives it its address, which never changes
   await page.getByRole("dialog", { name: "New process" }).getByLabel("Name of the process").fill("Order a laptop");
   await page.getByRole("dialog", { name: "New process" }).getByRole("button", { name: "Create process" }).click();
-  await expect(page.getByRole("heading", { name: "Order a laptop" })).toBeVisible();
-  await expect(page.locator(".banner", { hasText: "Draft." })).toBeVisible();
-  await expect(page.locator(".status.good, .status.warn")).toBeVisible();
+  await expect(page).toHaveURL(/#\/p\/order-a-laptop\/edit/);
+  await expect(page.locator(".eb-title h1")).toHaveText("Order a laptop");
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Draft\./);
+  await expect(page.locator(".eb-status.good, .eb-status.warn")).toBeVisible();
   expect((await readProcess(page, "order-a-laptop"))!.status).toBe("draft");
-  await page.getByRole("button", { name: "Details", exact: true }).click();
-  await page.locator(".modal").getByRole("button", { name: "Delete process" }).click();
+  await more(page, "Delete…");
   await answer(page, "Delete this process?", "Delete process");
   await expect(page.locator(".card").first()).toBeVisible();
 });

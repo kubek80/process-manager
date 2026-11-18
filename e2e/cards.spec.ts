@@ -36,7 +36,9 @@ for (const [hash, panelId] of [["/processes", "process-filters"], ["/standards",
     expect(p.x + p.width).toBeLessThanOrEqual(r.x + 1); // the panel ends where the results begin
     for (const name of ["Category", "Platform", "Practice", "Rigour", "Owner"]) await expect(panel.getByRole("button", { name: new RegExp(`^${name}: Any$`) })).toBeVisible();
     await expect(panel.getByRole("checkbox", { name: /^Only my bookmarks, \d+ results?$/ })).toBeVisible();
-    await expect(panel.locator("fieldset.profile-filter")).toBeVisible();
+    // the application's tier, environment and language are dropdowns like the others, not a section of their own
+    for (const name of ["Tier", "Environment", "Language"]) await expect(panel.getByRole("button", { name: new RegExp(`^${name}: Any$`) })).toBeVisible();
+    await expect(panel.locator("fieldset.profile-filter")).toHaveCount(0);
     await expect(page.locator(".filter-toggle")).toBeHidden(); // on a wide screen nothing to fold away
   });
 }

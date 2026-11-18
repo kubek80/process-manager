@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { open, SAM, signIn, watchErrors } from "./helpers";
+import { open, pickFilter, SAM, signIn, watchErrors } from "./helpers";
 
 test.beforeEach(async ({ page }) => { await signIn(page, SAM); });
 
@@ -16,23 +16,25 @@ test("find a process by searching and by tier and language", async ({ page }) =>
   await page.getByPlaceholder(/Search/).fill("");
 
   // Akamai onboarding only applies to tiers 0 and 1
-  const mine = page.locator(".profile-filter");
-  await mine.getByLabel("Tier").selectOption({ label: "Tier 3" });
+  // tier, environment and language are dropdowns like the other filters, with one choice each
+  await pickFilter(page, "Tier", "Tier 3");
+  await expect(page.getByRole("button", { name: "Tier: Tier 3", exact: true })).toBeVisible();
   await expect(cards.filter({ hasText: "Onboard a site to Akamai" })).toHaveCount(0);
   await expect(cards.filter({ hasText: "Request a GCP project" })).toBeVisible();
-  await mine.getByLabel("Tier").selectOption({ label: "any tier" });
+  await pickFilter(page, "Tier", "Any tier");
+  await expect(page.getByRole("button", { name: "Tier: Any", exact: true })).toBeVisible();
 
   // ...and only to staging and production
-  await mine.getByLabel("Environment").selectOption({ label: "Development" });
+  await pickFilter(page, "Environment", "Development");
   await expect(cards.filter({ hasText: "Onboard a site to Akamai" })).toHaveCount(0);
-  await mine.getByLabel("Environment").selectOption({ label: "Production" });
+  await pickFilter(page, "Environment", "Production");
   await expect(cards.filter({ hasText: "Onboard a site to Akamai" })).toContainText("Staging, Production");
-  await mine.getByLabel("Environment").selectOption({ label: "any environment" });
+  await pickFilter(page, "Environment", "Any environment");
 
   // publishing a library is for Go and JavaScript only
-  await mine.getByLabel("Language").selectOption({ label: "Python" });
+  await pickFilter(page, "Language", "Python");
   await expect(cards.filter({ hasText: "Publish an internal library" })).toHaveCount(0);
-  await mine.getByLabel("Language").selectOption({ label: "Go" });
+  await pickFilter(page, "Language", "Go");
   await expect(cards.filter({ hasText: "Publish an internal library" })).toBeVisible();
 
   await page.getByRole("button", { name: /^Category:/ }).click();
@@ -140,7 +142,7 @@ test("the guide explains the app with flow charts that fit the page", async ({ p
   // the guide covers using, editing, AI assistants, administration and running it
   const toc = page.locator(".guide-toc");
   await expect(toc.locator(".eyebrow")).toHaveText(["Using it", "Editing", "For AI assistants", "Administration", "Running it"]);
-  for (const id of ["what", "find", "modes", "belong", "read", "follow", "blocks", "standards", "feedback", "bookmarks", "requests", "mine", "edit", "editstandard", "versions", "ai", "lifecycle", "skills", "agents", "roadmap", "admin", "catalog", "architecture", "local", "tests", "deploy", "files", "docs"])
+  for (const id of ["what", "find", "modes", "belong", "read", "follow", "blocks", "standards", "feedback", "bookmarks", "requests", "mine", "editing", "publish", "edit", "editstandard", "versions", "ai", "lifecycle", "skills", "agents", "roadmap", "admin", "catalog", "architecture", "local", "tests", "deploy", "files", "docs"])
     await expect(page.locator(`#guide-${id} h2`)).toBeVisible();
   await expect(page.locator("#guide-modes .guide-table.roles tbody tr")).toHaveCount(7); // Owner, Platform owner, Practice owner, Process editor, Standards editor, Lists manager, Admin
   await expect(page.locator("#guide-architecture .arch-box")).toHaveCount(8);

@@ -5,7 +5,9 @@ A portal for two questions:
 - **“How do I get…?”** A **process** (request a GCP project, a repository, an Akamai onboarding…) shown as a swim-lane map, where the first lane is always you, and as a checklist with the exact actions.
 - **“What must I meet?”** A **standard** (the rules of cyber security, a platform or a practice): requirements with the reason, how to comply, and how each is checked.
 
-The home page is one search over both, by words or, where it is switched on, by meaning (Words, Meaning or Both). The search results and the lists of processes and of standards share one layout: filters on the left (category, platform, practice, rigour, owner, bookmarks, “My application”), cards with one fact per line, and pages. People bookmark, upvote and share what they use, and ask for what is missing.
+The home page is one search over both, by words or, where it is switched on, by meaning (Words, Meaning or Both). The search results and the lists of processes and of standards share one layout: filters on the left (category, platform, practice, rigour, owner, tier, environment, language, bookmarks), cards with one fact per line, a choice of order, and pages. People bookmark, upvote and share what they use, and ask for what is missing.
+
+Everyone reads the same pages. Whoever may change a process or standard gets **Edit**, which opens a separate editing screen; changes are saved as a draft that readers, skills, search and agents do not see until somebody publishes them.
 
 From both, the portal generates **skills for AI coding assistants** and, for standards, **pull request review agents**, and keeps them up to date as the content changes. AI agents can also ask the portal directly through its **MCP server**.
 
@@ -55,25 +57,26 @@ To use a Postgres you already run instead of Docker, set `PM_PG`, for example `P
 
 ## How it is built
 
-React + Vite frontend; Go server; Postgres. Everything people change lives in the database: processes, standards, the lists, roles, feedback, requests and the generated skills, and the views, bookmarks, upvotes and skill downloads. Every save is a numbered version with a note; a save made from an outdated version is refused, so two people never overwrite each other. The files in this repository are the code, the formats (`schema/`) and sample content for a first start. A database filled by an earlier version is converted by the server at its first start. Search by meaning cuts every published process and standard into parts and keeps a vector per part in Postgres with pgvector; the provider is built in (word-based, for trying it and for tests) or Google's Vertex AI, and off by default. The index follows saves in the background. Details, API and settings: [`docs/backend.md`](docs/backend.md).
+React + Vite frontend; Go server; Postgres. Everything people change lives in the database: processes, standards, the lists, roles, feedback, requests and the generated skills, and the views, bookmarks, upvotes and skill downloads. Every save is a numbered version with a note; changes to something published wait beside it as one shared working draft until they are published; a save made from an outdated version (or draft) is refused, so two people never overwrite each other. The files in this repository are the code, the formats (`schema/`) and sample content for a first start. A database filled by an earlier version is converted by the server at its first start. Search by meaning cuts every published process and standard into parts and keeps a vector per part in Postgres with pgvector; the provider is built in (word-based, for trying it and for tests) or Google's Vertex AI, and off by default. The index follows saves in the background. Details, API and settings: [`docs/backend.md`](docs/backend.md).
 
 ## What is in it
 
 | | |
 | --- | --- |
-| **Search and lists** | Home (`#/`) searches processes and standards together and shows your bookmarks. Results (`#/search?…`), the process list (`#/processes`) and the standards list (`#/standards`) share filters on the left, cards and pages of 12, 24 or 48; the search address holds the words, filters and page, so it can be shared. Where search by meaning is on, the results have a switch **Search by**: Words, Meaning, Both |
-| **Processes** | Map and checklist, sub-processes, prerequisites, block types, editing on the map and in the checklist |
+| **Search and lists** | Home (`#/`) searches processes and standards together, shows your bookmarks, and lets you browse by platform, practice and category. Results (`#/search?…`), the process list (`#/processes`) and the standards list (`#/standards`) share filters on the left, cards, sorting (best match or name, newest, recently updated) and pages of 12, 24 or 48; the search address holds the words, filters, order and page, so it can be shared. Where search by meaning is on, the results have a switch **Search by**: Words, Meaning, Both |
+| **Processes** | Map (with zoom: the buttons or Ctrl + scroll) and checklist, sub-processes, prerequisites, block types |
+| **Editing** | A separate editing screen (`#/p/<id>/edit`, `#/s/<id>/edit`): the outline, what readers will see (the map or the requirements, changeable in place), the fields of what is selected, the checker's findings, and Save draft / Publish. Changes to something published stay unpublished changes, seen only by its editors, until they are published; retire, unpublish and delete are explicit |
 | **Standards** | Requirements with level (must / should / may), reason, how to comply, examples, how it is checked, and what a reviewer looks for |
 | **What it belongs to** | An owning team, and optionally a category, a platform and a practice; a process also has a rigour, how binding it is (mandatory, recommended, optional), a standard follows from its requirements' levels |
-| **Where it applies** | Application tiers, environments and programming languages, on a process, a standard or a single requirement; “My application” hides the rest |
-| **Life-cycle** | Draft (hidden from readers), active, retired; periodic reviews by the owner |
-| **Versions** | Every save is a version with who, when and a note; what changed between versions in plain words; restore; undo while editing; a warning before unsaved changes are left; a decision when somebody else saved first |
+| **Where it applies** | Application tiers, environments and programming languages, on a process, a standard or a single requirement; the Tier, Environment and Language filters (“My application” on a standard) hide the rest |
+| **Life-cycle** | Draft (never published, hidden from readers), active, retired; periodic reviews by the owner |
+| **Versions** | Every publish is a version with who, when and a note; what changed between versions in plain words; restore; undo while editing; a warning before unsaved changes are left; a decision when somebody else saved the draft or published first |
 | **Feedback** | On a step (straight from the map) or a requirement, or “Give feedback” on the whole; “I hit this too”, closed by the owner, flagged when the text changed since; open and handled shown on every page |
-| **Bookmarks, upvotes, sharing** | Bookmarks per person, kept on the server; one upvote per person; views and skill downloads (each once per person per day) shown on every process and standard; Share copies a link or a message for Slack or Google Chat, or opens an e-mail |
+| **Bookmarks, upvotes, sharing** | Bookmarks per person, kept on the server; one upvote per person; views and skill downloads (each once per person per day) shown on every process and standard; Share copies the link (or the link and title), opens an e-mail, or uses the device's own share sheet where the browser has one |
 | **Requests** | `#/requests`: ask for a missing process or standard, vote; open, planned, done (linked to the published process or standard that answers it) or declined with a reason; withdrawn by the requester while open, removed by an admin |
-| **My responsibilities** | For owners: reviews to do, feedback waiting, drafts, and everything of their teams, platforms and practices, on one page with a count in the top bar |
+| **My responsibilities** | For owners: reviews to do, feedback waiting, drafts and unpublished changes, and everything of their teams, platforms and practices, on one page with a count in the top bar |
 | **Skills** | Generated per process and per standard, versioned automatically, with optional hand-written guidance |
-| **Admin panel** | Roles, the lists (teams, practices and platforms with their members, categories, tools, tiers, environments, languages), the skills registry, health, activity, statistics (`#/admin/statistics`: use per process and standard and per platform, practice and team, per period, as CSV) |
+| **Admin panel** | People and their roles (all of a person's roles in one dialog), the lists (teams, practices and platforms with their members, categories, tools and languages with icons, tiers, environments), the skills registry, health, activity, statistics (`#/admin/statistics`: use per process and standard and per platform, practice and team, per period, as CSV) |
 | **MCP server** | AI agents search and read the published processes and standards, the steps of one participant, the skills and the lists, and report problems for a person; a separate program on the same database, reachable from its own machine or with a shared secret. [`docs/mcp.md`](docs/mcp.md) |
 | **AI authoring** | A self-contained prompt for any chat assistant turns text into a process or a standard; the checker validates what comes back |
 
@@ -96,16 +99,16 @@ Everyone who signs in (Entra ID or Google) can read, tick and give feedback. Rol
 | Role | Adds |
 | --- | --- |
 | Owner (of one team) | Confirm reviews and close feedback on what the team maintains; a page of their own, **My responsibilities**, shows what is waiting |
-| Platform owner (of one platform) | Create, change and delete the processes and standards that belong to the platform, and everything an Owner does for them; move along the requests that name the platform |
+| Platform owner (of one platform) | Edit, publish and delete the processes and standards that belong to the platform and create new ones, and everything an Owner does for them; move along the requests that name the platform |
 | Practice owner (of one practice) | The same for one practice |
-
-A platform or practice owner may set or change the platform of a process or standard only from one of their own platforms to another (or to or from none): a platform that is not theirs stays as it is, and only its owners or an editor can change it. The same goes, separately, for the practice. They may change everything else, the owning team included; editors are not limited this way.
-| Process editor | Create and change every process; move requests for processes along |
-| Standards editor | Create and change every standard; move requests for standards along |
-| Lists manager | Teams, practices, platforms, categories, tools, tiers, environments, languages |
+| Process editor | Create, edit and publish every process; move requests for processes along |
+| Standards editor | Create, edit and publish every standard; move requests for standards along |
+| Lists manager | Teams, practices, platforms, categories, tools, tiers, environments, languages, and the icons of tools and languages |
 | Admin | Everything, including roles and the statistics |
 
-The members of a team, platform or practice are the people with Owner, Platform owner or Practice owner for it. Admins add them on the entry in **Admin › Lists** or person by person in **Admin › Access**; everyone can see them under **Teams & tools**. One person can be in a team, a platform and a practice at once. The rules in detail: the Guide and [`docs/backend.md`](docs/backend.md).
+There is no separate editor mode: the buttons people see follow their rights, and the server checks the same rights on every change. A platform or practice owner may set or change the platform of a process or standard only from one of their own platforms to another (or to or from none): a platform that is not theirs stays as it is, and only its owners or an editor can change it. The same goes, separately, for the practice. They may change everything else, the owning team included; editors are not limited this way.
+
+The members of a team, platform or practice are the people with Owner, Platform owner or Practice owner for it. Admins add them on the entry in **Admin › Lists** or person by person in **Admin › Access**, which also sets or removes all of a person's roles at once; everyone can see them under **Teams & tools**. One person can be in a team, a platform and a practice at once. The rules in detail: the Guide and [`docs/backend.md`](docs/backend.md).
 
 The first admins are named in the server setting `PM_ADMINS`.
 
@@ -123,9 +126,9 @@ npm run test:all
 
 | Command | What it covers |
 | --- | --- |
-| `npm test` | Frontend logic (Vitest): both checkers, editing helpers, undo and the rules for saving, comparing versions, layout, life-cycle, search (by words, by meaning, both), pages and cards, sharing, requests, statistics, prompts, rights and members, and that every sample file and the demo set are valid |
-| `npm run test:server` | Go server against a real Postgres: sign-in incl. a fake OpenID Connect provider, roles, content with versions and concurrent saves, skill generators, feedback, views, bookmarks, upvotes, requests, statistics, admin, start-up and shutdown, chunking, embeddings (Vertex AI only against a local stand-in), the search index, the MCP server |
-| `npm run test:e2e` | Playwright against the real server and database: consumer and editor journeys for processes and standards, versions and two people editing at once, feedback, the Admin panel, skills, AI import, the list filters, cards and pages, the map, views, upvotes, bookmarks and sharing, requests, statistics, the search switch (Words, Meaning, Both) |
+| `npm test` | Frontend logic (Vitest): both checkers, editing helpers, undo and the rules for saving, the editing screen's states and calls, comparing versions, sorting, zoom, icons, the roles dialog, layout, life-cycle, search (by words, by meaning, both), pages and cards, sharing, requests, statistics, prompts, rights and members, and that every sample file and the demo set are valid |
+| `npm run test:server` | Go server against a real Postgres: sign-in incl. a fake OpenID Connect provider, roles and people, content with versions and concurrent saves, working drafts and publishing, icons, skill generators, feedback, views, bookmarks, upvotes, requests, statistics, admin, start-up and shutdown, chunking, embeddings (Vertex AI only against a local stand-in), the search index, the MCP server |
+| `npm run test:e2e` | Playwright against the real server and database: reader and editor journeys for processes and standards, the editing screen, drafts and publishing, versions and two people editing at once, feedback, the Admin panel, skills, AI import, the list filters, cards and pages, the map, views, upvotes, bookmarks and sharing, requests, statistics, the search switch (Words, Meaning, Both) |
 | `npm run typecheck`, `npm run validate` | Types; the sample files (or an exported folder) against the schemas and rules |
 
 The end-to-end tests use their own database, emptied at the start of every run. CI runs all of this (`.github/workflows/ci.yml`).
@@ -152,7 +155,7 @@ Working on this repository with an AI coding assistant: `CLAUDE.md` and the skil
 src/                  frontend (components, lib with checker / layout / prompts, guide)
 server/               Go backend
 schema/               formats + the examples used in the prompts
-processes/ standards/ catalog/   sample content that fills an empty database
+processes/ standards/ catalog/   sample content that fills an empty database (icons in catalog/icons/)
 e2e/                  end-to-end tests
 scripts/              dev, mcp, test, validate, validators, prompt, reviews
 docs/                 backend.md, mcp.md, generated prompts, screenshots

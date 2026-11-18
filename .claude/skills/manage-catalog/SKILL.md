@@ -13,12 +13,12 @@ This file is **sample content**: it fills an empty database on its first start. 
 {
   "tiers": [{ "id": "tier-0", "name": "Tier 0", "description": "…" }],
   "environments": [{ "id": "production", "name": "Production" }],
-  "languages": [{ "id": "go", "name": "Go" }],
+  "languages": [{ "id": "go", "name": "Go", "icon": "<64 hex>" }],
   "teams": [{ "id": "cloud-platform-team", "name": "Cloud Platform team", "contact": "Slack #cloud-platform", "description": "…" }],
   "practices": [{ "id": "security", "name": "Cyber security", "contact": "Slack #security", "description": "…" }],
   "platforms": [{ "id": "google-cloud", "name": "Google Cloud", "contact": "Slack #cloud-platform" }],
   "categories": [{ "id": "cloud", "name": "Cloud" }],
-  "tools": [{ "id": "servicenow", "name": "ServiceNow", "url": "https://…", "description": "…" }]
+  "tools": [{ "id": "servicenow", "name": "ServiceNow", "url": "https://…", "description": "…", "icon": "<64 hex>" }]
 }
 ```
 
@@ -40,13 +40,26 @@ Processes in `processes/*.json` and standards in `standards/*.json` reference th
 | `environments` | `environments` of a process, a standard or a requirement (absent = all environments) |
 | `languages` | `languages` of a process, a standard or a requirement (absent = any language) |
 
+## Icons of tools and languages
+
+A tool or a language may name a square icon: `"icon"` is the SHA-256 of the image file (64 characters `0-9a-f`), and the file lies in `catalog/icons/<id>.<png|jpg|webp|svg>`. The demo set has its own folder, `demo/catalog/icons/`, with a copy of every sample icon plus its own, since loading it replaces the lists. In a running installation icons are uploaded in Admin › Lists ("Choose image…"); the server stores and serves them by the same id.
+
+To add one by hand:
+
+1. Use a square PNG, JPEG, WebP or SVG of at most 64 KB (a bitmap at most 512 × 512). An SVG may only draw: no scripts, event handlers, `foreignObject`, links to other files, `data:` or `javascript:` values, animation or DOCTYPE (`server/internal/icons/svg.go` is the allow-list). Keep it small and give it a square `viewBox`.
+2. Compute its id and name the file by it: `sha256sum logo.svg` → `cp logo.svg catalog/icons/<id>.svg` (`.jpg` for JPEG).
+3. Set `"icon": "<id>"` on the entry in `catalog/catalog.json`, and the same in `demo/catalog/catalog.json` with a copy of the file in `demo/catalog/icons/`.
+4. Changing the image changes its id: rename the file and update `"icon"`; remove a file nothing names any more.
+
+`npm run validate` checks only the form of the id. The server checks the files when it imports them: a file whose name does not match its content, or that fails the checks, is skipped with a warning, and the entry is shown without an icon. The Go test `server/cmd/server/icons_test.go` imports the sample icons, so run `npm run test:server` after adding one.
+
 ## Rules
 
 - `id` is kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`), unique within its list, derived from the name (`"GCP console"` → `gcp-console`).
 - **Never change an existing `id`** without updating every reference in `processes/*.json` and `standards/*.json` in the same change. Changing `name` is always safe.
 - Only `id` and `name` are required. Do not invent contacts or URLs; leave optional fields out when unknown. Categories have no `contact`.
 - Keep `teams`, `practices`, `tools` and `languages` sorted by name. Keep `tiers` ordered most critical first and `environments` in the order work moves through them.
-- Do not add fields that are not in the schema.
+- Do not add fields that are not in the schema. Only tools and languages have `icon`.
 
 ## Add an entry
 

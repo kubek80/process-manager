@@ -11,7 +11,7 @@ test("the app is closed until you sign in", async ({ page, request }) => {
   await expect(page.locator(".topbar")).toHaveCount(0);
 });
 
-test("a consumer signs in, sees no editing, and can switch user", async ({ page }) => {
+test("a reader signs in, sees no editing, and can switch user to an editor who does", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /Sam Consumer/ }).click();
   // signed in, the app starts at Home: one search over processes and standards
@@ -28,9 +28,12 @@ test("a consumer signs in, sees no editing, and can switch user", async ({ page 
   await page.getByRole("button", { name: "Switch user" }).click();
   await expect(page.locator(".login-users")).toBeVisible();
 
+  // an editor gets the editing controls by their rights alone: there is no mode to switch on
   await page.getByRole("button", { name: /Alex Editor/ }).click();
-  await expect(page.locator(".mode-switch")).toBeVisible();
-  await page.getByRole("button", { name: "Editor", exact: true }).click();
+  await expect(page.locator(".topbar")).toBeVisible();
+  await page.locator(".nav").getByRole("link", { name: "Processes" }).click();
+  await expect(page.locator(".mode-switch")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Consumer", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Create from text with AI/ })).toBeVisible();
 });
 

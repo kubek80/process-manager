@@ -62,7 +62,7 @@ Whoever holds the secret can file feedback in anyone's name (within the sign-in 
 - With the secret, whoever holds it can file feedback in the name of anyone of the sign-in domains, up to the limit of 30 items per person and hour.
 - Nothing records which agent or person read what.
 - One secret for all: to take access away from one agent the secret has to change for all of them.
-- Drafts stay hidden in every case: they are never returned, and an agent cannot tell a draft from something that does not exist.
+- Drafts stay hidden in every case: they are never returned, and an agent cannot tell a draft from something that does not exist. Unpublished changes to a published process or standard (its working draft) are never read: agents get the published version, as readers do.
 
 ## Tools
 

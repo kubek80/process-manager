@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { ALEX, open, readCatalog, readProcess, save, signIn } from "./helpers";
+import { ALEX, fields, open, openEditor, outline, publish, readCatalog, readProcess, readWorkingDraft, save, saveDraft, signIn } from "./helpers";
 
 // Alex manages the lists: for him the Admin panel has the Lists section only.
 
-test.beforeEach(async ({ page }) => { await signIn(page, ALEX, { editor: true }); });
+test.beforeEach(async ({ page }) => { await signIn(page, ALEX); });
 
 test("add a tool, fill in its details and save", async ({ page }) => {
   await open(page, "/admin/lists");
@@ -50,10 +50,9 @@ test("discard restores the lists; renaming keeps the id", async ({ page }) => {
 });
 
 test("a missing tool can be added straight from a step", async ({ page }) => {
-  await open(page, "/p/raise-servicenow-request/flow");
-  await page.locator(".block", { hasText: "Find the catalogue item" }).click();
-  const drawer = page.locator(".drawer");
-  await drawer.getByRole("button", { name: "Edit step" }).click();
+  await openEditor(page, "process", "raise-servicenow-request");
+  await outline(page, /^1 Find the catalogue item/);
+  const drawer = fields(page);
   const tool = drawer.getByRole("combobox", { name: "Tool" });
   await tool.selectOption("__new");
   // the name is typed in a field in the panel; Enter (or "Add tool") saves it to the list of tools
@@ -61,8 +60,11 @@ test("a missing tool can be added straight from a step", async ({ page }) => {
   await drawer.getByLabel("Name of the new tool").press("Enter");
   await expect(tool).toHaveValue("confluence");
   await expect(drawer.getByLabel("Name of the new tool")).toHaveCount(0);
-  await save(page);
+  // the tool is in the lists at once; the step only once the change is published
   expect((await readCatalog(page)).tools).toContainEqual({ id: "confluence", name: "Confluence" });
+  await saveDraft(page);
+  expect((await readWorkingDraft(page, "process", "raise-servicenow-request"))!.doc.steps[0].tool).toBe("confluence");
+  await publish(page);
   expect((await readProcess(page, "raise-servicenow-request"))!.steps[0].tool).toBe("confluence");
 });
 
@@ -92,8 +94,8 @@ test("a new environment can be chosen in a process; the lists of groups are sepa
   expect(catalog.teams.every((t: Record<string, unknown>) => !("kind" in t))).toBe(true);
   expect(catalog.environments.at(-1)).toEqual({ id: "pre-production", name: "Pre-production" });
 
-  await signIn(page, ALEX, { editor: true });
-  await open(page, "/p/raise-servicenow-request/flow");
-  await page.getByRole("button", { name: "Details", exact: true }).click();
-  await expect(page.locator(".modal").getByRole("button", { name: "Pre-production" })).toBeVisible();
+  await signIn(page, ALEX);
+  await openEditor(page, "process", "raise-servicenow-request");
+  await outline(page, "About");
+  await expect(fields(page).getByRole("button", { name: "Pre-production" })).toBeVisible();
 });

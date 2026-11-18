@@ -11,7 +11,7 @@ const flow = (id: string, title: string, summary: string, others: [string, strin
   steps,
 });
 
-export const followFlow = flow("guide-follow", "Follow a process", "How a consumer gets something done with Process Manager.",
+export const followFlow = flow("guide-follow", "Follow a process", "How a reader gets something done with Process Manager.",
   [["app", "Process Manager"], ["others", "Other teams"]],
   [
     s("find", "Find the process", "me", "task", ["show"], "search or filter"),
@@ -35,17 +35,17 @@ export const aiFlow = flow("guide-ai", "Describe a process with AI", "How an edi
     s("check", "Check the pasted answer", "app", "verify", ["valid"], "schema, references"),
     s("valid", "Valid?", "app", "decision", [["save", "Yes"], ["fix", "No"]]),
     s("fix", "Send the fix request", "me", "communication", ["write-json"], "same chat"),
-    s("save", "Save and draw the map", "app", "automation", []),
+    s("save", "Create a draft and open it", "app", "automation", [], "on the editing screen"),
   ]);
 
-export const feedbackFlow = flow("guide-feedback", "Feedback loop", "How a problem reported by a consumer reaches the owner and gets fixed.",
+export const feedbackFlow = flow("guide-feedback", "Feedback loop", "How a problem reported by a reader reaches the owner and gets fixed.",
   [["app", "Process Manager"], ["owner", "Process owner"]],
   [
     s("flag", "Flag a step that failed", "me", "form", ["show-flag"], "one sentence"),
     s("show-flag", "Show a red flag on the step", "app", "automation", ["read"], "map and checklist"),
     s("read", "Read the open feedback", "owner", "review", ["needs-change"]),
     s("needs-change", "Description wrong?", "owner", "decision", [["correct", "Yes"], ["mark-fixed", "No"]]),
-    s("correct", "Correct the step", "owner", "document", ["mark-fixed"], "on the map"),
+    s("correct", "Correct the step and publish", "owner", "document", ["mark-fixed"], "on the editing screen"),
     s("mark-fixed", "Mark as fixed", "owner", "task", ["cleared"]),
     s("cleared", "Remove the flag", "app", "automation", []),
   ]);
@@ -56,7 +56,7 @@ export const reviewFlow = flow("guide-review", "Periodic review", "How the owner
     s("due", "Flag the review as due", "app", "automation", ["read"], "every 3-24 months"),
     s("read", "Read the process end to end", "me", "review", ["correct"], "and its open feedback"),
     s("correct", "Still correct?", "me", "decision", [["confirm", "Yes"], ["update", "No"]]),
-    s("update", "Correct what changed", "me", "document", ["confirm"], "on the map or with AI"),
+    s("update", "Correct what changed", "me", "document", ["confirm"], "edit and publish"),
     s("confirm", "Mark as reviewed", "me", "task", ["restart"], "one click"),
     s("restart", "Restart the interval", "app", "automation", []),
   ], "Process owner");
@@ -76,7 +76,7 @@ export const automationFlow = flow("guide-automation", "Planned: an agent follow
 export const meaningFlow = flow("guide-meaning", "From a save to a search by meaning", "How a published process or standard becomes findable by meaning.",
   [["app", "Portal server"], ["provider", "Embeddings provider"], ["reader", "Reader"]],
   [
-    s("save", "Publish or save a change", "me", "document", ["parts"], "drafts are left out"),
+    s("save", "Publish a change", "me", "document", ["parts"], "drafts are left out"),
     s("parts", "Cut it into parts", "app", "automation", ["vectors"], "summary, steps, requirements"),
     s("vectors", "Turn each part into numbers", "provider", "automation", ["keep"], "built-in or Vertex AI"),
     s("keep", "Keep them in the search index", "app", "automation", ["ask"], "only changed parts"),
@@ -100,7 +100,7 @@ export const standardFlow = flow("guide-standard", "From a standard to a reviewe
   [["app", "Process Manager"], ["dev", "Developer and AI assistant"]],
   [
     s("write", "Write or change the standard", "me", "document", ["generate"], "requirements"),
-    s("generate", "Generate skill and review agent", "app", "automation", ["install"], "a new version each save"),
+    s("generate", "Generate skill and review agent", "app", "automation", ["install"], "a new version on each publish"),
     s("install", "Put both files in the repository", "dev", "code", ["code"], "download or export"),
     s("code", "Write code with the skill", "dev", "task", ["check"], "the assistant follows it"),
     s("check", "Review agent checks the change", "dev", "review", ["found"], "cites requirement ids"),
@@ -109,19 +109,31 @@ export const standardFlow = flow("guide-standard", "From a standard to a reviewe
     s("merge", "Merge", "dev", "verify", []),
   ], "Standard editor");
 
-export const versionFlow = flow("guide-versions", "Two people edit the same process", "How a save becomes a version and what happens when somebody else saved first.",
+export const versionFlow = flow("guide-versions", "Two people edit the same draft", "What happens when somebody else saved the draft while you were editing it.",
   [["colleague", "A colleague"], ["app", "Process Manager"]],
   [
-    s("edit", "Edit the process", "me", "task", ["colleague-saves"], "a draft, with Undo"),
-    s("colleague-saves", "Saves a change first", "colleague", "task", ["save"]),
-    s("save", "Press Save changes", "me", "task", ["newest"], "with a note"),
-    s("newest", "Started from the newest version?", "app", "decision", [["stored", "Yes"], ["compare", "No"]]),
+    s("edit", "Change it on the editing screen", "me", "task", ["colleague-saves"], "with Undo"),
+    s("colleague-saves", "Saves the draft first", "colleague", "task", ["save"]),
+    s("save", "Press Save draft", "me", "task", ["newest"]),
+    s("newest", "Started from the latest save?", "app", "decision", [["stored", "Yes"], ["compare", "No"]]),
     s("compare", "Show what they changed", "app", "automation", ["choose"]),
-    s("choose", "Whose version?", "me", "decision", [["continue", "Theirs"], ["stored", "Mine"]]),
-    s("continue", "Continue from theirs", "me", "task", ["save"], "yours: one Undo away"),
-    s("stored", "Keep it as a new version", "app", "automation", []),
+    s("choose", "Whose changes?", "me", "decision", [["continue", "Theirs"], ["stored", "Mine"]]),
+    s("continue", "Use their draft", "me", "task", ["save"], "yours: one Undo away"),
+    s("stored", "Keep it as the draft", "app", "automation", [], "readers see nothing yet"),
   ]);
 
+export const changeFlow = flow("guide-change", "The life of a change", "From pressing Edit to readers seeing the new version.",
+  [["app", "Process Manager"], ["readers", "Readers"]],
+  [
+    s("edit", "Press Edit and change it", "me", "task", ["save"], "on the editing screen"),
+    s("save", "Save draft", "me", "task", ["ready"], "only editors see it"),
+    s("ready", "Ready for readers?", "me", "decision", [["publish", "Yes"], ["edit", "Not yet"], ["discard", "Drop it"]]),
+    s("discard", "Discard draft", "me", "task", [], "readers keep theirs"),
+    s("publish", "Publish, with a note", "me", "form", ["newer"], "blocked by problems"),
+    s("newer", "Somebody published meanwhile?", "app", "decision", [["live", "No"], ["choose", "Yes"]]),
+    s("choose", "Whose version?", "me", "decision", [["live", "Mine"], ["edit", "Theirs"]]),
+    s("live", "See the new version", "readers", "task", [], "skills and search follow"),
+  ], "Editor");
 
 export const rightsFlow = flow("guide-rights", "Who may change a process or standard", "How the app decides what you may do with one process or standard.",
   [["app", "Process Manager"]],
@@ -130,8 +142,8 @@ export const rightsFlow = flow("guide-rights", "Who may change a process or stan
     s("editor", "Admin, process or standards editor?", "app", "decision", [["change", "Yes"], ["owns", "No"]]),
     s("owns", "Owner of its platform or practice?", "app", "decision", [["change", "Yes"], ["team", "No"]]),
     s("team", "Member of its owning team?", "app", "decision", [["manage", "Yes"], ["read", "No"]]),
-    s("change", "Change, create or delete it", "me", "document", [], "also reviews, feedback"),
-    s("manage", "Confirm reviews, answer feedback", "me", "review", [], "and see drafts"),
+    s("change", "Edit, publish or delete it", "me", "document", [], "also create, review, feedback"),
+    s("manage", "Confirm reviews, answer feedback", "me", "review", [], "and open its drafts"),
     s("read", "Read it and give feedback", "me", "task", []),
   ]);
 
