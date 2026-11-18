@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, ClipboardCheck, Eye, LayoutGrid, LogOut, Moon, Pencil, Search, Settings2, ShieldCheck, Sun, Users } from "lucide-react";
+import { BookOpen, ClipboardCheck, LayoutGrid, LogOut, Moon, Search, Settings2, ShieldCheck, Sun, Users } from "lucide-react";
 import { Lightbulb } from "lucide-react";
 import type { Catalog, DocMeta, Feedback, FeedbackByTarget, Me, Process, Standard, TargetKind } from "./types";
 import {
@@ -8,9 +8,8 @@ import {
 } from "./lib/store";
 import { CatalogContext, EMPTY_CATALOG, useCatalog } from "./lib/catalog";
 import { EngagementProvider } from "./lib/engagement";
-import { canEditSomething, canOpenAdmin, FeedbackContext, MeContext, roleLabel, usePerms, type FeedbackActions } from "./lib/session";
+import { canOpenAdmin, FeedbackContext, MeContext, roleLabel, usePerms, type FeedbackActions } from "./lib/session";
 import { belongsRefused, canEdit, editsAll } from "./lib/rights";
-import { ModeContext, type Mode } from "./lib/mode";
 import { blankProcess, blankStandard, slugify, tidy, tidyStandard, today, uniqueId, type BelongsTo } from "./lib/edit";
 import { CatalogPage } from "./components/CatalogPage";
 import { Library } from "./components/Library";
@@ -236,12 +235,6 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const [ai, setAi] = useState<null | "process" | "standard">(null);
   const [catalog, setCatalog] = useState<Catalog>(EMPTY_CATALOG);
   const [feedback, setFeedback] = useState<FeedbackByTarget>({ process: {}, standard: {} });
-  const [wanted, setWanted] = useState<Mode>(() => {
-    try { return localStorage.getItem("pm:mode") === "editor" ? "editor" : "consumer"; } catch { return "consumer"; }
-  });
-  // the Editor view exists only for people who can edit something
-  const mode: Mode = canEditSomething(perms) ? wanted : "consumer";
-  const switchMode = (m: Mode) => { setWanted(m); try { localStorage.setItem("pm:mode", m); } catch { /* ignore */ } };
 
   const loadedAt = useRef(0);
   const writes = useRef(0); // counts our own saves, creations and deletions
@@ -323,7 +316,10 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const refreshFeedback = () => { loadFeedback().then(setFeedback).catch(() => {}); };
   const byId = <T extends { id: string }>(list: T[], doc: T) => [...list.filter((x) => x.id !== doc.id), doc].sort((a, b) => a.id.localeCompare(b.id));
 
-  const setMeta = (set: typeof setProcessMeta, id: string, meta: DocMeta) => set((all) => ({ ...all, [id]: meta }));
+  // a save answers with the new version; what it does not say (when the first version was saved,
+  // unpublished changes) stays as it was
+  const setMeta = (set: typeof setProcessMeta, id: string, meta: Partial<DocMeta> & { version: number }) =>
+    set((all) => ({ ...all, [id]: { ...all[id], ...meta, createdAt: meta.createdAt || all[id]?.createdAt || meta.updatedAt || "" } as DocMeta }));
 
   // Saving: on top of the version the edits started from. The page that saves shows what went
   // wrong, including "somebody else saved first"; the new version is returned to it.
@@ -448,7 +444,6 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   useEffect(() => { document.title = title; }, [title]);
 
   return (
-    <ModeContext.Provider value={mode}>
     <CatalogContext.Provider value={catalogApi}>
     <FeedbackContext.Provider value={actions}>
       <header className="topbar">
@@ -472,12 +467,6 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
           {canOpenAdmin(perms) && <a className={`nav-link ${on("admin")}`} aria-current={current("admin")} href={href({ page: "admin", section: perms.admin ? "access" : "lists" })} aria-label="Admin" title="Admin"><Settings2 size={15} /><span>Admin</span></a>}
         </nav>
         <span className="spacer" />
-        {canEditSomething(perms) && (
-          <div className="mode-switch" role="group" aria-label="Mode">
-            <button className={mode === "consumer" ? "on" : ""} aria-pressed={mode === "consumer"} aria-label="Consumer" onClick={() => switchMode("consumer")} title="Consumer: read, follow and give feedback"><Eye size={14} /><span>Consumer</span></button>
-            <button className={mode === "editor" ? "on editor" : ""} aria-pressed={mode === "editor"} aria-label="Editor" onClick={() => switchMode("editor")} title="Editor: change what you have the right to change"><Pencil size={14} /><span>Editor</span></button>
-          </div>
-        )}
         <button className="icon-btn" onClick={() => setDark(!dark)} aria-label={dark ? "Switch to the light theme" : "Switch to the dark theme"}>{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
         <UserMenu me={me} onSignedOut={onSignedOut} />
       </header>
@@ -526,6 +515,5 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       {signedOut && <SignedOutDialog me={me} onBack={() => setSignedOut(false)} onOther={onSignedOut} />}
     </FeedbackContext.Provider>
     </CatalogContext.Provider>
-    </ModeContext.Provider>
   );
 }

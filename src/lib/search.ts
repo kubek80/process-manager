@@ -8,7 +8,7 @@ import { appliesTo, type Profile } from "./edit";
 // give, so that the page can show the counts and leave out what gives nothing.
 
 /** The filters of the lists and the results page; the results page carries them in the address. */
-export type Filters = Omit<SearchState, "q" | "pageNo" | "size" | "mode">;
+export type Filters = Omit<SearchState, "q" | "pageNo" | "size" | "mode" | "sort">;
 export type FilterKey = keyof Filters;
 export const FILTER_KEYS: FilterKey[] = ["type", "category", "platform", "practice", "rigour", "owner"];
 export const FILTER_LABEL: Record<FilterKey, string> = { type: "Type", rigour: "Rigour", category: "Category", practice: "Practice", platform: "Platform", owner: "Owner" };

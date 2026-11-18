@@ -277,6 +277,16 @@ describe("addresses of home and search", () => {
     for (const bad of ["mode=", "mode=Meaning", "mode=vector", "mode=both,meaning"])
       expect(parseRoute(`#/search?q=x&${bad}`)).toEqual({ page: "search", q: "x" });
   });
+  it("carries the order; the best match (or by name) is not written", () => {
+    const routes: Route[] = [
+      { page: "search", q: "gcp", sort: "newest" },
+      { page: "search", sort: "updated", platform: ["azure"], pageNo: 2, size: 12, mode: "both" },
+    ];
+    for (const r of routes) expect(parseRoute(href(r))).toEqual(r);
+    expect(href({ page: "search", q: "x", sort: "updated" })).toBe("#/search?q=x&sort=updated");
+    for (const bad of ["sort=", "sort=name", "sort=Newest", "sort=newest,updated", "sort=relevance"])
+      expect(parseRoute(`#/search?q=x&${bad}`)).toEqual({ page: "search", q: "x" });
+  });
   it("ignores what it does not know, and what is empty", () => {
     expect(parseRoute("#/search?q=&type=&foo=bar&rigour=often,mandatory&type=widget")).toEqual({ page: "search", rigour: ["mandatory"] });
     expect(parseRoute("#/search?q=%E0%A4%A&platform=azure,,azure")).toEqual({ page: "search", q: "%E0%A4%A", platform: ["azure"] });

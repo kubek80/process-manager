@@ -60,15 +60,22 @@ export const logout = () => call<void>("POST", "/auth/logout");
 export type MetaById = Record<string, DocMeta>;
 const saveQuery = (base: number, note = "") => `?base=${base}${note.trim() ? `&note=${encodeURIComponent(note.trim())}` : ""}`;
 
+/** An older server sends no `createdAt`: the date of the last save stands in for it. */
+export function completeMeta(meta: Record<string, Partial<DocMeta>> | undefined): MetaById {
+  const out: MetaById = {};
+  for (const [id, m] of Object.entries(meta ?? {})) out[id] = { version: 0, updatedAt: "", updatedBy: "", ...m, createdAt: m.createdAt || m.updatedAt || "" };
+  return out;
+}
+
 export async function loadProcesses(): Promise<{ docs: Process[]; meta: MetaById }> {
   const r = await call<{ processes: Process[]; meta?: MetaById }>("GET", "/api/processes");
-  return { docs: r.processes, meta: r.meta ?? {} };
+  return { docs: r.processes, meta: completeMeta(r.meta) };
 }
 export const putProcess = (p: Process, base: number, note?: string) => call<DocMeta>("PUT", `/api/processes/${p.id}${saveQuery(base, note)}`, p);
 export const removeProcess = (id: string, base: number) => call<void>("DELETE", `/api/processes/${id}?base=${base}`);
 export async function loadStandards(): Promise<{ docs: Standard[]; meta: MetaById }> {
   const r = await call<{ standards: Standard[]; meta?: MetaById }>("GET", "/api/standards");
-  return { docs: r.standards, meta: r.meta ?? {} };
+  return { docs: r.standards, meta: completeMeta(r.meta) };
 }
 export const putStandard = (s: Standard, base: number, note?: string) => call<DocMeta>("PUT", `/api/standards/${s.id}${saveQuery(base, note)}`, s);
 export const removeStandard = (id: string, base: number) => call<void>("DELETE", `/api/standards/${id}?base=${base}`);
@@ -218,6 +225,8 @@ export interface SearchState {
   size?: number;
   /** Search by meaning, or both ways; left out, by words. */
   mode?: "meaning" | "both";
+  /** The order: newest first (date added), recently updated first; left out, the best match (or by name). */
+  sort?: "newest" | "updated";
 }
 const SEARCH_LISTS = ["type", "rigour", "category", "practice", "platform", "owner"] as const;
 const SEARCH_SIZES = [12, 24, 48];
@@ -243,6 +252,7 @@ function parseSearch(query: string): Route {
     if (key === "page") { if (/^[1-9]\d{0,5}$/.test(raw)) r.pageNo = Number(raw); continue; }
     if (key === "size") { if (SEARCH_SIZES.includes(Number(raw)) && /^\d+$/.test(raw)) r.size = Number(raw); continue; }
     if (key === "mode") { if (raw === "meaning" || raw === "both") r.mode = raw; continue; }
+    if (key === "sort") { if (raw === "newest" || raw === "updated") r.sort = raw; continue; }
     if (!(SEARCH_LISTS as readonly string[]).includes(key)) continue;
     const k = key as (typeof SEARCH_LISTS)[number];
     const values = [...new Set(raw.split(",").map((v) => decode(v).trim()).filter((v) => v && (!SEARCH_ALLOWED[k] || SEARCH_ALLOWED[k]!.includes(v))))];
@@ -257,6 +267,7 @@ function searchHref(r: SearchState): string {
   if (r.pageNo && Number.isInteger(r.pageNo) && r.pageNo > 1) parts.push(`page=${r.pageNo}`);
   if (r.size && SEARCH_SIZES.includes(r.size)) parts.push(`size=${r.size}`);
   if (r.mode === "meaning" || r.mode === "both") parts.push(`mode=${r.mode}`);
+  if (r.sort === "newest" || r.sort === "updated") parts.push(`sort=${r.sort}`);
   return `#/search${parts.length ? `?${parts.join("&")}` : ""}`;
 }
 

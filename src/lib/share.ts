@@ -1,7 +1,7 @@
 import type { TargetKind } from "../types";
 
-// Sharing a process or standard: a link, and a short message for Slack, Google Chat or e-mail.
-// Nothing is posted anywhere; the person copies the text or their mail program opens.
+// Sharing a process or standard: its link, the link with its title, an e-mail, or the device's
+// own share sheet. Nothing is posted anywhere from the app.
 
 export interface ShareInfo { kind: TargetKind; id: string; title: string; summary?: string }
 
@@ -30,35 +30,6 @@ export function oneLine(text: string | undefined, max = 240): string {
 
 const noun = (kind: TargetKind) => (kind === "process" ? "process" : "standard");
 
-/** Plain text that reads well anywhere: the title, the summary, the link on a line of its own. */
-export function plainMessage(s: ShareInfo, url: string): string {
-  const summary = oneLine(s.summary);
-  return [oneLine(s.title, 200), summary, url].filter(Boolean).join("\n");
-}
-
-/**
- * Slack: the composer keeps bold text and links when rich text is pasted, so the message is
- * copied as HTML too; the plain text (used where HTML is not taken) marks the title with *…*,
- * which Slack shows as bold, and puts the link on its own line, which Slack turns into a link.
- * Slack's own <url|text> link syntax is left out: it only works for apps, not in pasted text.
- */
-export function slackMessage(s: ShareInfo, url: string): { text: string; html: string } {
-  const title = oneLine(s.title, 200), summary = oneLine(s.summary);
-  return {
-    text: [`*${title}*`, summary, url].filter(Boolean).join("\n"),
-    html: [`<b>${escapeHtml(title)}</b>`, summary && escapeHtml(summary), `<a href="${escapeHtml(url)}">${escapeHtml(url)}</a>`].filter(Boolean).join("<br>"),
-  };
-}
-
-/**
- * Google Chat takes pasted text as plain text and formats it when sent: *…* becomes bold and an
- * address becomes a link. Its <url|text> syntax only works for apps, so the address is shown as it is.
- */
-export function googleChatMessage(s: ShareInfo, url: string): string {
-  const title = oneLine(s.title, 200), summary = oneLine(s.summary);
-  return [`*${title}*`, summary, url].filter(Boolean).join("\n");
-}
-
 /** A mailto: link that opens the person's mail program with subject and text filled in. */
 export function mailtoLink(s: ShareInfo, url: string): string {
   const title = oneLine(s.title, 200);
@@ -68,22 +39,39 @@ export function mailtoLink(s: ShareInfo, url: string): string {
   return `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
 }
 
-export function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+/** "Copy link and title": the title on one line, the address on the next - reads well in any chat or document. */
+export function linkAndTitle(s: ShareInfo, url: string): string {
+  return `${oneLine(s.title, 200)}\n${url}`;
 }
 
-/** What each way of sharing gives the person when they paste it. */
+/** What the device's own share sheet gets (`navigator.share`). */
+export function nativeShareData(s: ShareInfo, url: string): ShareData {
+  const summary = oneLine(s.summary);
+  return { title: oneLine(s.title, 200), text: summary || oneLine(s.title, 200), url };
+}
+
+type Sharer = { share?: (d: ShareData) => Promise<void>; canShare?: (d: ShareData) => boolean };
+
+/** Whether the device has its own share sheet for this: `navigator.share` exists and, where it can be asked, `canShare` agrees. */
+export function canShareNatively(nav: Sharer | undefined, data: ShareData): boolean {
+  if (!nav || typeof nav.share !== "function") return false;
+  if (typeof nav.canShare === "function") {
+    try { return nav.canShare(data); } catch { return false; }
+  }
+  return true;
+}
+
+/** A share sheet the person closed without choosing is not a failure. */
+export const shareCancelled = (e: unknown) => e instanceof Error ? e.name === "AbortError" : (e as { name?: string } | null)?.name === "AbortError";
+
+/** What each way of sharing gives the person. */
 export const SHARE_HINT = {
-  link: "Only the address, to paste anywhere",
-  slack: "Pastes into Slack with the title in bold, the summary and a link",
-  chat: "Pastes into Google Chat; the title shows in bold once sent, with the summary and a link",
+  title: "The title and the address, to paste in a chat or a document",
+  email: "Opens your mail program with the message filled in",
+  device: "Send it with an app on this device",
 } as const;
 
-/** The line that confirms a copy, naming what was copied and where it goes. */
-export function copiedStatus(what: "link" | "slack" | "chat"): string {
-  switch (what) {
-    case "link": return "The link was copied. Paste it where you want to share it.";
-    case "slack": return "The message for Slack was copied. Paste it there.";
-    case "chat": return "The message for Google Chat was copied. Paste it there.";
-  }
+/** The line that confirms a copy, naming what was copied. */
+export function copiedStatus(what: "link" | "title"): string {
+  return what === "link" ? "The link was copied. Paste it where you want to share it." : "The link and title were copied. Paste them where you want to share them.";
 }
