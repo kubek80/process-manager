@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -21,6 +22,8 @@ func TestZZPerf(t *testing.T) {
 		from generate_series(1, 3600000) i
 		join (select kind, id, row_number() over (order by kind, id) - 1 as r, count(*) over () as c from documents where kind <> 'catalog') x on x.r = i % x.c
 		on conflict do nothing`)
+	must(t, err)
+	_, err = pool.Exec(bg, `insert into document_counts (kind, id, views, people) select kind, id, count(*), count(distinct email) from document_views group by kind, id`)
 	must(t, err)
 	_, err = pool.Exec(bg, `analyze`)
 	must(t, err)
@@ -43,7 +46,8 @@ func TestZZPerf(t *testing.T) {
 	st, _, _ := c.raw("POST", "/api/views/process/"+gcp, nil, true)
 	t.Logf("view: %d %v", st, time.Since(s))
 	if os.Getenv("PERF_PLAN") != "" {
-		for _, q := range []string{os.Getenv("PERF_PLAN")} {
+		for _, q := range strings.Split(os.Getenv("PERF_PLAN"), ";;") {
+			t.Log("----- " + q[:min(60, len(q))])
 			rows, _ := pool.Query(bg, "explain analyze "+q)
 			for rows.Next() {
 				var l string

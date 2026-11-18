@@ -51,7 +51,7 @@ func TestMigrateOnAnEmptyDatabaseCreatesTheTablesAndImportsNothing(t *testing.T)
 	pool := dbtest.NewEmptyPool(t)
 	out := runMigrate(t, pool)
 	for _, want := range []string{
-		"Tables:  5 applied: 001_feedback.sql, 002_content_roles_skills.sql, 003_version_notes_sessions.sql, 004_platform_practice_owners.sql, 005_engagement_requests.sql\n",
+		"Tables:  6 applied: 001_feedback.sql, 002_content_roles_skills.sql, 003_version_notes_sessions.sql, 004_platform_practice_owners.sql, 005_engagement_requests.sql, 006_counts_and_limits.sql\n",
 		"Content: nothing to convert: the content already fits this version\n",
 		"Skills:  already up to date\n",
 		"Done.\n",

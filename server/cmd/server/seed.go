@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
@@ -95,6 +96,12 @@ func seedEngagement(ctx context.Context, st stores, log *slog.Logger, now time.T
 		select * from unnest($1::text[], $2::text[], $3::text[]::date[], $4::text[]) on conflict do nothing`, kinds, ids, dayList, emails); err != nil {
 		return err
 	}
+	// the numbers kept per document follow the views added at once
+	if _, err := pool.Exec(ctx, `insert into document_counts (kind, id, views, people)
+		select kind, id, count(*), count(distinct email) from document_views group by kind, id
+		on conflict (kind, id) do update set views = excluded.views, people = excluded.people`); err != nil {
+		return err
+	}
 
 	// upvotes and bookmarks: some for every built-in user, upvotes from colleagues too
 	upvotes, bookmarks := 0, 0
@@ -132,10 +139,13 @@ func seedEngagement(ctx context.Context, st stores, log *slog.Logger, now time.T
 			continue
 		}
 		for n := rng.IntN(7); n > 0; n-- {
-			if err := st.engagement.CountDownload(ctx, sk.ID, sk.SourceKind, sk.SourceID, engagement.ViaDownload, at(rng.IntN(days))); err != nil {
+			counted, err := st.engagement.CountDownload(ctx, sk.ID, sk.SourceKind, sk.SourceID, people[rng.IntN(len(people))], engagement.ViaDownload, at(rng.IntN(days)))
+			if err != nil && !errors.Is(err, engagement.ErrNoDocument) {
 				return err
 			}
-			downloads++
+			if counted {
+				downloads++
+			}
 		}
 	}
 
@@ -189,7 +199,7 @@ func seedRequests(ctx context.Context, st stores, now time.Time, exists map[stri
 	added := 0
 	for _, s := range samples {
 		q, err := st.requests.Create(ctx, requests.New{Kind: s.kind, Title: s.title, Description: s.description,
-			Platform: known(lists.Platforms, s.platform), Practice: known(lists.Practices, s.practice), ByEmail: s.by, ByName: s.byName})
+			Platform: known(lists.Platforms, s.platform), Practice: known(lists.Practices, s.practice), ByEmail: s.by, ByName: s.byName}, 0)
 		if err != nil {
 			return added, err
 		}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/kubek80/process-manager/server/internal/docs"
@@ -82,7 +83,15 @@ func TestARequestIsChecked(t *testing.T) {
 		{with("title", strings.Repeat("x", 121)), "Give the request a title of 5 to 120 characters."},
 		{with("description", "Too short"), "Describe what is needed and why in 10 to 1000 characters."},
 		{with("description", strings.Repeat("y", 1001)), "Describe what is needed and why in 10 to 1000 characters."},
-		{with("title", "Bad \x00 title"), "The text contains characters that cannot be stored."},
+		{with("title", "Bad \x00 title"), "The title contains characters that cannot be stored."},
+		{with("title", "Bad \x07 title"), "The title contains control characters. Remove them and try again."},
+		{with("title", "A title\non two lines"), "The title contains control characters. Remove them and try again."},
+		{with("description", "What is \x1b[31m needed"), "The description contains control characters. Remove them and try again."},
+		{with("title", "Pay \u202Etxt.exe"), "The title contains characters that change the reading direction. Remove them and try again."},
+		{with("description", "Needed \u2066for\u2069 a reason"), "The description contains characters that change the reading direction. Remove them and try again."},
+		{with("title", "\u200B\u200B\u200B\u200B\u200B\u200B"), "The title has no visible characters."},
+		{with("description", "\u200B\u2060\uFEFF\u3164\u200B\u200B\u200B\u200B\u200B\u200B"), "The description has no visible characters."},
+		{with("title", "   Four   "), "Give the request a title of 5 to 120 characters."},
 		{with("platform", "mars"), "There is no platform “mars” in the lists."},
 		{with("practice", "alchemy"), "There is no practice “alchemy” in the lists."},
 	} {
@@ -205,16 +214,26 @@ func TestTheStatesOfARequest(t *testing.T) {
 		entries[0].Detail != "“Publish a library”: Done, answered by the process “Publish an internal library”" {
 		t.Fatalf("audit: %+v", entries[0])
 	}
-	// the document that answers it is deleted: the request keeps its id and the list still works
+	if body["linkedGone"] != false {
+		t.Fatalf("linkedGone: %v", body)
+	}
+	// the document that answers it is deleted: the request stays done and says the answer is gone
+	original := e.body(docs.Process, library, "", "")
 	status, body = a.do("DELETE", "/api/processes/"+library, nil)
 	wantStatus(t, status, 200, body)
-	if got := e.as(sam).requests()[0]; got["linkedId"] != library || got["state"] != "done" {
+	if got := e.as(sam).requests()[0]; got["linkedId"] != "" || got["linkedGone"] != true || got["state"] != "done" {
 		t.Fatalf("after deleting: %v", got)
+	}
+	// something new under the same id does not become the answer
+	status, body = a.do("PUT", "/api/processes/"+library, original)
+	wantStatus(t, status, 200, body)
+	if got := e.as(sam).requests()[0]; got["linkedId"] != "" || got["linkedGone"] != true {
+		t.Fatalf("after creating it again: %v", got)
 	}
 	// declined, with the reason
 	status, body = a.do("PUT", path(q, "/state"), map[string]string{"state": "declined", "note": "Covered elsewhere."})
 	wantStatus(t, status, 200, body)
-	if body["linkedId"] != "" || body["stateNote"] != "Covered elsewhere." {
+	if body["linkedId"] != "" || body["linkedGone"] != false || body["stateNote"] != "Covered elsewhere." {
 		t.Fatalf("declined: %v", body)
 	}
 	status, body = a.do("PUT", "/api/requests/999/state", map[string]string{"state": "planned"})
@@ -228,18 +247,24 @@ func TestADraftThatAnswersARequestIsNotNamedToOthers(t *testing.T) {
 	wantStatus(t, status, 200, body)
 	status, body = e.as(alex).do("PUT", "/api/processes/"+gcp, e.asDraft(docs.Process, gcp, "SECRET"))
 	wantStatus(t, status, 200, body)
-	if got := e.as(sam).requests()[0]; got["linkedId"] != "" {
-		t.Fatalf("sam sees %v", got["linkedId"])
+	got := e.as(sam).requests()[0]
+	if got["linkedId"] != "" || got["linkedGone"] != false || got["state"] != "done" {
+		t.Fatalf("sam sees %v", got)
+	}
+	raw := fmt.Sprint(got)
+	if strings.Contains(raw, "SECRET") || strings.Contains(raw, gcp) {
+		t.Fatalf("the draft leaks: %s", raw)
 	}
 	if got := e.as(casey).requests()[0]; got["linkedId"] != gcp {
 		t.Fatalf("casey works on it: %v", got["linkedId"])
 	}
-	// a manager who cannot see a draft cannot name it either
+	// a draft cannot answer a request, even for somebody who sees it
 	q2 := e.as(sam).request(docs.Process, "Another GCP request", "google-cloud", "")
+	status, body = e.as(jordan).do("PUT", path(q2, "/state"), map[string]string{"state": "done", "linkedId": gcp})
+	wantError(t, status, body, 400, "Only a published process can answer a request. Publish it first.")
+	// and somebody who cannot see it is told it does not exist
 	status, body = e.as(dana).do("POST", "/api/admin/access", map[string]string{"email": sam, "role": "platform-owner", "scope": "github"})
 	wantStatus(t, status, 200, body)
-	status, body = e.as(jordan).do("PUT", path(q2, "/state"), map[string]string{"state": "done", "linkedId": gcp})
-	wantStatus(t, status, 200, body) // jordan owns google-cloud and sees the draft
 	q3 := e.as(alex).request(docs.Process, "A GitHub request here", "github", "")
 	status, body = e.as(sam).do("PUT", path(q3, "/state"), map[string]string{"state": "done", "linkedId": gcp})
 	wantError(t, status, body, 400, "There is no process “request-gcp-project”.")
@@ -291,4 +316,65 @@ func TestARequestKeepsAPlatformThatIsRemovedFromTheLists(t *testing.T) {
 	if got := e.as(sam).requests()[0]; got["platform"] != "apigee" {
 		t.Fatalf("%v", got)
 	}
+}
+
+func TestARetiredDocumentCanAnswerARequest(t *testing.T) {
+	e := setup(t, nil)
+	q := e.as(sam).request(docs.Standard, "Rules for code review", "", "")
+	status, body := e.as(dana).do("PUT", "/api/standards/"+review, e.body(docs.Standard, review, `"status": "active"`, `"status": "deprecated"`))
+	wantStatus(t, status, 200, body)
+	status, body = e.as(dana).do("PUT", path(q, "/state"), map[string]string{"state": "done", "linkedId": review})
+	wantStatus(t, status, 200, body)
+	if e.as(sam).requests()[0]["linkedId"] != review {
+		t.Fatal("readers see it")
+	}
+	status, body = e.as(dana).do("PUT", "/api/standards/"+review, e.body(docs.Standard, review, `"status": "deprecated"`, `"status": "draft"`))
+	wantStatus(t, status, 200, body)
+	q2 := e.as(sam).request(docs.Standard, "Another one about reviews", "", "")
+	status, body = e.as(dana).do("PUT", path(q2, "/state"), map[string]string{"state": "done", "linkedId": review})
+	wantError(t, status, body, 400, "Only a published standard can answer a request. Publish it first.")
+}
+
+func TestTheRequestBrakeHoldsForParallelRequestsAndWithdrawals(t *testing.T) {
+	e := setup(t, nil)
+	s := e.as(sam)
+	var wg sync.WaitGroup
+	statuses := make(chan int, 40)
+	for i := 0; i < 40; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			status, _ := s.do("POST", "/api/requests", map[string]string{"kind": "process", "title": fmt.Sprintf("Parallel request %d", i), "description": "Sent all at the same time."})
+			statuses <- status
+		}(i)
+	}
+	wg.Wait()
+	close(statuses)
+	count := map[int]int{}
+	for st := range statuses {
+		count[st]++
+	}
+	if count[201] != maxRequestsPerHour || count[429] != 40-maxRequestsPerHour {
+		t.Fatalf("answers: %v", count)
+	}
+	// withdrawing frees nothing within the hour, so a loop of create and withdraw stops too
+	for _, q := range s.requests() {
+		s.noContent("DELETE", path(q, ""))
+	}
+	status, body := s.do("POST", "/api/requests", map[string]string{"kind": "process", "title": "After withdrawing", "description": "Still within the hour."})
+	wantError(t, status, body, 429, "You have made a lot of requests in the last hour. Please try again later.")
+}
+
+func TestFeedbackTextIsCheckedLikeRequests(t *testing.T) {
+	e := setup(t, nil)
+	for text, want := range map[string]string{
+		"Broken \x07 here":         "The text contains control characters. Remove them and try again.",
+		"Reads \u202Ebackwards":    "The text contains characters that change the reading direction. Remove them and try again.",
+		"\u200B\u200B\u200B\u200B": "The text has no visible characters.",
+	} {
+		status, body := e.as(sam).do("POST", "/api/feedback", map[string]string{"targetKind": docs.Process, "targetId": gcp, "kind": "broken", "text": text})
+		wantError(t, status, body, 400, want)
+	}
+	// line breaks are fine
+	e.as(sam).report(docs.Process, gcp, "", "First line.\nSecond line.")
 }

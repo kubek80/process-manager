@@ -40,7 +40,7 @@ var stdout io.Writer = os.Stdout
 
 type options struct {
 	seed      bool   // add sample feedback (and in development, sample engagement) when there is none
-	reset     bool   // delete all feedback, then exit
+	reset     bool   // delete all feedback and engagement, then exit
 	importDir string // load files into the database, then exit
 	exportDir string // write the database to files, then exit
 	migrate   bool   // upgrade the tables, convert older content, regenerate the skills, then exit
@@ -49,7 +49,7 @@ type options struct {
 func main() {
 	var o options
 	flag.BoolVar(&o.seed, "seed", false, "add sample feedback when the database has none, and with PM_AUTH=dev sample views, upvotes, bookmarks, downloads and requests when there are none (local development)")
-	flag.BoolVar(&o.reset, "reset", false, "delete all feedback, then exit (combine with -seed to refill; local development only)")
+	flag.BoolVar(&o.reset, "reset", false, "delete all feedback, views, bookmarks, upvotes, skill downloads and requests, then exit (combine with -seed to refill; local development only)")
 	flag.StringVar(&o.importDir, "import", "", "load processes/, standards/ and catalog/ from this folder into the database, then exit")
 	flag.BoolVar(&o.migrate, "migrate", false, "upgrade the tables, convert content stored by an earlier version and regenerate the skills, print what was done, then exit")
 	flag.StringVar(&o.exportDir, "export", "", "write processes, standards, lists and generated skills to this folder, then exit")
@@ -174,12 +174,12 @@ func run(log *slog.Logger, o options) error {
 	}
 	if o.reset {
 		if cfg.Auth != config.AuthDev {
-			return errors.New("-reset deletes all feedback and is only for local development (PM_AUTH=dev)")
+			return errors.New("-reset deletes all feedback, views, bookmarks, upvotes, skill downloads and requests and is only for local development (PM_AUTH=dev)")
 		}
-		if err := st.feedback.Reset(ctx); err != nil {
+		if err := reset(ctx, st); err != nil {
 			return err
 		}
-		log.Info("all feedback deleted")
+		log.Info("all feedback, views, bookmarks, upvotes, skill downloads and requests deleted")
 	}
 
 	// one instance at a time: several starting together on an empty database would all try to fill it
@@ -435,13 +435,17 @@ func exportFiles(ctx context.Context, st stores, dir string, log *slog.Logger) e
 	if err := st.skills.SyncAll(ctx, st.docs); err != nil {
 		return err
 	}
-	// every skill written counts as one download of the process or standard it comes from
+	// every skill written counts as one download of the process or standard it comes from: an
+	// export has no person, so each run counts again
 	var counted error
 	k, err := st.skills.ExportDir(ctx, dir, func(sk skills.Skill) {
 		if st.engagement == nil || counted != nil {
 			return
 		}
-		counted = st.engagement.CountDownload(ctx, sk.ID, sk.SourceKind, sk.SourceID, engagement.ViaExport, time.Now())
+		_, err := st.engagement.CountDownload(ctx, sk.ID, sk.SourceKind, sk.SourceID, "", engagement.ViaExport, time.Now())
+		if !errors.Is(err, engagement.ErrNoDocument) {
+			counted = err
+		}
 	})
 	if err != nil {
 		return err
@@ -451,6 +455,18 @@ func exportFiles(ctx context.Context, st stores, dir string, log *slog.Logger) e
 	}
 	log.Info("exported", "to", dir, "documents", n, "skills", k)
 	return nil
+}
+
+// reset deletes what -seed adds samples of: feedback, views, bookmarks, upvotes, skill
+// downloads and requests, so that -reset -seed gives the samples back completely.
+func reset(ctx context.Context, st stores) error {
+	if err := st.feedback.Reset(ctx); err != nil {
+		return err
+	}
+	if err := st.engagement.Reset(ctx); err != nil {
+		return err
+	}
+	return st.requests.Reset(ctx)
 }
 
 // seed adds the samples that make a local database worth looking at: feedback, and with

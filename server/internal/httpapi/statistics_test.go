@@ -26,8 +26,8 @@ type statsAnswer struct {
 		Documents, Views, People, Downloads, Upvotes, FeedbackHandled int
 	}
 	Trend []struct {
-		Week                     string
-		Views, People, Downloads int
+		Week                           string
+		Days, Views, People, Downloads int
 	}
 }
 
@@ -52,10 +52,13 @@ func (e *env) history() {
 		email string
 		days  int
 	}{{sam, 0}, {alex, 0}, {sam, 10}, {riley, 100}} {
-		must(e.t, e.deps.Engagement.RecordView(bg, docs.Process, gcp, v.email, ago(v.days)))
+		_, _, err := e.deps.Engagement.RecordView(bg, docs.Process, gcp, v.email, ago(v.days))
+		must(e.t, err)
 	}
-	must(e.t, e.deps.Engagement.CountDownload(bg, "process-"+gcp, docs.Process, gcp, engagement.ViaDownload, now))
-	must(e.t, e.deps.Engagement.CountDownload(bg, "process-"+gcp, docs.Process, gcp, engagement.ViaExport, ago(40)))
+	_, err := e.deps.Engagement.CountDownload(bg, "process-"+gcp, docs.Process, gcp, sam, engagement.ViaDownload, now)
+	must(e.t, err)
+	_, err = e.deps.Engagement.CountDownload(bg, "process-"+gcp, docs.Process, gcp, "", engagement.ViaExport, ago(40))
+	must(e.t, err)
 	for _, u := range []struct {
 		email string
 		days  int
@@ -131,6 +134,27 @@ func TestStatisticsOfAPeriod(t *testing.T) {
 	if len(week.Groups["team"]) == 0 || len(week.Groups["practice"]) == 0 || week.Groups["team"][0].ID != "cloud-platform-team" {
 		t.Fatalf("groups: %+v", week.Groups)
 	}
+	// the GCP process has no practice: it is in "None", which comes last; every team owns something
+	practices := week.Groups["practice"]
+	if none := practices[len(practices)-1]; none.ID != "" || none.Name != "None" || none.Views != 2 || none.People != 2 || none.Documents == 0 {
+		t.Fatalf("no practice: %+v", practices)
+	}
+	for _, g := range week.Groups["team"] {
+		if g.ID == "" {
+			t.Fatalf("no None without documents: %+v", g)
+		}
+	}
+	// the days of each week that fall in the period
+	days := 0
+	for _, w := range week.Trend {
+		if w.Days < 1 || w.Days > 7 {
+			t.Fatalf("days: %+v", w)
+		}
+		days += w.Days
+	}
+	if days != 7 {
+		t.Fatalf("7 days in the trend: %d", days)
+	}
 	// the trend: weeks from Monday, oldest first, the last one is this week
 	last := week.Trend[len(week.Trend)-1]
 	if last.Week != engagement.Monday(today).Format("2006-01-02") || week.Trend[0].Week > last.Week {
@@ -164,6 +188,28 @@ func TestStatisticsOfAPeriod(t *testing.T) {
 	}
 }
 
+func TestStatisticsSayWhatBelongsToDeletedDocuments(t *testing.T) {
+	e := setup(t, nil)
+	e.as(sam).view(docs.Process, library)
+	e.as(alex).view(docs.Process, gcp)
+	if status, _, _ := e.as(sam).raw("GET", "/api/skills/process-"+library+"/download", nil, false); status != 200 {
+		t.Fatal(status)
+	}
+	status, body := e.as(alex).do("DELETE", "/api/processes/"+library, nil)
+	wantStatus(t, status, 200, body)
+	st := e.stats("7")
+	if st.Totals["views"] != 2 || st.Totals["deletedViews"] != 1 || st.Totals["downloads"] != 1 || st.Totals["deletedDownloads"] != 1 || st.Totals["people"] != 2 {
+		t.Fatalf("%+v", st.Totals)
+	}
+	sum := 0
+	for _, r := range st.Rows {
+		sum += r.Views
+	}
+	if sum != st.Totals["views"]-st.Totals["deletedViews"] {
+		t.Fatalf("rows %d", sum)
+	}
+}
+
 func TestStatisticsShowDraftsToAdminsAsDrafts(t *testing.T) {
 	e := setup(t, nil)
 	status, body := e.as(alex).do("PUT", "/api/processes/"+gcp, e.asDraft(docs.Process, gcp, "SECRET"))
@@ -178,8 +224,10 @@ func TestStatisticsShowDraftsToAdminsAsDrafts(t *testing.T) {
 func TestStatisticsAsASpreadsheet(t *testing.T) {
 	e := setup(t, nil)
 	e.history()
+	status, body := e.as(dana).do("PUT", "/api/standards/"+review, e.body(docs.Standard, review, `"status": "active"`, `"status": "deprecated"`))
+	wantStatus(t, status, 200, body)
 	tricky := e.body(docs.Process, repoP, `"title": "Request a repository"`, `"title": "=HYPERLINK(\"http://x\", \"Click\"), then; more"`)
-	status, body := e.as(alex).do("PUT", "/api/processes/"+repoP, tricky)
+	status, body = e.as(alex).do("PUT", "/api/processes/"+repoP, tricky)
 	wantStatus(t, status, 200, body)
 
 	status, raw, header := e.as(dana).raw("GET", "/api/admin/statistics.csv?period=7", nil, false)
@@ -203,6 +251,9 @@ func TestStatisticsAsASpreadsheet(t *testing.T) {
 	}
 	found := false
 	for _, r := range records {
+		if r[2] == review && r[3] != "Retired" {
+			t.Fatalf("status in the words of the app: %v", r)
+		}
 		if r[2] == repoP {
 			found = true
 			if r[1] != `'=HYPERLINK("http://x", "Click"), then; more` {
@@ -220,7 +271,8 @@ func TestStatisticsAsASpreadsheet(t *testing.T) {
 }
 
 func TestCSVCellGuard(t *testing.T) {
-	for in, want := range map[string]string{"=1+1": "'=1+1", "+1": "'+1", "-1": "'-1", "@SUM(A1)": "'@SUM(A1)", "\tx": "'\tx", "plain": "plain", "": "", "a=b": "a=b"} {
+	for in, want := range map[string]string{"=1+1": "'=1+1", "+1": "'+1", "-1": "'-1", "@SUM(A1)": "'@SUM(A1)", "\tx": "'\tx", "plain": "plain", "": "", "a=b": "a=b",
+		"  =1+1": "'  =1+1", " \u00a0@x": "' \u00a0@x", "\n=1": "'\n=1", "\rx": "'\rx", "  plain": "  plain", "x -1": "x -1"} {
 		if got := csvCell(in); got != want {
 			t.Errorf("%q: %q, want %q", in, got, want)
 		}

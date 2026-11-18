@@ -32,6 +32,16 @@ func (c *client) engagement() engagementAnswer {
 	return out
 }
 
+// view counts a view and returns the answer: the all-time views and people of the document.
+func (c *client) view(kind, id string) (int, int) {
+	c.e.t.Helper()
+	status, body := c.do("POST", "/api/views/"+kind+"/"+id, nil)
+	if status != 200 || len(body) != 2 {
+		c.e.t.Fatalf("view %s %s: %d %v", kind, id, status, body)
+	}
+	return int(body["views"].(float64)), int(body["people"].(float64))
+}
+
 func (c *client) noContent(method, path string) {
 	c.e.t.Helper()
 	status, raw, _ := c.raw(method, path, nil, true)
@@ -51,10 +61,14 @@ func TestAViewCountsOncePerPersonPerDay(t *testing.T) {
 	e := setup(t, nil)
 	s := e.as(sam)
 	for i := 0; i < 3; i++ {
-		s.noContent("POST", "/api/views/process/"+gcp)
+		if views, people := s.view(docs.Process, gcp); views != 1 || people != 1 {
+			t.Fatalf("view %d: %d %d", i, views, people)
+		}
 	}
-	e.as(alex).noContent("POST", "/api/views/process/"+gcp)
-	e.as(alex).noContent("POST", "/api/views/standard/"+logging)
+	if views, people := e.as(alex).view(docs.Process, gcp); views != 2 || people != 2 {
+		t.Fatalf("alex: %d %d", views, people)
+	}
+	e.as(alex).view(docs.Standard, logging)
 	got := s.engagement()
 	if c := got.Counts[docs.Process][gcp]; c.Views != 2 || c.People != 2 {
 		t.Fatalf("process: %+v", c)
@@ -66,7 +80,8 @@ func TestAViewCountsOncePerPersonPerDay(t *testing.T) {
 		t.Fatal("a document with nothing yet is left out")
 	}
 	// another day is another view by the same person
-	must(t, e.deps.Engagement.RecordView(bg, docs.Process, gcp, "SAM@example.com", engagement.Day(mustDate(t, "2026-01-05"))))
+	_, _, err := e.deps.Engagement.RecordView(bg, docs.Process, gcp, "SAM@example.com", engagement.Day(mustDate(t, "2026-01-05")))
+	must(t, err)
 	if c := s.engagement().Counts[docs.Process][gcp]; c.Views != 3 || c.People != 2 {
 		t.Fatalf("emails are compared in lower case: %+v", c)
 	}
@@ -79,9 +94,13 @@ func TestAViewCountsOncePerPersonPerDay(t *testing.T) {
 
 func TestCountingAViewNeverFailsThePage(t *testing.T) {
 	e := setup(t, nil)
+	e.as(alex).view(docs.Process, gcp)
 	_, err := e.deps.Docs.Pool.Exec(bg, `drop table document_views`)
 	must(t, err)
-	e.as(sam).noContent("POST", "/api/views/process/"+gcp)
+	// the numbers as they are
+	if views, people := e.as(sam).view(docs.Process, gcp); views != 1 || people != 1 {
+		t.Fatalf("%d %d", views, people)
+	}
 	if !strings.Contains(e.logged.String(), "view not counted") {
 		t.Fatalf("not logged: %s", e.logged)
 	}
@@ -141,7 +160,7 @@ func TestUpvotesAreOnePerPersonAndCanBeTakenBack(t *testing.T) {
 func TestADraftNeverShowsInCountsBookmarksOrUpvotes(t *testing.T) {
 	e := setup(t, nil)
 	s := e.as(sam)
-	s.noContent("POST", "/api/views/process/"+gcp)
+	s.view(docs.Process, gcp)
 	s.noContent("PUT", "/api/bookmarks/process/"+gcp)
 	if status, _ := s.do("PUT", "/api/upvotes/process/"+gcp, nil); status != 200 {
 		t.Fatal(status)
@@ -153,21 +172,25 @@ func TestADraftNeverShowsInCountsBookmarksOrUpvotes(t *testing.T) {
 	if _, ok := got.Counts[docs.Process][gcp]; ok || len(got.Mine.Bookmarks) != 0 || len(got.Mine.Upvotes) != 0 {
 		t.Fatalf("the draft shows: %+v", got)
 	}
-	for _, req := range [][2]string{{"POST", "/api/views/process/" + gcp}, {"PUT", "/api/bookmarks/process/" + gcp}, {"PUT", "/api/upvotes/process/" + gcp}, {"DELETE", "/api/upvotes/process/" + gcp}} {
+	for _, req := range [][2]string{{"POST", "/api/views/process/" + gcp}, {"PUT", "/api/bookmarks/process/" + gcp}, {"PUT", "/api/upvotes/process/" + gcp}} {
 		if status, body := s.do(req[0], req[1], nil); status != 404 || body["error"] != "That does not exist." {
 			t.Errorf("%s %s: %d %v", req[0], req[1], status, body)
 		}
 	}
+	// taking the vote back still works, without saying how many there are
+	if status, raw, _ := s.raw("DELETE", "/api/upvotes/process/"+gcp, nil, true); status != 204 || len(raw) != 0 {
+		t.Fatalf("taking back: %d %s", status, raw)
+	}
 	// the people who work on it see it, with what was recorded while it was published
 	c := e.as(casey) // owner role of its team
-	c.noContent("POST", "/api/views/process/"+gcp)
-	if got := c.engagement().Counts[docs.Process][gcp]; got.Views != 2 || got.Upvotes != 1 {
+	c.view(docs.Process, gcp)
+	if got := c.engagement().Counts[docs.Process][gcp]; got.Views != 2 || got.Upvotes != 0 {
 		t.Fatalf("casey: %+v", got)
 	}
 	// published again, sam finds the bookmark and the vote where they were
 	status, body = e.as(alex).do("PUT", "/api/processes/"+gcp, strings.Replace(e.body(docs.Process, gcp, `"status": "draft"`, `"status": "active"`), "SECRET", "Request a GCP project", 1))
 	wantStatus(t, status, 200, body)
-	if got := s.engagement(); len(got.Mine.Bookmarks) != 1 || len(got.Mine.Upvotes) != 1 {
+	if got := s.engagement(); len(got.Mine.Bookmarks) != 1 || len(got.Mine.Upvotes) != 0 {
 		t.Fatalf("after publishing: %+v", got.Mine)
 	}
 }
@@ -185,8 +208,16 @@ func TestDownloadsOfTheSkillAndTheReviewAgentCountForTheirDocument(t *testing.T)
 		t.Fatal(status)
 	}
 	got := s.engagement()
-	if got.Counts[docs.Standard][logging].Downloads != 3 || got.Counts[docs.Process][gcp].Downloads != 1 {
+	// the review agent twice on one day by one person is one download
+	if got.Counts[docs.Standard][logging].Downloads != 2 || got.Counts[docs.Process][gcp].Downloads != 1 {
 		t.Fatalf("%+v", got.Counts)
+	}
+	for i := 0; i < 50; i++ {
+		e.as(sam).raw("GET", "/api/skills/process-"+gcp+"/download", nil, false)
+	}
+	e.as(alex).raw("GET", "/api/skills/process-"+gcp+"/download", nil, false)
+	if got := s.engagement().Counts[docs.Process][gcp].Downloads; got != 2 {
+		t.Fatalf("50 downloads by one reader: %d", got)
 	}
 }
 
@@ -204,7 +235,7 @@ func TestHandledFeedbackIsCounted(t *testing.T) {
 func TestDeletingADocumentDropsItsBookmarksAndVotesButNotThePast(t *testing.T) {
 	e := setup(t, nil)
 	s := e.as(sam)
-	s.noContent("POST", "/api/views/process/"+library)
+	s.view(docs.Process, library)
 	s.noContent("PUT", "/api/bookmarks/process/"+library)
 	if status, _ := s.do("PUT", "/api/upvotes/process/"+library, nil); status != 200 {
 		t.Fatal(status)
@@ -233,7 +264,7 @@ func TestDeletingADocumentDropsItsBookmarksAndVotesButNotThePast(t *testing.T) {
 	if got, ok := s.engagement().Counts[docs.Process][library]; ok {
 		t.Fatalf("the new document inherited %+v", got)
 	}
-	s.noContent("POST", "/api/views/process/"+library) // the same day: the old view does not stand in the way
+	s.view(docs.Process, library) // the same day: the old view does not stand in the way
 	if got := s.engagement().Counts[docs.Process][library]; got.Views != 1 || got.Downloads != 0 {
 		t.Fatalf("%+v", got)
 	}

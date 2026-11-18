@@ -133,3 +133,38 @@ func TestAnExportCountsOneDownloadPerSkill(t *testing.T) {
 		t.Fatalf("exports %d of %d skills; secure-logging %d (skill and review agent)", exports, active, logging)
 	}
 }
+
+func TestResetAndSeedGiveTheSamplesBack(t *testing.T) {
+	st := newStores(t)
+	dev := config.Config{Auth: config.AuthDev, SeedDir: filepath.Join(repo, "..")}
+	if err := prepare(ctx, dev, st, quiet); err != nil {
+		t.Fatal(err)
+	}
+	if err := seed(ctx, dev, st, quiet); err != nil {
+		t.Fatal(err)
+	}
+	views, requests := countRows(t, st, "document_views"), countRows(t, st, "requests")
+	if _, err := st.engagement.SetUpvote(ctx, "someone@example.com", "process", "request-gcp-project", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := reset(ctx, st); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"feedback", "document_views", "document_counts", "bookmarks", "upvotes", "skill_downloads", "requests", "request_votes"} {
+		if n := countRows(t, st, table); n != 0 {
+			t.Fatalf("%s: %d left", table, n)
+		}
+	}
+	if err := seed(ctx, dev, st, quiet); err != nil {
+		t.Fatal(err)
+	}
+	if countRows(t, st, "document_views") != views || countRows(t, st, "requests") != requests || countRows(t, st, "feedback") != 3 {
+		t.Fatal("the samples did not come back")
+	}
+	// the numbers kept per document match what was added
+	var mismatched int
+	if err := st.engagement.Pool.QueryRow(ctx, `select count(*) from document_counts c where c.views <> (select count(*) from document_views v where v.kind = c.kind and v.id = c.id)
+		or c.downloads <> (select count(*) from skill_downloads d where d.source_kind = c.kind and d.source_id = c.id)`).Scan(&mismatched); err != nil || mismatched != 0 {
+		t.Fatalf("numbers do not match: %d %v", mismatched, err)
+	}
+}

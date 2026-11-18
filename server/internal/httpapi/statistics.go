@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/kubek80/process-manager/server/internal/docs"
 	"github.com/kubek80/process-manager/server/internal/engagement"
@@ -26,6 +27,9 @@ type statTotals struct {
 	FeedbackOpened  int `json:"feedbackOpened"`
 	FeedbackHandled int `json:"feedbackHandled"`
 	Requests        int `json:"requests"`
+	// the part of views and downloads that belongs to documents deleted since
+	DeletedViews     int `json:"deletedViews"`
+	DeletedDownloads int `json:"deletedDownloads"`
 }
 
 // statRow is one process or standard. Views, people, downloads, upvotes and feedbackHandled are
@@ -61,6 +65,7 @@ type statGroup struct {
 
 type statWeek struct {
 	Week      string `json:"week"`
+	Days      int    `json:"days"` // how many of its days fall in the period (1-7)
 	Views     int    `json:"views"`
 	People    int    `json:"people"`
 	Downloads int    `json:"downloads"`
@@ -107,7 +112,7 @@ func (a *api) collectStatistics(w http.ResponseWriter, r *http.Request) (*statis
 			return nil, false
 		}
 	}
-	p, err := a.Engagement.PeriodFrom(ctx, from)
+	p, err := a.Engagement.PeriodFrom(ctx, from, now)
 	if err != nil {
 		a.fail(w, r, err)
 		return nil, false
@@ -120,37 +125,32 @@ func (a *api) collectStatistics(w http.ResponseWriter, r *http.Request) (*statis
 	out := &statistics{
 		Period: period, From: from.Format(dateOnly), To: today.Format(dateOnly), lists: lists,
 		Totals: statTotals{Views: p.Views, People: p.People, Downloads: p.Downloads, Upvotes: p.Upvotes,
-			FeedbackOpened: p.FeedbackOpened, FeedbackHandled: p.FeedbackHandled, Requests: p.Requests},
+			FeedbackOpened: p.FeedbackOpened, FeedbackHandled: p.FeedbackHandled, Requests: p.Requests,
+			DeletedViews: p.DeletedViews, DeletedDownloads: p.DeletedDownloads},
 		Rows: []statRow{}, Trend: []statWeek{},
 	}
-	type groupAcc struct {
-		statGroup
-		people map[string]bool
-	}
-	groups := map[string]map[string]*groupAcc{"platform": {}, "practice": {}, "team": {}}
+	groups := map[string]map[string]*statGroup{"platform": {}, "practice": {}, "team": {}}
 	listOf := map[string][]docs.Named{"platform": lists.Platforms, "practice": lists.Practices, "team": lists.Teams}
 	for key, list := range listOf {
 		for _, n := range list {
-			groups[key][n.ID] = &groupAcc{statGroup: statGroup{ID: n.ID, Name: n.Name}, people: map[string]bool{}}
+			groups[key][n.ID] = &statGroup{ID: n.ID, Name: n.Name}
 		}
 	}
-	add := func(key, id string, row statRow, viewers map[string]bool) {
-		if id == "" {
-			return
-		}
+	add := func(key, id string, row statRow) {
 		g := groups[key][id]
-		if g == nil { // named by a document but no longer in the lists: shown by its id
-			g = &groupAcc{statGroup: statGroup{ID: id, Name: id}, people: map[string]bool{}}
-			groups[key][id] = g
+		switch {
+		case g != nil:
+		case id == "": // documents without a platform, practice or owning team
+			g = &statGroup{ID: "", Name: "None"}
+		default: // named by a document but no longer in the lists: shown by its id
+			g = &statGroup{ID: id, Name: id}
 		}
+		groups[key][id] = g
 		g.Documents++
 		g.Views += row.Views
 		g.Downloads += row.Downloads
 		g.Upvotes += row.Upvotes
 		g.FeedbackHandled += row.FeedbackHandled
-		for email := range viewers {
-			g.people[email] = true
-		}
 	}
 	for _, kind := range []string{docs.Process, docs.Standard} {
 		list, err := a.Docs.List(ctx, kind)
@@ -179,9 +179,9 @@ func (a *api) collectStatistics(w http.ResponseWriter, r *http.Request) (*statis
 				row.UpvotesTotal, row.FeedbackOpen, row.FeedbackHandled = c.UpvotesTotal, c.FeedbackOpen, c.FeedbackHandled
 			}
 			out.Rows = append(out.Rows, row)
-			add("platform", row.Platform, row, p.Viewers[k])
-			add("practice", row.Practice, row, p.Viewers[k])
-			add("team", row.Owner, row, p.Viewers[k])
+			add("platform", row.Platform, row)
+			add("practice", row.Practice, row)
+			add("team", row.Owner, row)
 		}
 	}
 	sort.SliceStable(out.Rows, func(i, j int) bool {
@@ -197,11 +197,16 @@ func (a *api) collectStatistics(w http.ResponseWriter, r *http.Request) (*statis
 	out.Groups = map[string][]statGroup{}
 	for key, byID := range groups {
 		list := make([]statGroup, 0, len(byID))
-		for _, g := range byID {
-			g.People = len(g.people)
-			list = append(list, g.statGroup)
+		for id, g := range byID {
+			if c := p.Groups[key][id]; c != nil {
+				g.People = c.People // different people, counted in the database
+			}
+			list = append(list, *g)
 		}
 		sort.Slice(list, func(i, j int) bool {
+			if (list[i].ID == "") != (list[j].ID == "") {
+				return list[j].ID == "" // "None" comes last
+			}
 			if list[i].Views != list[j].Views {
 				return list[i].Views > list[j].Views
 			}
@@ -210,7 +215,7 @@ func (a *api) collectStatistics(w http.ResponseWriter, r *http.Request) (*statis
 		out.Groups[key] = list
 	}
 	for _, wk := range p.Weeks {
-		out.Trend = append(out.Trend, statWeek{Week: wk.Week.Format(dateOnly), Views: wk.Views, People: wk.People, Downloads: wk.Downloads})
+		out.Trend = append(out.Trend, statWeek{Week: wk.Week.Format(dateOnly), Days: wk.Days, Views: wk.Views, People: wk.People, Downloads: wk.Downloads})
 	}
 	return out, true
 }
@@ -221,16 +226,24 @@ func (a *api) statistics(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// csvCell keeps a text from being read as a formula by a spreadsheet: a cell that starts with
-// =, +, -, @ (or a tab or carriage return) gets an apostrophe in front.
+// csvCell keeps a text from being read as a formula by a spreadsheet: a cell that starts with a
+// tab, carriage return or line feed, or whose first character after spaces is =, +, - or @, gets
+// an apostrophe in front.
 func csvCell(s string) string {
-	if s != "" && strings.ContainsRune("=+-@\t\r", rune(s[0])) {
+	if s == "" {
+		return s
+	}
+	if strings.ContainsRune("\t\r\n", rune(s[0])) {
+		return "'" + s
+	}
+	if rest := strings.TrimLeftFunc(s, unicode.IsSpace); rest != "" && strings.ContainsRune("=+-@", rune(rest[0])) {
 		return "'" + s
 	}
 	return s
 }
 
-var statusWords = map[string]string{"active": "Active", "draft": "Draft", "deprecated": "Deprecated"}
+// statusWords are the words the app uses for a status (STATUS_LABEL in src/lib/lifecycle.ts).
+var statusWords = map[string]string{"active": "Active", "draft": "Draft", "deprecated": "Retired"}
 
 // statisticsCSV is the same as statistics, one line per process or standard, for a spreadsheet.
 // Names are used where the lists have them. The file starts with a byte order mark so that

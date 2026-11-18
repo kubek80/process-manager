@@ -349,22 +349,29 @@ func (s *Store) Earliest(ctx context.Context, now time.Time) (time.Time, error) 
 	return Day(*first), nil
 }
 
-// viewsBySet aggregates the views of a period in the database, in one pass: per document, per
-// platform, practice and owning team, the part of deleted documents, and in all. A view of a
-// deleted document has no row in documents (its id is marked).
-const viewsBySet = `with pairs as (
+// viewsBySet aggregates the views of a period in the database: per document, per platform,
+// practice and owning team, the part of deleted documents, and in all. The views are first
+// reduced to one row per document and person; different people are then counted by grouping
+// again (hash aggregation), never by sorting every view. A view of a deleted document has no row
+// in documents (its id is marked).
+const viewsBySet = `with pairs as materialized (
 	select kind, id, email, count(*) as n from document_views where day >= $1 group by kind, id, email
-), joined as (
+), joined as materialized (
 	select p.kind, p.id, p.email, p.n, d.kind is null as deleted,
 		coalesce(d.platform, '') as platform, coalesce(d.practice, '') as practice, coalesce(d.owner, '') as owner
 	from pairs p left join documents d on d.kind = p.kind and d.id = p.id
 )
-select grouping(deleted), grouping(kind), grouping(platform), grouping(practice), grouping(owner),
-	coalesce(bool_or(deleted), false), coalesce(min(kind), ''), coalesce(min(id), ''),
-	coalesce(min(platform), ''), coalesce(min(practice), ''), coalesce(min(owner), ''),
-	coalesce(sum(n), 0)::bigint, count(distinct email)
-from joined
-group by grouping sets ((deleted, kind, id), (deleted, platform), (deleted, practice), (deleted, owner), (deleted), ())`
+select 'document', kind, id, sum(n)::bigint, count(*) from joined where not deleted group by kind, id
+union all
+select 'platform', '', platform, sum(n)::bigint, count(*) from (select platform, email, sum(n) as n from joined where not deleted group by platform, email) x group by platform
+union all
+select 'practice', '', practice, sum(n)::bigint, count(*) from (select practice, email, sum(n) as n from joined where not deleted group by practice, email) x group by practice
+union all
+select 'team', '', owner, sum(n)::bigint, count(*) from (select owner, email, sum(n) as n from joined where not deleted group by owner, email) x group by owner
+union all
+select 'deleted', '', '', coalesce(sum(n), 0)::bigint, 0 from joined where deleted
+union all
+select 'total', '', '', coalesce(sum(n), 0)::bigint, count(*) from (select email, sum(n) as n from joined group by email) x`
 
 // PeriodFrom collects the statistics from the start of the day from (UTC) until now.
 func (s *Store) PeriodFrom(ctx context.Context, from, now time.Time) (*Period, error) {
@@ -376,43 +383,36 @@ func (s *Store) PeriodFrom(ctx context.Context, from, now time.Time) (*Period, e
 		}
 		return p.Docs[k]
 	}
-	rows, err := s.Pool.Query(ctx, viewsBySet, from)
+	// one transaction, so that the reports of a period may use more memory for their grouping
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `set local work_mem = '64MB'`); err != nil {
+		return nil, err
+	}
+	rows, err := tx.Query(ctx, viewsBySet, from)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
-		var gDeleted, gKind, gPlatform, gPractice, gOwner int
-		var deleted bool
-		var kind, id, platform, practice, owner string
+		var set, kind, id string
 		var views, people int
-		if err := rows.Scan(&gDeleted, &gKind, &gPlatform, &gPractice, &gOwner, &deleted, &kind, &id, &platform, &practice, &owner, &views, &people); err != nil {
+		if err := rows.Scan(&set, &kind, &id, &views, &people); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		switch {
-		case gDeleted == 1: // ()
+		switch set {
+		case "document":
+			c := get(Key{kind, id})
+			c.Views, c.People = views, people
+		case "platform", "practice", "team":
+			p.Groups[set][id] = &GroupCounts{views, people}
+		case "deleted":
+			p.DeletedViews = views
+		case "total":
 			p.Views, p.People = views, people
-		case gKind == 0:
-			if !deleted {
-				c := get(Key{kind, id})
-				c.Views, c.People = views, people
-			}
-		case gPlatform == 0:
-			if !deleted {
-				p.Groups["platform"][platform] = &GroupCounts{views, people}
-			}
-		case gPractice == 0:
-			if !deleted {
-				p.Groups["practice"][practice] = &GroupCounts{views, people}
-			}
-		case gOwner == 0:
-			if !deleted {
-				p.Groups["team"][owner] = &GroupCounts{views, people}
-			}
-		default: // (deleted)
-			if deleted {
-				p.DeletedViews = views
-			}
 		}
 	}
 	rows.Close()
@@ -421,7 +421,7 @@ func (s *Store) PeriodFrom(ctx context.Context, from, now time.Time) (*Period, e
 	}
 
 	// downloads per document; those of deleted documents have no row in documents
-	rows, err = s.Pool.Query(ctx, `select s.source_kind, s.source_id, d.kind is null, count(*) from skill_downloads s
+	rows, err = tx.Query(ctx, `select s.source_kind, s.source_id, d.kind is null, count(*) from skill_downloads s
 		left join documents d on d.kind = s.source_kind and d.id = s.source_id where s.day >= $1 group by 1, 2, 3`, from)
 	if err != nil {
 		return nil, err
@@ -457,7 +457,7 @@ func (s *Store) PeriodFrom(ctx context.Context, from, now time.Time) (*Period, e
 			func(c *PeriodCounts, a, b int) { c.FeedbackOpen, c.FeedbackHandled = a, b }},
 	}
 	for _, q := range perDoc {
-		rows, err := s.Pool.Query(ctx, q.sql, from)
+		rows, err := tx.Query(ctx, q.sql, from)
 		if err != nil {
 			return nil, err
 		}
@@ -476,7 +476,7 @@ func (s *Store) PeriodFrom(ctx context.Context, from, now time.Time) (*Period, e
 		}
 	}
 
-	err = s.Pool.QueryRow(ctx, `select
+	err = tx.QueryRow(ctx, `select
 		(select count(*) from upvotes where created_at >= $1),
 		(select count(*) from feedback where created_at >= $1),
 		(select count(*) from feedback where resolved_at >= $1),
@@ -494,7 +494,8 @@ func (s *Store) PeriodFrom(ctx context.Context, from, now time.Time) (*Period, e
 		}
 		return weeks[t]
 	}
-	rows, err = s.Pool.Query(ctx, `select date_trunc('week', day::timestamp), count(*), count(distinct email) from document_views where day >= $1 group by 1`, from)
+	rows, err = tx.Query(ctx, `select week, sum(n)::bigint, count(*) from (select date_trunc('week', day::timestamp) as week, email, count(*) as n
+		from document_views where day >= $1 group by 1, 2) x group by week`, from)
 	if err != nil {
 		return nil, err
 	}
@@ -512,7 +513,7 @@ func (s *Store) PeriodFrom(ctx context.Context, from, now time.Time) (*Period, e
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	rows, err = s.Pool.Query(ctx, `select date_trunc('week', day::timestamp), count(*) from skill_downloads where day >= $1 group by 1`, from)
+	rows, err = tx.Query(ctx, `select date_trunc('week', day::timestamp), count(*) from skill_downloads where day >= $1 group by 1`, from)
 	if err != nil {
 		return nil, err
 	}
