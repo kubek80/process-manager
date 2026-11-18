@@ -356,26 +356,31 @@ func (s *Store) Earliest(ctx context.Context, now time.Time) (time.Time, error) 
 // in documents (its id is marked).
 const viewsBySet = `with pairs as materialized (
 	select kind, id, email, count(*) as n from document_views where day >= $1 group by kind, id, email
-), joined as materialized (
-	select p.kind, p.id, p.email, p.n, d.kind is null as deleted,
-		coalesce(d.platform, '') as platform, coalesce(d.practice, '') as practice, coalesce(d.owner, '') as owner
-	from pairs p left join documents d on d.kind = p.kind and d.id = p.id
 )
-select 'document', kind, id, sum(n)::bigint, count(*) from joined where not deleted group by kind, id
+select 'document', p.kind, p.id, sum(p.n)::bigint, count(*) from pairs p join documents d on d.kind = p.kind and d.id = p.id group by p.kind, p.id
 union all
-select 'platform', '', platform, sum(n)::bigint, count(*) from (select platform, email, sum(n) as n from joined where not deleted group by platform, email) x group by platform
+select 'platform', '', platform, sum(n)::bigint, count(*) from (select d.platform, p.email, sum(p.n) as n from pairs p
+	join documents d on d.kind = p.kind and d.id = p.id group by d.platform, p.email) x group by platform
 union all
-select 'practice', '', practice, sum(n)::bigint, count(*) from (select practice, email, sum(n) as n from joined where not deleted group by practice, email) x group by practice
+select 'practice', '', practice, sum(n)::bigint, count(*) from (select d.practice, p.email, sum(p.n) as n from pairs p
+	join documents d on d.kind = p.kind and d.id = p.id group by d.practice, p.email) x group by practice
 union all
-select 'team', '', owner, sum(n)::bigint, count(*) from (select owner, email, sum(n) as n from joined where not deleted group by owner, email) x group by owner
+select 'team', '', owner, sum(n)::bigint, count(*) from (select d.owner, p.email, sum(p.n) as n from pairs p
+	join documents d on d.kind = p.kind and d.id = p.id group by d.owner, p.email) x group by owner
 union all
-select 'deleted', '', '', coalesce(sum(n), 0)::bigint, 0 from joined where deleted
+select 'deleted', '', '', coalesce(sum(p.n), 0)::bigint, 0 from pairs p where not exists (select 1 from documents d where d.kind = p.kind and d.id = p.id)
 union all
-select 'total', '', '', coalesce(sum(n), 0)::bigint, count(*) from (select email, sum(n) as n from joined group by email) x`
+select 'total', '', '', coalesce(sum(n), 0)::bigint, count(*) from (select email, sum(n) as n from pairs group by email) x`
 
 // PeriodFrom collects the statistics from the start of the day from (UTC) until now.
 func (s *Store) PeriodFrom(ctx context.Context, from, now time.Time) (*Period, error) {
 	from, today := Day(from), Day(now)
+	// the weekly trend is counted at the same time, on a connection of its own
+	trend := make(chan weekly, 1)
+	go func() {
+		w, err := s.weeksFrom(ctx, from)
+		trend <- weekly{w, err}
+	}()
 	p := &Period{Docs: map[Key]*PeriodCounts{}, Groups: map[string]map[string]*GroupCounts{"platform": {}, "practice": {}, "team": {}}}
 	get := func(k Key) *PeriodCounts {
 		if p.Docs[k] == nil {
@@ -486,6 +491,45 @@ func (s *Store) PeriodFrom(ctx context.Context, from, now time.Time) (*Period, e
 		return nil, err
 	}
 
+	weeks := <-trend
+	if weeks.err != nil {
+		return nil, weeks.err
+	}
+	week := func(t time.Time) *Week {
+		if weeks.byMonday[t] == nil {
+			weeks.byMonday[t] = &Week{Week: t}
+		}
+		return weeks.byMonday[t]
+	}
+	// every week of the period, quiet ones included, oldest first
+	for monday := Monday(from); !monday.After(today); monday = monday.AddDate(0, 0, 7) {
+		w := week(monday)
+		for d := 0; d < 7; d++ {
+			if day := monday.AddDate(0, 0, d); !day.Before(from) && !day.After(today) {
+				w.Days++
+			}
+		}
+		p.Weeks = append(p.Weeks, *w)
+	}
+	return p, nil
+}
+
+type weekly struct {
+	byMonday map[time.Time]*Week
+	err      error
+}
+
+// weeksFrom counts views, people and downloads per week from the start of the day from. It runs
+// beside the other queries of a period, on a connection of its own.
+func (s *Store) weeksFrom(ctx context.Context, from time.Time) (map[time.Time]*Week, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `set local work_mem = '64MB'`); err != nil {
+		return nil, err
+	}
 	weeks := map[time.Time]*Week{}
 	week := func(t time.Time) *Week {
 		t = Day(t)
@@ -494,7 +538,7 @@ func (s *Store) PeriodFrom(ctx context.Context, from, now time.Time) (*Period, e
 		}
 		return weeks[t]
 	}
-	rows, err = tx.Query(ctx, `select week, sum(n)::bigint, count(*) from (select date_trunc('week', day::timestamp) as week, email, count(*) as n
+	rows, err := tx.Query(ctx, `select week, sum(n)::bigint, count(*) from (select date_trunc('week', day::timestamp) as week, email, count(*) as n
 		from document_views where day >= $1 group by 1, 2) x group by week`, from)
 	if err != nil {
 		return nil, err
@@ -530,17 +574,7 @@ func (s *Store) PeriodFrom(ctx context.Context, from, now time.Time) (*Period, e
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	// every week of the period, quiet ones included, oldest first
-	for monday := Monday(from); !monday.After(today); monday = monday.AddDate(0, 0, 7) {
-		w := week(monday)
-		for d := 0; d < 7; d++ {
-			if day := monday.AddDate(0, 0, d); !day.Before(from) && !day.After(today) {
-				w.Days++
-			}
-		}
-		p.Weeks = append(p.Weeks, *w)
-	}
-	return p, nil
+	return weeks, nil
 }
 
 // Monday is the start of the week a day falls in.
