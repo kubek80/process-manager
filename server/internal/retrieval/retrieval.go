@@ -207,11 +207,12 @@ func (ix *Index) ProviderKind() string {
 // Outside reports whether text leaves the server to be embedded (documents and questions).
 func (ix *Index) Outside() bool { return ix.Enabled() && ix.emb.Outside() }
 
-// settings is what the stored vectors depend on: when any of it changes, every vector is made again.
+// settings is what the stored vectors depend on: when any of it changes, every vector is made
+// again. chunking.Version changes with the way the parts' texts are written.
 func (ix *Index) settings() (provider string, dims int, chunks string) {
 	parts := append([]string(nil), ix.opts.Parts...)
 	sort.Strings(parts)
-	return ix.emb.Name(), ix.emb.Dimensions(), fmt.Sprintf("parts=%s;max=%d;layout=%d", strings.Join(parts, ","), ix.opts.MaxChars, layout)
+	return ix.emb.Name(), ix.emb.Dimensions(), fmt.Sprintf("parts=%s;max=%d;layout=%d;text=%d", strings.Join(parts, ","), ix.opts.MaxChars, layout, chunking.Version)
 }
 
 // embed asks the provider, within the time limit, holding no database connection.
