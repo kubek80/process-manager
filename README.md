@@ -55,7 +55,7 @@ To use a Postgres you already run instead of Docker, set `PM_PG`, for example `P
 
 ## How it is built
 
-React + Vite frontend; Go server; Postgres. Everything people change lives in the database: processes, standards, the lists, roles, feedback, requests and the generated skills, and the views, bookmarks, upvotes and skill downloads. Every save is a numbered version with a note; a save made from an outdated version is refused, so two people never overwrite each other. The files in this repository are the code, the formats (`schema/`) and sample content for a first start. A database filled by an earlier version is converted by the server at its first start. Search by meaning cuts every published process and standard into parts and keeps a vector per part in Postgres with pgvector; the provider is built in or Google's Vertex AI, and off by default. Details, API and settings: [`docs/backend.md`](docs/backend.md).
+React + Vite frontend; Go server; Postgres. Everything people change lives in the database: processes, standards, the lists, roles, feedback, requests and the generated skills, and the views, bookmarks, upvotes and skill downloads. Every save is a numbered version with a note; a save made from an outdated version is refused, so two people never overwrite each other. The files in this repository are the code, the formats (`schema/`) and sample content for a first start. A database filled by an earlier version is converted by the server at its first start. Search by meaning cuts every published process and standard into parts and keeps a vector per part in Postgres with pgvector; the provider is built in (word-based, for trying it and for tests) or Google's Vertex AI, and off by default. The index follows saves in the background. Details, API and settings: [`docs/backend.md`](docs/backend.md).
 
 ## What is in it
 
@@ -125,7 +125,7 @@ npm run test:all
 | --- | --- |
 | `npm test` | Frontend logic (Vitest): both checkers, editing helpers, undo and the rules for saving, comparing versions, layout, life-cycle, search (by words, by meaning, both), pages and cards, sharing, requests, statistics, prompts, rights and members, and that every sample file and the demo set are valid |
 | `npm run test:server` | Go server against a real Postgres: sign-in incl. a fake OpenID Connect provider, roles, content with versions and concurrent saves, skill generators, feedback, views, bookmarks, upvotes, requests, statistics, admin, start-up and shutdown, chunking, embeddings (Vertex AI only against a local stand-in), the search index, the MCP server |
-| `npm run test:e2e` | Playwright against the real server and database: consumer and editor journeys for processes and standards, versions and two people editing at once, feedback, the Admin panel, skills, AI import, the list filters, cards and pages, the map, views, upvotes, bookmarks and sharing, requests, statistics |
+| `npm run test:e2e` | Playwright against the real server and database: consumer and editor journeys for processes and standards, versions and two people editing at once, feedback, the Admin panel, skills, AI import, the list filters, cards and pages, the map, views, upvotes, bookmarks and sharing, requests, statistics, the search switch (Words, Meaning, Both) |
 | `npm run typecheck`, `npm run validate` | Types; the sample files (or an exported folder) against the schemas and rules |
 
 The end-to-end tests use their own database, emptied at the start of every run. CI runs all of this (`.github/workflows/ci.yml`).

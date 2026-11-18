@@ -22,7 +22,7 @@ Agents also get the knowledge as **generated skills** (see `docs/backend.md` and
 | --- | --- |
 | `npm run mcp` | Builds and starts the MCP server against the development database, with the settings of `npm run dev` (search by meaning with `builtin`). Start `npm run dev` once first: the portal server creates and fills the database. It prints the address and an example client configuration. |
 | `go run ./cmd/mcp` (in `server/`) | The same by hand; settings from the environment. |
-| `CGO_ENABLED=0 go build -trimpath -o mcp ./cmd/mcp` (in `server/`) | A binary to deploy. The portal's `Dockerfile` does not include it: run it next to the portal server, with the same database and the same search settings. |
+| `docker run --entrypoint /app/mcp …` | Deployed: the portal's image holds the MCP server as `/app/mcp` (in Kubernetes `command: ["/app/mcp"]`). Run it as a second container next to the portal, with the same database and the same search settings, `PM_MCP_ADDR=0.0.0.0:8081` and a `PM_MCP_SECRET` (in a container it must listen beyond its own machine). |
 
 Endpoints: `POST /mcp` (streamable HTTP, [official Go SDK](https://github.com/modelcontextprotocol/go-sdk) v1.8.0) and `GET /healthz` (`ok`, or 503 when the database cannot be reached; it needs no secret and says nothing else). The server is stateless: every request stands on its own, nothing is kept between calls. A `GET /mcp` (a stream of messages from the server) is answered with 405, as the protocol allows: the server never sends anything on its own.
 
@@ -35,6 +35,7 @@ Endpoints: `POST /mcp` (streamable HTTP, [official Go SDK](https://github.com/mo
 | `PM_MCP_SECRET` | – | One shared secret, at least 32 characters, not a placeholder (`openssl rand -base64 48`). With it, every call must carry `Authorization: Bearer <secret>`. |
 | `PM_BASE_URL` | `http://localhost:5173` | The portal's address, for links in answers and notifications. |
 | `PM_NOTIFY`, `PM_NOTIFY_WEBHOOK_URL` | `log` | How the owning team hears about a reported problem: as in the portal. |
+| `PM_ALLOWED_EMAIL_DOMAINS`, `PM_GOOGLE_HOSTED_DOMAIN` | – | As for the portal's sign-in: when set, `X-PM-Person` must be an address of one of these domains (exactly that domain). |
 | `PM_EMBEDDINGS` and the other settings of search by meaning | `off` | As in the portal (`docs/backend.md`). They must be the same as the portal server's: the portal server builds the search index, the MCP server only reads it. |
 | `PM_LOG_FORMAT` | `text` | `text` or `json`. |
 
@@ -47,40 +48,42 @@ The server speaks plain HTTP. When it listens beyond this machine, set `PM_MCP_S
 Sign-in for agents is not built (see below). Until then two rules stand in for it:
 
 - **Without `PM_MCP_SECRET`** the server refuses to start on an address other than this machine (`127.0.0.1`, `::1`, `localhost`), and refuses calls that do not come from this machine (`403`). Anything running on the machine can call it. The person headers are ignored, so the server is read-only. Do not put a proxy on the same machine in front of it without a secret: every call through that proxy comes from this machine and would be accepted.
-- **With `PM_MCP_SECRET`** it may listen anywhere, and every call must carry `Authorization: Bearer <secret>`. A missing or wrong secret gets `401` with the same answer either way; the comparison takes the same time whatever was sent.
+- **With `PM_MCP_SECRET`** it may listen anywhere, and every call must carry `Authorization: Bearer <secret>` (the word `Bearer` in any case). A missing or wrong secret gets `401` with the same answer either way; the comparison takes the same time whatever was sent.
 
-**The person an agent acts for**: header `X-PM-Person: <email>` (and optionally `X-PM-Person-Name: <name>`). It is honoured **only** with the secret configured and presented; a value that is not an email address is refused with `400`. Only then is `report_problem` listed and callable. The server cannot check that the email is really the person's: whoever holds the secret is trusted to name the right person.
+Whoever holds the secret can file feedback in anyone's name (within the sign-in domains) and read the members' emails: the secret stands in for the gateway and must be guarded like one.
+
+**The person an agent acts for**: header `X-PM-Person: <email>` (and optionally `X-PM-Person-Name: <name>`). It is honoured **only** with the secret configured and presented; a value that is not an email address, or not of the sign-in domains (`PM_ALLOWED_EMAIL_DOMAINS`, `PM_GOOGLE_HOSTED_DOMAIN`, when set), is refused with `400`. `X-PM-Person-Name` is used when it is one line of at most 60 characters without control or direction characters; otherwise feedback shows the part of the email before the @. Only then is `report_problem` listed and callable. The server cannot check that the email is really the person's: whoever holds the secret is trusted to name the right person.
 
 **Members of teams, platforms and practices** (their emails) are given by `get_catalog` only to callers that present the secret. In the portal they are shown to everyone signed in; an agent on this machine that nobody vouched for is not signed in, so it gets the lists without the people.
 
 ### Consequences of running without a gateway
 
 - Everyone who can reach the server reads every published process and standard, the lists and the generated skills. Without a secret that is everyone on the machine; with one, everyone who has the secret. Nothing is limited per person.
-- With the secret, whoever holds it can file feedback in anyone's name, up to the limit of 30 items per person and hour.
+- With the secret, whoever holds it can file feedback in the name of anyone of the sign-in domains, up to the limit of 30 items per person and hour.
 - Nothing records which agent or person read what.
 - One secret for all: to take access away from one agent the secret has to change for all of them.
 - Drafts stay hidden in every case: they are never returned, and an agent cannot tell a draft from something that does not exist.
 
 ## Tools
 
-Every tool returns structured content (with an output schema) and two text blocks: a short sentence for people reading along, and the same structured content as JSON for clients that do not read structured results. Errors are plain sentences an agent can act on, e.g. "There is no process “x”. Use search_processes to find the id."
+Every tool returns structured content (with an output schema) and two text blocks: a short sentence for people reading along, and the same structured content as JSON for clients that do not read structured results. Errors are plain sentences an agent can act on, e.g. "There is no process “x”. Use search_processes to find the id." A tool that fails unexpectedly answers "Something went wrong on the server. Try again later." and the server keeps running. Every call is answered within 45 seconds. Queries, emails and the secret are not written to the log.
 
 Everywhere: list ids (teams, categories, practices, platforms, tools, tiers, environments, languages) are resolved to names, with the contact of teams, practices and platforms and the link of tools; other processes and standards are named by id and title (a draft by its id only); every document carries its `version`, its `link` in the portal, its `review` state (`review.overdue: true` when the owner has not confirmed it in time) and, when retired, `retired: true` and `replacedBy`. A `notice` sentence says what the agent must tell the person.
 
 | Tool | Input | Returns |
 | --- | --- | --- |
-| `search_processes` | `query?`, `category?`, `practice?`, `platform?`, `owner?`, `rigour?`, `tier?`, `environment?`, `language?`, `limit?` (1–50, default 10) | **Active** processes: id, title, summary, version, owner, category, practice, platform, rigour, where they apply, review state, link; with a query the `score` and up to three `matches` (part, step id, label, snippet). `total`, `rankedBy` (`meaning`, `words` or `title`) and the filters as understood. |
+| `search_processes` | `query?`, `category?`, `practice?`, `platform?`, `owner?`, `rigour?`, `tier?`, `environment?`, `language?`, `limit?` (1–50, default 10) | **Active** processes: id, title, summary, version, owner, category, practice, platform, rigour, where they apply, review state, link; with a query the `score` and up to three `matches` (part, step id, label, snippet). `total` (with `totalAtLeast: true` when search by meaning matched more than the 500 documents it returns, so `total` is a lower bound), `rankedBy` (`meaning`, `words`, `words-fallback` or `title`), a `note` when it fell back, and the filters as understood. |
 | `search_standards` | the same | **Active** standards, with the requirements that apply (id, title, level). A standard matches a `rigour` when a requirement that applies has that level (`must` = mandatory, `should` = recommended, `may` = optional). |
 | `get_process` | `id` | The complete published process: prerequisites, actors (the first is always `me`), every step with instructions, tool, link, outcome, sub-process, resources and what follows, `agentMayDo` per step, the standards it helps to meet, its skills. |
 | `get_standard` | `id`, `tier?`, `environment?`, `language?` | The complete published standard: scope, exception process, every requirement with level, statement, rationale, guidance, examples, verification, what a reviewer looks for. With a profile only the requirements that apply, and `leftOut` says how many were left out. |
 | `get_my_steps` | `id`, `actor?` (id or name, default `me`) | Only that participant's steps in the order the process flows (from the first step along `next`), each with what it waits for (`before`) and what follows (`after`). |
 | `get_skill` | `id` (e.g. `process-request-gcp-project`, from `skills` of get_process / get_standard), `version?` | The text of a generated skill or review agent, latest by default, with its version, the version of its source and `active`. The skill of a draft does not exist. |
 | `get_catalog` | – | Teams, practices and platforms (with contact; with the secret also members), categories, tools (with link), tiers, environments, languages. |
-| `report_problem` | `targetKind`, `targetId`, `itemId?`, `kind` (`broken`, `outdated`, `unclear`, `idea`), `text` | Only listed when acting for a person. Files feedback as that person, through the same checks as the flag in the portal: the text check, 3–2000 characters, a published process or standard, an existing step or requirement, at most 30 items per person and hour (portal and agents together). The owning team is notified as from the portal. |
+| `report_problem` | `targetKind`, `targetId`, `itemId?`, `kind` (`broken`, `outdated`, `unclear`, `idea`), `text` | Only listed when acting for a person. Files feedback as that person, through the same checks as the flag in the portal: the text check, 3–2000 characters, a published process or standard, an existing step or requirement, at most 30 items per person and hour, counted together with the portal and holding for reports sent at the same moment. The owning team is notified as from the portal. |
 
 **Filters** take ids or names, in any case and with or without accents ("Google Cloud", `google-cloud`). An unknown value is refused and names the list to look in. A document without `tiers`, `environments` or `languages` applies to all of them.
 
-**Search**: with a `query` and search by meaning switched on, results are ranked by the portal's search index (`rankedBy: "meaning"`), each with the parts that matched, pointing at the exact step or requirement. Otherwise, or when the index is not built yet or its provider cannot be reached, it is the portal's word match (`rankedBy: "words"`): every word must be found in the title, id, tags, the names of category, practice, platform and owner, the summary, or a step, prerequisite, requirement or the scope; a `note` says why it is a word match. Without a query everything that passes the filters is listed by title.
+**Search**: with a `query` and search by meaning switched on, results are ranked by the portal's search index (`rankedBy: "meaning"`), each with the parts that matched, pointing at the exact step or requirement. Search by meaning gets about 5 seconds; when it does not answer in time, the index is not ready (not built yet, not in use, or built with other settings) or its provider cannot be reached, the tool answers with the portal's word match instead (`rankedBy: "words-fallback"`, with a `note` saying why). With search by meaning off it is the word match (`rankedBy: "words"`): every word must be found in the title, id, tags, the names of category, practice, platform and owner, the summary, or a step, prerequisite, requirement or the scope. Searches that would use the embeddings provider are limited to 60 a minute per person (or, without one, per calling address); beyond that the tool answers "Too many searches in the last minute (at most 60). Try again in N seconds." The MCP server never builds or changes the index: it only searches one the portal server built with the same settings. Without a query everything that passes the filters is listed by title.
 
 ## Connecting a client
 
