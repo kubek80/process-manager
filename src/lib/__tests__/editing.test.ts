@@ -148,6 +148,11 @@ describe("what the Publish dialog lists", () => {
     b.steps[1] = { ...b.steps[1], title: "Approve it quickly", instructions: ["Read it.", "Approve."] };
     const lines = publishLines("process", a, b);
     expect(lines).toContain("Name: “Demo process” → “Demo process renamed”");
+    const long = base(), short = base();
+    long.summary = "A long summary ".repeat(8).trim();
+    short.summary = "Short now.";
+    expect(publishLines("process", long, short)).toEqual(["Summary changed, now “Short now.”"]);
+    expect(publishLines("process", short, long)).toEqual(["Summary changed"]);
     expect(lines.find((l) => l.startsWith("Step “Approve it quickly” changed"))).toBe("Step “Approve it quickly” changed: name “Approve it” → “Approve it quickly”, instructions");
   });
   it("leaves out the review dates the server keeps from the published version", () => {

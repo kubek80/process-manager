@@ -284,8 +284,9 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
       if (ok) notify.info(`Published. Everybody can now find this ${noun}.`);
       return ok;
     }
-    // what is on screen goes into the working draft first
-    if (d.dirty && !(await d.save("", keepStatus))) return false;
+    // what is on screen goes into the working draft first; when that is refused, the conflict
+    // dialog takes over from the Publish dialog
+    if (d.dirty && !(await d.save("", keepStatus))) { setDialog(null); return false; }
     const w = workingNow.current;
     if (!w) return false;
     try {

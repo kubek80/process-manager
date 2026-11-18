@@ -276,6 +276,8 @@ export function publishLines(kind: TargetKind, published: Process | Standard, dr
     if (c.what === "Details" && c.from === undefined && c.to === undefined) {
       const key = keyFor(c.label, before, after);
       if (key && shortValue(before[key]) && shortValue(after[key])) return `${cap(words(key))}: ${quoted(before[key])} → ${quoted(after[key])}`;
+      // a long text that became short is shown as it is now
+      if (key && typeof after[key] === "string" && shortValue(after[key])) return `${cap(words(key))} changed, now ${quoted(after[key])}`;
       return describeChange(c);
     }
     if (c.kind === "changed" && c.what !== "Details" && c.details?.length) {
