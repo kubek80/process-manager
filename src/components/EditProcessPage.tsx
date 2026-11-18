@@ -153,7 +153,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
             <BeforeYouStart process={draft} all={all} standards={standards} open={beforeOpen} onToggle={() => setBeforeOpen(!beforeOpen)} />
           </div>
         : <button className="preview-empty" onClick={() => choose({ section: "before" })}>Nothing needed before step 1 yet. <b>Add what readers must have in place</b></button>}
-      <FlowView editable fitMin={0.4} process={draft} selectedId={stepId} done={NONE} feedback={feedback}
+      <FlowView editable fitMin={0.4} openMin={0.6} follow process={draft} selectedId={stepId} done={NONE} feedback={feedback}
         onSelect={(id) => choose({ section: "steps", item: id })}
         onInsert={(at, spec) => { const r = insertStep(draft, at, spec); setDraft(r.process); selectStep(r.id); }}
         onMoveToLane={(id, actor) => setDraft(updateStep(draft, id, { actor }))} />

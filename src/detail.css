@@ -105,3 +105,11 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
 .draft-line a { font-weight: 600; }
 .draft-line.never { background: var(--warn-bg); }
 .draft-line.never svg { color: var(--warn); }
+
+/* where more of the flow is out of view, the map fades out on that edge (the lane names stay readable on the left) */
+.flow-viewport { position: relative; }
+.flow-viewport::before, .flow-viewport::after { content: ""; position: absolute; top: 0; bottom: 0; width: 56px; z-index: 3; pointer-events: none; opacity: 0; transition: opacity .15s; }
+.flow-viewport::before { left: var(--head, 0px); background: linear-gradient(to right, var(--surface), transparent); }
+.flow-viewport::after { right: 0; background: linear-gradient(to left, var(--surface), transparent); }
+.flow-viewport.fade-left::before, .flow-viewport.fade-right::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .flow-viewport::before, .flow-viewport::after { transition: none; } }

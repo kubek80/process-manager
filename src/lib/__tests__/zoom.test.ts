@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampZoom, isZoomWheel, scrollForZoom, wheelZoom, zoomKey, ZOOM_MAX, ZOOM_MIN } from "../zoom";
+import { fitZoom, hiddenEdges, scrollToShow, clampZoom, isZoomWheel, scrollForZoom, wheelZoom, zoomKey, ZOOM_MAX, ZOOM_MIN } from "../zoom";
 
 describe("Ctrl + scroll on the map", () => {
   it("scrolling up zooms in, down zooms out, by about a tenth per notch of a mouse wheel", () => {
@@ -40,5 +40,44 @@ describe("Ctrl + scroll on the map", () => {
     expect(zoomKey("MacIntel")).toBe("Cmd");
     expect(zoomKey("Win32")).toBe("Ctrl");
     expect(zoomKey("Linux x86_64")).toBe("Ctrl");
+  });
+});
+
+
+describe("fitting the map", () => {
+  it("fits the column in steps of 5%, never above 100% and never below the floor", () => {
+    expect(fitZoom(1000, 800, 0.6)).toBe(1);
+    expect(fitZoom(700, 1000, 0.6)).toBe(0.7);
+    expect(fitZoom(700, 1040, 0.6)).toBe(0.65);
+    // a long flow: readable on opening (60%), the whole of it on request (40%)
+    expect(fitZoom(700, 2400, 0.6)).toBe(0.6);
+    expect(fitZoom(700, 2400, 0.4)).toBe(0.4);
+    expect(fitZoom(700, 1600, 0.4)).toBe(0.4);
+    expect(fitZoom(0, 1600, 0.4)).toBe(1);
+  });
+});
+
+describe("bringing a selected step into view", () => {
+  const view = { left: 0, top: 0, width: 600, height: 400 };
+  it("leaves a block that is fully visible alone", () => {
+    expect(scrollToShow({ x: 100, y: 50, w: 200, h: 90 }, 1, view)).toBeNull();
+  });
+  it("scrolls just far enough for a block to the right or below, with a margin", () => {
+    expect(scrollToShow({ x: 900, y: 50, w: 200, h: 90 }, 1, view)).toEqual({ left: 1100 + 24 - 600, top: 0 });
+    expect(scrollToShow({ x: 100, y: 500, w: 200, h: 90 }, 1, view)).toEqual({ left: 0, top: 590 + 24 - 400 });
+  });
+  it("scrolls back for a block to the left, and counts the zoom", () => {
+    expect(scrollToShow({ x: 100, y: 50, w: 200, h: 90 }, 1, { ...view, left: 500 })).toEqual({ left: 76, top: 0 });
+    // at 60% the block at x 1000 starts at 600 on screen
+    expect(scrollToShow({ x: 1000, y: 0, w: 200, h: 90 }, 0.6, view)).toEqual({ left: 1200 * 0.6 + 24 - 600, top: 0 });
+  });
+});
+
+describe("the fade at the edges of the map", () => {
+  it("shows where more of the flow is hidden", () => {
+    expect(hiddenEdges(0, 1000, 1000)).toEqual({ left: false, right: false });
+    expect(hiddenEdges(0, 2000, 1000)).toEqual({ left: false, right: true });
+    expect(hiddenEdges(500, 2000, 1000)).toEqual({ left: true, right: true });
+    expect(hiddenEdges(1000, 2000, 1000)).toEqual({ left: true, right: false });
   });
 });

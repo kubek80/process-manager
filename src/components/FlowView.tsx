@@ -4,10 +4,10 @@ import type { Feedback, Process, StepType } from "../types";
 import { diamondPoints, L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import { toolName, useCatalog } from "../lib/catalog";
-import { isZoomWheel, scrollForZoom, wheelZoom, clampZoom, zoomKey } from "../lib/zoom";
+import { fitZoom, hiddenEdges, isZoomWheel, scrollForZoom, scrollToShow, wheelZoom, clampZoom, zoomKey } from "../lib/zoom";
 import { openCount } from "./Feedback";
 import { EntryIcon } from "./EntryIcon";
-import { TypeIcon } from "./ui";
+import { scrollBehavior, TypeIcon } from "./ui";
 
 import { QuickAdd, type InsertAt } from "./QuickAdd";
 import "../detail.css";
@@ -20,10 +20,14 @@ const NO_PAN = "button:not(.block-main), a, input, select, textarea, label, .qui
 /** How far the pointer moves before a press becomes a drag of the map (and no longer a click). */
 const PAN_START = 5;
 
-export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, editable = true, bare, fitMin }: {
+export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, editable = true, bare, fitMin, openMin, follow }: {
   editable?: boolean; bare?: boolean;
   /** The smallest zoom "Fit" (and opening) goes down to; the reader's page keeps text readable (75%), the editing screen shows the whole flow. */
   fitMin?: number;
+  /** The smallest zoom the map opens at (default: `fitMin`): readable, a wider flow scrolls sideways. */
+  openMin?: number;
+  /** Bring the selected step into view whenever it changes or moves (the editing screen). */
+  follow?: boolean;
   /** Opens the report form for one step, without opening the step. */
   onReport?: (stepId: string) => void;
   process: Process; selectedId: string | null; done: Set<string>; feedback: Feedback[];
@@ -122,12 +126,41 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
     el.scrollLeft = to.left;
     el.scrollTop = to.top;
   }, [zoom]);
-  const fit = () => {
+  const floor = fitMin ?? (bare ? 0.6 : 0.75);
+  const fit = (min = floor) => {
     const w = scroller.current?.clientWidth ?? 0;
-    if (w) setZoom(Math.max(fitMin ?? (bare ? 0.6 : 0.75), Math.min(1, Math.floor((w / layout.width) * 20) / 20)));
+    if (w) setZoom(fitZoom(w, layout.width, min));
   };
-  // open zoomed to fit the width (on the reader's page never below 75%, where text stops being readable)
-  useLayoutEffect(fit, [process.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // open zoomed to fit the width, but never below where text stops being readable (75% on the
+  // reader's page, `openMin` on the editing screen): a wider flow scrolls sideways
+  useLayoutEffect(() => fit(openMin ?? floor), [process.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // the selected step is brought into view inside the map (never the page), when it is chosen
+  // and when it moves (added, reordered, another lane); also on opening with a step in the address
+  const node = follow && selectedId ? layout.nodes.find((n) => n.step.id === selectedId) : undefined;
+  const nodeAt = node ? `${node.x},${node.y}` : "";
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || !node) return;
+    const frame = requestAnimationFrame(() => {
+      const to = scrollToShow({ x: node.x, y: node.y, w: L.W, h: L.H }, zoomNow.current, { left: el.scrollLeft, top: el.scrollTop, width: el.clientWidth, height: el.clientHeight });
+      if (to) el.scrollTo({ ...to, behavior: scrollBehavior() });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedId, nodeAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // where more of the flow is out of view, that edge fades out
+  const [edges, setEdges] = useState({ left: false, right: false });
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || bare) return;
+    const check = () => setEdges((e) => { const n = hiddenEdges(el.scrollLeft, el.scrollWidth, el.clientWidth); return n.left === e.left && n.right === e.right ? e : n; });
+    check();
+    el.addEventListener("scroll", check, { passive: true });
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(check) : null;
+    ro?.observe(el);
+    return () => { el.removeEventListener("scroll", check); ro?.disconnect(); };
+  }, [bare, zoom, layout.width]);
 
   const focus = hover ?? selectedId;
   const titleOf = (id: string) => process.steps.find((s) => s.id === id)?.title ?? id;
@@ -155,13 +188,14 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
         {!bare && <div className="map-tools">
           <span className="map-pan-hint"><Hand size={14} aria-hidden="true" />Drag to move · <kbd className="key">{zoomKey()}</kbd> + scroll to zoom</span>
           <div className="zoom" role="group" aria-label="Zoom">
-            <button className="btn small ghost" onClick={fit}><Maximize2 size={14} />Fit</button>
+            <button className="btn small ghost" onClick={() => fit()} title="Show the whole width of the flow"><Maximize2 size={14} />Fit</button>
             <button className="icon-btn" onClick={() => step(-1)} aria-label="Zoom out"><Minus size={16} /></button>
             <button className="zoom-val" onClick={() => setZoom(1)} aria-label={`Zoom ${Math.round(zoom * 100)}%, press for 100%`}>{Math.round(zoom * 100)}%</button>
             <button className="icon-btn" onClick={() => step(1)} aria-label="Zoom in"><Plus size={16} /></button>
           </div>
         </div>}
       </div>
+      <div className={`flow-viewport ${edges.left ? "fade-left" : ""} ${edges.right ? "fade-right" : ""}`} style={{ "--head": `${Math.round(L.HEADER * zoom)}px` } as React.CSSProperties}>
       <div className={`flow-scroll ${bare ? "" : "pannable"} ${panning ? "panning" : ""}`} ref={scroller}>
         <div className={`flow-canvas ${drag ? "dragging" : ""}`} style={{ width: layout.width, height, zoom }} onMouseDown={() => setAdding(null)}>
           {layout.lanes.map((lane) => {
@@ -270,6 +304,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
               onAdd={(spec) => { onInsert?.({ afterId: adding.afterId, beforeId: adding.beforeId }, spec); setAdding(null); }} />
           )}
         </div>
+      </div>
       </div>
 
       {editable && <p className="flow-hint"><b>Edit on the map:</b> press <span className="kbd">+</span> on an arrow to insert a step there · <span className="kbd">+</span> on a block to add one after it · drag a block to another lane to change who does it · select a block to change it.</p>}
