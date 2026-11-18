@@ -156,6 +156,13 @@ test("reviews: the library shows what is due, and one click confirms a process",
   await expect(page.locator(".banner", { hasText: "Review overdue" })).toHaveCount(0);
   await expect(page.locator(".facts")).toContainText(`Reviewed ${serverToday()}`); // dated by the server, not by this browser's clock
   await expect.poll(async () => (await readProcess(page, "onboard-site-to-akamai"))!.review).toEqual({ intervalMonths: 6, lastReviewedAt: serverToday(), reviewedBy: "Alex Editor" });
+
+  // back in the list the filter is still on, and the process confirmed just now has left it
+  await page.goBack();
+  await expect(page.getByRole("checkbox", { name: /^Only what needs a review/ })).toBeChecked();
+  await expect(page.locator(".card", { hasText: "Onboard a site to Akamai" })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("checkbox", { name: /^Only what needs a review/ })).toBeChecked();
 });
 
 test("the JSON editor marks problems on the line and applies valid edits", async ({ page }) => {

@@ -341,6 +341,8 @@ test.describe("what answers a request", () => {
     const gone = (await list(page.request)).find((r) => r.id === b.id) as Req & { linkedGone?: boolean };
     expect(gone).toMatchObject({ state: "done", linkedId: "", linkedGone: true });
     await open(page, "/requests?state=done");
+    await page.reload(); // the list was loaded before the changes made through the API
+    await expect(item(page, b.title)).toBeVisible();
     await expect(item(page, b.title).locator("a.req-answer")).toHaveCount(0);
     await expect(item(page, b.title).locator(".req-gone")).toHaveText("the process that answered it has been removed since.");
     await expect(item(page, a.title).locator("a.req-answer")).toHaveText(`Answer retired demo ${run}`);
@@ -358,12 +360,15 @@ test.describe("what answers a request", () => {
 
 test("an admin removes a request for good", async ({ page, request }) => {
   const r = await ask(request, RILEY, { kind: "standard", title: title("Something nobody needs") });
+  await as(request, DANA);
+  expect((await setState(request, r.id, { state: "planned", note: "Maybe later." })).ok()).toBeTruthy();
   // not in Consumer mode
   await signIn(page, DANA);
-  await open(page, "/requests");
+  await open(page, "/requests?state=planned");
+  await expect(item(page, r.title)).toBeVisible();
   await expect(item(page, r.title).getByRole("button", { name: "Remove" })).toHaveCount(0);
   await signIn(page, DANA, { editor: true });
-  await open(page, "/requests");
+  await open(page, "/requests?state=planned");
   await item(page, r.title).getByRole("button", { name: "Remove", exact: true }).click();
   const confirm = page.getByRole("dialog", { name: "Remove this request?" });
   await expect(confirm).toContainText(r.title);
@@ -371,6 +376,12 @@ test("an admin removes a request for good", async ({ page, request }) => {
   await expect(page.locator(".toast", { hasText: "The request was removed." })).toBeVisible();
   await expect(item(page, r.title)).toHaveCount(0);
   expect((await list(page.request)).some((x) => x.id === r.id)).toBe(false);
+  // the activity log says it in words
+  await open(page, "/admin/activity");
+  const log = page.locator(".activity li");
+  await expect(log.filter({ hasText: "removed" }).filter({ hasText: r.title }).first()).toBeVisible();
+  await expect(log.filter({ hasText: "asked for something new:" }).filter({ hasText: r.title }).first()).toBeVisible();
+  await expect(log.filter({ hasText: "changed the state of" }).filter({ hasText: r.title }).first()).toBeVisible();
   // nobody else may
   const other = await ask(request, RILEY, { kind: "standard", title: title("Something else nobody needs") });
   await as(request, ALEX);

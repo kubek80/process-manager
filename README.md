@@ -13,6 +13,8 @@ From both, the portal generates **skills for AI coding assistants** and, for sta
 
 ![Search results with filters](docs/search.png)
 
+![The list of processes](docs/processes.png)
+
 ![Map view](docs/map.png)
 
 ## Run it locally
@@ -79,6 +81,8 @@ React + Vite frontend; Go server; Postgres. Everything people change lives in th
 
 ![My responsibilities](docs/responsibilities.png)
 
+![Requests for what is missing](docs/requests.png)
+
 The in-app **Guide** (top bar) is the main documentation and describes all of this, with flow charts drawn by the app's own map.
 
 ![Guide](docs/guide.png)
@@ -106,6 +110,8 @@ The first admins are named in the server setting `PM_ADMINS`.
 ![Admin panel](docs/admin.png)
 
 ![A platform and its members](docs/platforms.png)
+
+![Statistics](docs/statistics.png)
 
 ## Tests
 

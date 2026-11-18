@@ -143,3 +143,55 @@ test("on a phone the pages read “Page 2 of 3” and nothing scrolls sideways",
   await expect(bottom.getByRole("button", { name: "Next page" })).toBeInViewport({ ratio: 1 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 });
+
+test("Back and reload return to the page the person left; a new browser starts on page 1", async ({ page, browser }) => {
+  await signIn(page, SAM);
+  await page.addInitScript(() => { try { localStorage.setItem("pm:page-size", "12"); } catch { /* ignore */ } });
+  await open(page, "/processes");
+  const bottom = pager(page, "Pages of processes, at the end");
+  await bottom.getByRole("button", { name: "Page 2" }).click();
+  await expect(count(page)).toHaveText(`Showing 13–24 of ${TOTAL} processes`);
+  const first = page.locator("li.card").first();
+  const title = (await first.locator(".card-title").textContent())!.trim();
+  await first.locator(".card-link").click();
+  await expect(page.getByRole("heading", { name: title, level: 1 })).toBeVisible();
+  await page.goBack();
+  await expect(count(page)).toHaveText(`Showing 13–24 of ${TOTAL} processes`);
+  await expect(bottom.getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+  await page.reload();
+  await expect(count(page)).toHaveText(`Showing 13–24 of ${TOTAL} processes`);
+  // the Standards list keeps a page of its own
+  await open(page, "/standards");
+  await expect(page.locator("p.list-count")).toHaveText("3 standards");
+  await open(page, "/processes");
+  await expect(count(page)).toHaveText(`Showing 13–24 of ${TOTAL} processes`);
+
+  // another browser (a new tab session) starts at the beginning
+  const other = await browser.newContext({ baseURL: "http://127.0.0.1:8090" });
+  const p2 = await other.newPage();
+  await signIn(p2, SAM);
+  await p2.addInitScript(() => { try { localStorage.setItem("pm:page-size", "12"); } catch { /* ignore */ } });
+  await open(p2, "/processes");
+  await expect(p2.locator("p.list-count")).toHaveText(`Showing 1–12 of ${TOTAL} processes`);
+  await other.close();
+});
+
+test("on a phone the panel ends with a button that shows the results", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page, SAM);
+  await open(page, "/processes");
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
+  await page.getByRole("searchbox", { name: "Search processes" }).fill("paging demo");
+  const done = page.locator("#process-filters button.filter-done");
+  await expect(done).toHaveText(`Show ${N} processes`);
+  await done.click();
+  await expect(page.locator("#process-filters")).toBeHidden();
+  await expect(page.getByRole("button", { name: /^Filters \(1\)$/ })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("li.card").first()).toBeInViewport();
+  // the same on the search page
+  await open(page, "/search?q=paging%20demo");
+  await page.locator("button.filter-toggle").click();
+  await expect(page.locator("#search-filters button.filter-done")).toHaveText(`Show ${N} results`);
+  await page.locator("#search-filters button.filter-done").click();
+  await expect(page.locator("#search-filters")).toBeHidden();
+});
