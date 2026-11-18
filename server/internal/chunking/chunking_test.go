@@ -166,45 +166,204 @@ func byPart(cs []Chunk, part string) []Chunk {
 
 func TestTextOfAStepAndARequirement(t *testing.T) {
 	lists := docs.Lists{
-		Tools:      []docs.Named{{ID: "servicenow", Name: "ServiceNow"}},
-		Teams:      []docs.Named{{ID: "fin", Name: "Finance team"}},
-		Categories: []docs.Named{{ID: "money", Name: "Money"}},
+		Tools:        []docs.Named{{ID: "servicenow", Name: "ServiceNow"}},
+		Teams:        []docs.Named{{ID: "fin", Name: "Finance team"}},
+		Categories:   []docs.Named{{ID: "money", Name: "Money"}},
+		Tiers:        []docs.Named{{ID: "tier-0", Name: "Tier 0"}, {ID: "tier-1", Name: "Tier 1"}},
+		Environments: []docs.Named{{ID: "production", Name: "Production"}},
+		Languages:    []docs.Named{{ID: "go", Name: "Go"}},
 	}
 	p := `{"id":"pay","title":"Pay an invoice","summary":"Get a supplier paid.","owner":"fin","category":"money","tags":["ap"],
-	  "actors":[{"id":"me","name":"You"},{"id":"boss","name":"Budget owner"}],
-	  "prerequisites":[{"title":"Approved cost centre","description":"Ask finance."}],
+	  "rigour":"recommended","tiers":["tier-0"],"languages":["go"],"estimatedDuration":"2 days","standards":["finance-rules"],
+	  "actors":[{"id":"me","name":"You","description":"The reader."},{"id":"boss","name":"Budget owner","description":"Owns the money."}],
+	  "prerequisites":[{"title":"Approved cost centre","description":"Ask finance.","processId":"open-cost-centre"}],
 	  "steps":[{"id":"raise","title":"Raise it","actor":"me","next":[]},
 	           {"id":"approve","title":"Approve the monthly budget","actor":"boss","tool":"servicenow","description":"The owner looks.",
-	            "instructions":["Open the request","Press approve"],"outcome":"Approved request","next":[]}]}`
+	            "instructions":["Open the request","Press approve"],"outcome":"Approved request","duration":"1 day",
+	            "url":"https://x.example.com","urlLabel":"Open the queue","resources":[{"title":"Approval guide","url":"https://y.example.com"}],
+	            "subProcessId":"approve-spend","next":[]}]}`
 	cs, err := Chunks(docs.Process, []byte(p), lists, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "Process: Pay an invoice\nGet a supplier paid.\nTags: ap\nCategory: Money\nOwned by: Finance team"
+	want := "Process: Pay an invoice\nGet a supplier paid.\nHow binding: recommended, the expected way; another way needs a good reason\n" +
+		"Where it applies: tiers Tier 0; all environments; programming languages Go\nLead time: 2 days\n" +
+		"Helps to meet the standards: finance-rules\nTags: ap\nCategory: Money\nOwned by: Finance team"
 	if cs[0].Text != want {
 		t.Errorf("summary text\n%q\nwant\n%q", cs[0].Text, want)
 	}
-	if cs[1].Text != "Process: Pay an invoice\nBefore you start: Approved cost centre\nAsk finance." || cs[1].Label != "Before you start: Approved cost centre" {
+	want = "Process: Pay an invoice\nBefore you start: Approved cost centre\nAsk finance.\nComes from the process: open-cost-centre"
+	if cs[1].Text != want || cs[1].Label != "Before you start: Approved cost centre" {
 		t.Errorf("prerequisite %+v", cs[1])
 	}
-	want = "Process: Pay an invoice\nStep 2: Approve the monthly budget\nDone by: Budget owner\nTool: ServiceNow\nThe owner looks.\nInstructions:\n- Open the request\n- Press approve\nOutcome: Approved request"
+	if cs[2].Text != "Process: Pay an invoice\nStep 1: Raise it\nDone by: You" {
+		t.Errorf("the reader's own lane: %q", cs[2].Text)
+	}
+	want = "Process: Pay an invoice\nStep 2: Approve the monthly budget\nDone by: Budget owner\nAbout Budget owner: Owns the money.\n" +
+		"Tool: ServiceNow\nThe owner looks.\nInstructions:\n- Open the request\n- Press approve\nOutcome: Approved request\n" +
+		"Takes: 1 day\nUses the process: approve-spend\nLink: Open the queue\nResources: Approval guide"
 	if cs[3].Text != want || cs[3].Item != "approve" || cs[3].Label != "Step 2: Approve the monthly budget" {
 		t.Errorf("step %+v\nwant text\n%q", cs[3], want)
 	}
 
-	s := `{"id":"logs","title":"Secure logging","summary":"Rules for logs.","scope":"All services.",
+	s := `{"id":"logs","title":"Secure logging","summary":"Rules for logs.","scope":"All services.","environments":["production"],
 	  "requirements":[{"id":"SEC-LOG-01","title":"No secrets in logs","level":"must","statement":"Never log secrets.",
-	  "rationale":"Logs leak.","guidance":["Mask headers"],"verification":{"method":"review"}}]}`
+	  "rationale":"Logs leak.","guidance":["Mask headers"],"verification":{"method":"review","description":"Reviewers check."},
+	  "tiers":["tier-0","tier-1"],"languages":["go"],"processId":"rotate-secret",
+	  "review":{"lookFor":["apiKey in a log call"]},"examples":{"good":["log(key.ID)"],"bad":["log(key)"]}},
+	  {"id":"SEC-LOG-02","title":"Keep logs","level":"should","statement":"Keep logs a year.","verification":{"method":"manual"}}]}`
 	cs, err = Chunks(docs.Standard, []byte(s), lists, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cs) != 3 || cs[1].Part != Scope || cs[1].Label != "Scope" || cs[1].Text != "Standard: Secure logging\nScope: All services." {
+	want = "Standard: Secure logging\nRules for logs.\nRequirements: 2 (1 mandatory, 1 recommended)\n" +
+		"Where it applies: all tiers; environments Production; all programming languages"
+	if cs[0].Text != want {
+		t.Errorf("summary text\n%q\nwant\n%q", cs[0].Text, want)
+	}
+	if len(cs) != 4 || cs[1].Part != Scope || cs[1].Label != "Scope" || cs[1].Text != "Standard: Secure logging\nScope: All services." {
 		t.Fatalf("scope %+v", cs)
 	}
-	want = "Standard: Secure logging\nSEC-LOG-01: No secrets in logs\nLevel: mandatory (must)\nNever log secrets.\nWhy: Logs leak.\nHow to comply:\n- Mask headers"
+	want = "Standard: Secure logging\nSEC-LOG-01: No secrets in logs\nLevel: mandatory (must)\n" +
+		"Applies only to: tiers Tier 0, Tier 1; programming languages Go\nNever log secrets.\nWhy: Logs leak.\n" +
+		"How to comply:\n- Mask headers\nA process that helps: rotate-secret\nHow it is checked: in code review. Reviewers check.\n" +
+		"A reviewer looks for: apiKey in a log call\nGood example: log(key.ID)\nBad example, do not do this: log(key)"
 	if cs[2].Text != want || cs[2].Item != "SEC-LOG-01" || cs[2].Label != "SEC-LOG-01: No secrets in logs" {
-		t.Errorf("requirement %+v", cs[2])
+		t.Errorf("requirement\n%q\nwant\n%q", cs[2].Text, want)
+	}
+	want = "Standard: Secure logging\nSEC-LOG-02: Keep logs\nLevel: recommended (should)\nKeep logs a year.\n" +
+		"How it is checked: by a person, outside code review"
+	if cs[3].Text != want {
+		t.Errorf("requirement\n%q\nwant\n%q", cs[3].Text, want)
+	}
+}
+
+// One sample process and one sample standard, word for word: what a change of the sample or of
+// the chunk layout does to the embedded text is visible in review.
+func TestSampleTexts(t *testing.T) {
+	root := filepath.Join("..", "..", "..")
+	lists := readLists(t, filepath.Join(root, "catalog", "catalog.json"))
+	get := func(kind, file, item string, part string) string {
+		b, err := os.ReadFile(filepath.Join(root, file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		cs, err := Chunks(kind, b, lists, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range cs {
+			if c.Part == part && c.Item == item {
+				return c.Text
+			}
+		}
+		t.Fatalf("%s: no %s %q", file, part, item)
+		return ""
+	}
+	cases := []struct{ kind, file, part, item, want string }{
+		{docs.Process, "processes/request-gcp-project.json", Summary, "", `Process: Request a GCP project
+Get a new Google Cloud project created by the project factory, attached to the right folder and billing account, with your team as owners.
+How binding: mandatory, the only allowed way to get this done
+Where it applies: all tiers; all environments; any programming language
+Lead time: 3-5 working days
+Helps to meet the standards: infrastructure-as-code
+Tags: gcp, cloud, terraform
+Category: Cloud
+Platform: Google Cloud
+Owned by: Cloud Platform team`},
+		{docs.Process, "processes/request-gcp-project.json", Step, "add-project-config", `Process: Request a GCP project
+Step 7: Add your project to the project factory
+Done by: You
+Tool: GitHub
+Instructions:
+- Create a branch named after your request number.
+- Copy projects/_template.yaml to projects/<project-name>.yaml.
+- Fill in name, folder, billing, owner group and labels.
+- Open a pull request and put the request number in the title.
+Outcome: Open pull request
+Takes: 20 min
+Link: Open gcp-project-factory
+Resources: Skill: add a GCP project`},
+		{docs.Standard, "standards/secure-logging.json", Summary, "", `Standard: Secure logging
+What services must and must not write to their logs, so that incidents can be investigated without logs becoming a leak.
+Requirements: 5 (4 mandatory, 1 recommended)
+Where it applies: all tiers; all environments; all programming languages
+Tags: logging, secrets, audit
+Category: Security
+Practice: Cyber security
+Owned by: Cyber Security`},
+		{docs.Standard, "standards/secure-logging.json", Requirement, "SEC-LOG-01", `Standard: Secure logging
+SEC-LOG-01: No secrets in logs
+Level: mandatory (must)
+Passwords, API keys, tokens, private keys and session ids are never written to logs, traces or error messages.
+Why: Logs are read by many people and copied to many systems. A secret in a log has to be treated as leaked.
+How to comply:
+- Log the name of a credential, never its value.
+- Mask the Authorization header and cookies before logging a request.
+- Use the logging library's redaction list for known secret field names.
+How it is checked: automatically, by a pipeline or scanner. Secret scanner on log statements in the build pipeline, plus code review.
+A reviewer looks for: A variable named like password, secret, token, apiKey or authorization passed to a log call
+A reviewer looks for: Whole request, header or config objects printed with %v, %+v, JSON.stringify or similar
+A reviewer looks for: Secrets interpolated into error messages that are later logged
+Good example: log.Info("calling billing API", "key_id", key.ID)
+Bad example, do not do this: log.Info("calling billing API", "key", apiKey)
+Bad example, do not do this: fmt.Printf("request: %+v", req) // prints the Authorization header`},
+	}
+	for _, c := range cases {
+		if got := get(c.kind, c.file, c.item, c.part); got != c.want {
+			t.Errorf("%s %s %s:\n%s\n---- want\n%s", c.file, c.part, c.item, got, c.want)
+		}
+	}
+}
+
+// When a requirement is too long, the examples are left out first (the bad ones before the
+// good ones), then the review hints; the statement stays.
+func TestWhatIsLeftOutFirst(t *testing.T) {
+	long := strings.Repeat("word ", 40)
+	s := `{"id":"x","title":"X","requirements":[{"id":"R-1","title":"Rule","level":"must","statement":"The statement stays.",
+	  "verification":{"method":"review"},"review":{"lookFor":["hint one ` + long + `","hint two ` + long + `"]},
+	  "examples":{"good":["good ` + long + `"],"bad":["bad ` + long + `"]}}]}`
+	text := func(max int) string {
+		cs, err := Chunks(docs.Standard, []byte(s), docs.Lists{}, Options{Parts: []string{Requirement}, MaxChars: max})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := utf8.RuneCountInString(cs[0].Text); n > max {
+			t.Fatalf("%d characters with limit %d", n, max)
+		}
+		return cs[0].Text
+	}
+	has := func(txt string, parts ...string) string {
+		var out []string
+		for _, p := range parts {
+			if strings.Contains(txt, p) {
+				out = append(out, p)
+			}
+		}
+		return strings.Join(out, ",")
+	}
+	all := []string{"statement stays", "hint one", "hint two", "Good example", "Bad example"}
+	for _, c := range []struct {
+		max  int
+		want string
+	}{
+		{5000, "statement stays,hint one,hint two,Good example,Bad example"},
+		{900, "statement stays,hint one,hint two,Good example"},
+		{700, "statement stays,hint one,hint two"},
+		{400, "statement stays,hint one"},
+		{200, "statement stays"},
+	} {
+		if got := has(text(c.max), all...); got != c.want {
+			t.Errorf("limit %d keeps %s, want %s", c.max, got, c.want)
+		}
+	}
+	// a step: links and resources first, then the lane's description and the duration
+	p := `{"id":"p","title":"P","actors":[{"id":"me","name":"You"},{"id":"a","name":"Team","description":"About the team ` + long + `"}],
+	  "steps":[{"id":"s","title":"Do it","actor":"a","description":"What happens.","duration":"1 day ` + long + `",
+	  "urlLabel":"Open ` + long + `","resources":[{"title":"Guide","url":"https://x.example.com"}]}]}`
+	cs, _ := Chunks(docs.Process, []byte(p), docs.Lists{}, Options{Parts: []string{Step}, MaxChars: 650})
+	if got := has(cs[0].Text, "What happens", "About Team", "Takes", "Link", "Resources"); got != "What happens,About Team,Takes" {
+		t.Errorf("step keeps %s:\n%s", got, cs[0].Text)
 	}
 }
 
@@ -281,21 +440,40 @@ func TestSizeLimit(t *testing.T) {
 				if n := utf8.RuneCountInString(c.Text); n > limit || strings.TrimSpace(c.Text) == "" {
 					t.Errorf("%s %s: %d characters with limit %d", s.path, c.Item, n, limit)
 				}
-				if c.Item != full[i].Item || !strings.HasPrefix(full[i].Text, c.Text) {
-					t.Errorf("%s %s: the cut text is not the start of the full one", s.path, c.Item)
+				if c.Item != full[i].Item || c.Label != full[i].Label {
+					t.Errorf("%s %s: another part with a limit", s.path, c.Item)
 				}
-				// never mid-word: the cut ends where the full text has a boundary.
-				if rest := full[i].Text[len(c.Text):]; rest != "" && !strings.ContainsAny(rest[:1], " \n") && !isWordLonger(full[i].Text, c.Text) {
-					t.Errorf("%s %s: cut mid-word: %q | %q", s.path, c.Item, c.Text[max(0, len(c.Text)-20):], rest[:min(20, len(rest))])
+				if msg := shortened(full[i].Text, c.Text); msg != "" {
+					t.Errorf("%s %s: %s", s.path, c.Item, msg)
 				}
 			}
 		}
 	}
 }
 
-// isWordLonger: the text had no boundary within the limit (a single long word), the only case
-// where a cut inside a word is allowed.
-func isWordLonger(full, cut string) bool { return !strings.ContainsAny(cut, " \n") }
+// shortened checks that short is long with whole lines left out and the last kept line cut at
+// a word boundary (or inside a single word longer than the limit); "" when it is.
+func shortened(long, short string) string {
+	have := strings.Split(long, "\n")
+	keep := strings.Split(short, "\n")
+	j := 0
+	for n, k := range keep {
+		for j < len(have) && have[j] != k && !(n == len(keep)-1 && strings.HasPrefix(have[j], k)) {
+			j++
+		}
+		if j == len(have) {
+			return fmt.Sprintf("line %q is not from the full text", k)
+		}
+		if have[j] != k {
+			rest := have[j][len(k):]
+			if !strings.HasPrefix(rest, " ") && strings.ContainsAny(k, " ") {
+				return fmt.Sprintf("cut mid-word: %q | %q", k, rest)
+			}
+		}
+		j++
+	}
+	return ""
+}
 
 func TestCut(t *testing.T) {
 	cases := []struct {

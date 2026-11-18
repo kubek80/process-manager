@@ -127,11 +127,12 @@ func run(log *slog.Logger, o options) error {
 		skills: &skills.Store{Pool: pool}, feedback: &feedback.Store{Pool: pool}, audit: &audit.Log{Pool: pool},
 		engagement: &engagement.Store{Pool: pool}, requests: &requests.Store{Pool: pool},
 	}
-	embedder, err := embedding.New(ctx, cfg.Embeddings.EmbeddingOptions())
+	embedder, err := newEmbedder(ctx, cfg.Embeddings.EmbeddingOptions())
 	if err != nil {
 		return fmt.Errorf("search by meaning: %w", err)
 	}
 	st.index = retrieval.New(pool, st.docs, embedder, cfg.Embeddings.ChunkOptions(), log)
+	st.index.SetMinScore(cfg.Embeddings.MinScore)
 	logSearch(log, cfg.Embeddings, st.index)
 	if o.migrate {
 		return migrateCommand(ctx, pool, st, log, stdout)
@@ -211,15 +212,18 @@ func run(log *slog.Logger, o options) error {
 	if o.reset {
 		return nil
 	}
-	if err := catchUpIndex(ctx, st, log); err != nil {
+	// only the quick part before serving: the provider may be slow or unreachable
+	if err := prepareIndex(ctx, st, log); err != nil {
 		return err
 	}
 	var background sync.WaitGroup
 	if st.index.Enabled() {
-		// documents whose sync failed (the provider could not be reached) are tried again
+		// the index is caught up in the background (searches answer "not ready yet" while it is
+		// built), then documents whose sync failed are tried again every few minutes
 		background.Add(1)
 		go func() {
 			defer background.Done()
+			st.index.LogCatchUp(ctx)
 			st.index.RetryEvery(ctx, indexRetry)
 		}()
 	}
@@ -263,6 +267,29 @@ func run(log *slog.Logger, o options) error {
 // indexRetry is how often documents that could not be indexed are tried again.
 const indexRetry = 5 * time.Minute
 
+// newEmbedder makes the embeddings provider; tests replace it.
+var newEmbedder = embedding.New
+
+// prepareIndex is what a start does about the search index before it serves: with search by
+// meaning on, only the quick work in the database (the extension, the tables); with it off, an
+// index left from earlier is marked as not in use, since nobody keeps it up to date any more.
+func prepareIndex(ctx context.Context, st stores, log *slog.Logger) error {
+	if !st.index.Enabled() {
+		was, err := st.index.MarkUnused(ctx)
+		if err != nil {
+			return fmt.Errorf("search by meaning: %w", err)
+		}
+		if was {
+			log.Warn("search by meaning is off, so the search index left from earlier is no longer kept up to date: it is marked as not in use and nothing searches it (an MCP server answers by words only). Switched on again, it is caught up first")
+		}
+		return nil
+	}
+	if err := st.index.Ensure(ctx); err != nil {
+		return fmt.Errorf("search by meaning: %w", err)
+	}
+	return nil
+}
+
 // logSearch says at start whether search by meaning is on, and whether text leaves the company.
 func logSearch(log *slog.Logger, e config.Embeddings, ix *retrieval.Index) {
 	switch {
@@ -273,6 +300,13 @@ func logSearch(log *slog.Logger, e config.Embeddings, ix *retrieval.Index) {
 			"project", e.Project, "location", e.Location, "model", e.Model, "dimensions", e.Dimensions)
 	default:
 		log.Info("search by meaning is on with the built-in embedder: nothing leaves this server", "dimensions", e.Dimensions)
+	}
+	if ix.Enabled() {
+		source := "the provider's default"
+		if e.MinScore >= 0 {
+			source = "PM_SEARCH_MIN_SCORE"
+		}
+		log.Info("search by meaning: parts scoring below the floor are not matches", "floor", ix.Floor(), "from", source)
 	}
 }
 
@@ -285,9 +319,12 @@ func catchUpIndex(ctx context.Context, st stores, log *slog.Logger) error {
 	if !st.index.Enabled() {
 		return nil
 	}
+	if err := st.index.Ensure(ctx); err != nil {
+		return fmt.Errorf("search by meaning: %w", err)
+	}
 	r, err := st.index.CatchUp(ctx)
 	switch {
-	case errors.Is(err, retrieval.ErrProvider):
+	case errors.Is(err, retrieval.ErrProvider), errors.Is(err, retrieval.ErrOtherSettings):
 		log.Warn("search by meaning: the embeddings provider cannot be reached; searches use what is indexed, and what is missing is tried again in a few minutes", "error", err)
 	case err != nil:
 		return fmt.Errorf("search by meaning: %w", err)
@@ -301,6 +338,9 @@ func catchUpIndex(ctx context.Context, st stores, log *slog.Logger) error {
 func reindexCommand(ctx context.Context, st stores, out io.Writer) error {
 	if !st.index.Enabled() {
 		return errors.New("search by meaning is switched off (PM_EMBEDDINGS=off): there is no index to rebuild. Set PM_EMBEDDINGS to builtin or vertex")
+	}
+	if err := st.index.Ensure(ctx); err != nil {
+		return fmt.Errorf("search by meaning: %w", err)
 	}
 	r, err := st.index.CatchUp(ctx)
 	if err != nil && !errors.Is(err, retrieval.ErrProvider) {
@@ -372,14 +412,23 @@ func migrateCommand(ctx context.Context, pool *pgxpool.Pool, st stores, log *slo
 
 	searchLine, searchChanged := "", false
 	if st.index.Enabled() {
-		r, err := st.index.CatchUp(ctx)
-		if err != nil {
-			return fmt.Errorf("migration failed: the tables, content and skills are up to date, but the search index could not be brought up to date (%s): %w", r.String(), err)
+		if err := st.index.Ensure(ctx); err != nil {
+			return fmt.Errorf("migration failed: the tables, content and skills are up to date, but the search index could not be set up: %w", err)
 		}
-		searchChanged = r.Embedded > 0 || r.Removed > 0
-		searchLine = "already up to date"
-		if searchChanged {
-			searchLine = r.String()
+		r, err := st.index.CatchUp(ctx)
+		switch {
+		case errors.Is(err, retrieval.ErrProvider) || errors.Is(err, retrieval.ErrOtherSettings):
+			// like a start: the rest of the migration worked; the index is caught up later
+			log.Warn("search by meaning: the search index could not be brought up to date; it is caught up when the server runs", "error", err)
+			searchLine = "not brought up to date: " + plainCause(err) + "; the server catches it up later"
+		case err != nil:
+			return fmt.Errorf("migration failed: the tables, content and skills are up to date, but the search index could not be brought up to date (%s): %w", r.String(), err)
+		default:
+			searchChanged = r.Embedded > 0 || r.Removed > 0
+			searchLine = "already up to date"
+			if searchChanged {
+				searchLine = r.String()
+			}
 		}
 	}
 
@@ -610,4 +659,12 @@ func seedFeedback(ctx context.Context, st stores, log *slog.Logger) error {
 	}
 	log.Info("sample feedback added", "items", added)
 	return nil
+}
+
+// plainCause says in a few words why the search index could not be brought up to date.
+func plainCause(err error) string {
+	if errors.Is(err, retrieval.ErrOtherSettings) {
+		return "the index belongs to other settings of search by meaning"
+	}
+	return "the embeddings provider cannot be reached"
 }

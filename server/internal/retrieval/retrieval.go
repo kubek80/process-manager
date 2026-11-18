@@ -973,7 +973,13 @@ func (ix *Index) RetryEvery(ctx context.Context, every time.Duration) {
 			return
 		case <-t.C:
 		}
-		if ix.switching.Load() {
+		// to be switched to new settings, or marked as not in use by a server with search by
+		// meaning off: built again or caught up
+		if ix.switching.Load() || errors.Is(ix.Ready(ctx), ErrNotSetUp) {
+			if err := ix.Ensure(ctx); err != nil {
+				ix.log.Error("search by meaning: the search index could not be set up; it is tried again in a few minutes", "error", err)
+				continue
+			}
 			ix.LogCatchUp(ctx)
 			continue
 		}
