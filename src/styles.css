@@ -42,20 +42,15 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
 .nav { display: flex; gap: 2px; margin-left: 8px; }
 .nav-link { display: inline-flex; align-items: center; gap: 7px; flex: none; height: 32px; padding: 0 11px; border-radius: 8px; font-weight: 550; font-size: 13px; color: var(--text-2); white-space: nowrap; }
 .nav-link:hover, .nav-link.on { background: var(--surface-2); color: var(--text); }
-.mode-switch { display: inline-flex; flex: none; padding: 3px; border-radius: 10px; background: color-mix(in srgb, var(--line) 70%, transparent); gap: 2px; }
-.mode-switch button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 7px; font-size: 12.5px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
-.mode-switch button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-1); }
-.mode-switch button.on.editor { background: var(--accent); color: var(--accent-ink); }
-/* Narrower screens, in this order: the names next to the logo and the avatar go, then the words of the
-   mode switch, then the words of the navigation (the links keep their name for screen readers), then the spacing,
+/* Narrower screens, in this order: the names next to the logo and the avatar go, then the words of the navigation (the links keep their name for screen readers), then the spacing,
    and on the smallest phones the logo (Home is the first link). The widths fit the longest top bar: an admin who
    also answers for something, with eight links. */
 @media (max-width: 1440px) { .brand-name, .user-name { display: none; } .user-btn { padding: 0 3px; } }
-@media (max-width: 1320px) { .mode-switch button span { display: none; } .mode-switch button { padding: 0 9px; } .topbar { gap: 10px; } .nav-link { padding: 0 8px; } }
+@media (max-width: 1320px) { .topbar { gap: 10px; } .nav-link { padding: 0 8px; } }
 @media (max-width: 1120px) { .nav-link span { display: none; } .nav-link { padding: 0 10px; } }
-@media (max-width: 520px) { .topbar { gap: 6px; padding: 0 10px; } .nav { margin-left: 0; gap: 0; } .nav-link { padding: 0 7px; } .mode-switch button { padding: 0 7px; } }
+@media (max-width: 520px) { .topbar { gap: 6px; padding: 0 10px; } .nav { margin-left: 0; gap: 0; } .nav-link { padding: 0 7px; } }
 @media (max-width: 440px) { .brand { display: none; } .topbar { gap: 4px; padding: 0 8px; } .nav-link { padding: 0 6px; } }
-@media (max-width: 390px) { .topbar { gap: 3px; padding: 0 6px; } .nav-link { padding: 0 4px; min-width: 24px; justify-content: center; } .mode-switch button { padding: 0 5px; } }
+@media (max-width: 390px) { .topbar { gap: 3px; padding: 0 6px; } .nav-link { padding: 0 4px; min-width: 24px; justify-content: center; } }
 
 /* ---------- buttons ---------- */
 .btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 13px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--surface); font-weight: 550; font-size: 13.5px; white-space: nowrap; box-shadow: var(--shadow-1); transition: background .12s, border-color .12s, transform .05s; }
@@ -552,13 +547,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .res-kind { flex: 0 0 150px; }
 .row.indent-r { padding-right: 38px; }
 
-/* ---------- inserting steps in the checklist ---------- */
-.step-insert { grid-column: 2; margin: -8px 0 4px; height: 20px; display: flex; align-items: center; }
-.step-insert.open { height: auto; margin: 0 0 12px; }
-.step-insert > button { display: inline-flex; align-items: center; gap: 6px; height: 20px; padding: 0 10px; border-radius: 999px; font-size: 11.5px; font-weight: 650; color: var(--accent); background: var(--accent-soft); opacity: 0; transition: opacity .12s; }
-.step.editable:hover .step-insert > button, .step-insert > button:focus-visible { opacity: 1; }
-.quick-add.inline { position: static; width: 100%; max-width: 420px; box-shadow: var(--shadow-2); animation: none; }
-.step.editable .step-rail::before { bottom: 0; }
 .step-rail { grid-row: 1 / span 2; }
 
 /* ---------- sign-in and account ---------- */
@@ -713,8 +701,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .admin-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; box-shadow: var(--shadow-1); display: grid; gap: 12px; min-width: 0; }
 .admin-card > h2 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
 .admin-card > h2 span { font-size: 13px; font-weight: 500; color: var(--text-3); }
-.grant { display: grid; grid-template-columns: minmax(200px, 1.4fr) minmax(160px, 1fr) minmax(160px, 1fr) auto; gap: 12px; align-items: end; }
-@media (max-width: 900px) { .grant { grid-template-columns: 1fr; } }
 .people, .health, .activity { list-style: none; margin: 0; padding: 0; display: grid; }
 .people li, .health li button { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 10px 0; }
 .people li + li, .health li + li, .activity li + li { border-top: 1px solid var(--line); }
@@ -749,7 +735,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 /* ---------- touch screens and reduced motion ---------- */
 /* without a mouse there is no hover: show what hover would reveal */
 @media (hover: none) {
-  .report, .step-insert > button { opacity: 1; }
+  .report { opacity: 1; }
   .block-add { opacity: 1; transform: none; }
   .flow-canvas .edge-add { opacity: .9; }
   .flow-canvas.dragging .edge-add { opacity: 0; }

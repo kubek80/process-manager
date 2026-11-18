@@ -64,7 +64,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
 }) {
   const { d } = s;
   const draft = d.draft;
-  const drawable = !s.json;
+  const drawable = s.drawable;
   const setDraft = d.change;
   const set = (patch: Partial<Process>) => setDraft((p) => ({ ...p, ...patch }));
   // the step selected is in the address (so a link can point at it); a section only on screen
@@ -73,7 +73,9 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
   const [section, setSection] = useState<ProcessSection>("about");
   const sel: Selection = stepId ? { section: "steps", item: stepId } : { section };
   const step = drawable && stepId ? draft.steps.find((x) => x.id === stepId) : undefined;
-  const [beforeOpen, setBeforeOpen] = useState(true);
+  // "Before you start" opens when one of its parts is chosen; otherwise the map has the room
+  const [beforeOpen, setBeforeOpen] = useState(false);
+  useEffect(() => { if (!stepId && ["before", "links", "standards"].includes(section)) setBeforeOpen(true); }, [section, stepId]);
 
   const choose = (next: Selection, open = true) => {
     if (next.item) selectStep(next.item);
@@ -166,7 +168,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
           onAdd={{ section: "steps", label: "Add a step at the end", run: () => addAfter(null) }}
           onMove={(id, dir) => setDraft(moveStep(draft, id, dir))} />}
         middle={middle} fields={<div className="edit-fields-body">{fields}</div>} fieldsLabel={fieldsLabel}
-        panel={s.panel} setPanel={s.setPanel} />
+        panel={s.panel} setPanel={s.setPanel} json={s.json} />
       {s.dialogs}
     </>
   );

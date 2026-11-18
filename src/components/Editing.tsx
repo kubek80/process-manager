@@ -158,10 +158,10 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
 
   if (!c.exists && loadTheirs) {
     return (
-      <Modal title="The unpublished changes were discarded" subtitle="Somebody else threw the shared draft away while you were editing." onClose={d.dismissConflict}
+      <Modal title="The unpublished changes are gone" subtitle="Somebody else published or discarded the shared draft while you were editing." onClose={d.dismissConflict}
         footer={<><span className="spacer" /><button className="btn" onClick={d.dismissConflict}>Keep editing</button>
           <button className="btn primary" disabled={busy} onClick={run(() => d.keepMine())}>Save mine as a new draft</button></>}>
-        <p>Your changes are still here. Readers still see the published version. Saving starts a new draft with your changes.</p>
+        <p>Your changes are still here and not saved. Saving starts a new draft with your changes, on top of what readers see now; look at the versions in the More menu first if you are not sure what was published.</p>
       </Modal>
     );
   }

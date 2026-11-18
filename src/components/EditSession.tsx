@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash2, TriangleAlert, Undo2 } from "lucide-react";
+import { ArrowLeft, Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash2, TriangleAlert, Undo2 } from "lucide-react";
 import type { DocMeta, Issue, Process, Standard, TargetKind } from "../types";
 import { conflictOf, useDraft, type Conflict, type Draft } from "../lib/draft";
 import { draftKindOf, editState, statusChangeBlocked, type DraftKind } from "../lib/editing";
@@ -50,6 +50,8 @@ export interface SessionOptions<T extends Doc> {
 export interface Session<T extends Doc> {
   d: Draft<T>;
   draftKind: DraftKind;
+  /** The document can be drawn (a broken one can only be repaired in its JSON). */
+  drawable: boolean;
   working: WorkingDraft<T> | null;
   issues: Issue[];
   /** The text of the document is shown instead of the map or the requirements. */
@@ -154,6 +156,8 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
     loadWorkingDraft<T>(kind, id).then((w) => { if (w) setWorking(w); }, () => { /* the next save says what is wrong */ });
   }, [theirDraftAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // the shared draft was saved, published or discarded by somebody else: what readers see may have moved on too
+  useEffect(() => { if (d.conflict?.draft) void opts.current.onRefresh().catch(() => {}); }, [d.conflict]);
   useEffect(() => { if (d.error) { notify.error(`The ${noun} could not be saved.`, d.error); d.clearError(); } }, [d.error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const issues = useMemo(() => o.check(d.clean), [d.clean, o.check]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -226,6 +230,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
       const c = conflictOf(e);
       if (!c) { notify.error("The changes could not be published.", whyNot(e, noun)); return false; }
       // refused because somebody else saved or discarded the draft, or because a newer version was published
+      setDialog(null);
       if (c.draft) { d.raiseConflict(c); return false; }
       setPublishConflict({ c, note });
       return false;
@@ -369,13 +374,15 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
 
   const jsonView = json ? (
     <Suspense fallback={<Loading />}>
-      {!drawable && <div className="check warn banner" role="alert"><TriangleAlert size={16} /><span>This {noun} cannot be shown until the problems in its JSON are fixed.</span></div>}
+      {!drawable
+        ? <div className="check warn banner" role="alert"><TriangleAlert size={16} /><span>This {noun} cannot be shown until the problems in its JSON are fixed.</span></div>
+        : <div className="json-head"><button className="btn small" onClick={() => setJson(false)}><ArrowLeft size={14} />Back to the editor</button><span className="muted small">The text of the whole {noun}. Changes that pass the checks go into the draft as you type.</span></div>}
       <JsonView doc={d.clean} noun={noun} validate={o.json.validate} schema={o.json.schema} schemaFile={o.json.schemaFile} onChange={(doc) => d.change(doc)} onPending={setJsonPending} />
     </Suspense>
   ) : null;
 
   return <>{children({
-    d, draftKind, working, issues, json, jsonView, panel, setPanel, dialogs,
+    d, draftKind, drawable, working, issues, json, jsonView, panel, setPanel, dialogs,
     frame: {
       state, unsaved: d.dirty,
       undo: { canUndo: d.canUndo, canRedo: d.canRedo, undo: d.undo, redo: d.redo },

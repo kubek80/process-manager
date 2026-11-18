@@ -7,8 +7,6 @@ import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import { go } from "../lib/store";
 import { TypeIcon } from "./ui";
 import { Resources } from "./Resources";
-import { QuickAdd, type InsertAt } from "./QuickAdd";
-import type { StepType } from "../types";
 
 export function StepBody({ step, process, all, onSelect, compact }: {
   step: Step; process: Process; all: Process[]; onSelect?: (id: string) => void; compact?: boolean;
@@ -73,19 +71,13 @@ export function StepBody({ step, process, all, onSelect, compact }: {
   );
 }
 
-export function ListView({ process, all, done, toggle, reset, selectedId, onSelect, feedback, onReport, editable, onInsert }: {
-  editable?: boolean; onInsert?: (at: InsertAt, spec: { title: string; type: StepType; actor: string }) => void;
+/** The checklist of the reader's page: every step in order, the reader's own ones to tick off. */
+export function ListView({ process, all, done, toggle, reset, selectedId, onSelect, feedback, onReport }: {
   process: Process; all: Process[]; feedback: Feedback[]; onReport: (id: string) => void; done: Set<string>; toggle: (id: string) => void; reset: () => void;
   selectedId: string | null; onSelect: (id: string) => void;
 }) {
   const [onlyMine, setOnlyMine] = useState(false);
   const { catalog } = useCatalog();
-  const [adding, setAdding] = useState<string | null>(null);
-  // inserting below step i: on the arrow to the next listed step when one exists, otherwise after it
-  const insertAt = (i: number): InsertAt => {
-    const cur = process.steps[i], nxt = process.steps[i + 1];
-    return { afterId: cur.id, beforeId: nxt && cur.next.some((n) => n.to === nxt.id) ? nxt.id : undefined };
-  };
   const mine = process.steps.filter((s) => s.actor === "me");
   const mineDone = mine.filter((s) => done.has(s.id)).length;
   const laneIdx = (id: string) => Math.max(0, process.actors.findIndex((a) => a.id === id));
@@ -112,7 +104,7 @@ export function ListView({ process, all, done, toggle, reset, selectedId, onSele
           const meta = STEP_META[s.type];
           return (
             <li key={s.id} id={`step-${s.id}`}
-              className={`step ${editable && !onlyMine ? "editable" : ""} ${isMine ? "mine" : "other"} ${done.has(s.id) ? "done" : ""} ${selectedId === s.id ? "selected" : ""}`}
+              className={`step ${isMine ? "mine" : "other"} ${done.has(s.id) ? "done" : ""} ${selectedId === s.id ? "selected" : ""}`}
               style={{ "--c": meta.color, "--lane": LANE_COLORS[laneIdx(s.actor) % LANE_COLORS.length] } as React.CSSProperties}>
               <div className="step-rail"><span className="step-num">{i + 1}</span></div>
               <div className="step-card">
@@ -138,14 +130,6 @@ export function ListView({ process, all, done, toggle, reset, selectedId, onSele
                 </div>
                 <StepBody step={isMine ? s : { ...s, instructions: undefined }} process={process} all={all} onSelect={onSelect} />
               </div>
-              {editable && !onlyMine && (
-                <div className={`step-insert ${adding === s.id ? "open" : ""}`}>
-                  {adding === s.id
-                    ? <QuickAdd inline process={process} at={insertAt(i)} onClose={() => setAdding(null)} returnFocus={() => document.getElementById(`insert-after-${s.id}`)}
-                        onAdd={(spec) => { onInsert?.(insertAt(i), spec); setAdding(null); }} />
-                    : <button id={`insert-after-${s.id}`} onClick={() => setAdding(s.id)} title={`Insert a step after “${s.title}”`}><Plus size={13} strokeWidth={3} />Insert a step here</button>}
-                </div>
-              )}
             </li>
           );
         })}

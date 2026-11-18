@@ -6,10 +6,10 @@ import { TypeIcon, useLayer } from "./ui";
 
 export interface InsertAt { afterId: string; beforeId?: string }
 
-/** Small form that appears exactly where the new step will go - on the map or in the checklist. */
-export function QuickAdd({ process, at, onAdd, onClose, style, inline, returnFocus }: {
+/** Small form that appears exactly where the new step will go on the map. */
+export function QuickAdd({ process, at, onAdd, onClose, style, returnFocus }: {
   process: Process; at: InsertAt; onAdd: (spec: { title: string; type: StepType; actor: string }) => void; onClose: () => void;
-  style?: React.CSSProperties; inline?: boolean;
+  style?: React.CSSProperties;
   /** Where the focus goes afterwards when the button that opened the form is no longer there. */
   returnFocus?: () => HTMLElement | null;
 }) {
@@ -24,7 +24,7 @@ export function QuickAdd({ process, at, onAdd, onClose, style, inline, returnFoc
 
   // a form: Enter in the name adds the step; Enter on a button only presses that button
   return (
-    <form ref={form} className={`quick-add ${inline ? "inline" : ""}`} style={style} role="dialog" aria-label="Add a step" tabIndex={-1}
+    <form ref={form} className="quick-add" style={style} role="dialog" aria-label="Add a step" tabIndex={-1}
       onMouseDown={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (ok) onAdd({ title: title.trim(), type, actor }); }}>
       <div className="quick-head">
         <span>{before ? <>New step between <b>{after?.title}</b> and <b>{before.title}</b></>

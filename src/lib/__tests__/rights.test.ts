@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { belongsChoice, belongsRefused, canCreate, canEdit, canEditSomething, canManage, canOpenAdmin, completePerms, editsAll, NO_PERMS, roleLabel, wouldLoseEdit } from "../rights";
+import { belongsChoice, belongsRefused, canCreate, canEdit, canManage, canOpenAdmin, completePerms, editsAll, NO_PERMS, roleLabel, wouldLoseEdit } from "../rights";
 import type { Perms } from "../../types";
 
 const perms = (p: Partial<Perms>): Perms => ({ ...NO_PERMS, ...p });
@@ -14,7 +14,6 @@ describe("who may change a process or standard", () => {
       expect(canManage(NO_PERMS, kind, gcp)).toBe(false);
       expect(canCreate(NO_PERMS, kind)).toBe(false);
     }
-    expect(canEditSomething(NO_PERMS)).toBe(false);
     expect(canOpenAdmin(NO_PERMS)).toBe(false);
     expect(roleLabel(NO_PERMS)).toBe("Consumer");
   });
@@ -54,7 +53,6 @@ describe("who may change a process or standard", () => {
       // creating is offered: what they create is filled in with one of theirs
       expect(canCreate(jordan, kind)).toBe(true);
     }
-    expect(canEditSomething(jordan)).toBe(true); // the Consumer / Editor switch
     expect(canOpenAdmin(jordan)).toBe(false);
     expect(roleLabel(jordan)).toBe("Platform owner · Practice owner · Owner");
   });
@@ -66,7 +64,6 @@ describe("who may change a process or standard", () => {
     expect(canManage(casey, "standard", gcp)).toBe(true);
     expect(canManage(casey, "process", azure)).toBe(false);
     expect(canCreate(casey, "process")).toBe(false);
-    expect(canEditSomething(casey)).toBe(false);
     expect(roleLabel(casey)).toBe("Owner");
     // whoever may edit also manages
     expect(canManage(perms({ practices: ["engineering"] }), "standard", engineering)).toBe(true);

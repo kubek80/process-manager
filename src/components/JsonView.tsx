@@ -84,7 +84,7 @@ export function JsonView<T extends { id: string }>({ doc, noun, validate, schema
           <button className="btn" onClick={() => download(`${doc.id}.json`, text + "\n")}><Download size={16} />Download JSON</button>
           <CopyButton label="Copy JSON schema" text={() => JSON.stringify(schema, null, 2)} />
         </div>
-        <p className="muted small">Schema: <code>{schemaFile}</code><br />Every save is kept as a version; press the version in the header to see them.</p>
+        <p className="muted small">Schema: <code>{schemaFile}</code><br />Every save is kept as a version.</p>
       </div>
     </div>
   );

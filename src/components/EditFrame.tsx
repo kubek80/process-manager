@@ -4,7 +4,7 @@ import {
 } from "lucide-react";
 import type { Feedback, Issue } from "../types";
 import { checkerSummary, issueText, type EditState, type OutlineEntry } from "../lib/editing";
-import { summarize, type Change } from "../lib/diff";
+import type { Change } from "../lib/diff";
 import { ChangeList } from "./Editing";
 import { FeedbackItem, type FeedbackTarget } from "./Feedback";
 import { Modal, useLayer } from "./ui";
@@ -229,7 +229,7 @@ function CheckerPop({ issues, place, onClose, onPick }: { issues: Issue[]; place
 
 export interface BarAction { label: string; run: () => void; blocked?: string; busy?: boolean }
 
-export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo, onBack, discard, save, publish, more, unsaved, banners, outline, middle, fields, fieldsLabel, panel, setPanel }: {
+export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo, onBack, discard, save, publish, more, unsaved, banners, outline, middle, fields, fieldsLabel, panel, setPanel, json }: {
   kind: "process" | "standard"; title: string; state: EditState;
   issues: Issue[]; place: (i: Issue) => string; onPickIssue: (i: Issue) => void;
   undo: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
@@ -247,11 +247,16 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
   fieldsLabel: string;
   /** Which panel slides over on a small screen. */
   panel: Panel; setPanel: (p: Panel) => void;
+  /** The JSON of the whole document is shown: it takes the whole width. */
+  json?: boolean;
 }) {
   const off = (unavailable: boolean) => (unavailable ? { "aria-disabled": true, className: "eb-icon off" } : { className: "eb-icon" });
   const noun = kind === "process" ? "process" : "standard";
+  // on a phone there is no room for Discard on the bar: it moves into More
+  const phone = useNarrow();
+  const items = phone && discard ? [{ label: discard.label, icon: <Undo2 size={16} />, run: discard.run, blocked: discard.blocked }, ...more] : more;
   return (
-    <div className={`edit-screen panel-${panel ?? "none"}`}>
+    <div className={`edit-screen panel-${panel ?? "none"} ${json ? "json" : ""}`}>
       <header className={`edit-bar state-${state.key}`}>
         <button className="eb-btn eb-back" onClick={onBack} title={`Back to reading this ${noun}`}><ArrowLeft size={16} /><span className="eb-label">Back to reading</span></button>
         <div className="eb-title">
@@ -269,8 +274,8 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
           <Checker issues={issues} place={place} onPick={onPickIssue} />
         </div>
         <div className="eb-actions">
-          <MoreMenu items={more} />
-          {discard && <button className="eb-btn eb-discard" disabled={!!discard.blocked || discard.busy} onClick={discard.run} title={discard.blocked}>{discard.label}</button>}
+          <MoreMenu items={items} />
+          {discard && !phone && <button className="eb-btn eb-discard" disabled={!!discard.blocked || discard.busy} onClick={discard.run} title={discard.blocked}>{discard.label}</button>}
           <button className="eb-btn eb-save" disabled={!!save.blocked || save.busy} onClick={save.run} title={save.blocked}>{save.busy ? "Saving…" : save.label}</button>
           <button className="eb-btn eb-publish" disabled={!!publish.blocked || publish.busy} onClick={publish.run} title={publish.blocked}><Send size={15} />{publish.label}</button>
         </div>
@@ -298,6 +303,20 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
 
 export type Panel = "outline" | "fields" | null;
 
+/** Whether the screen is as narrow as a phone (the stylesheet's breakpoint for the editing screen). */
+function useNarrow() {
+  const query = "(max-width: 760px)";
+  const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && !!window.matchMedia?.(query).matches);
+  useEffect(() => {
+    const m = window.matchMedia?.(query);
+    if (!m) return;
+    const on = () => setNarrow(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return narrow;
+}
+
 /**
  * "Publish…": what changed since the published version, a note for the list of versions, and
  * what publishing means for readers. Blocked, with the reason, while the checker has errors.
@@ -318,7 +337,7 @@ export function PublishDialog({ noun, first, changes, version, blocked, onPublis
   };
   return (
     <Modal title={first ? `Publish this ${noun}` : "Publish your changes"}
-      subtitle={first ? `Until now only the people who may change it could see it.` : `Readers now see version ${version}. ${summarize(changes)}.`}
+      subtitle={first ? `Until now only the people who may change it could see it.` : `Readers now see version ${version}.`}
       onClose={onClose}
       footer={<><span className="spacer" /><button className="btn" onClick={onClose}>Not yet</button>
         <button className="btn primary" disabled={!!blocked || busy} onClick={go} title={blocked}><Send size={15} />{busy ? "Publishing…" : "Publish"}</button></>}>

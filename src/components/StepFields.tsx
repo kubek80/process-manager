@@ -109,7 +109,7 @@ export function StepFields({ process, all, step, feedback, issues, onChange, onT
           </div>
         </div>
 
-        <Field label="Context" hint="Why it is done and what happens meanwhile">
+        <Field label="Context" hint="Why it is done, and what goes on meanwhile">
           <textarea rows={3} value={step.description ?? ""} maxLength={600} onChange={(e) => onChange({ description: e.target.value })} />
         </Field>
       </EditSection>

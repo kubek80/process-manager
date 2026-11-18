@@ -76,9 +76,6 @@ export function belongsRefused(p: Perms, kind: TargetKind, saved: Belongs | unde
   });
 }
 
-/** Anyone who can change some process or standard gets the Consumer / Editor switch. */
-export const canEditSomething = (p: Perms) => canCreate(p, "process") || canCreate(p, "standard");
-
 /** The Admin panel has something for admins and for people who manage the lists. */
 export const canOpenAdmin = (p: Perms) => p.admin || p.catalog;
 

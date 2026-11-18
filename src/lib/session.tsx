@@ -19,7 +19,7 @@ export function useVisibleDrafts(): false | ((kind: TargetKind, doc: { owner?: s
 }
 
 // the rights themselves are worked out in ./rights; these are here for the pages that import them from the session
-export { canCreate, canEdit, canEditSomething, canManage, canOpenAdmin, editsAll, roleLabel } from "./rights";
+export { canCreate, canEdit, canManage, canOpenAdmin, editsAll, roleLabel } from "./rights";
 
 /** Everything that can be done to feedback. Each action is saved on the server straight away. */
 export interface FeedbackActions {

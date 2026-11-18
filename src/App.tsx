@@ -332,6 +332,10 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const setMeta = (set: typeof setProcessMeta, id: string, meta: Partial<DocMeta> & { version: number }) =>
     set((all) => ({ ...all, [id]: { ...all[id], ...meta, createdAt: meta.createdAt || all[id]?.createdAt || meta.updatedAt || "" } as DocMeta }));
 
+  // unpublished changes were saved, published or discarded on the editing screen
+  const setDraftMeta = (set: typeof setProcessMeta, id: string, draft: DocMeta["draft"] | null) =>
+    set((all) => (all[id] ? { ...all, [id]: { ...all[id], draft: draft ?? undefined } } : all));
+
   // Saving: on top of the version the edits started from. The page that saves shows what went
   // wrong, including "somebody else saved first"; the new version is returned to it.
   const saveProcess = async (p: Process, base: number, note?: string) => {
@@ -451,7 +455,9 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const process = route.page === "process" || route.page === "edit-process" ? all.find((p) => p.id === route.id) : undefined;
   const standard = route.page === "standard" || route.page === "edit-standard" ? standards.find((s) => s.id === route.id) : undefined;
   // the editing screen is a screen of its own: its editing bar takes the place of the top bar
-  const editing = route.page === "edit-process" || route.page === "edit-standard";
+  // (somebody who may not change it gets the ordinary page, with the top bar, saying so)
+  const editing = (route.page === "edit-process" && !!process && canEdit(perms, "process", process))
+    || (route.page === "edit-standard" && !!standard && canEdit(perms, "standard", standard));
   const on = (...pages: string[]) => (pages.includes(route.page) ? "on" : "");
   const current = (...pages: string[]) => (pages.includes(route.page) ? "page" as const : undefined);
 
@@ -520,12 +526,12 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       {processes && route.page === "edit-process" && (process
         ? <EditProcessPage key={process.id} process={process} meta={processMeta[process.id]} all={all} standards={standards} item={route.item}
           feedback={feedback.process[process.id] ?? []} onSave={saveProcess} onReload={() => reloadProcess(process.id)} onRefresh={refreshAll}
-          onDelete={(base) => deleteProcess(process.id, base)} onDraftMeta={(d) => setMeta(setProcessMeta, process.id, { ...processMeta[process.id], draft: d ?? undefined })} />
+          onDelete={(base) => deleteProcess(process.id, base)} onDraftMeta={(d) => setDraftMeta(setProcessMeta, process.id, d)} />
         : <NotFound noun="process" id={route.id} />)}
       {processes && route.page === "edit-standard" && (standard
         ? <EditStandardPage key={standard.id} standard={standard} meta={standardMeta[standard.id]} all={standards} processes={all} item={route.item}
           feedback={feedback.standard[standard.id] ?? []} onSave={saveStandard} onReload={() => reloadStandard(standard.id)} onRefresh={refreshAll}
-          onDelete={(base) => deleteStandard(standard.id, base)} onDraftMeta={(d) => setMeta(setStandardMeta, standard.id, { ...standardMeta[standard.id], draft: d ?? undefined })} />
+          onDelete={(base) => deleteStandard(standard.id, base)} onDraftMeta={(d) => setDraftMeta(setStandardMeta, standard.id, d)} />
         : <NotFound noun="standard" id={route.id} />)}
       </Suspense>
       </ErrorBoundary>

@@ -1,0 +1,190 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Plus } from "lucide-react";
+import type { DocMeta, Feedback, Process, Standard } from "../types";
+import { addRequirement, deleteRequirement, moveRequirement, tidyStandard, today, updateRequirement } from "../lib/edit";
+import { issueTarget, issuesByPlace, issuesFor, selectionKey, STANDARD_SECTIONS, standardOutline, type Selection, type StandardSection } from "../lib/editing";
+import { isDrawableStandard, standardSchema, validateStandard } from "../lib/validate";
+import { useSelectedItem } from "../lib/selection";
+import { canEdit } from "../lib/rights";
+import { usePerms } from "../lib/session";
+import { useCatalog } from "../lib/catalog";
+import { statusOf } from "../lib/lifecycle";
+import { href } from "../lib/store";
+import { openCount } from "./Feedback";
+import { EditFrame, EditSection, ItemIssues, Outline } from "./EditFrame";
+import { EditSession, type Session } from "./EditSession";
+import { NoRight } from "./EditProcessPage";
+import { BelongsEditor, DimsEditor, ReviewEditor } from "./Governance";
+import { RequirementCard, RequirementFields } from "./Requirements";
+import { ResourceEditor, Resources } from "./Resources";
+import { standardAiSpec, StandardIntro } from "./StandardPage";
+import { confirmDialog, Field, scrollBehavior } from "./ui";
+
+const stamp = (s: Standard): Standard => ({ ...s, updatedAt: today() });
+
+/** The editing screen of a standard (`#/s/:id/edit[/:REQ-ID]`). */
+export function EditStandardPage(props: {
+  standard: Standard; meta?: DocMeta; all: Standard[]; processes: Process[]; feedback: Feedback[]; item?: string;
+  onSave: (s: Standard, base: number, note?: string) => Promise<number>;
+  onReload: () => Promise<{ saved: Standard; version: number } | null>;
+  onRefresh: () => Promise<void>;
+  onDelete: (base: number) => void;
+  onDraftMeta: (d: { updatedAt: string; updatedBy: string } | null) => void;
+}) {
+  const { standard, all, processes } = props;
+  const perms = usePerms();
+  const { catalog } = useCatalog();
+  const ctx = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds: all.map((s) => s.id), catalog }), [processes, all, catalog]);
+  const check = useCallback((s: Standard) => validateStandard(s, ctx), [ctx]);
+  if (!canEdit(perms, "standard", standard)) return <NoRight noun="standard" title={standard.title} readHref={href({ page: "standard", id: standard.id, tab: "doc" })} />;
+  return (
+    <EditSession<Standard> o={{
+      kind: "standard", doc: standard, meta: props.meta, others: all, tidy: tidyStandard, stamp, check, drawable: isDrawableStandard,
+      aiSpec: (current) => standardAiSpec(current, all, processes, catalog),
+      json: { validate: check as (v: unknown) => ReturnType<typeof check>, schema: standardSchema, schemaFile: "schema/standard.schema.json" },
+      onSave: props.onSave, onReload: props.onReload, onRefresh: props.onRefresh, onDelete: props.onDelete, onDraftMeta: props.onDraftMeta,
+    }}>
+      {(s) => <StandardEditor s={s} {...props} />}
+    </EditSession>
+  );
+}
+
+function StandardEditor({ s, standard, all, processes, feedback, item }: {
+  s: Session<Standard>; standard: Standard; all: Standard[]; processes: Process[]; feedback: Feedback[]; item?: string;
+}) {
+  const { d } = s;
+  const draft = d.draft;
+  const drawable = s.drawable;
+  const setDraft = d.change;
+  const set = (patch: Partial<Standard>) => setDraft((x) => ({ ...x, ...patch }));
+  const { catalog } = useCatalog();
+  const [reqId, selectReq] = useSelectedItem(item, (id) => ({ page: "edit-standard", id: standard.id, ...(id ? { item: id } : {}) }),
+    (id) => !drawable || draft.requirements.some((r) => r.id === id));
+  const [section, setSection] = useState<StandardSection>("about");
+  const sel: Selection = reqId ? { section: "requirements", item: reqId } : { section };
+  const current = drawable && reqId ? draft.requirements.find((r) => r.id === reqId) : undefined;
+
+  const choose = (next: Selection, open = true) => {
+    if (next.item) selectReq(next.item);
+    else { if (reqId) selectReq(null); setSection(next.section as StandardSection); }
+    if (open) s.setPanel("fields");
+  };
+  // the selected requirement is brought into view in the middle
+  useEffect(() => {
+    if (!reqId) return;
+    const t = setTimeout(() => document.getElementById(`req-${reqId}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" }), 30);
+    return () => clearTimeout(t);
+  }, [reqId]);
+
+  const byPlace = useMemo(() => (drawable ? issuesByPlace("standard", draft, s.issues) : new Map()), [drawable, draft, s.issues]);
+  const add = (after?: string) => { const r = addRequirement(draft, after); setDraft(r.standard); selectReq(r.id); s.setPanel("fields"); };
+  const sectionLabel = STANDARD_SECTIONS.find((x) => x.id === section)?.label ?? "About";
+  const fieldsLabel = current ? `${current.id}: ${current.title || "(no name yet)"}` : sectionLabel;
+  const helpers = processes.filter((p) => p.standards?.includes(draft.id) && statusOf(p) === "active");
+
+  let fields;
+  if (!drawable) fields = <p className="empty-hint pad">Repair the JSON first: its problems are listed next to it.</p>;
+  else if (current) {
+    fields = <RequirementFields key={current.id} r={current} standard={draft} processes={processes} feedback={feedback} issues={issuesFor("standard", draft, s.issues, sel)}
+      onChange={(patch) => setDraft(updateRequirement(draft, current.id, patch))}
+      onRename={(id) => { if (!draft.requirements.some((x) => x.id === id && x !== current)) { setDraft(updateRequirement(draft, current.id, { id })); selectReq(id); } }}
+      onDelete={async () => {
+        if (!await confirmDialog({ title: `Delete ${current.id}?`, body: <>The requirement “{current.title}” is removed from the draft. Undo brings it back; readers see nothing until you publish.</>, confirmLabel: "Delete requirement", danger: true })) return;
+        setDraft((x) => deleteRequirement(x, current.id)); selectReq(null); setSection("requirements");
+      }}
+      onMove={(dir) => setDraft(moveRequirement(draft, current.id, dir))}
+      onAddAfter={() => add(current.id)} />;
+  } else {
+    const head = <h2 className="fields-section-title">{sectionLabel}</h2>;
+    const own = issuesFor("standard", draft, s.issues, { section }).filter((i) => !issueTarget("standard", draft, i.path).item);
+    const body = {
+      about: (
+        <>
+          <EditSection title="Name and summary">
+            <Field label="Name" hint="What it is about, in a few words"><input value={draft.title} maxLength={80} onChange={(e) => set({ title: e.target.value })} /></Field>
+            <Field label="Summary" hint="What it protects or achieves"><textarea rows={3} maxLength={400} value={draft.summary} onChange={(e) => set({ summary: e.target.value })} /></Field>
+            <Field label="Issued by" hint="The team that reviews it, answers feedback and grants exceptions">
+              <select value={draft.owner} onChange={(e) => set({ owner: e.target.value })}>
+                {catalog.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {!catalog.teams.some((t) => t.id === draft.owner) && <option value={draft.owner}>{draft.owner} (not in the list)</option>}
+              </select>
+            </Field>
+          </EditSection>
+          <EditSection title="What it belongs to" hint="How readers find it, and who besides the editors may change it.">
+            <BelongsEditor kind="standard" doc={draft} saved={d.saved} onChange={set} />
+          </EditSection>
+          <EditSection title="Where it applies" hint="Nothing selected means everywhere. A requirement can narrow this further.">
+            <DimsEditor value={draft} onChange={set} />
+            <Field label="Tags" hint="Words readers might search for, separated by commas">
+              <input value={(draft.tags ?? []).join(", ")} onChange={(e) => set({ tags: e.target.value.split(",").map((t) => t.trimStart().slice(0, 30)).slice(0, 12) })} />
+            </Field>
+          </EditSection>
+          <EditSection title="Review"><ReviewEditor doc={draft} others={all} onChange={set} /></EditSection>
+        </>
+      ),
+      scope: (
+        <EditSection title="Scope and exceptions">
+          <Field label="Scope" hint="What it covers and what it does not"><textarea rows={4} maxLength={400} value={draft.scope ?? ""} onChange={(e) => set({ scope: e.target.value })} /></Field>
+          <Field label="How to ask for an exception" hint="Readers who cannot comply follow this">
+            <select value={draft.exceptionProcessId ?? ""} onChange={(e) => set({ exceptionProcessId: e.target.value || undefined })}>
+              <option value="">Ask the issuing team directly</option>
+              {processes.map((p) => <option key={p.id} value={p.id}>Process: {p.title}</option>)}
+            </select>
+          </Field>
+        </EditSection>
+      ),
+      requirements: (
+        <div className="empty-hint">
+          <p>{draft.requirements.length} requirement{draft.requirements.length === 1 ? "" : "s"}. Select one in the outline or in the middle to change it.</p>
+          <button className="btn small" onClick={() => add()}><Plus size={14} />Add a requirement at the end</button>
+        </div>
+      ),
+      background: (
+        <EditSection title="Background" hint="Policies, documentation and other reading behind the standard.">
+          {!draft.resources?.length && <p className="empty-hint">No background yet. Link the policy this standard comes from, so readers can check the source.</p>}
+          <ResourceEditor list={draft.resources ?? []} onChange={(resources) => set({ resources })} />
+        </EditSection>
+      ),
+    }[section];
+    fields = <>{head}<ItemIssues issues={own} />{body}</>;
+  }
+
+  const middle = s.json ? s.jsonView : (
+    <div className="edit-preview standard-doc">
+      <p className="preview-label">What readers will see</p>
+      <button className={`preview-head ${sel.section === "about" ? "on" : ""}`} onClick={() => choose({ section: "about" })}>
+        <h2>{draft.title || <span className="muted">(no name yet)</span>}</h2>
+        <p>{draft.summary || <span className="muted">No summary yet. Say what it protects or achieves.</span>}</p>
+      </button>
+      <div className={`preview-part clickable ${sel.section === "scope" ? "on" : ""}`} onClick={() => choose({ section: "scope" })}>
+        <StandardIntro standard={draft} processes={processes} helpers={helpers} />
+      </div>
+      {draft.resources?.length
+        ? <div className={`preview-part clickable ${sel.section === "background" ? "on" : ""}`} onClick={() => choose({ section: "background" })}><section className="prereqs"><h2>Background</h2><Resources list={draft.resources} /></section></div>
+        : <button className="preview-empty" onClick={() => choose({ section: "background" })}>No background yet. <b>Link the policy behind it</b></button>}
+      <ol className="reqs">
+        {draft.requirements.map((r) => (
+          <RequirementCard key={r.id} r={r} standard={draft} processes={processes} applies flags={openCount(feedback, r.id)}
+            selected={reqId === r.id} onSelect={() => choose({ section: "requirements", item: r.id })} />
+        ))}
+      </ol>
+      <button className="btn add-req" onClick={() => add()}><Plus size={15} />Add a requirement</button>
+    </div>
+  );
+
+  return (
+    <>
+      <EditFrame kind="standard" title={draft.title} issues={s.issues} {...s.frame}
+        place={(i) => { const t = issueTarget("standard", draft, i.path); return t.item ?? STANDARD_SECTIONS.find((x) => x.id === t.section)?.label ?? "About"; }}
+        onPickIssue={(i) => choose(issueTarget("standard", draft, i.path))}
+        outline={drawable ? <Outline label="Outline of the standard" entries={standardOutline(draft)} selected={selectionKey(sel)} issues={byPlace}
+          feedback={(id) => openCount(feedback, id)}
+          onSelect={(e) => choose({ section: e.section, item: e.item })}
+          onAdd={{ section: "requirements", label: "Add a requirement at the end", run: () => add() }}
+          onMove={(id, dir) => setDraft(moveRequirement(draft, id, dir))} /> : null}
+        middle={middle} fields={<div className="edit-fields-body">{fields}</div>} fieldsLabel={fieldsLabel}
+        panel={s.panel} setPanel={s.setPanel} json={s.json} />
+      {s.dialogs}
+    </>
+  );
+}
