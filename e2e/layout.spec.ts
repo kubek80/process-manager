@@ -1,11 +1,14 @@
 import { expect, test } from "@playwright/test";
-import { CASEY, CSRF, DANA, JORDAN, RILEY, SAM, open, signIn } from "./helpers";
+import { CASEY, CSRF, DANA, JORDAN, RILEY, SAM, meaningReady, open, signIn } from "./helpers";
 
 // What a phone, a tablet and a small laptop show. A page that scrolls sideways hides controls
 // off screen, so no page may be wider than the screen.
 const PAGES = ["/", "/search?q=gcp", "/search?q=logging&type=standard&rigour=mandatory", "/processes", "/standards", "/p/request-gcp-project/flow", "/p/request-gcp-project/list", "/p/request-gcp-project/flow/raise-request",
   "/s/secure-logging/doc", "/s/secure-logging/doc/SEC-LOG-02", "/catalog", "/guide", "/mine", "/requests", "/requests?state=all"];
 const ADMIN = ["/p/request-gcp-project/json", "/admin/access", "/admin/lists", "/admin/skills", "/admin/health", "/admin/activity", "/admin/statistics", "/admin/system"];
+
+// the server listens before its index is complete: wait until search by meaning answers
+test.beforeAll(async ({ request }) => { await meaningReady(request); });
 
 const box = (page: import("@playwright/test").Page) => page.getByRole("searchbox", { name: "Search processes and standards" });
 const sideways = (page: import("@playwright/test").Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

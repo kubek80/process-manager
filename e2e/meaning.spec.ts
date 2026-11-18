@@ -1,13 +1,16 @@
 import { expect, test, type APIResponse, type Page, type Route } from "@playwright/test";
-import { ALEX, CASEY, CSRF, DANA, JORDAN, RILEY, SAM, open, putDoc, readProcess, signIn, watchErrors } from "./helpers";
+import { ALEX, CASEY, CSRF, DANA, JORDAN, RILEY, SAM, meaningReady, open, putDoc, readProcess, signIn, watchErrors } from "./helpers";
 
 // Search by meaning: the switch Words / Meaning / Both on the search page. The browser tests'
 // server runs with the built-in embedder (it compares words and parts of words, nothing leaves
-// the server), so `me.search.meaning` is true and `me.search.outside` false.
+// the server), so `me.search` is {meaning: true, outside: false, provider: "builtin"}.
 //
 // One person may search by meaning 60 times a minute. The tests here spread their searches over
 // several people, and the test that reaches the limit on purpose comes last, with a person no
 // later test searches by meaning as.
+
+// the server listens before its index is complete: wait until search by meaning answers
+test.beforeAll(async ({ request }) => { await meaningReady(request); });
 
 const results = (page: Page) => page.locator(".search-page ol.cards > li.card");
 const card = (page: Page, id: string) => page.locator(`.search-page li.card[data-id="${id}"]`);
@@ -18,12 +21,14 @@ const box = (page: Page) => page.getByRole("searchbox", { name: "Search processe
 const state = (page: Page) => page.locator(".search-state");
 const settled = (page: Page) => expect(page.locator("section.list-results")).not.toHaveAttribute("aria-busy", "true");
 
-/** The queries the page sends to the server, in order. */
+/** The queries the page sends to the server, in order. Each asks for up to 500, in one call. */
 function asked(page: Page) {
   const qs: string[] = [];
   page.on("request", (r) => {
     const u = new URL(r.url());
-    if (u.pathname === "/api/search") qs.push(u.searchParams.get("q") ?? "");
+    if (u.pathname !== "/api/search") return;
+    const q = u.searchParams.get("q") ?? "";
+    qs.push(u.searchParams.get("limit") === "500" ? q : `${q} (limit ${u.searchParams.get("limit")})`);
   });
   return qs;
 }
@@ -40,7 +45,7 @@ async function answerSearch(page: Page, status: number, body: unknown) {
 }
 
 /** `/api/me` as the server sends it, with `search` replaced. */
-async function meWith(page: Page, search: { meaning: boolean; outside: boolean }) {
+async function meWith(page: Page, search: { meaning: boolean; outside: boolean; provider?: string }) {
   await page.route(/\/api\/me$/, async (route) => {
     const res = await route.fetch();
     route.fulfill({ response: res, json: { ...(await res.json()), search } });
@@ -84,10 +89,11 @@ test("the switch is on the search page only: three choices, each explained, noth
   await expect(page.locator(".search-mode-name")).toHaveText("Search by");
   await expect(page.locator("#search-mode-help li")).toHaveText([
     "Words finds what contains every word you type.",
-    "Meaning puts first what comes closest to what you type, even when not every word is in it.",
+    "Meaning compares the words and parts of words you type with the text of every process and standard, and shows the closest first, even when none is really close. It does not know that different words can mean the same thing.",
     "Both shows what either finds, the best of each first.",
   ]);
   await expect(modes(page)).toHaveAccessibleDescription(/^Words finds what contains every word you type\./);
+  await expect(page.locator("li.search-mode-meaning")).toHaveAttribute("data-provider", "builtin");
   // the built-in embedder: what is typed stays in the company, so nothing says otherwise
   await expect(page.locator(".search-mode-outside")).toHaveCount(0);
   await expect(page.locator(".search-mode")).not.toContainText("Google Cloud");
@@ -97,12 +103,25 @@ test("the switch is on the search page only: three choices, each explained, noth
   expect(errors).toEqual([]);
 });
 
-test("with an outside service the page says that what is typed is sent to Google Cloud", async ({ page }) => {
+test("with Vertex AI the page says what Meaning does and that what is typed is sent to Google Cloud", async ({ page }) => {
   await signIn(page, SAM);
-  await meWith(page, { meaning: true, outside: true });
+  await meWith(page, { meaning: true, outside: true, provider: "vertex" });
   await open(page, "/search?q=gcp");
+  const line = page.locator("li.search-mode-meaning");
+  await expect(line).toHaveAttribute("data-provider", "vertex");
+  await expect(line).toHaveText("Meaning finds processes and standards about what you type, even when they use other words, and shows the closest first.");
   await expect(page.locator(".search-mode-outside")).toHaveText("With Meaning and Both, what you type is sent to Google Cloud to be compared.");
   await expect(modes(page)).toHaveAccessibleDescription(/sent to Google Cloud/);
+});
+
+test("from a server that does not say which provider compares, the line about Meaning is the cautious one", async ({ page }) => {
+  await signIn(page, SAM);
+  await meWith(page, { meaning: true, outside: false });
+  await open(page, "/search?q=gcp");
+  const line = page.locator("li.search-mode-meaning");
+  await expect(line).toHaveAttribute("data-provider", "unknown");
+  await expect(line).toHaveText("Meaning puts first what comes closest to what you type, even when not every word is in it.");
+  await expect(page.locator(".search-mode-outside")).toHaveCount(0);
 });
 
 test("the switch works with the keyboard: arrows move the choice, Home and End go to the ends", async ({ page }) => {
@@ -280,11 +299,13 @@ test("typing does not search by meaning; Enter, the Search button and a new choi
   await expect(page.locator("p.search-earlier")).toHaveText("These results are for the earlier search “gcp”. Press Enter or Search to search for “akamai site”.");
   await expect(count(page)).toHaveText(/ for “gcp”$/);
   await expect(results(page).first()).toHaveAttribute("data-id", "request-gcp-project");
-  await expect(page).toHaveURL(/q=akamai(%20|\+)site/); // the address follows the box
+  // the address says what the results are for, until the search is run
   await page.waitForTimeout(600);
+  await expect(page).toHaveURL(/#\/search\?q=gcp&mode=meaning$/);
   expect(qs, "typing alone asks nothing").toEqual(["gcp"]);
 
   await box(page).press("Enter");
+  await expect(page).toHaveURL(/#\/search\?q=akamai(%20|\+)site&mode=meaning$/);
   await expect(results(page).first()).toHaveAttribute("data-id", "onboard-site-to-akamai");
   await expect(count(page)).toHaveText(/ for “akamai site”$/);
   await expect(page.locator("p.search-earlier")).toHaveCount(0);
@@ -293,7 +314,13 @@ test("typing does not search by meaning; Enter, the Search button and a new choi
   await box(page).fill("repository");
   await page.locator(".search-page form[role=search]").getByRole("button", { name: "Search" }).click();
   await expect(results(page).first()).toHaveAttribute("data-id", "request-github-repository");
+  await expect(page).toHaveURL(/#\/search\?q=repository&mode=meaning$/);
   expect(qs).toEqual(["gcp", "akamai site", "repository"]);
+
+  // a reload shows what the address says
+  await page.reload();
+  await expect(box(page)).toHaveValue("repository");
+  await expect(results(page).first()).toHaveAttribute("data-id", "request-github-repository");
 
   // a new choice searches for what is in the box
   await box(page).fill("budget");
@@ -302,52 +329,59 @@ test("typing does not search by meaning; Enter, the Search button and a new choi
   await expect(page).toHaveURL(/#\/search\?q=budget&mode=both$/);
   await expect(results(page).first()).toHaveAttribute("data-id", "request-gcp-project");
   await expect(count(page)).toHaveText(/ for “budget”$/);
-  expect(qs).toEqual(["gcp", "akamai site", "repository", "budget"]);
+  expect(qs).toEqual(["gcp", "akamai site", "repository", "repository", "budget"]);
 
   // asked again a little later: the page has the answer still
-  await box(page).fill("akamai site");
+  await box(page).fill("budget");
   await box(page).press("Enter");
-  await expect(results(page).first()).toHaveAttribute("data-id", "onboard-site-to-akamai");
   await choice(page, "Meaning").click();
-  await expect(count(page)).toHaveText(/ for “akamai site”$/);
+  await expect(page).toHaveURL(/#\/search\?q=budget&mode=meaning$/);
+  await expect(count(page)).toHaveText(/ for “budget”$/);
+  await expect(results(page).first()).toHaveAttribute("data-id", "request-gcp-project");
   await page.waitForTimeout(400);
-  expect(qs, "the same query is asked once").toEqual(["gcp", "akamai site", "repository", "budget"]);
+  expect(qs, "the same query is asked once").toEqual(["gcp", "akamai site", "repository", "repository", "budget"]);
 
   // emptied box: everything, by words, without the server
   await box(page).fill("");
   await box(page).press("Enter");
   await expect(count(page)).toHaveText(/^\d+ results$/);
-  expect(qs).toHaveLength(4);
+  await expect(page).toHaveURL(/#\/search\?mode=meaning$/);
+
+  // Words follows the typing, in the address as well
+  await choice(page, "Words").click();
+  await box(page).fill("akamai");
+  await expect(page).toHaveURL(/#\/search\?q=akamai$/);
+  await expect(results(page).first()).toHaveAttribute("data-id", "onboard-site-to-akamai");
+  // the reload above started the page afresh: "repository" was asked once more there, nothing else
+  expect(qs).toEqual(["gcp", "akamai site", "repository", "repository", "budget"]);
 });
 
 // ---------- C. Both
 
 test("Both shows what either way finds, says how each was found, and a place found both ways once", async ({ page }) => {
   await signIn(page, JORDAN);
-  // "terraform" is in the words of several processes, but by meaning only the standard comes close
-  await open(page, "/search?q=terraform&mode=both");
+  // "gcp": the GCP and Apigee processes have the word and come close by meaning; the standard on
+  // infrastructure as code has the word but is not close
+  await open(page, "/search?q=gcp&mode=both");
   await settled(page);
-  const iac = card(page, "infrastructure-as-code");
-  await expect(iac.locator("p.card-found-by")).toHaveText("Found by words and by meaning");
-  await expect(iac.locator("p.card-found-by")).toHaveClass(/\bboth\b/);
-  await expect(results(page).first()).toHaveAttribute("data-id", "infrastructure-as-code");
-  const wordsOnly = results(page).filter({ has: page.locator("p.card-found-by.words") });
-  expect(await wordsOnly.count()).toBeGreaterThan(0);
-  await expect(wordsOnly.first().locator("p.card-found-by")).toHaveText("Found by words");
-  // a place found both ways is named once
-  const places = await iac.locator("ul.card-hits li a").evaluateAll((as) => as.map((a) => a.getAttribute("href")));
-  expect(places.length).toBeGreaterThan(0);
-  expect(new Set(places).size, places.join(" ")).toBe(places.length);
-
-  // "logging": only the standard has the word; by meaning a ServiceNow step comes close too
-  await box(page).fill("logging");
+  const gcp = card(page, "request-gcp-project");
+  await expect(gcp.locator("p.card-found-by")).toHaveText("Found by words and by meaning");
+  await expect(gcp.locator("p.card-found-by")).toHaveClass(/\bboth\b/);
+  await expect(card(page, "infrastructure-as-code").locator("p.card-found-by")).toHaveText("Found by words");
+  await expect(card(page, "infrastructure-as-code").locator("p.card-found-by")).toHaveClass(/\bwords\b/);
+  // "gcp project": now the scope of secure logging comes close by meaning, without the word "gcp"
+  await box(page).fill("gcp project");
   await box(page).press("Enter");
-  await expect(card(page, "secure-logging").locator("p.card-found-by")).toHaveText("Found by words and by meaning");
-  const meaningOnly = results(page).filter({ has: page.locator("p.card-found-by.meaning") });
-  expect(await meaningOnly.count()).toBeGreaterThan(0);
-  await expect(meaningOnly.first().locator("p.card-found-by")).toHaveText("Found by meaning");
-  const logging = await card(page, "secure-logging").locator("ul.card-hits li a").evaluateAll((as) => as.map((a) => a.getAttribute("href")));
-  expect(new Set(logging).size, logging.join(" ")).toBe(logging.length);
+  await expect(count(page)).toHaveText(/ for “gcp project”$/);
+  await expect(card(page, "request-gcp-project").locator("p.card-found-by")).toHaveText("Found by words and by meaning");
+  await expect(card(page, "secure-logging").locator("p.card-found-by")).toHaveText("Found by meaning");
+  await expect(card(page, "secure-logging").locator("p.card-found-by")).toHaveClass(/\bmeaning\b/);
+  // a place found both ways is named once
+  for (const id of ["request-gcp-project", "onboard-api-to-apigee"]) {
+    const places = await card(page, id).locator("ul.card-hits li a").evaluateAll((as) => as.map((a) => a.getAttribute("href")));
+    expect(places.length, id).toBeGreaterThan(0);
+    expect(new Set(places).size, places.join(" ")).toBe(places.length);
+  }
 
   // what Words and Meaning each find on their own, Both has all of it
   const ids = async () => results(page).evaluateAll((li) => li.map((l) => `${l.getAttribute("data-kind")}:${l.getAttribute("data-id")}`));
@@ -357,19 +391,21 @@ test("Both shows what either way finds, says how each was found, and a place fou
   const byWords = await ids();
   await choice(page, "Meaning").click();
   await settled(page);
-  await expect(count(page)).toHaveText(/ for “logging”$/);
+  await expect(count(page)).toHaveText(/ for “gcp project”$/);
   const byMeaning = await ids();
   expect(new Set(both)).toEqual(new Set([...byWords, ...byMeaning]));
 });
 
 // ---------- D. the index follows what is saved
 
-test("what is published is found by meaning at once, and follows changes, drafts and deletion", async ({ page }) => {
+test("what is published is found by meaning within a moment, and follows changes; a draft or a deleted one is gone at once", async ({ page }) => {
   const id = "meaning-follow-demo";
+  // "wombat burrows" alone is too short for the built-in provider to come close enough
+  const W = "wombat burrows in the national park";
   await makeProcess(page, id, { title: "Wildlife survey", summary: "Count the quokkas living on Rottnest island every spring.", status: "active" });
   try {
     await signIn(page, SAM);
-    // through the API: the index has it straight away
+    // the index follows a save in the background: within a moment
     await expect.poll(() => meaningIds(page, "quokkas on rottnest island")).toContain(`process:${id}`);
     await load(page, "/search?q=quokkas%20on%20rottnest%20island&mode=meaning");
     await expect(results(page).first()).toHaveAttribute("data-id", id);
@@ -377,9 +413,9 @@ test("what is published is found by meaning at once, and follows changes, drafts
     // a new summary: found by its new words, no longer by the old ones
     await makeProcess(page, id, { title: "Wildlife survey", summary: "Measure the wombat burrows in the national park.", status: "active" });
     await signIn(page, SAM);
-    await expect.poll(() => meaningIds(page, "wombat burrows")).toContain(`process:${id}`);
+    await expect.poll(() => meaningIds(page, W)).toContain(`process:${id}`);
     expect(await meaningIds(page, "quokkas on rottnest island")).not.toContain(`process:${id}`);
-    await load(page, "/search?q=wombat%20burrows&mode=meaning");
+    await load(page, `/search?q=${encodeURIComponent(W)}&mode=meaning`);
     await expect(results(page).first()).toHaveAttribute("data-id", id);
     await load(page, "/search?q=quokkas%20on%20rottnest%20island&mode=meaning");
     await settled(page);
@@ -388,17 +424,17 @@ test("what is published is found by meaning at once, and follows changes, drafts
     // back to a draft: gone for readers at once
     await makeProcess(page, id, { title: "Wildlife survey", summary: "Measure the wombat burrows in the national park.", status: "draft" });
     await signIn(page, SAM);
-    expect(await meaningIds(page, "wombat burrows")).not.toContain(`process:${id}`);
+    expect(await meaningIds(page, W)).not.toContain(`process:${id}`);
     expect(await meaningIds(page, "Wildlife survey")).not.toContain(`process:${id}`);
-    await load(page, "/search?q=wombat%20burrows&mode=meaning");
+    await load(page, `/search?q=${encodeURIComponent(W)}&mode=meaning`);
     await settled(page);
     await expect(card(page, id)).toHaveCount(0);
     await expect(page.locator(".search-drafts-note")).toHaveCount(0); // a reader has no drafts to be told about
 
     // the editor who may change it finds the draft by words, not by meaning: drafts are not compared
     await signIn(page, ALEX, { editor: true });
-    expect(await meaningIds(page, "wombat burrows")).not.toContain(`process:${id}`);
-    await open(page, "/search?q=wombat%20burrows");
+    expect(await meaningIds(page, W)).not.toContain(`process:${id}`);
+    await open(page, `/search?q=${encodeURIComponent(W)}`);
     await expect(card(page, id)).toBeVisible();
     await expect(card(page, id).locator(".card-mark.draft")).toHaveText("Draft");
     await choice(page, "Meaning").click();
@@ -414,11 +450,11 @@ test("what is published is found by meaning at once, and follows changes, drafts
     // published again, then deleted: gone
     await makeProcess(page, id, { title: "Wildlife survey", summary: "Measure the wombat burrows in the national park.", status: "active" });
     await signIn(page, SAM);
-    await expect.poll(() => meaningIds(page, "wombat burrows")).toContain(`process:${id}`);
+    await expect.poll(() => meaningIds(page, W)).toContain(`process:${id}`);
     await removeProcess(page, id);
     await signIn(page, SAM);
-    expect(await meaningIds(page, "wombat burrows")).not.toContain(`process:${id}`);
-    await load(page, "/search?q=wombat%20burrows&mode=meaning");
+    expect(await meaningIds(page, W)).not.toContain(`process:${id}`);
+    await load(page, `/search?q=${encodeURIComponent(W)}&mode=meaning`);
     await settled(page);
     await expect(card(page, id)).toHaveCount(0);
   } finally {
@@ -443,6 +479,119 @@ test("a change made in the editor is found by meaning", async ({ page }) => {
     const now = (await readProcess(page, "request-gcp-project"))!;
     expect((await putDoc(page, "process", "request-gcp-project", { ...now, steps: [first, ...now.steps.slice(1)] })).ok()).toBeTruthy();
   }
+});
+
+test("when the server sent only the closest of more, the page says so and the counts say “at least”", async ({ page }) => {
+  await signIn(page, DANA);
+  // a bookmark, so that "Only my bookmarks" has something to count
+  expect((await page.request.put("/api/bookmarks/process/request-gcp-project", { headers: CSRF })).ok()).toBeTruthy();
+  try {
+    await page.route(/\/api\/search\?/, async (route) => {
+      const res = await route.fetch();
+      await route.fulfill({ response: res, json: { ...(await res.json()), truncated: true } });
+    });
+    await open(page, "/search?q=cloud&mode=meaning");
+    await settled(page);
+    const n = await results(page).count();
+    expect(n).toBeGreaterThan(1);
+    await expect(page.locator("p.search-truncated")).toHaveText(`Showing the ${n} closest. Add words or choose a filter to narrow it down.`);
+    // a count that is not zero is at least that many; a zero stays a zero
+    const type = page.locator('.filter-dd[data-filter="type"]');
+    await type.locator("button.filter-dd-button").click();
+    const processes = type.locator("label.filter-option", { hasText: "Processes" });
+    const p = await results(page).and(page.locator('[data-kind="process"]')).count();
+    await expect(processes.locator(".filter-option-count")).toHaveText(`${p}+`);
+    await expect(processes.getByRole("checkbox")).toHaveAccessibleName(`Processes, at least ${p} ${p === 1 ? "result" : "results"}`);
+    await type.locator("button.filter-dd-button").click();
+    const rigour = page.locator('.filter-dd[data-filter="rigour"]');
+    await rigour.locator("button.filter-dd-button").click();
+    const optional = rigour.locator("label.filter-option", { hasText: "Optional" });
+    await expect(optional.locator(".filter-option-count")).toHaveText("0");
+    await expect(optional.getByRole("checkbox")).toHaveAccessibleName("Optional, 0 results");
+    await rigour.locator("button.filter-dd-button").click();
+    const mine = page.locator('label.filter-option[data-flag="bookmarked"]');
+    await expect(mine.locator(".filter-option-count")).toHaveText("1+");
+    await expect(mine.getByRole("checkbox")).toHaveAccessibleName("Only my bookmarks, at least 1 result");
+    // on a phone the button at the end of the filters says it too
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator("button.filter-toggle").click();
+    await expect(page.locator("button.filter-done")).toHaveText(`Show ${n}+ results`);
+    await page.locator("button.filter-done").click();
+
+    // an answer that is complete says nothing of the kind
+    await page.unroute(/\/api\/search\?/);
+    await page.setViewportSize({ width: 1500, height: 950 });
+    await box(page).fill("budget");
+    await box(page).press("Enter");
+    await expect(count(page)).toHaveText(/ for “budget”$/);
+    await expect(page.locator("p.search-truncated")).toHaveCount(0);
+    await expect(mine.locator(".filter-option-count")).toHaveText("1");
+  } finally {
+    await page.request.delete("/api/bookmarks/process/request-gcp-project", { headers: CSRF });
+  }
+});
+
+test("a kept answer is used again only while nothing has changed", async ({ page }) => {
+  await page.clock.install();
+  await signIn(page, JORDAN, { editor: true });
+  const qs = asked(page);
+  await open(page, "/search?q=budget&mode=meaning");
+  await expect(results(page).first()).toHaveAttribute("data-id", "request-gcp-project");
+  expect(qs).toEqual(["budget"]);
+  /** What happens when the person comes back to the tab after a while: the portal fetches what others changed. */
+  const comeBackLater = async () => {
+    const loaded = page.waitForResponse((r) => r.url().endsWith("/api/processes"));
+    await page.clock.fastForward(61_000);
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await loaded;
+  };
+
+  // to the document and back, and the same search once more: nothing changed, nothing asked
+  await card(page, "request-gcp-project").locator("h2.card-title a").click();
+  await expect(page).toHaveURL(/#\/p\/request-gcp-project/);
+  await page.goBack();
+  await expect(results(page).first()).toHaveAttribute("data-id", "request-gcp-project");
+  await box(page).press("Enter");
+  await comeBackLater(); // nobody changed anything
+  await box(page).press("Enter");
+  await expect(count(page)).toHaveText(/ for “budget”$/);
+  await page.waitForTimeout(500);
+  expect(qs).toEqual(["budget"]);
+
+  // somebody saves a change; the page has it when the person comes back, and searching asks again
+  const before = (await readProcess(page, "request-gcp-project"))!;
+  try {
+    expect((await putDoc(page, "process", "request-gcp-project", { ...before, summary: `${before.summary} Ask early in the month.` })).ok()).toBeTruthy();
+    await comeBackLater();
+    await box(page).press("Enter");
+    await expect.poll(() => qs).toEqual(["budget", "budget"]);
+    await expect(results(page).first()).toHaveAttribute("data-id", "request-gcp-project");
+  } finally {
+    const now = (await readProcess(page, "request-gcp-project"))!;
+    expect((await putDoc(page, "process", "request-gcp-project", { ...now, summary: before.summary })).ok()).toBeTruthy();
+  }
+});
+
+test("when the filters hide what was found, dropping them is offered first", async ({ page }) => {
+  await signIn(page, CASEY);
+  // by meaning "gcp" finds two processes and no standard
+  await open(page, "/search?q=gcp&mode=meaning&type=standard");
+  const empty = page.locator(".search-empty");
+  await expect(empty.getByRole("heading", { name: "Nothing found" })).toBeVisible();
+  await expect(empty).toContainText("Nothing matches “gcp” with these filters. Without the filters there are 2 results.");
+  await expect(empty.getByRole("button").first()).toHaveText("Without Type: Standards");
+  await expect(empty.getByRole("button").nth(1)).toHaveText("Clear all filters");
+  await expect(empty.locator(".search-try-other")).toHaveCount(0);
+  await empty.getByRole("button", { name: "Without Type: Standards" }).click();
+  await expect(results(page)).toHaveCount(2);
+  await expect(page).toHaveURL(/#\/search\?q=gcp&mode=meaning$/);
+
+  // nothing close at all, and no filter: the other way of searching is offered
+  await open(page, "/search?q=zzqx&mode=meaning");
+  await expect(page.locator(".search-empty")).toContainText("Nothing close to “zzqx” was found.");
+  await page.locator(".search-try-other").getByRole("button", { name: "Search by words instead" }).click();
+  await expect(page).toHaveURL(/#\/search\?q=zzqx$/);
+  await expect(page.locator(".search-empty")).toContainText("Check the spelling");
 });
 
 // ---------- E. when the server cannot answer
@@ -601,24 +750,31 @@ test("search by meaning needs a signed-in person, never gives a draft, and refus
   }
 
   await page.request.post("/auth/dev/login", { data: { email: DANA }, headers: CSRF });
-  for (const limit of ["0", "1000", "-1", "ten"]) {
+  for (const limit of ["0", "501", "1000", "-1", "ten"]) {
     const r = await page.request.get(`/api/search?q=gcp&limit=${limit}`);
     expect(r.status(), `limit=${limit}`).toBe(400);
-    expect((await r.json()).error).toBe("limit must be a number from 1 to 100.");
+    expect((await r.json()).error).toBe("Ask for 1 to 500 results.");
   }
+  expect((await page.request.get("/api/search?q=gcp&limit=500")).status()).toBe(200);
   const long = await page.request.get(`/api/search?q=${"a".repeat(1001)}`);
   expect(long.status()).toBe(400);
   expect((await long.json()).error).toBe("The question is too long: use at most 1000 characters.");
   // an empty question is no search
   const empty = await page.request.get("/api/search?q=%20");
   expect(empty.status()).toBe(200);
-  expect(await empty.json()).toEqual({ results: [] });
+  expect(await empty.json()).toEqual({ results: [], truncated: false });
   // one result asked for, one given, with the places inside
   const one = await (await page.request.get("/api/search?q=google%20cloud%20project&limit=1")).json();
   expect(one.results).toHaveLength(1);
   expect(one.results[0]).toMatchObject({ kind: "process", id: "request-gcp-project" });
   expect(one.results[0].hits.length).toBeGreaterThan(0);
   expect(one.results[0].hits.length).toBeLessThanOrEqual(3);
+  expect(one.truncated, "more than one is close to it").toBe(true);
+  const all = await (await page.request.get("/api/search?q=google%20cloud%20project&limit=500")).json();
+  expect(all.truncated).toBe(false);
+  expect(all.results.length).toBeGreaterThan(1);
+  // /api/me says which provider compares
+  expect((await (await page.request.get("/api/me")).json()).search).toEqual({ meaning: true, outside: false, provider: "builtin" });
 });
 
 // ---------- the limit per person: last in this file, with a person no later test searches by meaning as

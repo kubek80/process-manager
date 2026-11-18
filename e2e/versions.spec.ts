@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { ALEX, DANA, SAM, answer, open, readProcess, save, signIn, watchErrors } from "./helpers";
+import { ALEX, DANA, SAM, answer, meaningReady, open, readProcess, save, signIn, watchErrors } from "./helpers";
 
 const CSRF = { "X-Requested-With": "process-manager" };
 
@@ -238,6 +238,7 @@ test("the app runs under a strict security policy", async ({ page }) => {
   page.on("pageerror", (e) => problems.push(String(e)));
   // what the browser blocks under the policy is reported in the page as well as on the console
   await page.addInitScript(() => document.addEventListener("securitypolicyviolation", (e) => console.error(`CSP: ${e.violatedDirective} ${e.blockedURI}`)));
+  await meaningReady(page.request); // the pages below search by meaning too
   await signIn(page, DANA, { editor: true });
   const res = await page.goto("/#/p/request-gcp-project/json");
   const csp = res!.headers()["content-security-policy"];

@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { ALEX, CSRF, open, SAM, signIn } from "./helpers";
+import { ALEX, CSRF, meaningReady, open, SAM, signIn } from "./helpers";
 
 // Pages of a list. The sample is small, so 18 more processes are made here (25 in all) and
 // removed again afterwards: other tests count what there is.
@@ -14,6 +14,7 @@ async function asAlex(request: APIRequestContext) {
 }
 
 test.beforeAll(async ({ request }) => {
+  await meaningReady(request); // one test here searches by meaning: the server's index must be complete
   await asAlex(request);
   const { processes } = await (await request.get("/api/processes")).json();
   const src = processes.find((p: { id: string }) => p.id === "request-github-repository");

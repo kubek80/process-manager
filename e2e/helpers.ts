@@ -107,3 +107,18 @@ export async function pickFilter(page: Page, filter: string, option: string | Re
   await button.click(); // closes it
   await expect(button).toHaveAttribute("aria-expanded", "false");
 }
+
+/**
+ * Waits until search by meaning answers: the server listens before its index is complete, and
+ * until then `/api/search` answers 503 "not ready yet". Call it before the first test of a file
+ * that searches by meaning. Signs in `request` as Alex (who searches by meaning in no test that
+ * counts on the limit of 60 a minute).
+ */
+export async function meaningReady(request: APIRequestContext, timeout = 25_000) {
+  await request.post("/auth/dev/login", { data: { email: ALEX }, headers: CSRF });
+  await expect.poll(async () => (await request.get("/api/search?q=x&limit=1")).status(), {
+    message: `search by meaning did not become ready within ${timeout / 1000} seconds: /api/search kept answering 503 "not ready yet"`,
+    timeout, intervals: [250, 500, 1000],
+  }).not.toBe(503);
+  expect((await request.get("/api/search?q=x&limit=1")).status(), "search by meaning answers").toBe(200);
+}
