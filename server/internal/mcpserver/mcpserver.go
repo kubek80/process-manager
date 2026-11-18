@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -49,6 +50,14 @@ type Index interface {
 	// Search returns published processes and standards, best first.
 	Search(ctx context.Context, query string, limit int) ([]Found, error)
 }
+
+// Errors an Index returns so that the agent is told why it gets a word match instead.
+var (
+	// ErrIndexNotReady: the portal server has not built the index with these settings yet.
+	ErrIndexNotReady = errors.New("the search index is not built yet")
+	// ErrIndexProvider: the embeddings provider could not be reached.
+	ErrIndexProvider = errors.New("the embeddings provider could not be reached")
+)
 
 // Found is one document the index found, with the parts that matched best first.
 type Found struct {

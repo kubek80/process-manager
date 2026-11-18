@@ -171,11 +171,19 @@ func (m meaning) Enabled() bool { return m.ix.Enabled() }
 
 func (m meaning) Search(ctx context.Context, query string, limit int) ([]mcpserver.Found, error) {
 	results, err := m.ix.Search(ctx, query, limit)
-	if err != nil {
+	switch {
+	case errors.Is(err, retrieval.ErrNotSetUp):
+		return nil, fmt.Errorf("%w: %v", mcpserver.ErrIndexNotReady, err)
+	case errors.Is(err, retrieval.ErrProvider):
+		return nil, fmt.Errorf("%w: %v", mcpserver.ErrIndexProvider, err)
+	case err != nil:
 		return nil, err
 	}
 	out := make([]mcpserver.Found, 0, len(results))
 	for _, r := range results {
+		if r.Status != "active" { // the search tools return active documents only (the server checks again)
+			continue
+		}
 		f := mcpserver.Found{Kind: r.Kind, ID: r.ID, Score: r.Score}
 		for _, h := range r.Hits {
 			f.Hits = append(f.Hits, mcpserver.FoundHit{Part: h.Part, Item: h.Item, Label: h.Label, Snippet: h.Snippet, Score: h.Score})

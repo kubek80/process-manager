@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -53,11 +54,11 @@ type SearchResult struct {
 
 // SearchOutput is the answer of both search tools.
 type SearchOutput struct {
-	Total     int            `json:"total" jsonschema:"how many match; results holds the first ones"`
-	Results   []SearchResult `json:"results"`
-	RankedBy  string         `json:"rankedBy" jsonschema:"meaning (search by meaning), words (every word of the query found) or title (no query)"`
-	Note      string         `json:"note,omitempty"`
-	Filters   map[string]string `json:"filters" jsonschema:"the filters as understood, by id"`
+	Total    int               `json:"total" jsonschema:"how many match; results holds the first ones"`
+	Results  []SearchResult    `json:"results"`
+	RankedBy string            `json:"rankedBy" jsonschema:"meaning (search by meaning), words (every word of the query found) or title (no query)"`
+	Note     string            `json:"note,omitempty"`
+	Filters  map[string]string `json:"filters" jsonschema:"the filters as understood, by id"`
 }
 
 const (
@@ -69,7 +70,7 @@ const (
 // filters is a SearchInput with the list values resolved to ids.
 type filters struct {
 	category, practice, platform, owner, rigour string
-	profile                                   Profile
+	profile                                     Profile
 }
 
 // resolve finds a list entry by id or by name, ignoring case and accents.
@@ -480,8 +481,17 @@ func (s *Server) search(ctx context.Context, kind string, in SearchInput) (Searc
 			out.RankedBy = "meaning"
 			break
 		}
-		s.o.Log.Warn("search by meaning failed; searching by words", "error", err)
-		out.Note = "Search by meaning is not available right now; these results are a word match."
+		switch {
+		case errors.Is(err, ErrIndexNotReady):
+			s.o.Log.Info("the search index is not built yet: agents search by words until the portal server has built it")
+			out.Note = "Search by meaning is not ready yet; these results are a word match."
+		case errors.Is(err, ErrIndexProvider):
+			s.o.Log.Warn("search by meaning failed: the embeddings provider could not be reached; searching by words", "error", err)
+			out.Note = "Search by meaning is not available right now (the service that compares meanings could not be reached); these results are a word match."
+		default:
+			s.o.Log.Warn("search by meaning failed; searching by words", "error", err)
+			out.Note = "Search by meaning is not available right now; these results are a word match."
+		}
 		fallthrough
 	default:
 		out.RankedBy = "words"

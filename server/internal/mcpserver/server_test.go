@@ -388,6 +388,16 @@ func TestSearchByMeaning(t *testing.T) {
 	if out.RankedBy != "words" || out.Total != 1 || out.Note == "" || !strings.Contains(text, out.Note) {
 		t.Fatalf("%+v", out)
 	}
+	ix.err = fmt.Errorf("%w: timeout", ErrIndexProvider)
+	mustCall(t, cs, "search_processes", map[string]any{"query": "budget"}, &out)
+	if out.RankedBy != "words" || !strings.Contains(out.Note, "could not be reached") {
+		t.Fatalf("%+v", out)
+	}
+	ix.err = ErrIndexNotReady
+	mustCall(t, cs, "search_processes", map[string]any{"query": "budget"}, &out)
+	if out.RankedBy != "words" || !strings.Contains(out.Note, "not ready yet") {
+		t.Fatalf("%+v", out)
+	}
 	// switched off: words
 	ix.on, ix.err = false, nil
 	mustCall(t, cs, "search_processes", map[string]any{"query": "budget"}, &out)
@@ -452,7 +462,9 @@ func TestGetProcess(t *testing.T) {
 	}
 
 	// a draft is exactly like nothing
-	want := func(id string) string { return "There is no process “" + id + "”. Use search_processes to find the id." }
+	want := func(id string) string {
+		return "There is no process “" + id + "”. Use search_processes to find the id."
+	}
 	mustRefuse(t, cs, "get_process", map[string]any{"id": draftProcess}, want(draftProcess))
 	mustRefuse(t, cs, "get_process", map[string]any{"id": "no-such-thing"}, want("no-such-thing"))
 	mustRefuse(t, cs, "get_process", map[string]any{"id": "secure-logging"}, want("secure-logging"))

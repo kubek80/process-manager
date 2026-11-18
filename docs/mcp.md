@@ -1,64 +1,122 @@
-# Consuming the portal over MCP (planned)
+# Consuming the portal over MCP
 
-> **Status: design only.** No MCP server exists in this repository yet. This document fixes the contract so that the data model, the app and future agents move in the same direction.
-
-## Why
-
-Process Manager holds one description of each process and each standard. People read them in the app. AI agents should read the **same** content, so that "how do I get a GCP project" and "what must my service meet" have one answer whether a person or an agent asks. The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is the standard way to give an agent that access.
+Process Manager holds one description of each process and each standard. People read them in the app. AI agents read the **same** content through an MCP server, so that "how do I get a GCP project" and "what must my service meet" have one answer whether a person or an agent asks. The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is the standard way to give an agent that access.
 
 ```mermaid
 flowchart LR
-  db[("Database<br/>processes, standards, lists, skills")]
-  app["Process Manager app"] --> server["Server"] --> db
-  mcp["MCP server (planned)"] --> server
+  db[("Database<br/>processes, standards, lists, skills,<br/>feedback, search index")]
+  app["Process Manager app"] --> server["Portal server"] --> db
+  mcp["MCP server<br/>(server/cmd/mcp)"] --> db
   human(["People"]) --> app
   agent(["AI agents"]) --> mcp
   agent -. "follows generated skills" .-> repos["Repositories"]
 ```
 
-## What exists today
+The MCP server is a separate program in the same Go module (`server/cmd/mcp`, code in `server/internal/mcpserver`). It reads the portal's database with the portal's settings. It never creates or upgrades tables: it refuses to start, with a plain message, when the portal server has not prepared the database (no tables, or tables of an older version). The only thing it writes is feedback (`report_problem`).
 
-Agents already get the knowledge as **generated skills** (see `docs/backend.md` and the Guide):
+Agents also get the knowledge as **generated skills** (see `docs/backend.md` and the Guide): a skill per active process, a skill per active standard and a review agent per standard with review hints. They are downloaded from the portal, written to files with `npm run export -- <folder>`, or read with `get_skill`.
 
-- a skill per active process ("follow this process for a person"),
-- a skill per active standard ("write code that complies"),
-- a review agent per standard that has review hints ("check this pull request").
+## Running it
 
-They are downloaded from the portal or written to files with `npm run export -- <folder>`, and committed to the repository the agent works in. They are a snapshot: each names its version and the version of its source.
+| | |
+| --- | --- |
+| `npm run mcp` | Builds and starts the MCP server against the development database, with the settings of `npm run dev` (search by meaning with `builtin`). Start `npm run dev` once first: the portal server creates and fills the database. It prints the address and an example client configuration. |
+| `go run ./cmd/mcp` (in `server/`) | The same by hand; settings from the environment. |
 
-## What the MCP server will expose
+Endpoints: `POST /mcp` (streamable HTTP, [official Go SDK](https://github.com/modelcontextprotocol/go-sdk) v1.8.0) and `GET /healthz` (`ok`, or 503 when the database cannot be reached; it needs no secret and says nothing else). The server is stateless: every request stands on its own, nothing is kept between calls. A `GET /mcp` (a stream of messages from the server) is answered with 405, as the protocol allows: the server never sends anything on its own.
 
-Read-only except for feedback. Content follows `schema/process.schema.json`, `schema/standard.schema.json` and `schema/catalog.schema.json`.
+### Settings
+
+| Variable | Default | |
+| --- | --- | --- |
+| `DATABASE_URL` | – | The portal's database. Required. |
+| `PM_MCP_ADDR` | `127.0.0.1:8081` | Where to listen. Without `PM_MCP_SECRET` only an address of this machine is accepted. |
+| `PM_MCP_SECRET` | – | One shared secret, at least 32 characters, not a placeholder (`openssl rand -base64 48`). With it, every call must carry `Authorization: Bearer <secret>`. |
+| `PM_BASE_URL` | `http://localhost:5173` | The portal's address, for links in answers and notifications. |
+| `PM_NOTIFY`, `PM_NOTIFY_WEBHOOK_URL` | `log` | How the owning team hears about a reported problem: as in the portal. |
+| `PM_EMBEDDINGS` and the other settings of search by meaning | `off` | As in the portal (`docs/backend.md`). They must be the same as the portal server's: the portal server builds the search index, the MCP server only reads it. |
+| `PM_LOG_FORMAT` | `text` | `text` or `json`. |
+
+At start it logs where it listens, whether a secret is required, whether search by meaning is on and with which provider, and whether text leaves the company. With `PM_EMBEDDINGS=vertex` **every search query of an agent is sent to Google Vertex AI** to be turned into a vector; the log says so.
+
+## The guard (until agents sign in)
+
+Sign-in for agents is not built (see below). Until then two rules stand in for it:
+
+- **Without `PM_MCP_SECRET`** the server refuses to start on an address other than this machine (`127.0.0.1`, `::1`, `localhost`), and refuses calls that do not come from this machine. Anything running on the machine can call it. The person headers are ignored, so the server is read-only.
+- **With `PM_MCP_SECRET`** it may listen anywhere, and every call must carry `Authorization: Bearer <secret>`. A missing or wrong secret gets `401` with the same answer either way; the comparison takes the same time whatever was sent.
+
+**The person an agent acts for**: header `X-PM-Person: <email>` (and optionally `X-PM-Person-Name: <name>`). It is honoured **only** with the secret configured and presented; a value that is not an email address is refused with `400`. Only then is `report_problem` listed and callable. The server cannot check that the email is really the person's: whoever holds the secret is trusted to name the right person.
+
+**Members of teams, platforms and practices** (their emails) are given by `get_catalog` only to callers that present the secret. In the portal they are shown to everyone signed in; an agent on this machine that nobody vouched for is not signed in, so it gets the lists without the people.
+
+### Consequences of running without a gateway
+
+- Everyone who can reach the server reads every published process and standard, the lists and the generated skills. Without a secret that is everyone on the machine; with one, everyone who has the secret. Nothing is limited per person.
+- With the secret, whoever holds it can file feedback in anyone's name, up to the limit of 30 items per person and hour.
+- Nothing records which agent or person read what.
+- One secret for all: to take access away from one agent the secret has to change for all of them.
+- Drafts stay hidden in every case: they are never returned, and an agent cannot tell a draft from something that does not exist.
+
+## Tools
+
+Every tool returns structured content (with an output schema) and two text blocks: a short sentence for people reading along, and the same structured content as JSON for clients that do not read structured results. Errors are plain sentences an agent can act on, e.g. "There is no process “x”. Use search_processes to find the id."
+
+Everywhere: list ids (teams, categories, practices, platforms, tools, tiers, environments, languages) are resolved to names, with the contact of teams, practices and platforms and the link of tools; other processes and standards are named by id and title (a draft by its id only); every document carries its `version`, its `link` in the portal, its `review` state (`review.overdue: true` when the owner has not confirmed it in time) and, when retired, `retired: true` and `replacedBy`. A `notice` sentence says what the agent must tell the person.
 
 | Tool | Input | Returns |
 | --- | --- | --- |
-| `search_processes` | `query?`, `category?`, `practice?`, `platform?`, `rigour?`, `tier?`, `environment?`, `language?` | Matching **active** processes: `id`, `title`, `summary`, `owner`, `category`, `practice`, `platform`, `rigour`, where they apply, review state. A process without `tiers` / `environments` / `languages` matches every one. |
-| `search_standards` | `query?`, `owner?`, `category?`, `practice?`, `platform?`, `rigour?`, `tier?`, `environment?`, `language?` | Matching **active** standards, with the requirements that apply to that profile. A standard matches a `rigour` when at least one of its requirements has that level (`must` = mandatory, `should` = recommended, `may` = optional). |
-| `get_process` | `id` | The complete process with its version number, with team, category, practice, platform and tool ids resolved to names, contacts and links. |
-| `get_standard` | `id`, profile? | The complete standard with its version number; with a profile, only the requirements that apply. |
-| `get_my_steps` | `id`, `actor?` (default `me`) | Only that participant's steps in flow order, with `instructions`, `tool`, `url`, `outcome`, `resources`, and what it waits for before and after. |
-| `get_skill` | `id`, `version?` | The text of a generated skill or review agent, latest by default, with its version. |
-| `get_catalog` | – | Teams, practices and platforms (with contact and members), categories, tools (with link), tiers, environments, languages. |
-| `report_problem` | `targetKind`, `targetId`, `itemId?`, `kind`, `text` | Files feedback on behalf of the person the agent acts for, the same as the flag in the app. |
+| `search_processes` | `query?`, `category?`, `practice?`, `platform?`, `owner?`, `rigour?`, `tier?`, `environment?`, `language?`, `limit?` (1–50, default 10) | **Active** processes: id, title, summary, version, owner, category, practice, platform, rigour, where they apply, review state, link; with a query the `score` and up to three `matches` (part, step id, label, snippet). `total`, `rankedBy` (`meaning`, `words` or `title`) and the filters as understood. |
+| `search_standards` | the same | **Active** standards, with the requirements that apply (id, title, level). A standard matches a `rigour` when a requirement that applies has that level (`must` = mandatory, `should` = recommended, `may` = optional). |
+| `get_process` | `id` | The complete published process: prerequisites, actors (the first is always `me`), every step with instructions, tool, link, outcome, sub-process, resources and what follows, `agentMayDo` per step, the standards it helps to meet, its skills. |
+| `get_standard` | `id`, `tier?`, `environment?`, `language?` | The complete published standard: scope, exception process, every requirement with level, statement, rationale, guidance, examples, verification, what a reviewer looks for. With a profile only the requirements that apply, and `leftOut` says how many were left out. |
+| `get_my_steps` | `id`, `actor?` (id or name, default `me`) | Only that participant's steps in the order the process flows (from the first step along `next`), each with what it waits for (`before`) and what follows (`after`). |
+| `get_skill` | `id` (e.g. `process-request-gcp-project`, from `skills` of get_process / get_standard), `version?` | The text of a generated skill or review agent, latest by default, with its version, the version of its source and `active`. The skill of a draft does not exist. |
+| `get_catalog` | – | Teams, practices and platforms (with contact; with the secret also members), categories, tools (with link), tiers, environments, languages. |
+| `report_problem` | `targetKind`, `targetId`, `itemId?`, `kind` (`broken`, `outdated`, `unclear`, `idea`), `text` | Only listed when acting for a person. Files feedback as that person, through the same checks as the flag in the portal: the text check, 3–2000 characters, a published process or standard, an existing step or requirement, at most 30 items per person and hour (portal and agents together). The owning team is notified as from the portal. |
 
-It needs something the server does not have yet: access for machines (tokens tied to a person or a repository). Today every API call needs a browser session.
+**Filters** take ids or names, in any case and with or without accents ("Google Cloud", `google-cloud`). An unknown value is refused and names the list to look in. A document without `tiers`, `environments` or `languages` applies to all of them.
 
-## Measuring use by agents
+**Search**: with a `query` and search by meaning switched on, results are ranked by the portal's search index (`rankedBy: "meaning"`), each with the parts that matched, pointing at the exact step or requirement. Otherwise, or when the index is not built yet or its provider cannot be reached, it is the portal's word match (`rankedBy: "words"`): every word must be found in the title, id, tags, the names of category, practice, platform and owner, the summary, or a step, prerequisite, requirement or the scope; a `note` says why it is a word match. Without a query everything that passes the filters is listed by title.
 
-Today the portal counts **skill downloads** as the use by AI assistants: a download of a skill or review agent from the portal counts one for its process or standard, at most once per person, skill and day, and every run of `npm run export` counts one per skill it writes. The count is shown on each process and standard and in Admin › Statistics. It says how often a skill was fetched, not how often an assistant followed it afterwards.
+## Connecting a client
 
-With the MCP server (planned, not built) every tool call names the process or standard it is about, so the portal could count what agents actually look up and follow, next to the views of people. Nothing of this is counted yet.
+A client that speaks streamable HTTP needs the address and, when a secret is set, the header. For example, a project's `.mcp.json` for Claude Code:
+
+```json
+{
+  "mcpServers": {
+    "process-manager": {
+      "type": "http",
+      "url": "http://127.0.0.1:8081/mcp",
+      "headers": {
+        "Authorization": "Bearer ${PM_MCP_SECRET}",
+        "X-PM-Person": "sam@example.com"
+      }
+    }
+  }
+}
+```
+
+Leave out `headers` when the server runs without a secret on the same machine; leave out `X-PM-Person` for read-only use. Keep the secret in an environment variable, never in a file in a repository.
 
 ## Rules an agent must be able to rely on
 
+The server gives these to every agent when it connects (its instructions):
+
 - `actors[0]` of a process is always `me`: the party the agent acts for.
-- A step with `subProcessId` is described by another process.
-- Steps of type `approval`, and anything done by an actor other than `me`, are **not** for the agent to perform. It waits and reports.
+- A step with a sub-process is described by another process.
+- Steps of type `approval`, and anything done by an actor other than `me`, are **not** for the agent to perform (`agentMayDo: false`). It waits and reports.
 - A process with `rigour: "mandatory"` is the only allowed way to get its result; the agent does not look for another.
-- A requirement of level `must` cannot be waived by the agent. If it cannot be met, the agent stops and tells the person; exceptions go through `exceptionProcessId`.
+- A requirement of level `must` cannot be waived by the agent. If it cannot be met, the agent stops and tells the person; exceptions go through the standard's exception process.
 - A requirement with `tiers`, `environments` or `languages` applies only there.
-- `status: "deprecated"` means do not follow it; use `replacedBy` when present. Drafts are never returned.
+- `status: "deprecated"` (`retired: true`) means do not follow it; use `replacedBy` when present. Drafts are never returned.
 - A process or standard whose review is overdue is still returned, marked as such, so the agent can warn the person.
+
+## Planned
+
+- **Sign-in through a dedicated MCP gateway** (planned, not built). Agents will sign in as a person or a repository; the gateway will pass on who calls, and the shared secret and the person header will no longer be needed. Until then the guard above applies.
+- **Counting use by agents** (planned, not built). Today the portal counts **skill downloads** as the use by AI assistants: a download from the portal counts one for its process or standard, at most once per person, skill and day, and every run of `npm run export` counts one per skill it writes. Calls to the MCP server are **not** counted: neither as views nor as downloads. Every tool call names the process or standard it is about, so the portal could later count what agents actually look up, next to the views of people.
 
 ## Where this leads
 

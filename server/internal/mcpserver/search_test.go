@@ -86,7 +86,7 @@ func TestFiltersAcceptIdsAndNamesInAnyCase(t *testing.T) {
 
 func TestFiltersOnProcesses(t *testing.T) {
 	l := sampleLists(t)
-	gcp := sample(t, docs.Process, "request-gcp-project")         // all tiers, mandatory, google-cloud
+	gcp := sample(t, docs.Process, "request-gcp-project")          // all tiers, mandatory, google-cloud
 	akamai := sample(t, docs.Process, "onboard-site-to-akamai")    // tier-0 and tier-1, staging and production
 	library := sample(t, docs.Process, "publish-internal-library") // go and javascript, recommended
 	cases := []struct {
@@ -273,12 +273,12 @@ func TestReviewState(t *testing.T) {
 func TestSecretsAndAddresses(t *testing.T) {
 	good := "k7Qp2Lx9Vb4Nz8Rt1Wm6Hs3Jd5Fg0YcE"
 	for secret, ok := range map[string]bool{
-		"":                                       true,
-		good:                                     true,
-		"too-short":                              false,
+		"":          true,
+		good:        true,
+		"too-short": false,
 		"change-me-change-me-change-me-change-me": false,
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":    false,
-		"k7Qp2Lx9Vb4Nz8Rt 1Wm6Hs3Jd5Fg0Yc":       false,
+		"k7Qp2Lx9Vb4Nz8Rt 1Wm6Hs3Jd5Fg0Yc":        false,
 	} {
 		if (CheckSecret(secret) == "") != ok {
 			t.Errorf("%q: %q", secret, CheckSecret(secret))
