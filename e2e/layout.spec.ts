@@ -95,3 +95,40 @@ test("a step opens as a panel that works with the keyboard alone", async ({ page
   await expect(panel).toHaveCount(0);
   await expect(first).toBeFocused();
 });
+
+for (const theme of ["light", "dark"] as const) {
+  test(`requests, statistics and the share dialog fit a phone in the ${theme} theme`, async ({ page }) => {
+    await signIn(page, DANA, { editor: true });
+    await page.addInitScript((t) => { try { localStorage.setItem("pm:theme", t); } catch { /* ignore */ } }, theme);
+    for (const width of [360, 390, 768, 1024]) {
+      await page.setViewportSize({ width, height: 844 });
+      for (const hash of ["/requests", "/requests?state=all", "/admin/statistics"]) {
+        await open(page, hash);
+        await expect(page.locator("h1").first()).toBeVisible();
+        if (hash === "/admin/statistics") await expect(page.locator(".stat-totals")).toBeVisible();
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        expect(await sideways(page), `${hash} at ${width}px, ${theme}`).toBe(0);
+      }
+      await open(page, "/requests");
+      await page.getByRole("button", { name: "Ask for a process or standard" }).first().click();
+      const ask = page.getByRole("dialog", { name: "Ask for a process or standard" });
+      await expect(ask.getByRole("button", { name: "Send request" })).toBeVisible();
+      expect(await sideways(page), `the request form at ${width}px, ${theme}`).toBe(0);
+      await page.keyboard.press("Escape");
+
+      await open(page, "/p/request-gcp-project/flow");
+      await page.getByRole("button", { name: "Share" }).click();
+      const share = page.getByRole("dialog", { name: /^Share/ });
+      for (const option of [/Copy link/, /Copy message for Slack/, /Copy message for Google Chat/]) await expect(share.getByRole("button", { name: option })).toBeInViewport({ ratio: 1 });
+      await expect(share.getByRole("link", { name: /Email/ })).toBeInViewport({ ratio: 1 });
+      expect(await sideways(page), `the share dialog at ${width}px, ${theme}`).toBe(0);
+      // the numbers and the buttons near the top of the page fit as well
+      await page.keyboard.press("Escape");
+      const engage = page.getByRole("group", { name: "Use and feedback" });
+      for (const b of await engage.getByRole("button").all()) {
+        const box = (await b.boundingBox())!;
+        expect(box.x + box.width, `${await b.getAttribute("aria-label") ?? await b.innerText()} at ${width}px`).toBeLessThanOrEqual(width);
+      }
+    }
+  });
+}

@@ -4,12 +4,20 @@ import { ALEX, CSRF, JORDAN, open, SAM, signIn, watchErrors } from "./helpers";
 // Home is one search over processes and standards; the results page narrows it down with
 // filters, and its address carries all of it. The sample has 7 processes and 3 standards.
 
-const results = (page: Page) => page.locator("ol.search-list > li.search-result");
-const count = (page: Page) => page.locator("p.search-count");
-const group = (page: Page, key: string) => page.locator(`fieldset.search-facet[data-filter="${key}"]`);
+const results = (page: Page) => page.locator(".search-page ol.cards > li.card");
+const count = (page: Page) => page.locator("p.list-count");
+const group = (page: Page, key: string) => page.locator(`.filter-dd[data-filter="${key}"]`);
+/** Opens the dropdown of one filter (once) and gives it. */
+async function openGroup(page: Page, key: string) {
+  const g = group(page, key);
+  const button = g.locator("button.filter-dd-button");
+  if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
+  await expect(g.locator(".filter-dd-list")).toBeVisible();
+  return g;
+}
 const sideways = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 /** The number an option says it would give, read from what is shown next to it. */
-const numberOf = async (option: Locator) => Number((await option.locator(".search-option-count").innerText()).match(/\d+/)![0]);
+const numberOf = async (option: Locator) => Number((await option.locator(".filter-option-count").innerText()).match(/\d+/)![0]);
 
 test.beforeEach(async ({ page }) => { await signIn(page, SAM); });
 
@@ -53,47 +61,50 @@ test("results mix processes and standards, with what they belong to and where th
   await expect(results(page)).toHaveCount(3);
   // the best match first: the word is in its title
   await expect(results(page).first()).toHaveAttribute("data-id", "request-gcp-project");
-  const gcp = page.locator('li.search-result[data-id="request-gcp-project"]');
-  await expect(gcp.locator(".search-kind")).toHaveText("Process");
-  await expect(gcp.locator("h2.search-result-title mark.search-mark")).toHaveText("GCP");
-  await expect(gcp.locator(".search-tags")).toContainText("Mandatory");
-  await expect(gcp.locator(".search-tags")).toContainText("Google Cloud");
-  await expect(gcp.locator(".search-tags")).toContainText("Cloud Platform team");
-  const iac = page.locator('li.search-result[data-kind="standard"][data-id="infrastructure-as-code"]');
-  await expect(iac.locator(".search-kind")).toHaveText("Standard");
-  await expect(iac.locator(".search-tags")).toContainText("4 mandatory, 1 recommended"); // the rigour of a standard comes from its requirements
-  await expect(iac.locator(".search-tags")).toContainText("Engineering");
+  const gcp = page.locator('li.card[data-id="request-gcp-project"]');
+  await expect(gcp.locator(".card-kind")).toHaveText("Process");
+  await expect(gcp.locator("h2.card-title mark.search-mark")).toHaveText("GCP");
+  await expect(gcp.locator('[data-line="rigour"] dd')).toHaveText("Mandatory");
+  await expect(gcp.locator('[data-line="platform"] dd')).toHaveText("Google Cloud");
+  await expect(gcp.locator('[data-line="owner"] dd')).toHaveText("Cloud Platform team");
+  const iac = page.locator('li.card[data-kind="standard"][data-id="infrastructure-as-code"]');
+  await expect(iac.locator(".card-kind")).toHaveText("Standard");
+  await expect(iac.locator('[data-line="rigour"] dd')).toHaveText("4 mandatory, 1 recommended"); // the rigour of a standard comes from its requirements
+  await expect(iac.locator('[data-line="practice"] dd')).toHaveText("Engineering");
   // the apigee process only mentions it inside: the place is named
-  await expect(page.locator('li.search-result[data-id="onboard-api-to-apigee"] ul.search-hits')).toBeVisible();
+  await expect(page.locator('li.card[data-id="onboard-api-to-apigee"] ul.card-hits')).toBeVisible();
 });
 
 test("each filter narrows the results, and the number next to an option is what it gives", async ({ page }) => {
   await open(page, "/search");
   await expect(count(page)).toHaveText("10 results");
-  for (const key of ["type", "rigour", "category", "practice", "platform"]) {
-    const options = group(page, key).locator("label.search-option:not(.off)");
+  for (const key of ["type", "rigour", "category", "practice", "platform", "owner"]) {
+    await openGroup(page, key);
+    const options = group(page, key).locator("label.filter-option:not(.off)");
     const n = await options.count();
     expect(n, `options of ${key}`).toBeGreaterThan(0);
     for (let i = 0; i < n; i++) {
       const option = options.nth(i);
-      const name = await option.locator(".search-option-name").innerText();
+      const name = await option.locator(".filter-option-name").innerText();
       const expected = await numberOf(option);
       await option.getByRole("checkbox").check();
       await expect(results(page), `${key}: ${name}`).toHaveCount(expected);
       await expect(count(page)).toHaveText(`${expected} ${expected === 1 ? "result" : "results"} with 1 filter`);
-      await expect(page.getByRole("button", { name: `Remove filter ${await group(page, key).locator("legend").innerText()}: ${name}` })).toBeVisible();
+      await expect(page.getByRole("button", { name: `Remove filter ${await group(page, key).locator(".filter-dd-name").innerText()}: ${name}` })).toBeVisible();
       await option.getByRole("checkbox").uncheck();
       await expect(count(page)).toHaveText("10 results");
     }
+    await group(page, key).locator("button.filter-dd-button").click(); // closes it
   }
   // what gives nothing is shown greyed out and cannot be picked: nothing is optional in the sample
-  const optional = group(page, "rigour").locator("label.search-option.off", { hasText: "Optional" });
+  await openGroup(page, "rigour");
+  const optional = group(page, "rigour").locator("label.filter-option.off", { hasText: "Optional" });
   await expect(optional.getByRole("checkbox")).toBeDisabled();
 });
 
 test("two values of one filter mean either; two filters mean both", async ({ page }) => {
   await open(page, "/search");
-  const platform = group(page, "platform");
+  const platform = await openGroup(page, "platform");
   await platform.getByRole("checkbox", { name: "Google Cloud, 2 results" }).check();
   await expect(results(page)).toHaveCount(2);
   await platform.getByRole("checkbox", { name: /^Azure, / }).check();
@@ -101,33 +112,36 @@ test("two values of one filter mean either; two filters mean both", async ({ pag
   await expect(page).toHaveURL(/platform=google-cloud,azure/);
 
   // the counts of the other filters follow what is chosen
+  await openGroup(page, "type");
   await expect(group(page, "type").getByRole("checkbox", { name: "Standards, 1 result" })).toBeVisible();
   await group(page, "type").getByRole("checkbox", { name: "Standards, 1 result" }).check();
   await expect(results(page)).toHaveCount(1); // a standard and on one of the two platforms
   await expect(results(page).first()).toHaveAttribute("data-id", "infrastructure-as-code");
   await expect(count(page)).toHaveText("1 result with 3 filters");
-  await expect(page.locator(".search-filter-toggle")).toBeHidden(); // on a wide screen the filters are always shown
+  await expect(page.locator(".filter-toggle")).toBeHidden(); // on a wide screen the filters are always shown
+  await expect(page.getByRole("button", { name: /^Platform: (Google Cloud, Azure|Azure, Google Cloud)$/ })).toBeVisible();
 
   // the address carries all of it: a reload, and the copied address in another tab, show the same
   await page.reload();
   await expect(results(page)).toHaveCount(1);
+  await openGroup(page, "platform");
   await expect(platform.getByRole("checkbox", { name: /^Azure, / })).toBeChecked();
   const address = page.url();
   const other = await page.context().newPage();
   await other.goto(address);
-  await expect(other.locator("ol.search-list > li.search-result")).toHaveCount(1);
-  await expect(other.locator("p.search-count")).toHaveText("1 result with 3 filters");
+  await expect(other.locator(".search-page ol.cards > li.card")).toHaveCount(1);
+  await expect(other.locator("p.list-count")).toHaveText("1 result with 3 filters");
   await other.close();
 
   // a chosen filter is removed on its own, or all at once
-  const chosen = page.locator(".search-chosen");
-  await expect(chosen.locator("button.chip.on")).toHaveCount(3);
+  const chosen = page.locator(".filter-chosen");
+  await expect(chosen.locator("button.filter-chip")).toHaveCount(3);
   await chosen.getByRole("button", { name: "Remove filter Type: Standards" }).click();
   await expect(results(page)).toHaveCount(3);
   await expect(page).not.toHaveURL(/type=/);
   await chosen.getByRole("button", { name: "Clear all filters" }).click();
   await expect(results(page)).toHaveCount(10);
-  await expect(page.locator(".search-chosen")).toHaveCount(0);
+  await expect(page.locator(".filter-chosen")).toHaveCount(0);
   await expect(page).toHaveURL(/#\/search$/);
 });
 
@@ -146,18 +160,18 @@ test("typing searches at once and keeps Back for the page before", async ({ page
 
 test("a place found inside a document opens straight at that step or requirement", async ({ page }) => {
   await open(page, "/search?q=project%20factory");
-  const gcp = page.locator('li.search-result[data-id="request-gcp-project"]');
-  const step = gcp.locator("ul.search-hits a", { hasText: "Add your project to the project factory" });
-  await expect(step.locator(".search-hit-where")).toHaveText("Step");
+  const gcp = page.locator('li.card[data-id="request-gcp-project"]');
+  const step = gcp.locator("ul.card-hits a", { hasText: "Add your project to the project factory" });
+  await expect(step.locator(".card-hit-where")).toHaveText("Step");
   await expect(step.locator("mark.search-mark").first()).toBeVisible();
   await step.click();
   await expect(page).toHaveURL(/#\/p\/request-gcp-project\/flow\/[\w-]+$/);
   await expect(page.locator(".drawer h3")).toHaveText("Add your project to the project factory");
 
   await open(page, "/search?q=personal%20data");
-  const logging = page.locator('li.search-result[data-id="secure-logging"]');
-  const requirement = logging.locator("ul.search-hits a", { hasText: "SEC-LOG-02" });
-  await expect(requirement.locator(".search-hit-where")).toHaveText("Requirement SEC-LOG-02");
+  const logging = page.locator('li.card[data-id="secure-logging"]');
+  const requirement = logging.locator("ul.card-hits a", { hasText: "SEC-LOG-02" });
+  await expect(requirement.locator(".card-hit-where")).toHaveText("Requirement SEC-LOG-02");
   await requirement.click();
   await expect(page).toHaveURL(/#\/s\/secure-logging\/doc\/SEC-LOG-02$/);
   await expect(page.locator("#req-SEC-LOG-02")).toHaveClass(/selected/);
@@ -206,9 +220,10 @@ test("a draft is found only by the people who may edit it, in editor mode, and i
 
     await signIn(page, ALEX, { editor: true });
     await open(page, "/search?q=zebra");
-    const hit = page.locator('li.search-result[data-id="search-draft-demo"]');
+    const hit = page.locator('li.card[data-id="search-draft-demo"]');
     await expect(hit).toBeVisible();
-    await expect(hit.locator(".search-tags .tier-tag", { hasText: "Draft" })).toBeVisible();
+    await expect(hit).toHaveClass(/\bdraft\b/);
+    await expect(hit.locator(".card-mark.draft")).toHaveText("Draft");
     // in Consumer mode the same person sees what readers see
     await page.locator(".mode-switch").getByRole("button", { name: "Consumer" }).click();
     await expect(page.locator(".search-empty h2")).toHaveText("Nothing found");
@@ -227,7 +242,7 @@ for (const width of [390, 360]) {
 
     await open(page, "/search?q=gcp");
     await expect(results(page)).toHaveCount(3);
-    const toggle = page.locator("button.search-filter-toggle");
+    const toggle = page.locator("button.filter-toggle");
     await expect(toggle).toHaveText("Filters");
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await expect(page.locator("#search-filters")).toBeHidden();
@@ -235,12 +250,18 @@ for (const width of [390, 360]) {
 
     await toggle.click();
     await expect(page.locator("#search-filters")).toBeVisible();
+    await openGroup(page, "type");
     await group(page, "type").getByRole("checkbox", { name: /^Standards, / }).check();
     await expect(toggle).toHaveText("Filters (1)");
     await expect(results(page)).toHaveCount(1);
     expect(await sideways(page), `results with the filters open at ${width}px`).toBe(0);
-    for (const el of [page.locator(".search-chosen button.chip.on"), page.locator(".search-clear"), results(page).first().locator("h2 a")])
+    for (const el of [page.locator(".filter-chosen button.filter-chip"), page.locator(".filter-clear")])
       await expect(el).toBeInViewport({ ratio: 1 });
+    // the open panel pushes the results down; folding it away brings them back up
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("#search-filters")).toBeHidden();
+    await expect(results(page).first().locator("h2 a")).toBeInViewport({ ratio: 1 });
 
     await open(page, "/search?q=gcp&platform=azure&type=standard");
     await expect(page.locator(".search-empty h2")).toBeVisible();
@@ -256,10 +277,19 @@ test("search works with the keyboard alone", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/#\/search\?q=akamai$/);
   await expect(results(page).first()).toHaveAttribute("data-id", "onboard-site-to-akamai");
-  // Tab goes through the filters to the first result
-  const first = results(page).first().locator("h2.search-result-title a");
-  for (let i = 0; i < 40 && !(await first.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press("Tab");
+  // Tab goes through the page size and the filters to the first result
+  const first = results(page).first().locator("h2.card-title a");
+  const reached: string[] = [];
+  for (let i = 0; i < 40 && !(await first.evaluate((el) => el === document.activeElement)); i++) {
+    await page.keyboard.press("Tab");
+    reached.push(await page.evaluate(() => { const el = document.activeElement as HTMLElement; return el.getAttribute("aria-label") ?? el.textContent ?? ""; }));
+  }
   await expect(first).toBeFocused();
+  // the page size, then the filters of the panel, come before the first result
+  const at = (name: string) => reached.findIndex((r) => r.startsWith(name));
+  expect(at("Items per page"), reached.join(" | ")).toBeGreaterThanOrEqual(0);
+  expect(at("Items per page")).toBeLessThan(at("Type:"));
+  expect(at("Type:")).toBeLessThan(at("Category:"));
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Onboard a site to Akamai" })).toBeVisible();
 });

@@ -82,7 +82,7 @@ test("when somebody else saved first, nothing is overwritten without a decision"
   await dialog.getByRole("button", { name: "Use their version" }).click();
   await expect(page.locator("h1")).toHaveText("Renamed by Dana");
   await expect(page.locator(".block").first()).toContainText("Request a registry namespace");
-  await page.getByRole("button", { name: "Undo" }).click();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(page.locator(".block").first()).toContainText("My wording");
 
   // this time keep mine: it is saved on top of theirs, and theirs stays in the versions
@@ -154,7 +154,7 @@ test("changes can be undone step by step, including a deleted step and Discard",
   await answer(page, "Delete this step?", "Delete step");
   await expect(blocks).toHaveCount(all - 1);
 
-  await page.getByRole("button", { name: "Undo" }).click();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(blocks).toHaveCount(all);
   await expect(page.locator(".saved")).toBeVisible(); // back to what is saved
   await page.getByRole("button", { name: "Redo" }).click();
@@ -163,7 +163,7 @@ test("changes can be undone step by step, including a deleted step and Discard",
   // Discard goes back to the saved version - and can be undone like any other change
   await page.getByRole("button", { name: "Discard" }).click();
   await expect(blocks).toHaveCount(all);
-  await page.getByRole("button", { name: "Undo" }).click();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(blocks).toHaveCount(all - 1);
   // the keyboard works too, outside text fields
   await page.locator("h1").click();
@@ -236,6 +236,8 @@ test("the app runs under a strict security policy", async ({ page }) => {
   const problems: string[] = [];
   page.on("console", (m) => { if (m.type() === "error") problems.push(m.text()); });
   page.on("pageerror", (e) => problems.push(String(e)));
+  // what the browser blocks under the policy is reported in the page as well as on the console
+  await page.addInitScript(() => document.addEventListener("securitypolicyviolation", (e) => console.error(`CSP: ${e.violatedDirective} ${e.blockedURI}`)));
   await signIn(page, DANA, { editor: true });
   const res = await page.goto("/#/p/request-gcp-project/json");
   const csp = res!.headers()["content-security-policy"];
@@ -244,10 +246,19 @@ test("the app runs under a strict security policy", async ({ page }) => {
   expect(res!.headers()["x-frame-options"]).toBe("DENY");
   await expect(page.locator(".cm-editor")).toBeVisible(); // the code editor and the checker both work under it
   await expect(page.locator(".status.good")).toBeVisible();
-  for (const hash of ["/", "/search?q=gcp", "/processes", "/standards", "/s/secure-logging/doc", "/catalog", "/guide", "/admin/skills"]) {
+  for (const hash of ["/", "/search?q=gcp", "/processes", "/standards", "/s/secure-logging/doc", "/catalog", "/guide", "/admin/skills", "/requests", "/requests?state=all", "/admin/statistics"]) {
     await open(page, hash);
     await expect(page.locator("h1").first()).toBeVisible();
   }
+  await expect(page.locator(".stat-totals")).toBeVisible(); // the statistics, with the chart drawn by hand
+  // a process page with the share dialog open
+  await open(page, "/p/request-gcp-project/flow");
+  await page.getByRole("button", { name: "Share" }).click();
+  await expect(page.getByRole("dialog", { name: /^Share/ })).toBeVisible();
+  // the request form
+  await open(page, "/requests");
+  await page.getByRole("button", { name: "Ask for a process or standard" }).first().click();
+  await expect(page.getByRole("dialog", { name: "Ask for a process or standard" })).toBeVisible();
   expect(problems).toEqual([]);
 });
 

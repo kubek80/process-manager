@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { ALEX, answer, clearFeedback, open, putDoc, readSkill, readStandard, report, RILEY, SAM, save, serverToday, signIn, watchErrors } from "./helpers";
+import { ALEX, answer, clearFeedback, open, pickFilter, putDoc, readSkill, readStandard, report, RILEY, SAM, save, serverToday, signIn, watchErrors } from "./helpers";
 
 const LOGGING = "secure-logging"; // belongs to the practice Cyber security: Riley edits it
 const IAC = "infrastructure-as-code"; // issued by the Cloud Platform team
@@ -14,8 +14,8 @@ test("a consumer finds standards by the team that issues them and by what applie
   await open(page, "/standards");
   await expect(page.getByRole("heading", { name: "What must I meet?" })).toBeVisible();
   const cards = page.locator(".card");
-  await expect(cards.filter({ hasText: "Secure logging" })).toContainText("Cyber Security");
-  await expect(cards.filter({ hasText: "Secure logging" })).toContainText("4 must");
+  await expect(cards.filter({ hasText: "Secure logging" }).locator('[data-line="owner"] dd')).toHaveText("Cyber Security");
+  await expect(cards.filter({ hasText: "Secure logging" }).locator('[data-line="rigour"] dd')).toContainText("4 mandatory");
   await expect(page.getByRole("button", { name: /Blank standard/ })).toHaveCount(0);
 
   await page.getByPlaceholder(/Search/).fill("IAC-03"); // requirement ids are searchable
@@ -23,15 +23,16 @@ test("a consumer finds standards by the team that issues them and by what applie
   await expect(cards.first()).toContainText("Infrastructure as code");
   await page.getByPlaceholder(/Search/).fill("");
 
-  await page.locator(".filters .chip", { hasText: "Developer Experience team" }).click();
+  await pickFilter(page, "Owner", "Developer Experience team");
   await expect(cards).toHaveCount(1);
   await expect(cards.first()).toContainText("Code review");
-  await expect(cards.first()).toContainText("Engineering"); // the practice it belongs to
-  await page.locator(".filters .chip", { hasText: "All" }).click();
+  await expect(cards.first().locator('[data-line="practice"] dd')).toHaveText("Engineering"); // the practice it belongs to
+  await page.getByRole("button", { name: "Clear all filters" }).click();
+  await expect(cards).toHaveCount(3);
 
   // for a development environment one of the four mandatory logging rules falls away
   await page.locator(".profile-filter").getByLabel("Environment").selectOption({ label: "Development" });
-  await expect(cards.filter({ hasText: "Secure logging" })).toContainText("3 must");
+  await expect(cards.filter({ hasText: "Secure logging" }).locator('[data-line="rigour"] dd')).toContainText("3 mandatory");
   expect(errors).toEqual([]);
 });
 
@@ -80,7 +81,7 @@ test("standards and processes point to each other", async ({ page }) => {
   await expect(page.locator(".standard-intro")).toContainText("Follow “Raise a ServiceNow request”"); // how to ask for an exception
   await page.locator("#req-IAC-01").getByRole("button", { name: /How: Request a GCP project/ }).click();
   await expect(page.getByRole("heading", { name: "Request a GCP project" })).toBeVisible();
-  await page.getByRole("button", { name: /Before you start/ }).click(); // on the map the links are one line that opens
+  await expect(page.getByRole("button", { name: /Before you start/ })).toHaveAttribute("aria-expanded", "true"); // open on arrival
   await page.locator(".link-list.row").getByRole("link", { name: "Infrastructure as code" }).click();
   await expect(page.getByRole("heading", { name: "Infrastructure as code", exact: true })).toBeVisible();
   await expect(page.locator(".standard-intro .link-list").getByRole("link", { name: "Request a GCP project" })).toBeVisible();

@@ -93,3 +93,17 @@ export async function putDoc(from: Page | APIRequestContext, kind: "process" | "
   const base = await versionOf(from, kind, id);
   return api(from).put(`/api/${kind === "process" ? "processes" : "standards"}/${id}?base=${base}`, { data: body, headers: CSRF });
 }
+
+/**
+ * Choose (or un-choose) a value in a dropdown of the filter panel on the left of a list
+ * ("Category", "Platform", "Owner", …) and close the dropdown again.
+ */
+export async function pickFilter(page: Page, filter: string, option: string | RegExp) {
+  const panel = page.getByRole("complementary", { name: "Filters" });
+  const button = panel.getByRole("button", { name: new RegExp(`^${filter}:`) });
+  if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
+  const name = typeof option === "string" ? new RegExp(`^${option.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}, \\d+ results?$`) : option;
+  await panel.getByRole("group", { name: filter, exact: true }).getByRole("checkbox", { name }).click();
+  await button.click(); // closes it
+  await expect(button).toHaveAttribute("aria-expanded", "false");
+}

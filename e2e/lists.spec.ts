@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ALEX, CSRF, DANA, JORDAN, open, putDoc, readCatalog, readProcess, SAM, save, signIn } from "./helpers";
+import { ALEX, CSRF, DANA, JORDAN, open, pickFilter, putDoc, readCatalog, readProcess, SAM, save, signIn } from "./helpers";
 
 // Categories, practices and platforms are lists of their own, next to the teams. A platform's
 // and a practice's members are their owners, who may change what belongs to them; everyone can
@@ -256,11 +256,15 @@ test("Details: an editor says what a process belongs to and its rigour; readers 
     await open(page, "/processes");
     const card = page.locator(".card", { hasText: "Details demo" });
     await expect(card.locator(".card-cat")).toHaveText("Network");
-    for (const name of ["Mandatory", "Azure", "Service management"]) await expect(card.locator(".card-tags")).toContainText(name);
-    await page.locator(".filters .chip", { hasText: "Network" }).click();
+    await expect(card.locator('[data-line="platform"]')).toHaveText("PlatformAzure");
+    await expect(card.locator('[data-line="practice"]')).toHaveText("PracticeService management");
+    await expect(card.locator('[data-line="rigour"]')).toContainText("Mandatory");
+    await expect(card.locator(".card-lines")).not.toContainText("service-management");
+    await pickFilter(page, "Category", "Network");
     await expect(page.locator(".card", { hasText: "Details demo" })).toBeVisible();
     await expect(page.locator(".card", { hasText: "Request a GCP project" })).toHaveCount(0);
-    await page.locator(".filters .chip", { hasText: "All" }).click();
+    await page.getByRole("button", { name: "Clear all filters" }).click();
+    await expect(page.locator(".card", { hasText: "Request a GCP project" })).toBeVisible();
 
     // an id that is not in its list is refused, with the ones that are
     await signIn(page, ALEX);
@@ -286,12 +290,15 @@ test("a process without a category is listed under Other", async ({ page }) => {
   await open(page, "/processes");
   const card = page.locator(".card", { hasText: "Other demo" });
   await expect(card.locator(".card-cat")).toHaveText("Other");
-  await expect(page.locator(".filters .chip").last()).toContainText("Other"); // the place for what has no category comes last
-  await page.locator(".filters .chip", { hasText: "Other" }).click();
+  await page.getByRole("button", { name: /^Category:/ }).click();
+  // the place for what has no category comes last
+  await expect(page.getByRole("group", { name: "Category", exact: true }).locator(".filter-option-name").last()).toHaveText("Other");
+  await page.getByRole("button", { name: /^Category:/ }).click();
+  await pickFilter(page, "Category", "Other");
   await expect(card).toBeVisible();
   await expect(page.locator(".card", { hasText: "Request a GCP project" })).toHaveCount(0);
   for (const cat of await page.locator(".card .card-cat").allInnerTexts()) expect(cat.toLowerCase()).toBe("other");
-  await page.locator(".filters .chip", { hasText: "All" }).click();
+  await page.getByRole("button", { name: "Clear all filters" }).click();
 });
 
 test("a platform that still has members cannot be removed until they are gone", async ({ page }) => {

@@ -45,7 +45,8 @@ export function StatisticsSection() {
     return () => { live = false; };
   }, [period]);
   useEffect(load, [load]);
-  const choose = (p: Period) => { setPeriod(p); setStats(null); try { localStorage.setItem(PERIOD_KEY, p); } catch { /* private mode */ } };
+  // the period already shown is not loaded again (its numbers would be cleared and never come back)
+  const choose = (p: Period) => { if (p === period) return; setPeriod(p); setStats(null); try { localStorage.setItem(PERIOD_KEY, p); } catch { /* private mode */ } };
 
   const rows = useMemo(() => sortRows((stats?.rows ?? []).filter((r) => kind === "all" || r.kind === kind), sort.key, sort.dir), [stats, kind, sort]);
   const groups = useMemo(() => (stats ? groupTotals(stats, by, catalog) : []), [stats, by, catalog]);

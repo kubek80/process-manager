@@ -256,6 +256,9 @@ export function Pager({ page, onPage, label, compact }: {
  */
 export function usePaging(what: string): [number, (n: number) => void] {
   const [at, setAt] = useState({ what, page: 1 });
+  // forget the old page as soon as the search or a filter changes, so that undoing the change
+  // does not bring the old page back
+  if (at.what !== what) setAt({ what, page: 1 });
   const page = at.what === what ? at.page : 1;
   return [page, (n: number) => setAt({ what, page: n })];
 }
