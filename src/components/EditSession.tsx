@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { ArrowLeft, Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash2, TriangleAlert, Undo2 } from "lucide-react";
 import type { DocMeta, Issue, Process, Standard, TargetKind } from "../types";
 import { conflictOf, useDraft, type Conflict, type Draft } from "../lib/draft";
-import { author, baseBehindSentence, draftKindOf, draftSaveBase, editState, exampleIssues, isExampleIssue, issueText, publishLines, statusChangeBlocked, type DraftKind } from "../lib/editing";
+import { author, baseBehindSentence, draftKindOf, draftSaveBase, saveCallOf, editState, exampleIssues, isExampleIssue, issueText, publishLines, statusChangeBlocked, type DraftKind } from "../lib/editing";
 import { compare, type Change } from "../lib/diff";
 import { belongsRefused } from "../lib/rights";
 import { useMe, usePerms } from "../lib/session";
@@ -139,12 +139,33 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
   const rebaseTo = useRef<number | null>(null);
 
   const unpublished = draftKind === "unpublished";
+  // Somebody else deleted it while it was open: saving brings it back, as a draft readers do not
+  // see until it is published (the ordinary save that creates something new).
+  const gone = useRef(false);
+  const [isGone, setGone] = useState(false);
+  const markGone = () => { gone.current = true; setGone(true); };
+  const recreate = (doc: T, note: string) => opts.current.onSave({ ...doc, status: "draft" }, 0, note || "Restored after it was deleted");
   const d = useDraft<T>({
     docKey: `${kind}/${id}`, what: `this ${noun}`, tidy: o.tidy, stamp: o.stamp,
     saved: working?.doc ?? o.doc,
     version: unpublished ? o.meta?.version ?? 0 : working?.revision ?? 0,
-    save: unpublished ? (doc, base, note) => opts.current.onSave(doc, base, note) : async (doc, rev) => {
-      const r = await putWorkingDraft(kind, id, doc, rev, draftSaveBase(rev, startBase.current, rebaseTo.current));
+    save: async (doc, rev, note) => {
+      const call = saveCallOf(draftKind, gone.current);
+      if (call === "recreate-as-draft") return recreate(doc, note);
+      if (call === "save-version") return opts.current.onSave(doc, rev, note);
+      let r;
+      try {
+        r = await putWorkingDraft(kind, id, doc, rev, draftSaveBase(rev, startBase.current, rebaseTo.current));
+      } catch (e) {
+        // the draft calls answer "does not exist" for something that was deleted: say it like a save does
+        if (e instanceof ApiError && e.status === 404) {
+          markGone();
+          const deleted = new ApiError(409, `Somebody else deleted this ${noun} while you were editing.`);
+          deleted.conflict = { exists: false };
+          throw deleted;
+        }
+        throw e;
+      }
       startBase.current = r.base;
       rebaseTo.current = null;
       setWorking({ doc, base: r.base, revision: r.revision, updatedBy: r.updatedBy, updatedByName: r.updatedByName, updatedAt: r.updatedAt });
@@ -189,6 +210,8 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
 
   // the shared draft was saved, published or discarded by somebody else: what readers see may have moved on too
   useEffect(() => { if (d.conflict?.draft) void opts.current.onRefresh().catch(() => {}); }, [d.conflict]);
+  // an ordinary save refused because it was deleted (a draft that was never published)
+  useEffect(() => { if (d.conflict && !d.conflict.exists && !d.conflict.draft) markGone(); }, [d.conflict]);
   useEffect(() => { if (d.error) { notify.error(`The ${noun} could not be saved.`, d.error); d.clearError(); } }, [d.error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const drawable = useMemo(() => o.drawable(d.draft), [d.draft, o.drawable]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -197,7 +220,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
   const issues = useMemo(() => (drawable ? [...checked, ...exampleIssues(kind, d.clean)] : checked), [checked, drawable, kind, d.clean]);
   const errors = issues.filter((i) => i.level === "error").length;
   // a draft that was never published is saved as a version of its own, which the checker must pass
-  const saveErrors = unpublished ? checked.filter((i) => i.level === "error") : [];
+  const saveErrors = unpublished || isGone ? checked.filter((i) => i.level === "error") : [];
   const [notice, setNotice] = useState<Notice | null>(null);
   const [focus, setFocus] = useState<{ issue: Issue; n: number } | null>(null);
   const goTo = (issue?: Issue) => { if (issue) setFocus((f) => ({ issue, n: (f?.n ?? 0) + 1 })); };
@@ -232,7 +255,10 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
   const rightsBlock = refused ? "Put the platform or practice back as it was (under About)." : losing ? "Keep it with a platform or practice of yours (under About)." : "";
   const jsonBlock = jsonPending ? "The JSON has changes with problems. Fix them there first." : "";
   const firstError = issues.find((i) => i.level === "error");
-  const problemsBlock = errors ? `Publishing waits until ${errors === 1 ? "the problem is" : `the ${errors} problems are`} fixed. First: ${issueText(firstError!)}` : "";
+  const onlyExamples = errors > 0 && issues.filter((i) => i.level === "error").every(isExampleIssue);
+  const problemsBlock = !errors ? "" : onlyExamples
+    ? `Publishing waits until ${errors === 1 ? "the example text is" : `the ${errors} example texts are`} replaced. First: ${issueText(firstError!)}`
+    : `Publishing waits until ${errors === 1 ? "the problem is" : `the ${errors} problems are`} fixed. First: ${issueText(firstError!)}`;
   const saveBlocked = !d.dirty && !jsonPending ? "Nothing to save: all changes are saved." : undefined;
   const publishBlocked = rightsBlock || jsonBlock || problemsBlock
     || (!unpublished && !working && !d.dirty ? "There are no changes to publish." : "") || undefined;
@@ -245,7 +271,10 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
     if (why) return setNotice({ text: `This draft cannot be saved yet. ${why}`, tone: "bad" });
     if (saveErrors.length) {
       const first = saveErrors[0];
-      setNotice({ text: `This draft cannot be saved yet: a ${noun} that was never published is only saved when the checker finds no problems. ${saveErrors.length === 1 ? "The problem" : `First of ${saveErrors.length}`}: ${issueText(first)}`, tone: "bad", issue: first });
+      const why = isGone
+        ? `This ${noun} cannot be brought back yet: it comes back as a draft, which is only saved when the checker finds no problems. Your changes are still here.`
+        : `This draft cannot be saved yet: a ${noun} that was never published is only saved when the checker finds no problems.`;
+      setNotice({ text: `${why} ${saveErrors.length === 1 ? "The problem" : `First of ${saveErrors.length}`}: ${issueText(first)}`, tone: "bad", issue: first });
       return goTo(first);
     }
     setNotice(null);
@@ -437,7 +466,8 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
             notify.info("Their version is now in the editor, not saved yet. Undo brings your own changes back; Save draft continues from theirs.");
           } catch (e) { notify.error("Their version could not be loaded.", e); }
         }} />}
-      <ConflictDialog d={d} kind={kind} id={id} noun={`this ${noun}`} blocked={rightsBlock || jsonBlock || (unpublished ? problemsBlock : "") || undefined}
+      <ConflictDialog d={d} kind={kind} id={id} noun={`this ${noun}`} blocked={rightsBlock || jsonBlock || undefined}
+        onRestore={() => { markGone(); saveDraft(); }} wasPublished={!unpublished}
         theirs={unpublished ? undefined : async () => (await loadWorkingDraft<T>(kind, id))?.doc} />
     </>
   );
@@ -525,6 +555,7 @@ function PublishConflict({ kind, id, c, base, onMine, onTheirs, onClose }: {
         <button className="btn primary danger" disabled={busy} onClick={run(onMine)} title="Your version becomes the newest. Theirs stays in the list of versions.">Publish mine over theirs</button>
       </>}>
       <p>Nothing was published and nothing was overwritten. Your changes are still in the draft.</p>
+      <p>Nothing is merged: “Continue from theirs” starts from their version (Undo brings yours back as a whole), and “Publish mine over theirs” replaces theirs. A change of theirs you want to keep has to be made again in yours.</p>
       <h3 className="mini-title">What they changed</h3>
       {changes === "failed" ? <p className="muted">What they changed could not be loaded. Look at the versions in the More menu.</p>
         : changes ? <ChangeList changes={changes} /> : base ? <p className="muted">Looking…</p> : null}

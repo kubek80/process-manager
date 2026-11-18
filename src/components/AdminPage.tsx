@@ -5,6 +5,7 @@ import { teamName, useCatalog } from "../lib/catalog";
 import { reviewInfo, statusOf } from "../lib/lifecycle";
 import { usePerms } from "../lib/session";
 import { go, href, loadAudit, loadSkills, loadSystem, type AdminSection, type SystemInfo } from "../lib/store";
+import { shownTarget } from "../lib/activity";
 import { CatalogPage } from "./CatalogPage";
 import { UsersSection } from "./UsersSection";
 import { openCount } from "./Feedback";
@@ -163,7 +164,7 @@ function ActivitySection() {
           {entries.map((e) => (
             <li key={e.id}>
               <time>{e.at.slice(0, 16).replace("T", " ")}</time>
-              <span><b>{e.name}</b> {ACTION[e.action] ?? e.action} <code>{e.target}</code>{e.detail && <em> · {e.detail}</em>}</span>
+              <span><b>{e.name}</b> {ACTION[e.action] ?? e.action}{shownTarget(e.action, e.target) && <> <code>{e.target}</code></>}{e.detail && <em> · {e.detail}</em>}</span>
             </li>
           ))}
           {entries.length === 0 && <li className="muted">Nothing has been changed yet.</li>}

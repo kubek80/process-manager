@@ -3,7 +3,7 @@ import {
   ArrowDown, ArrowLeft, ArrowUp, ChevronRight, CircleAlert, CircleCheck, Flag, ListTree, MoreHorizontal, PanelRight, Plus, Redo2, Send, TriangleAlert, Undo2, X,
 } from "lucide-react";
 import type { Feedback, Issue } from "../types";
-import { checkerSummary, issueText, type EditState, type OutlineEntry } from "../lib/editing";
+import { checkerSummary, isExampleIssue, issueText, type EditState, type IssueCount, type OutlineEntry } from "../lib/editing";
 import type { Notice } from "./EditSession";
 import { FeedbackItem, type FeedbackTarget } from "./Feedback";
 import { Modal, useLayer } from "./ui";
@@ -53,17 +53,22 @@ export function ItemIssues({ issues }: { issues: Issue[] }) {
   const fixBefore = useContext(FixBefore);
   if (!issues.length) return null;
   const errors = issues.filter((i) => i.level === "error");
+  const n = (list: Issue[], one: string, many: string) => `${list.length} ${list.length === 1 ? one : many}`;
+  const saving = errors.filter((i) => fixBefore(i) === "saving");
+  const publishing = errors.filter((i) => fixBefore(i) !== "saving" && !isExampleIssue(i));
+  const examples = errors.filter((i) => fixBefore(i) !== "saving" && isExampleIssue(i));
   const groups: { title: string; tone: "bad" | "warn"; list: Issue[] }[] = [
-    { list: errors.filter((i) => fixBefore(i) === "saving"), tone: "bad", title: "to fix before saving" },
-    { list: errors.filter((i) => fixBefore(i) !== "saving"), tone: "bad", title: "to fix before publishing" },
-    { list: issues.filter((i) => i.level !== "error"), tone: "warn", title: "" },
+    { list: saving, tone: "bad", title: n(saving, "problem to fix before saving", "problems to fix before saving") },
+    { list: publishing, tone: "bad", title: n(publishing, "problem to fix before publishing", "problems to fix before publishing") },
+    // example texts of something new: calmer, they are simply still to be written
+    { list: examples, tone: "warn", title: n(examples, "example text to replace before publishing", "example texts to replace before publishing") },
+    { list: issues.filter((i) => i.level !== "error"), tone: "warn", title: "Worth a look" },
   ];
   return (
     <>
       {groups.filter((g) => g.list.length).map((g) => (
-        <div key={g.title || "hints"} className={`item-issues ${g.tone}`} role="status">
-          <strong>{g.tone === "bad" ? <CircleAlert size={15} /> : <TriangleAlert size={15} />}
-            {g.title ? `${g.list.length} problem${g.list.length > 1 ? "s" : ""} ${g.title}` : "Worth a look"}</strong>
+        <div key={g.title} className={`item-issues ${g.tone}`} role="status">
+          <strong>{g.tone === "bad" ? <CircleAlert size={15} /> : <TriangleAlert size={15} />}{g.title}</strong>
           <ul>{g.list.map((i, k) => <li key={k} className={i.level}>{issueText(i)}</li>)}</ul>
         </div>
       ))}
@@ -84,13 +89,22 @@ export function ItemFeedback({ feedback, target, noun }: { feedback: Feedback[];
 
 // ---------- the outline
 
+/** "2 problems", "1 to fill in" (example texts only), "3 hints": what an outline mark stands for. */
+const markWords = (c: IssueCount, lead = "") => {
+  const plural = (n: number, one: string, many: string) => `${lead}${n} ${n === 1 ? one : many}`;
+  if (c.errors > c.examples) return plural(c.errors, "problem", "problems");
+  if (c.errors) return plural(c.errors, "to fill in", "to fill in");
+  if (c.warnings) return plural(c.warnings, "hint", "hints");
+  return "";
+};
+
 export function Outline({ entries, selected, onSelect, issues, feedback, onAdd, onMove, label }: {
   entries: OutlineEntry[];
   /** The key of what is selected: "about", "steps/<id>". */
   selected: string;
   onSelect: (e: OutlineEntry) => void;
   /** Problems per key (see issuesByPlace). */
-  issues: Map<string, { errors: number; warnings: number }>;
+  issues: Map<string, IssueCount>;
   /** Open feedback per item id. */
   feedback: (item: string) => number;
   /** The section whose items can be added to, with what the button says. */
@@ -111,12 +125,12 @@ export function Outline({ entries, selected, onSelect, issues, feedback, onAdd, 
           return (
             <li key={e.key} className={`outline-row depth-${e.depth} ${on ? "on" : ""}`}>
               <button className={`outline-item ${(e.number?.length ?? 0) > 3 ? "long-n" : ""}`} aria-current={on ? "true" : undefined} onClick={() => onSelect(e)}
-                aria-label={`${e.number && e.depth === 1 ? `${e.number} ` : ""}${e.label}${c?.errors ? `, ${c.errors} problem${c.errors > 1 ? "s" : ""}` : c?.warnings ? `, ${c.warnings} hint${c.warnings > 1 ? "s" : ""}` : ""}${flags ? `, ${flags} open feedback` : ""}`}>
+                aria-label={`${e.number && e.depth === 1 ? `${e.number} ` : ""}${e.label}${c ? markWords(c, ", ") : ""}${flags ? `, ${flags} open feedback` : ""}`}>
                 {e.depth === 1 && <span className="outline-n">{e.number}</span>}
                 <span className="outline-label">{e.label}</span>
                 {e.depth === 0 && e.count !== undefined && <span className="outline-count">{e.count}</span>}
                 {flags > 0 && <span className="outline-flag" title={`${flags} open feedback`}><Flag size={11} strokeWidth={2.5} />{flags}</span>}
-                {c && (c.errors || c.warnings) ? <span className={`outline-mark ${c.errors ? "bad" : "warn"}`} title={c.errors ? `${c.errors} problem${c.errors > 1 ? "s" : ""}` : `${c.warnings} hint${c.warnings > 1 ? "s" : ""}`}>{c.errors || c.warnings}</span> : null}
+                {c && (c.errors || c.warnings) ? <span className={`outline-mark ${c.errors > c.examples ? "bad" : "warn"}`} title={markWords(c)}>{c.errors || c.warnings}</span> : null}
               </button>
               {e.depth === 0 && e.section === onAdd.section && (
                 <button className="icon-btn outline-add" onClick={onAdd.run} aria-label={onAdd.label} title={onAdd.label}><Plus size={15} /></button>
@@ -162,7 +176,7 @@ function MoreMenu({ items }: { items: MenuItem[] }) {
   }, [open]);
   return (
     <div className="more-menu" ref={box}>
-      <button ref={button} className="eb-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} title="More: versions, retire, delete, AI, JSON">
+      <button ref={button} className="eb-btn" aria-label="More" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} title="More: versions, retire, delete, AI, JSON">
         <MoreHorizontal size={17} /><span className="eb-label">More</span>
       </button>
       {open && <MenuPop items={items} onClose={() => { setOpen(false); button.current?.focus(); }} onRun={(it) => { setOpen(false); it.run(); }} />}
@@ -277,7 +291,7 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
   return (
     <div className={`edit-screen panel-${panel ?? "none"} ${json ? "json" : ""}`}>
       <header className={`edit-bar state-${state.key}`}>
-        <button className="eb-btn eb-back" onClick={onBack} title={`Back to reading this ${noun}`}><ArrowLeft size={16} /><span className="eb-label">Back to reading</span></button>
+        <button className="eb-btn eb-back" aria-label="Back to reading" onClick={onBack} title={`Back to reading this ${noun}`}><ArrowLeft size={16} /><span className="eb-label eb-long">Back to reading</span><span className="eb-label eb-short" aria-hidden="true">Back</span></button>
         <div className="eb-title">
           <span className="eb-kicker">Editing {noun}</span>
           <h1 title={title}>{title || "(no name yet)"}</h1>

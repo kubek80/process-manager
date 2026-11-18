@@ -20,6 +20,11 @@ describe("which calls a draft uses", () => {
     expect(saveCallOf("working")).toBe("save-working-draft");
     expect(publishCallOf("working")).toBe("publish-working-draft");
   });
+  it("something deleted by somebody else while it was open comes back as a new draft", () => {
+    expect(saveCallOf("working", true)).toBe("recreate-as-draft");
+    expect(saveCallOf("unpublished", true)).toBe("recreate-as-draft");
+    expect(saveCallOf("working", false)).toBe("save-working-draft");
+  });
 });
 
 describe("the state on the editing bar", () => {
@@ -200,5 +205,23 @@ describe("who saved", () => {
     expect(author({ updatedBy: "alex@example.com" }, "dana@example.com").name).toBe("alex@example.com");
     expect(author({ updatedBy: "Alex@Example.com" }, "alex@example.com")).toEqual({ you: true, name: "You" });
     expect(author(undefined, "alex@example.com").name).toBe("Somebody else");
+  });
+});
+
+describe("a new document's example texts read calmer than real problems", () => {
+  const example = { level: "error" as const, path: "summary", message: exampleIssues("process", blankProcess([], "X"))[0].message };
+  const real = { level: "error" as const, path: "title", message: "is too short" };
+  it("are counted as things to fill in when they are all there is", () => {
+    expect(checkerSummary([example, example, example])).toEqual({ level: "warn", text: "3 to fill in" });
+    expect(checkerSummary([example])).toEqual({ level: "warn", text: "1 to fill in" });
+  });
+  it("are problems as soon as a real one is among them", () => {
+    expect(checkerSummary([example, real])).toEqual({ level: "bad", text: "2 problems" });
+  });
+  it("are told apart per place in the outline", () => {
+    const p = blankProcess([], "X");
+    const by = issuesByPlace("process", p, exampleIssues("process", p));
+    expect(by.get("about")).toEqual({ errors: 1, warnings: 0, examples: 1 });
+    expect(by.get("steps/first-step")).toEqual({ errors: 2, warnings: 0, examples: 2 });
   });
 });

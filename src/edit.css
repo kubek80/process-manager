@@ -214,12 +214,20 @@
   .eb-title h1 { max-width: 24vw; }
 }
 /* a narrow laptop or tablet: fewer words on the bar */
+.eb-short { display: none; }
 @media (max-width: 1100px) {
-  .eb-label { display: none; }
+  /* short words while they fit; icons only on a phone */
+  .eb-long { display: none; }
+  .eb-short { display: inline; }
   .eb-back, .more-menu .eb-btn { padding: 0 10px; }
+  /* the bar takes a second row when its parts do not fit on one */
+  .edit-bar { flex-wrap: wrap; }
   .edit-body { grid-template-columns: minmax(0, 1fr) 340px; }
 }
 /* a phone: the fields slide over too, the bar takes two rows */
+@media (max-width: 767px) {
+  .eb-label { display: none !important; }
+}
 @media (max-width: 760px) {
   .edit-bar { flex-wrap: wrap; padding: 8px 10px; gap: 8px; }
   .eb-title { flex: 1 0 calc(100% - 60px); }

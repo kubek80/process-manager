@@ -133,7 +133,7 @@ export function ChangeList({ changes }: { changes: Change[] }) {
  * Somebody else saved while this person was editing. Nothing is overwritten without a
  * decision: look at what they changed, then continue from their version or keep your own.
  */
-export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadTheirs }: {
+export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadTheirs, onRestore, wasPublished }: {
   d: Draft<T>; kind: TargetKind | "catalog"; id: string; noun: string;
   /** Why saving is not possible right now, e.g. the checker found problems. */
   blocked?: string;
@@ -142,6 +142,13 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
    * what they saved. Without it the conflict is about versions of the document.
    */
   theirs?: () => Promise<unknown>;
+  /**
+   * It was deleted: brings it back with what is on screen (as a draft for a process or standard,
+   * checked first). Without it, "Save mine and bring it back" saves straight away.
+   */
+  onRestore?: () => void;
+  /** It was published before it was deleted: it comes back as a draft readers do not see. */
+  wasPublished?: boolean;
 }) {
   const c = d.conflict;
   const { catalog } = useCatalog();
@@ -159,7 +166,7 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
   if (!c) return null;
   const run = (fn: () => Promise<unknown>) => async () => { setBusy(true); try { await fn(); } finally { setBusy(false); } };
 
-  if (!c.exists && loadTheirs) {
+  if (!c.exists && c.draft) {
     return (
       <Modal title="The unpublished changes are gone" subtitle="The shared draft was published or discarded, perhaps in another window, while you were editing." onClose={d.dismissConflict}
         footer={<><span className="spacer" /><button className="btn" onClick={d.dismissConflict}>Keep editing</button>
@@ -192,8 +199,9 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
     return (
       <Modal title={`${noun[0].toUpperCase()}${noun.slice(1)} was deleted`} subtitle="Somebody else deleted it while you were editing." onClose={d.dismissConflict}
         footer={<><span className="spacer" /><button className="btn" onClick={d.dismissConflict}>Keep editing</button>
-          <button className="btn primary" disabled={busy} onClick={run(() => d.keepMine("Restored after it was deleted"))}>Save mine and bring it back</button></>}>
+          <button className="btn primary" disabled={busy} onClick={onRestore ? () => { d.dismissConflict(); onRestore(); } : run(() => d.keepMine("Restored after it was deleted"))}>Save mine and bring it back</button></>}>
         <p>Your changes are still here. Saving brings {noun} back with your version; ask whoever deleted it first if you are not sure.</p>
+        {onRestore && <p>{wasPublished ? "It comes back as a draft: readers see it again when you publish." : "It comes back as a draft: readers see it when you publish."}</p>}
       </Modal>
     );
   }
@@ -267,7 +275,7 @@ export function HistoryDialog<T>({ kind, id, title, onRestore, onClose }: {
   };
   return (
     <Modal wide title={`Versions of “${title}”`}
-      subtitle={onRestore ? "Every save is a version. Restoring one puts it into your draft; nothing changes until you save." : "Every save is a version: who changed it, when, and what they said about it."}
+      subtitle={onRestore ? "Every save is a version. Restoring one puts it into your draft on this screen: nothing is kept until you save the draft, and readers see nothing until you publish." : "Every save is a version: who changed it, when, and what they said about it."}
       onClose={onClose} footer={<><span className="spacer" /><button className="btn primary" onClick={onClose}>Close</button></>}>
       {error && (versions ? <div className="check bad">{error}</div> : <LoadError what="The versions could not be loaded." error={error} onRetry={load} />)}
       {!versions && !error && <p className="muted">Loading…</p>}
