@@ -101,7 +101,7 @@ test("a card: owner, tiers top right, one fact per line, no step icons and no ch
   // one "name: value" per line, the owner first
   const lines = akamai.locator("dl.card-lines > .card-line");
   await expect(lines.first()).toHaveAttribute("data-line", "owner");
-  await expect(lines.first().locator("dt")).toHaveText("Owner");
+  await expect(lines.first().locator("dt")).toHaveText("Owner:");
   await expect(lines.first().locator("dd")).not.toBeEmpty();
   expect(await lines.count()).toBeGreaterThanOrEqual(3);
   for (const line of await lines.all()) {

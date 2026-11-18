@@ -118,7 +118,14 @@ test("Jordan, owner of Google Cloud, manages the requests that name it, and only
   const gcp = await ask(request, CASEY, { kind: "process", title: title("Delete a GCP project"), platform: "google-cloud" });
   const azure = await ask(request, CASEY, { kind: "process", title: title("Delete an Azure subscription"), platform: "azure" });
   const declined = await ask(request, CASEY, { kind: "process", title: title("Move a GCP project to another folder"), platform: "google-cloud" });
+  // in Consumer mode a reader's view: nothing to manage
   await signIn(page, JORDAN);
+  await open(page, "/requests");
+  await expect(item(page, gcp.title)).toBeVisible();
+  await expect(item(page, gcp.title).locator(".req-actions")).toHaveCount(0);
+  expect((await list(page.request)).find((r) => r.id === gcp.id)!.canManage).toBe(true); // the right is there all the same
+
+  await signIn(page, JORDAN, { editor: true });
   await open(page, "/requests");
 
   // nothing to do on the Azure one, and the server refuses it too
@@ -129,8 +136,8 @@ test("Jordan, owner of Google Cloud, manages the requests that name it, and only
 
   // plan the Google Cloud one, with a note
   const mine = item(page, gcp.title);
-  await expect(mine.locator(".req-actions").getByRole("button")).toHaveText(["Plan", "Mark as done", "Decline"]);
-  await mine.getByRole("button", { name: "Plan", exact: true }).click();
+  await expect(mine.locator(".req-actions").getByRole("button")).toHaveText(["Mark as planned", "Mark as done", "Decline request"]);
+  await mine.getByRole("button", { name: "Mark as planned" }).click();
   const plan = page.getByRole("dialog", { name: "Mark as planned" });
   await plan.getByLabel("Note").fill("In the next sprint.");
   await plan.getByRole("button", { name: "Mark as planned" }).click();
@@ -160,7 +167,7 @@ test("Jordan, owner of Google Cloud, manages the requests that name it, and only
 
   // declined needs a reason
   await page.getByRole("group", { name: "State" }).getByRole("button", { name: /^Open/ }).click();
-  await item(page, declined.title).getByRole("button", { name: "Decline" }).click();
+  await item(page, declined.title).getByRole("button", { name: "Decline request" }).click();
   const decline = page.getByRole("dialog", { name: "Decline request" });
   await expect(decline.getByRole("button", { name: "Decline request" })).toBeDisabled();
   expect((await setState(page.request, declined.id, { state: "declined" })).status()).toBe(400);
@@ -182,9 +189,9 @@ test("Jordan, owner of Google Cloud, manages the requests that name it, and only
 test("Alex, a process editor, manages process requests but not standard requests", async ({ page, request }) => {
   const process = await ask(request, RILEY, { kind: "process", title: title("Request a service mesh namespace") });
   const standard = await ask(request, RILEY, { kind: "standard", title: title("Retention of audit logs") });
-  await signIn(page, ALEX);
+  await signIn(page, ALEX, { editor: true });
   await open(page, "/requests");
-  await expect(item(page, process.title).getByRole("button", { name: "Plan", exact: true })).toBeVisible();
+  await expect(item(page, process.title).getByRole("button", { name: "Mark as planned" })).toBeVisible();
   await expect(item(page, standard.title).locator(".req-actions")).toHaveCount(0);
   const refused = await setState(page.request, standard.id, { state: "planned" });
   expect(refused.status()).toBe(403);
@@ -195,7 +202,7 @@ test("Alex, a process editor, manages process requests but not standard requests
   // done with a standard of the right kind only
   const wrongKind = await setState(page.request, process.id, { state: "done", linkedId: "secure-logging" });
   expect(wrongKind.status()).toBe(400);
-  await item(page, process.title).getByRole("button", { name: "Plan", exact: true }).click();
+  await item(page, process.title).getByRole("button", { name: "Mark as planned" }).click();
   await page.getByRole("dialog", { name: "Mark as planned" }).getByRole("button", { name: "Mark as planned" }).click();
   await expect(page.locator(".toast", { hasText: "Marked as planned." })).toBeVisible();
   // and back to open
@@ -206,10 +213,10 @@ test("Alex, a process editor, manages process requests but not standard requests
   await expect(item(page, process.title)).toHaveClass(/state-open/);
 
   // an admin manages both
-  await signIn(page, DANA);
+  await signIn(page, DANA, { editor: true });
   await open(page, "/requests");
-  await expect(item(page, standard.title).getByRole("button", { name: "Plan", exact: true })).toBeVisible();
-  await expect(item(page, process.title).getByRole("button", { name: "Plan", exact: true })).toBeVisible();
+  await expect(item(page, standard.title).getByRole("button", { name: "Mark as planned" })).toBeVisible();
+  await expect(item(page, process.title).getByRole("button", { name: "Mark as planned" })).toBeVisible();
 });
 
 test("the person who asked may withdraw an open request of their own, nothing else", async ({ page, request }) => {
@@ -286,4 +293,139 @@ test("the lists and the empty search lead to the requests", async ({ page }) => 
   await expect(page).toHaveURL(/#\/requests$/);
   await open(page, "/");
   await expect(page.locator(".home-ask").getByRole("link", { name: "Ask for it, or vote for what others asked for" })).toHaveAttribute("href", "#/requests");
+});
+
+test.describe("what answers a request", () => {
+  const DRAFT = `req-answer-draft-${run}`, RETIRED = `req-answer-retired-${run}`, GONE = `req-answer-gone-${run}`;
+  test.beforeAll(async ({ request }) => {
+    await as(request, ALEX);
+    const { processes } = await (await request.get("/api/processes")).json();
+    const src = processes.find((p: { id: string }) => p.id === "request-github-repository");
+    for (const [id, t, status] of [[DRAFT, "Answer draft demo", "draft"], [RETIRED, "Answer retired demo", "deprecated"], [GONE, "Answer gone demo", "active"]]) {
+      const res = await request.put(`/api/processes/${id}?base=0`, { data: { ...src, id, title: `${t} ${run}`, status }, headers: CSRF });
+      expect(res.ok(), `${id}: ${await res.text()}`).toBeTruthy();
+    }
+  });
+  test.afterAll(async ({ request }) => {
+    await as(request, ALEX);
+    for (const id of [DRAFT, RETIRED, GONE]) await request.delete(`/api/processes/${id}`, { headers: CSRF });
+  });
+
+  test("only a published process answers a request; one removed later is said to be gone", async ({ page, request }) => {
+    const a = await ask(request, CASEY, { kind: "process", title: title("Answered by a retired process") });
+    const b = await ask(request, CASEY, { kind: "process", title: title("Answered by a process that goes") });
+    await signIn(page, DANA, { editor: true });
+
+    // a draft is refused; a retired one is accepted
+    const draft = await setState(page.request, a.id, { state: "done", linkedId: DRAFT });
+    expect(draft.status()).toBe(400);
+    expect((await draft.json()).error).toBe("Only a published process can answer a request. Publish it first.");
+    // the dialog offers only active processes
+    await open(page, "/requests");
+    await item(page, a.title).getByRole("button", { name: "Mark as done" }).click();
+    const dialog = page.getByRole("dialog", { name: "Mark as done" });
+    const offered = await dialog.getByLabel("The process that answers it").locator("option").allTextContents();
+    expect(offered).toContain("Request a GCP project");
+    expect(offered).toContain(`Answer gone demo ${run}`);
+    expect(offered).not.toContain(`Answer draft demo ${run}`);
+    expect(offered).not.toContain(`Answer retired demo ${run}`);
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    const retired = await setState(page.request, a.id, { state: "done", linkedId: RETIRED });
+    expect(retired.status(), await retired.text()).toBe(200);
+    expect((await retired.json()).linkedId).toBe(RETIRED);
+
+    // answered, then the answer is deleted: still done, the answer is said to be gone
+    expect((await setState(page.request, b.id, { state: "done", linkedId: GONE })).ok()).toBeTruthy();
+    await as(request, ALEX);
+    expect((await request.delete(`/api/processes/${GONE}`, { headers: CSRF })).ok()).toBeTruthy();
+    const gone = (await list(page.request)).find((r) => r.id === b.id) as Req & { linkedGone?: boolean };
+    expect(gone).toMatchObject({ state: "done", linkedId: "", linkedGone: true });
+    await open(page, "/requests?state=done");
+    await expect(item(page, b.title).locator("a.req-answer")).toHaveCount(0);
+    await expect(item(page, b.title).locator(".req-gone")).toHaveText("the process that answered it has been removed since.");
+    await expect(item(page, a.title).locator("a.req-answer")).toHaveText(`Answer retired demo ${run}`);
+
+    // a new process under the same id does not become the answer
+    const { processes } = await (await request.get("/api/processes")).json();
+    const src = processes.find((p: { id: string }) => p.id === "request-github-repository");
+    expect((await request.put(`/api/processes/${GONE}?base=0`, { data: { ...src, id: GONE, title: `Answer gone demo again ${run}`, status: "active" }, headers: CSRF })).ok()).toBeTruthy();
+    expect((await list(page.request)).find((r) => r.id === b.id)).toMatchObject({ linkedId: "", linkedGone: true });
+    await page.reload();
+    await expect(item(page, b.title).locator(".req-gone")).toBeVisible();
+    await expect(item(page, b.title).locator("a.req-answer")).toHaveCount(0);
+  });
+});
+
+test("an admin removes a request for good", async ({ page, request }) => {
+  const r = await ask(request, RILEY, { kind: "standard", title: title("Something nobody needs") });
+  // not in Consumer mode
+  await signIn(page, DANA);
+  await open(page, "/requests");
+  await expect(item(page, r.title).getByRole("button", { name: "Remove" })).toHaveCount(0);
+  await signIn(page, DANA, { editor: true });
+  await open(page, "/requests");
+  await item(page, r.title).getByRole("button", { name: "Remove", exact: true }).click();
+  const confirm = page.getByRole("dialog", { name: "Remove this request?" });
+  await expect(confirm).toContainText(r.title);
+  await confirm.getByRole("button", { name: "Remove request" }).click();
+  await expect(page.locator(".toast", { hasText: "The request was removed." })).toBeVisible();
+  await expect(item(page, r.title)).toHaveCount(0);
+  expect((await list(page.request)).some((x) => x.id === r.id)).toBe(false);
+  // nobody else may
+  const other = await ask(request, RILEY, { kind: "standard", title: title("Something else nobody needs") });
+  await as(request, ALEX);
+  expect((await request.delete(`/api/requests/${other.id}`, { headers: CSRF })).status()).toBe(403);
+});
+
+test("text with invisible or direction-changing characters is refused", async ({ page, request }) => {
+  await signIn(page, DANA);
+  const post = (data: Record<string, string>) => page.request.post("/api/requests", { data: { kind: "process", title: title("A fine title"), description: "A fine description of the need.", ...data }, headers: CSRF });
+  for (const [data, said] of [
+    [{ title: `Rotate keys ‮gnirts ${run}` }, "The title contains characters that change the reading direction. Remove them and try again."],
+    [{ title: `Bell\u0007 in the title ${run}` }, "The title contains control characters. Remove them and try again."],
+    [{ title: "​​​​​​" }, "The title has no visible characters."],
+    [{ description: "Needed because‮ of reasons." }, "The description contains characters that change the reading direction. Remove them and try again."],
+    [{ description: "⁠⁠⁠⁠⁠⁠⁠⁠⁠⁠⁠" }, "The description has no visible characters."],
+  ] as const) {
+    const res = await post(data);
+    expect(res.status(), JSON.stringify(data)).toBe(400);
+    expect((await res.json()).error).toBe(said);
+  }
+  // a description may have more than one line
+  const ok = await ask(request, CASEY, { kind: "process", title: title("Request a message queue"), description: "Line one.\nLine two, with the reason." });
+  expect(ok.title).toBe(title("Request a message queue"));
+  // a note says the same
+  await signIn(page, DANA);
+  const note = await setState(page.request, ok.id, { state: "declined", note: "No‮" });
+  expect(note.status()).toBe(400);
+  expect((await note.json()).error).toMatch(/^The note /);
+  // and feedback
+  const fb = await page.request.post("/api/feedback", { data: { targetKind: "process", targetId: "request-gcp-project", kind: "broken", text: "​​​​​​​​​​" }, headers: CSRF });
+  expect(fb.status()).toBe(400);
+});
+
+test("one person can ask for at most 10 in an hour, withdrawn ones included", async ({ page }) => {
+  // Jordan asks for nothing in any other test, so the brake is his alone
+  await signIn(page, JORDAN);
+  const made: number[] = [];
+  for (let i = 1; i <= 10; i++) {
+    const res = await page.request.post("/api/requests", { data: { kind: "process", title: title(`Brake test ${i}`), description: "Asked only to test the brake." }, headers: CSRF });
+    expect(res.status(), `request ${i}`).toBe(201);
+    made.push((await res.json()).id);
+  }
+  const eleventh = await page.request.post("/api/requests", { data: { kind: "process", title: title("Brake test 11"), description: "Asked only to test the brake." }, headers: CSRF });
+  expect(eleventh.status()).toBe(429);
+  expect((await eleventh.json()).error).toBe("You have made a lot of requests in the last hour. Please try again later.");
+  // withdrawing does not make room
+  for (const id of made) expect((await page.request.delete(`/api/requests/${id}`, { headers: CSRF })).status()).toBe(204);
+  const again = await page.request.post("/api/requests", { data: { kind: "process", title: title("Brake test 12"), description: "Asked only to test the brake." }, headers: CSRF });
+  expect(again.status()).toBe(429);
+  // the form says so in words
+  await open(page, "/requests");
+  await page.getByRole("button", { name: "Ask for a process or standard" }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Ask for a process or standard" });
+  await dialog.getByLabel("Name").fill(title("Brake test in the form"));
+  await dialog.getByLabel("What is needed and why").fill("Asked only to test the brake.");
+  await dialog.getByRole("button", { name: "Send request" }).click();
+  await expect(dialog).toContainText("You have made a lot of requests in the last hour. Please try again later.");
 });

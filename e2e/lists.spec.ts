@@ -256,8 +256,8 @@ test("Details: an editor says what a process belongs to and its rigour; readers 
     await open(page, "/processes");
     const card = page.locator(".card", { hasText: "Details demo" });
     await expect(card.locator(".card-cat")).toHaveText("Network");
-    await expect(card.locator('[data-line="platform"]')).toHaveText("PlatformAzure");
-    await expect(card.locator('[data-line="practice"]')).toHaveText("PracticeService management");
+    await expect(card.locator('[data-line="platform"]')).toHaveText("Platform:Azure");
+    await expect(card.locator('[data-line="practice"]')).toHaveText("Practice:Service management");
     await expect(card.locator('[data-line="rigour"]')).toContainText("Mandatory");
     await expect(card.locator(".card-lines")).not.toContainText("service-management");
     await pickFilter(page, "Category", "Network");

@@ -5,9 +5,15 @@ import { ALEX, CASEY, CSRF, DANA, JORDAN, open, report, RILEY, SAM, serverToday,
 // Admin > Statistics: how much each process and standard is used. The numbers are made in the
 // test, on a process of its own, by every built-in person.
 
-const ID = "statistics-demo";
+// new ids for every start of the file: a skill download counts once per person, skill and day,
+// so a process deleted and made again under the same id the same day would count no downloads
+const run = Date.now().toString(36);
+const ID = `statistics-demo-${run}`;
 const TITLE = "Statistics demo";
 const EVERYONE = [SAM, ALEX, CASEY, RILEY, JORDAN, DANA];
+const FORMULA = `statistics-formula-demo-${run}`; // a draft whose title starts like a spreadsheet formula
+const RETIRED = `statistics-retired-demo-${run}`;
+const GONE = `statistics-gone-demo-${run}`; // viewed, then deleted
 
 async function as(request: APIRequestContext, email: string) {
   await request.post("/auth/dev/login", { data: { email }, headers: CSRF });
@@ -19,20 +25,34 @@ test.beforeAll(async ({ request }) => {
   const src = processes.find((p: { id: string }) => p.id === "request-gcp-project"); // on Google Cloud
   await request.delete(`/api/processes/${ID}`, { headers: CSRF });
   expect((await request.put(`/api/processes/${ID}?base=0`, { data: { ...src, id: ID, title: TITLE, status: "active" }, headers: CSRF })).ok()).toBeTruthy();
-  // six people view it (twice each: still one view a day each), one upvotes, three downloads of its skill, one piece of feedback
+  // six people view it (twice each: still one view a day each), one upvotes, three people download
+  // its skill (Sam twice: still one download a day), one piece of feedback
   for (const who of EVERYONE) {
     await as(request, who);
-    for (let i = 0; i < 2; i++) expect((await request.post(`/api/views/process/${ID}`, { headers: CSRF })).status()).toBe(204);
+    for (let i = 0; i < 2; i++) expect((await request.post(`/api/views/process/${ID}`, { headers: CSRF })).status()).toBe(200);
+  }
+  for (const who of [SAM, SAM, CASEY, RILEY]) {
+    await as(request, who);
+    expect((await request.get(`/api/skills/process-${ID}/download`)).ok()).toBeTruthy();
   }
   await as(request, SAM);
   expect((await request.put(`/api/upvotes/process/${ID}`, { headers: CSRF })).ok()).toBeTruthy();
-  for (let i = 0; i < 3; i++) expect((await request.get(`/api/skills/process-${ID}/download`)).ok()).toBeTruthy();
   await report(request, SAM, { targetId: ID, text: "The statistics demo has a problem." });
+
+  await as(request, ALEX);
+  const docs: [string, string, string][] = [[FORMULA, " =1+1 Formula demo", "draft"], [RETIRED, "Retired statistics demo", "deprecated"], [GONE, "Gone statistics demo", "active"]];
+  for (const [id, title, status] of docs) {
+    await request.delete(`/api/processes/${id}`, { headers: CSRF });
+    const res = await request.put(`/api/processes/${id}?base=0`, { data: { ...src, id, title, status }, headers: CSRF });
+    expect(res.ok(), `${id}: ${await res.text()}`).toBeTruthy();
+  }
+  expect((await request.post(`/api/views/process/${GONE}`, { headers: CSRF })).status()).toBe(200);
+  expect((await request.delete(`/api/processes/${GONE}`, { headers: CSRF })).ok()).toBeTruthy();
 });
 
 test.afterAll(async ({ request }) => {
   await as(request, ALEX);
-  await request.delete(`/api/processes/${ID}`, { headers: CSRF });
+  for (const id of [ID, FORMULA, RETIRED]) await request.delete(`/api/processes/${id}`, { headers: CSRF });
 });
 
 const cells = async (row: Locator) => (await row.locator("td").allTextContents()).map((t) => t.trim());
@@ -157,8 +177,57 @@ test("the trend of views per week has a text alternative", async ({ page }) => {
   expect(weeks).toBe(await chart.locator("rect.stat-bar").count());
   const viewsThisWeek = num(await alt.locator("tbody tr").last().locator("td").nth(1).innerText());
   expect(viewsThisWeek).toBeGreaterThanOrEqual(6);
-  // weeks start on a Monday
-  for (const w of await alt.locator("tbody tr td:first-child").allTextContents()) expect(new Date(`${w}T00:00:00Z`).getUTCDay(), w).toBe(1);
+  // the weeks as the server sends them: Mondays, oldest first, each with how many of its days are in the period
+  const { trend, from, to } = await (await page.request.get("/api/admin/statistics?period=30")).json();
+  expect(trend.length).toBe(weeks);
+  for (const w of trend) {
+    expect(new Date(`${w.week}T00:00:00Z`).getUTCDay(), w.week).toBe(1);
+    expect(w.days).toBeGreaterThanOrEqual(1);
+    expect(w.days).toBeLessThanOrEqual(7);
+  }
+  expect(trend.reduce((n: number, w: { days: number }) => n + w.days, 0)).toBe(30);
+  expect(trend[0].week <= from && from < trend[1].week).toBe(true);
+  expect(trend[trend.length - 1].week <= to).toBe(true);
+  // a week only partly in the period is drawn lighter, said under the chart and in the table
+  const partial = trend.filter((w: { days: number }) => w.days < 7);
+  expect(partial.length).toBeGreaterThanOrEqual(1); // 30 days are never whole weeks
+  await expect(chart.locator("rect.stat-bar.partial")).toHaveCount(partial.length);
+  await expect(page.locator("p.stat-partial-note")).toHaveText("Lighter bars: weeks only partly inside the period (the first or the last).");
+  const names = await alt.locator("tbody tr td:first-child").allTextContents();
+  trend.forEach((w: { days: number }, i: number) => expect(names[i]).toMatch(w.days < 7 ? new RegExp(`^Week of .+, ${w.days} days?$`) : /^Week of \d+ \w+$/));
+});
+
+test("groups end with what belongs to none; deleted documents are explained, not hidden", async ({ page }) => {
+  await statistics(page);
+  await page.getByRole("group", { name: "Period" }).getByRole("button", { name: "7 days" }).click();
+  // views of a document deleted since are in the totals, with a sentence that says so
+  const { totals } = await (await page.request.get("/api/admin/statistics?period=7")).json();
+  expect(totals.deletedViews).toBeGreaterThanOrEqual(1);
+  await expect(page.locator("p.stat-deleted")).toContainText(/^The totals include \d[\d,]* views?( and \d[\d,]* skill downloads?)? of processes and standards that were deleted since; the table below shows only those that still exist\.$/);
+  await expect(page.getByRole("link", { name: "Gone statistics demo" })).toHaveCount(0);
+
+  const { groups } = await (await page.request.get("/api/admin/statistics?period=7")).json();
+  const grouped = page.getByRole("group", { name: "Totals grouped" });
+  for (const [key, button, none] of [["platform", "By platform", "No platform"], ["practice", "By practice", "No practice"], ["team", "By owning team", "No owning team"]]) {
+    await grouped.getByRole("button", { name: button }).click();
+    const rows = page.getByRole("region", { name: `Totals ${button.toLowerCase()}` }).locator("tbody tr");
+    const hasNone = groups[key].some((g: { id: string }) => g.id === "");
+    // the GCP copies belong to no practice; every process and standard has an owning team
+    if (key === "practice") expect(hasNone).toBe(true);
+    await expect(rows.first()).toBeVisible();
+    if (hasNone) await expect(rows.last().locator("td").first()).toHaveText(none);
+    await expect(rows.filter({ has: page.locator("td", { hasText: new RegExp(`^${none}$`) }) })).toHaveCount(hasNone ? 1 : 0);
+  }
+  // the practice of the GCP copies is empty: they are counted under "No practice"
+  const noPractice = page.getByRole("region", { name: "Totals by practice" });
+  await grouped.getByRole("button", { name: "By practice" }).click();
+  expect(num((await cells(noPractice.locator("tbody tr").last()))[2])).toBeGreaterThanOrEqual(6);
+
+  // the explanation on the page
+  const about = page.locator(".stat-about");
+  await expect(about).toContainText("Views by admins and editors count like everyone else's.");
+  await expect(about).toContainText("A skill download counts once per person per skill per day.");
+  await expect(about).toContainText("midnight to midnight UTC");
 });
 
 test("Download as CSV gives a file with a header line and a line per process and standard", async ({ page }) => {
@@ -177,6 +246,10 @@ test("Download as CSV gives a file with a header line and a line per process and
   expect(line).toBeDefined();
   expect(line).toContain(`Process,${TITLE},${ID},Active,Cloud Platform team,Google Cloud,`);
   expect(line.split(",").slice(-7)).toEqual(["6", "6", "3", "1", "1", "1", "0"]);
+  // the status in words, and a title that starts like a formula is not run by a spreadsheet
+  expect(lines.find((l) => l.includes(`,${RETIRED},`))).toContain(`Process,Retired statistics demo,${RETIRED},Retired,`);
+  const formula = lines.find((l) => l.includes(`,${FORMULA},`))!;
+  expect(formula).toMatch(new RegExp(`^Process,'\\s*=1\\+1 Formula demo,${FORMULA},Draft,`));
 
   // the link on the page downloads the same file
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "Download as CSV" }).click()]);

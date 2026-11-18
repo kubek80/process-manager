@@ -39,11 +39,15 @@ test("the hint shows how to use the map until the person opened a step", async (
   await signIn(page, SAM);
   await open(page, `/p/${GCP}/flow`);
   const hint = page.locator(".map-hint");
-  await expect(hint).toContainText("Select a step to see what to do, who does it and with which tool.");
-  await expect(hint).toContainText("Drag the map to move around.");
+  await expect(hint).toHaveText("Select a step on the map to see what to do, who does it and with which tool.");
+  // in the row of the tabs, above the map
+  await expect(page.locator(".tabs-row .map-hint")).toBeVisible();
+  // how to move the map is said under it, and stays
+  await expect(page.locator(".flow-foot .map-pan-hint")).toHaveText("Drag the map to move around");
   await block(page, "Approve the monthly budget").locator(".block-main").click();
   await expect(page.locator(".drawer h3")).toHaveText("Approve the monthly budget");
   await expect(hint).toHaveCount(0);
+  await expect(page.locator(".map-pan-hint")).toBeVisible();
   await page.reload();
   await expect(page.locator(".block").first()).toBeVisible();
   await expect(hint).toHaveCount(0);
@@ -186,4 +190,13 @@ test("a reader cannot report on a process through another person's name", async 
   });
   expect(res.status()).toBe(201);
   expect((await res.json()).author.email).toBe(SAM);
+});
+
+test("on a phone the map says nothing about dragging: a finger scrolls it", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page, SAM);
+  await open(page, `/p/${GCP}/flow`);
+  await expect(page.locator(".map-hint")).toBeVisible();
+  await expect(page.locator(".map-pan-hint")).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 });
