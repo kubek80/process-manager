@@ -73,6 +73,18 @@ export const automationFlow = flow("guide-automation", "Planned: an agent follow
     s("report", "Track and report back", "agent", "verify", []),
   ]);
 
+export const meaningFlow = flow("guide-meaning", "From a save to a search by meaning", "How a published process or standard becomes findable by meaning.",
+  [["app", "Portal server"], ["provider", "Embeddings provider"], ["reader", "Reader"]],
+  [
+    s("save", "Publish or save a change", "me", "document", ["parts"], "drafts are left out"),
+    s("parts", "Cut it into parts", "app", "automation", ["vectors"], "summary, steps, requirements"),
+    s("vectors", "Turn each part into numbers", "provider", "automation", ["keep"], "built-in or Vertex AI"),
+    s("keep", "Keep them in the search index", "app", "automation", ["ask"], "only changed parts"),
+    s("ask", "Search by Meaning", "reader", "form", ["closest"], "Enter or Search"),
+    s("closest", "Find the closest parts", "app", "automation", ["open"], "grouped by document"),
+    s("open", "Open the matching step", "reader", "task", [], "or requirement"),
+  ], "Editor");
+
 export const signInFlow = flow("guide-sign-in", "Signing in", "How you get into the app and how your rights are decided.",
   [["app", "Process Manager"], ["idp", "Entra ID or Google"]],
   [

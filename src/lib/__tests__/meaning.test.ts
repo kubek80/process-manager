@@ -125,6 +125,11 @@ describe("when the server is asked", () => {
     expect(problemOf(new ApiError(0, "The server cannot be reached."))).toMatchObject({ kind: "unavailable" });
     expect(problemOf(new ApiError(404, "Search by meaning is not switched on."))).toMatchObject({ kind: "off" });
   });
+  it("keeps the server's sentence when search by meaning is not ready yet", () => {
+    const ready = "Search by meaning is not ready yet. Try again in a moment, or search by words.";
+    expect(problemOf(new ApiError(503, ready))).toEqual({ kind: "notready", message: ready });
+    expect(problemOf(new ApiError(503, ""))).toEqual({ kind: "notready", message: ready });
+  });
 });
 
 describe("what the page shows", () => {

@@ -22,6 +22,7 @@ Agents also get the knowledge as **generated skills** (see `docs/backend.md` and
 | --- | --- |
 | `npm run mcp` | Builds and starts the MCP server against the development database, with the settings of `npm run dev` (search by meaning with `builtin`). Start `npm run dev` once first: the portal server creates and fills the database. It prints the address and an example client configuration. |
 | `go run ./cmd/mcp` (in `server/`) | The same by hand; settings from the environment. |
+| `CGO_ENABLED=0 go build -trimpath -o mcp ./cmd/mcp` (in `server/`) | A binary to deploy. The portal's `Dockerfile` does not include it: run it next to the portal server, with the same database and the same search settings. |
 
 Endpoints: `POST /mcp` (streamable HTTP, [official Go SDK](https://github.com/modelcontextprotocol/go-sdk) v1.8.0) and `GET /healthz` (`ok`, or 503 when the database cannot be reached; it needs no secret and says nothing else). The server is stateless: every request stands on its own, nothing is kept between calls. A `GET /mcp` (a stream of messages from the server) is answered with 405, as the protocol allows: the server never sends anything on its own.
 
@@ -37,13 +38,15 @@ Endpoints: `POST /mcp` (streamable HTTP, [official Go SDK](https://github.com/mo
 | `PM_EMBEDDINGS` and the other settings of search by meaning | `off` | As in the portal (`docs/backend.md`). They must be the same as the portal server's: the portal server builds the search index, the MCP server only reads it. |
 | `PM_LOG_FORMAT` | `text` | `text` or `json`. |
 
-At start it logs where it listens, whether a secret is required, whether search by meaning is on and with which provider, and whether text leaves the company. With `PM_EMBEDDINGS=vertex` **every search query of an agent is sent to Google Vertex AI** to be turned into a vector; the log says so.
+At start it logs where it listens, whether a secret is required, whether search by meaning is on and with which provider, and whether text leaves the company. With `PM_EMBEDDINGS=vertex` **every search query of an agent is sent to Google Vertex AI** to be turned into a vector; the log says so. What else leaves the company with Vertex AI, and what has to be checked before its first real use, is in `docs/backend.md` (Search by meaning).
+
+The server speaks plain HTTP. When it listens beyond this machine, set `PM_MCP_SECRET` and put it behind a proxy that adds HTTPS, so that the secret and the person headers do not travel in the clear.
 
 ## The guard (until agents sign in)
 
 Sign-in for agents is not built (see below). Until then two rules stand in for it:
 
-- **Without `PM_MCP_SECRET`** the server refuses to start on an address other than this machine (`127.0.0.1`, `::1`, `localhost`), and refuses calls that do not come from this machine. Anything running on the machine can call it. The person headers are ignored, so the server is read-only.
+- **Without `PM_MCP_SECRET`** the server refuses to start on an address other than this machine (`127.0.0.1`, `::1`, `localhost`), and refuses calls that do not come from this machine (`403`). Anything running on the machine can call it. The person headers are ignored, so the server is read-only. Do not put a proxy on the same machine in front of it without a secret: every call through that proxy comes from this machine and would be accepted.
 - **With `PM_MCP_SECRET`** it may listen anywhere, and every call must carry `Authorization: Bearer <secret>`. A missing or wrong secret gets `401` with the same answer either way; the comparison takes the same time whatever was sent.
 
 **The person an agent acts for**: header `X-PM-Person: <email>` (and optionally `X-PM-Person-Name: <name>`). It is honoured **only** with the secret configured and presented; a value that is not an email address is refused with `400`. Only then is `report_problem` listed and callable. The server cannot check that the email is really the person's: whoever holds the secret is trusted to name the right person.

@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Bookmark, Bot, Boxes, CalendarCheck, ChartColumn, Check, Compass, Eye, Flag, Hand, History, KeyRound, Lightbulb, List, Search, Share2, ShieldCheck, GripVertical, Layers, ListChecks, MousePointerClick, Pencil, Plus, Sparkles, Tag, ThumbsUp, Users, Workflow } from "lucide-react";
 import type { Process } from "../types";
 import { STEP_META, STEP_TYPES } from "../lib/stepMeta";
-import { aiFlow, automationFlow, feedbackFlow, followFlow, requestFlow, reviewFlow, rightsFlow, signInFlow, standardFlow, versionFlow } from "../guide/flows";
+import { aiFlow, automationFlow, feedbackFlow, followFlow, meaningFlow, requestFlow, reviewFlow, rightsFlow, signInFlow, standardFlow, versionFlow } from "../guide/flows";
 import { FlowView } from "./FlowView";
 import { scrollBehavior, TypeIcon } from "./ui";
 
@@ -30,7 +30,7 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
   ] },
   { title: "For AI assistants", items: [
     ["skills", "Skills and review agents"],
-    ["agents", "For agents: MCP"],
+    ["agents", "For agents: the MCP server"],
     ["roadmap", "Planned: automation"],
   ] },
   { title: "Administration", items: [
@@ -109,16 +109,27 @@ export function GuidePage() {
 
         <Section id="find" title="Finding a process or standard">
           <p><b>Home</b>, the first page and the first link in the top bar, is one search over processes and standards together. Type what you need, such as “GCP project” or “logging”, and press <b>Search</b>. Every word you type must be found somewhere in a process or standard; capitals and accents do not matter.</p>
+          <p><b>By words or by meaning.</b> Where the portal has search by meaning switched on, the search results have a switch under the search box, <b>Search by</b>, with three choices and a line on each:</p>
+          <dl className="guide-dl">
+            <div><dt>Words</dt><dd>Finds what contains every word you type, as described above, and the results follow as you type. Use it when you know a word that must be in it: a name, a tool, an id such as SEC-LOG-01.</dd></div>
+            <div><dt>Meaning</dt><dd>Puts first what comes closest to what you type, even when not every word is in it. Use it when you do not know the words the owners used, or to ask in a sentence, such as “where do I keep passwords for my service”. How well it understands depends on how the portal is set up: some installations compare the meaning, others mainly match words and parts of words, so that “logging” also finds “logs”. It finds only published processes and standards, never drafts, also not in Editor mode.</dd></div>
+            <div><dt>Both</dt><dd>Shows what either finds, the best of each first; what both find rises. Each card says whether it was found by words, by meaning, or by both.</dd></div>
+            <div><dt>When it searches</dt><dd>With Meaning and Both, the search is made when you press Enter or <b>Search</b>, when you change the choice, and when you arrive with a search, from Home or a link; not while you type. Until you press Enter, the results stay those of your earlier search, and a line says so: “These results are for the earlier search …”.</dd></div>
+            <div><dt>The same tools</dt><dd>The filters, the counts next to them, My application, the pages and “Found in” work the same with all three choices. “Found in” then names the step, the requirement, the prerequisite (“Before you start”), the scope or the summary that came closest.</dd></div>
+            <div><dt>Your choice</dt><dd>Is remembered in this browser: the next search you start from Home is made the same way. The address holds it too, so a shared link searches the same way.</dd></div>
+            <div><dt>When it does not work</dt><dd>If search by meaning is not available or not ready yet, the page says so and offers <b>Search by words instead</b>; with Both you see what words find in the meantime. If you search very often within a minute, it asks you to wait a moment. When Meaning finds nothing close, it offers to search by words, and the other way round.</dd></div>
+            <div><dt>Where your words go</dt><dd>When the line under the switch says “With Meaning and Both, what you type is sent to Google Cloud to be compared.”, that is what happens: so type a question, not confidential details. Without that line, what you type stays in the portal. Words never sends anything anywhere.</dd></div>
+          </dl>
           <p>Below the search box are the ways in without typing: <b>All processes</b> and <b>All standards</b>; <b>Your bookmarks</b>, once you have some (the newest six, and <b>Show all</b> for the rest); a link to <b>Requests</b> for what is missing; and <b>By platform</b>, <b>By practice</b> and <b>By category</b>, each with the number of processes and standards it leads to.</p>
           <p>The search results, <b>Processes</b> and <b>Standards</b> in the top bar all look the same: the filters on the left, the results as cards on the right, in pages. All three search inside as well, in the steps, requirements, prerequisites and scope.</p>
           <dl className="guide-dl">
-            <div><dt><Search size={14} />The order</dt><dd>The best matches come first: a word in the name counts more than a word deep inside. Without words to search for, the list is in alphabetical order.</dd></div>
+            <div><dt><Search size={14} />The order</dt><dd>The best matches come first. By words, a word in the name counts more than a word deep inside; by meaning, what comes closest. Without words to search for, the list is in alphabetical order.</dd></div>
             <div><dt>Filters</dt><dd>On the left. <b>Category</b>, <b>Platform</b>, <b>Practice</b>, <b>Rigour</b> and <b>Owner</b> (the owning team) are lists that open when you press them; the search results also have <b>Type</b> (processes or standards). Tick several values of one filter to see what matches any of them; filters of different kinds must all match. Every value shows how many results it would give; values that give nothing are greyed out or left out. Processes and standards without a category are under <b>Other</b>, at the end.</dd></div>
             <div><dt>More filters</dt><dd><b>Only my bookmarks</b> shows what you bookmarked. <b>My application</b> (tier, environment, language) hides what does not apply to your application; your choice is remembered for every list and every standard. In Editor mode, when something you may change is due for a review, <b>Only what needs a review</b> shows just that; it stays on until you turn it off. Until your bookmarks have been loaded, “Only my bookmarks” cannot be ticked, and says why. The Processes and Standards lists also have a search box of their own at the top of the filters.</dd></div>
             <div><dt>The chosen filters</dt><dd>Listed above the results, each with a cross to remove it; <b>Clear all filters</b> removes them all. On a narrow screen the filters are folded away: the <b>Filters</b> button opens them and says how many are chosen, and a button at the end of the filters, such as “Show 12 processes”, closes them and goes to the results.</dd></div>
             <div><dt>Pages</dt><dd>The line above the results says how many there are and which are shown, such as “Showing 13–24 of 57 processes”. Choose 12, 24 or 48 per page; the choice is remembered in your browser for every list. The page numbers are above and below the results. A new search or filter starts again on the first page; Back, or reloading the page, returns to the page you were on.</dd></div>
             <div><dt>Rigour</dt><dd>A process says itself how binding it is. A standard is as binding as its requirements: <b>must</b> counts as mandatory, <b>should</b> as recommended, <b>may</b> as optional. A standard is found under every rigour it has at least one requirement of, and its card says how many of each it has, such as “3 mandatory, 1 recommended”.</dd></div>
-            <div><dt>Share a search</dt><dd>The address in your browser holds the whole search: the words, every filter, the page and how many are on it. Copy it to send a colleague exactly these results. Open a result and press Back to return to the same results. The Processes and Standards lists keep your search and filters while you look at one and come back.</dd></div>
+            <div><dt>Share a search</dt><dd>The address in your browser holds the whole search: the words, by words or by meaning, every filter, the page and how many are on it. Copy it to send a colleague exactly these results. Open a result and press Back to return to the same results. The Processes and Standards lists keep your search and filters while you look at one and come back.</dd></div>
             <div><dt>Nothing found</dt><dd>The page says so and why. With filters, it tells you how many results there would be without them and offers to remove them one at a time. It also points to <b>Requests</b>, to ask for what is missing.</dd></div>
             <div><dt>Drafts and retired ones</dt><dd>Drafts are only found in Editor mode, by the people who may change them, and are marked as drafts. Retired processes and standards are found and marked as retired.</dd></div>
           </dl>
@@ -252,7 +263,7 @@ export function GuidePage() {
             <div><dt><ThumbsUp size={14} />Upvote</dt><dd>Says “this is useful”. Everyone sees how many upvotes a process or standard has; one per person, and pressing it again takes yours back, even when it has become a draft since. It tells owners what people rely on.</dd></div>
             <div><dt><Share2 size={14} />Share</dt><dd>On the page of a process or standard. <b>Copy link</b> copies its address. <b>Copy message for Slack</b> and <b>Copy message for Google Chat</b> copy its name, its summary and the link, ready to paste into that chat, where the name shows in bold. <b>Email</b> opens your mail program with the subject and text filled in. Each option says what it does, and after copying the dialog says what was copied. Nothing is sent for you, and the link always leads to the whole process or standard. If your browser does not allow copying, the text is shown to copy by hand.</dd></div>
             <div><dt><Eye size={14} />Views</dt><dd>Opening a process or standard counts as a view, once per person per day however often you open it; a day runs from midnight to midnight UTC. Views by admins and editors count like anyone else’s. The portal counts views and different people; nobody, admins included, can see who viewed what.</dd></div>
-            <div><dt>Skill downloads</dt><dd>How often the skill or review agent of a process or standard was downloaded from the portal: once per person per skill per day, like views, and nobody is shown who. Each run of an export that writes the skills to files counts one per skill. It stands for how much AI assistants use it; what they do with it afterwards is not counted.</dd></div>
+            <div><dt>Skill downloads</dt><dd>How often the skill or review agent of a process or standard was downloaded from the portal: once per person per skill per day, like views, and nobody is shown who. Each run of an export that writes the skills to files counts one per skill. It stands for how much AI assistants use it; what they do with it afterwards is not counted, and neither are the questions assistants ask the portal over its MCP server.</dd></div>
           </dl>
           <p>Drafts stay hidden here too: what you may not see is not counted for you and not listed in your bookmarks, and you cannot newly upvote it.</p>
         </Section>
@@ -344,31 +355,36 @@ export function GuidePage() {
           <Chart process={standardFlow} caption="A rule written once reaches the code twice: as guidance while writing, and as a check when reviewing." />
           <dl className="guide-dl">
             <div><dt>Always current</dt><dd>Saving a process or standard produces a new version of its skills. Each version is numbered and names the version of the process or standard it was made from, so a repository holding an old copy can tell. Skills that mention another process or standard follow it too: when that one is renamed they get the new name, and when it is retired or deleted they stop pointing at its skill.</dd></div>
-            <div><dt>Where to find them</dt><dd>The <b>Skill</b> or <b>Skills</b> tab of a process or standard, and <b>Admin › Skills</b> for all of them. Copy or download; the page shows where the file belongs in a repository. Each download is counted and shown on the process or standard as its skill downloads.</dd></div>
+            <div><dt>Where to find them</dt><dd>The <b>Skill</b> or <b>Skills</b> tab of a process or standard, and <b>Admin › Skills</b> for all of them. Copy or download; the page shows where the file belongs in a repository. Each download is counted and shown on the process or standard as its skill downloads. An assistant connected to the portal’s MCP server can also read them itself.</dd></div>
             <div><dt>Extra guidance</dt><dd>Editors can add hand-written notes to a skill, for example an exemption. They are added to every new version and survive changes of the source.</dd></div>
             <div><dt>Links to other skills</dt><dd>A process or a step can also link to skills kept elsewhere, such as one that updates an infrastructure repository. Those are shown under “Do it faster”.</dd></div>
           </dl>
           <p>The generated files follow the Claude Code layout: skills under <code>.claude/skills/</code>, review agents under <code>.claude/agents/</code>.</p>
         </Section>
 
-        <Section id="agents" title="For agents: MCP">
-          <p>The same knowledge is meant for people and for AI agents. People use this app. Agents will use an <b>MCP server</b> (Model Context Protocol) on top of the same content. The server is <b>not built yet</b>; the contract below is the plan, described in full in <code>docs/mcp.md</code>.</p>
+        <Section id="agents" title="For agents: the MCP server">
+          <p>People use this app. AI assistants and agents can ask the portal the same questions through its <b>MCP server</b> (Model Context Protocol, the usual way to connect an assistant to a source of knowledge). They get the same published content as people: one answer, whoever asks. Where your installation runs it, whoever looks after the portal tells you the address to give your assistant.</p>
           <table className="guide-table">
             <tbody>
-              <tr><td><code>search_processes</code>, <code>search_standards</code></td><td>Find what applies, by words, category, platform, practice, rigour, tier, environment and language. Only what is active.</td></tr>
-              <tr><td><code>get_process</code>, <code>get_standard</code></td><td>The full content, with names and contacts resolved.</td></tr>
-              <tr><td><code>get_my_steps</code></td><td>Only the steps of one participant, in order, with exact actions.</td></tr>
-              <tr><td><code>get_skill</code></td><td>The latest version of a generated skill or review agent.</td></tr>
-              <tr><td><code>get_catalog</code></td><td>Teams, practices and platforms with contacts and members, categories, tools with links, tiers, environments and languages.</td></tr>
-              <tr><td><code>report_problem</code></td><td>File feedback on a step or a requirement, the same as the flag in the app.</td></tr>
+              <tr><td><code>search_processes</code>, <code>search_standards</code></td><td>Find what is in use, by words or, where search by meaning is switched on, by meaning; narrowed by category, platform, practice, owning team, rigour, tier, environment and language. Retired ones and drafts are not found.</td></tr>
+              <tr><td><code>get_process</code>, <code>get_standard</code></td><td>One published process or standard in full, with names and contacts filled in. A retired one is marked and says what replaces it. A standard can be narrowed to what applies to one application.</td></tr>
+              <tr><td><code>get_my_steps</code></td><td>Only the steps of one participant, in the order the process runs, with what each waits for, what follows, and whether the assistant may do it itself: never an approval, never a step of someone else.</td></tr>
+              <tr><td><code>get_skill</code></td><td>A generated skill or review agent, the latest version unless an older one is asked for.</td></tr>
+              <tr><td><code>get_catalog</code></td><td>Teams, practices and platforms with their contacts, categories, tools with links, tiers, environments and languages. The members only where the installation vouches for the assistant.</td></tr>
+              <tr><td><code>report_problem</code></td><td>Feedback on a process, a standard, a step or a requirement, in your name, the same as the flag in the app, with the same limits. Offered only where the installation vouches for the assistant and says whom it acts for.</td></tr>
             </tbody>
           </table>
-          <p>Until then, the generated skills are the way to give an assistant this knowledge: put them in the repository it works in.</p>
+          <dl className="guide-dl">
+            <div><dt>Never a draft</dt><dd>An assistant never gets a draft, and cannot tell a draft from something that does not exist.</dd></div>
+            <div><dt>Rules it is given</dt><dd>When an assistant connects, the portal tells it how to read the content: the first participant of a process is the person it acts for; it waits for approvals and for other teams instead of doing their part; a mandatory process is the only allowed way; a <b>must</b> cannot be waived by it; a retired process or standard is not followed.</dd></div>
+            <div><dt>Not yet</dt><dd>Signing in as a person is planned, not built: today the MCP server is reachable only on the computer it runs on, or with one secret shared by every assistant that may use it. Counting what assistants look up, next to the views of people, is planned too.</dd></div>
+          </dl>
+          <p>The generated skills are the other way to give an assistant this knowledge: put them in the repository it works in. Setting the server up is under <b>Running it locally</b> and <b>Deploying</b>; the full contract is in <code>docs/mcp.md</code>.</p>
         </Section>
 
         <Section id="roadmap" title="Planned: automation">
-          <p>Today a person follows the checklist. The next stage is an agent that follows it for you: it looks the process up over MCP, does your steps with the linked skills, asks you to approve, and tracks the steps of other teams. Nothing in this section exists yet.</p>
-          <Chart process={automationFlow} caption="Planned, not built: an AI agent follows the process on your behalf. You stay in control of approvals." />
+          <p>Today a person follows the checklist, and an assistant can already look a process up over the MCP server and read which steps are yours. The next stage, planned and not built, is an agent that follows the process for you: it does your steps with the linked skills, asks you to approve, and tracks the steps of other teams.</p>
+          <Chart process={automationFlow} caption="Planned: an AI agent follows the process on your behalf. Looking the process up over MCP works today; the rest is not built. You stay in control of approvals." />
           <p>This is why steps name their participant, tool and kind precisely, and why skills are generated from the same content: the description is already written for a machine to act on.</p>
         </Section>
 
@@ -408,31 +424,36 @@ export function GuidePage() {
             <div className="arch">
               <div className="arch-col">
                 <div className="arch-box who"><strong>People</strong><span>in a browser</span></div>
-                <div className="arch-box who planned"><strong>AI agents</strong><span>over MCP, planned</span></div>
+                <div className="arch-box who"><strong>AI agents</strong><span>over the MCP server, a second program on the same database</span></div>
               </div>
               <div className="arch-arrow" aria-hidden="true">→</div>
               <div className="arch-col">
                 <div className="arch-group">
                   <em>One container</em>
                   <div className="arch-box core"><strong>The app</strong><span>built, static files</span></div>
-                  <div className="arch-box core"><strong>Go server</strong><span>sign-in, roles, content, skills, feedback, requests</span></div>
+                  <div className="arch-box core"><strong>Go server</strong><span>sign-in, roles, content, skills, feedback, requests, search index</span></div>
                 </div>
               </div>
               <div className="arch-arrow" aria-hidden="true">→</div>
               <div className="arch-col">
-                <div className="arch-box ext"><strong>Postgres</strong><span>content with every version, roles, feedback, skills, activity, requests, views and votes</span></div>
+                <div className="arch-box ext"><strong>Postgres</strong><span>content with every version, roles, feedback, skills, activity, requests, views and votes; with pgvector, the search index</span></div>
                 <div className="arch-box ext"><strong>Entra ID or Google</strong><span>sign-in</span></div>
                 <div className="arch-box ext"><strong>Team channel</strong><span>notifications, optional</span></div>
                 <div className="arch-box ext planned"><strong>Files in git</strong><span>first fill, import, export and backup</span></div>
               </div>
             </div>
-            <figcaption>What runs where. A change saved in the portal is live at once; no deployment is involved.</figcaption>
+            <figcaption>What runs where. A change saved in the portal is live at once; no deployment is involved. Not drawn: Vertex AI, used only when search by meaning is set to it.</figcaption>
           </figure>
           <dl className="guide-dl">
             <div><dt>In the database</dt><dd>All content and its history, roles, feedback, requests, generated skills and the activity log; and the views, bookmarks, upvotes and skill downloads. A view is stored as who viewed what on which day, only to count views and people; it is never shown.</dd></div>
             <div><dt>In the repository</dt><dd>The code, the formats (<code>schema/</code>), and sample content that fills an empty database on its first start.</dd></div>
             <div><dt>Import and export</dt><dd><code>npm run export -- &lt;folder&gt;</code> writes the content and the skills to files, as a backup or to commit. <code>npm run db:import</code> loads the files of the repository over what is stored; files that do not match the format are reported and skipped. <code>npm run db:demo</code> loads the larger demo set from the folder <code>demo/</code> in the same way. An export also removes the files of skills that were withdrawn.</dd></div>
             <div><dt>Two checks</dt><dd>The app checks a document fully before it lets you save. The server checks again: the rights, the format, that the parts of the document fit together (every step leads to a step that exists, every tier is in the lists), and that the save was made from the newest version. Nothing invalid, unauthorised or outdated is stored.</dd></div>
+            <div><dt>Search by meaning</dt><dd>Off unless <code>PM_EMBEDDINGS</code> is set. Every published process and standard (active or retired) is cut into parts: its summary, each step, each prerequisite, each requirement and the scope (<code>server/internal/chunking</code>). Each part is turned into a vector of numbers by an <b>embeddings provider</b> (<code>server/internal/embedding</code>): <code>builtin</code>, inside the server, which matches words and parts of words rather than meaning, or <code>vertex</code>, Google’s Vertex AI, which compares meaning. The vectors are kept in Postgres with the <b>pgvector</b> extension (<code>server/internal/retrieval</code>). The index follows every save, publish, retire and delete, together with the skills; only parts that changed are embedded again, and drafts are never in it. A search turns the question into a vector the same way, finds the closest parts and returns their documents, each with up to three parts that matched; the page then applies its filters and pages to them.</dd></div>
+          </dl>
+          <Chart process={meaningFlow} caption="Search by meaning, from a save to a result. The question is turned into numbers by the same provider and compared with the parts kept in the index." />
+          <dl className="guide-dl">
+            <div><dt>The MCP server</dt><dd>A second program (<code>server/cmd/mcp</code>, code in <code>server/internal/mcpserver</code>) that reads the same database as the portal and gives AI agents its published content as tools. It never changes tables and writes nothing but feedback. Until agents can sign in it accepts calls only from its own computer, or calls that carry one shared secret.</dd></div>
             <div><dt>Protection in the browser</dt><dd>The server tells the browser to run only the app’s own code and never to show the app inside another page. For that reason the format checks are not built in the browser but generated from the schemas beforehand (<code>npm run validators</code>).</dd></div>
           </dl>
         </Section>
@@ -450,6 +471,8 @@ export function GuidePage() {
             <div><dt>Dana Admin</dt><dd>Admin: everything, including who has which role.</dd></div>
           </dl>
           <p>Choosing who to be only works on your own machine: the server refuses to start this way on an address that others can reach.</p>
+          <p>Search by meaning is on, with the built-in provider: nothing leaves your machine. Set <code>PM_EMBEDDINGS=off</code> before <code>npm run dev</code> to try the portal without it. The Postgres container is the image <code>pgvector/pgvector:pg16</code>, which has the extension the search index needs.</p>
+          <p><code>npm run mcp</code> starts the MCP server for AI agents on <code>127.0.0.1:8081</code>, against the same database, and prints a client configuration to copy. Start <code>npm run dev</code> once first: the portal server prepares and fills the database, and builds the search index.</p>
           <p><code>npm run db:reset</code> empties the feedback, views, bookmarks, upvotes, skill downloads and requests, and adds all the samples again. <code>npm run db:demo</code> adds a larger demo set - more processes and standards, teams, platforms and practices, with reviews due and overdue - to try the search, its filters and My responsibilities; its lists replace the stored ones, and <code>npm run db:import</code> puts the smaller sample lists back. <code>npm run db:migrate</code> upgrades the database to the current version and says what it did. To use a Postgres you already run instead of Docker, set <code>PM_PG</code>, for example <code>PM_PG=postgres://pm:pm@localhost:5432</code>.</p>
         </Section>
 
@@ -457,13 +480,13 @@ export function GuidePage() {
           <p>Every level is tested, and <code>npm run test:all</code> runs all of it. The same runs on every pull request.</p>
           <table className="guide-table">
             <tbody>
-              <tr><td><code>npm test</code></td><td>The logic of the app: both checkers, editing, undo and the rules for saving, comparing versions, map layout, review dates, search and its filters, pages and cards, sharing messages, requests and statistics, the AI prompts, rights and members, and that every sample file in the repository and the demo set are valid.</td></tr>
-              <tr><td><code>npm run test:server</code></td><td>The server against a real Postgres: sign-in (with a stand-in for Entra and Google that signs real tokens), roles, content with versions and saves at the same time, the skill generators, feedback, views, bookmarks, upvotes, requests and statistics, the Admin endpoints, starting and stopping.</td></tr>
+              <tr><td><code>npm test</code></td><td>The logic of the app: both checkers, editing, undo and the rules for saving, comparing versions, map layout, review dates, search and its filters, pages and cards, search by meaning on the page (when the server is asked, how Both puts the two lists together), sharing messages, requests and statistics, the AI prompts, rights and members, and that every sample file in the repository and the demo set are valid.</td></tr>
+              <tr><td><code>npm run test:server</code></td><td>The server against a real Postgres: sign-in (with a stand-in for Entra and Google that signs real tokens), roles, content with versions and saves at the same time, the skill generators, feedback, views, bookmarks, upvotes, requests and statistics, the Admin endpoints, starting and stopping; cutting documents into parts, the embeddings providers, the search index and its search; the MCP server with its tools and its guard.</td></tr>
               <tr><td><code>npm run test:e2e</code></td><td>A real browser against the real server and database: signing in, following a process, reading a standard, editing both, versions and two people editing at once, feedback, the Admin panel, skills, AI import; the filters, cards and pages of the lists and the search; the map (Before you start, the hint, diamonds, dragging, the flag on a step); views, skill downloads, upvotes, bookmarks and sharing; requests with their rights; and the statistics with the CSV file.</td></tr>
               <tr><td><code>npm run validate</code></td><td>The sample files, or a folder written by <code>npm run export</code>, against the schemas and the rules. <code>npm run validate demo</code> checks the demo set as it is loaded: over the sample.</td></tr>
             </tbody>
           </table>
-          <p>The browser tests run on their own database, emptied and refilled at the start of every run, without the made-up use of <code>npm run dev</code>.</p>
+          <p>The browser tests run on their own database, emptied and refilled at the start of every run, without the made-up use of <code>npm run dev</code>. No test calls an outside service: search by meaning runs with the built-in provider, and Vertex AI is tested against a stand-in.</p>
         </Section>
 
         <Section id="deploy" title="Deploying">
@@ -481,10 +504,13 @@ export function GuidePage() {
               <tr><td><code>PM_SESSION_SECRET</code></td><td>At least 32 random characters, for example from <code>openssl rand -base64 48</code>. A placeholder is refused.</td></tr>
               <tr><td><code>PM_NOTIFY</code>, <code>PM_NOTIFY_WEBHOOK_URL</code></td><td>Optional: send notifications to a chat webhook instead of the server log.</td></tr>
               <tr><td><code>PM_LOG_FORMAT</code></td><td>Optional: <code>json</code> for one JSON object per log line.</td></tr>
+              <tr><td><code>PM_EMBEDDINGS</code></td><td>Optional: search by meaning. <code>off</code> (the default), <code>builtin</code> (computed in the server; nothing leaves it) or <code>vertex</code> (Google’s Vertex AI, with <code>PM_VERTEX_PROJECT</code> and <code>PM_VERTEX_LOCATION</code>). The size of the vectors and which parts are searched have settings of their own.</td></tr>
             </tbody>
           </table>
+          <p><b>Search by meaning</b> needs the <b>pgvector</b> extension, version 0.5 or later, in the database. The server creates it when its database user may; otherwise it stops with a message naming the statement an administrator has to run once (<code>CREATE EXTENSION IF NOT EXISTS vector;</code>). The index is built at start and follows every save; <code>server -reindex</code> brings it up to date by hand and says what it did. With <code>vertex</code>, the text of every published process and standard and every search question, from the portal and from agents, is sent to Google Cloud; the server log says so at every start and the search page tells people. Vertex AI has been tried only against a stand-in, not against Google itself, so its first real use needs checking, and the threshold below which a part does not count as a match is a starting value to tune on real content. Credentials come from the place the server runs (Google’s Application Default Credentials), never from the repository.</p>
+          <p><b>The MCP server</b> is not in the container: build it from <code>server/cmd/mcp</code> and run it next to the portal with the same database and the same search settings. Without <code>PM_MCP_SECRET</code> it only listens on its own computer; with it, it may listen anywhere and every call must carry that secret.</p>
           <p>The server answers <code>/healthz</code> when it runs and <code>/readyz</code> when it can also reach the database; use the second to decide whether it gets traffic. Several copies can start at the same time, also on an empty database. When it is asked to stop it finishes the requests it is answering first.</p>
-          <p>On its first start with an empty database the server loads the sample content from the container; after that the database is the only source, and a new version of the container never overwrites it. When a new version needs the stored content in another shape, it converts it by itself at its first start, as new versions with a note. The full list of settings, the API and the rights are in <code>docs/backend.md</code>; a template is in <code>.env.example</code>.</p>
+          <p>On its first start with an empty database the server loads the sample content from the container; after that the database is the only source, and a new version of the container never overwrites it. When a new version needs the stored content in another shape, it converts it by itself at its first start, as new versions with a note. The full list of settings, the API, the rights and search by meaning are in <code>docs/backend.md</code>, the MCP server in <code>docs/mcp.md</code>; a template is in <code>.env.example</code>.</p>
         </Section>
 
         <Section id="files" title="Files, schema and checker">
@@ -496,7 +522,7 @@ export function GuidePage() {
               <tr><td><code>processes/</code>, <code>standards/</code>, <code>catalog/</code></td><td>Sample content that fills an empty database; also the layout of an export</td></tr>
               <tr><td><code>docs/llm-prompt.md</code>, <code>docs/llm-prompt-standards.md</code></td><td>The AI prompts as shareable files</td></tr>
               <tr><td><code>docs/backend.md</code></td><td>The server: API, settings, rights, database</td></tr>
-              <tr><td><code>docs/mcp.md</code></td><td>Planned MCP contract for agents</td></tr>
+              <tr><td><code>docs/mcp.md</code></td><td>The MCP server for agents: its tools, settings and guard</td></tr>
               <tr><td><code>server/</code></td><td>The backend</td></tr>
               <tr><td><code>.claude/skills/</code></td><td>Instructions for AI coding assistants working on this repository</td></tr>
             </tbody>

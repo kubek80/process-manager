@@ -224,11 +224,11 @@ export function SearchPage({ route, processes, standards, feedback }: {
               {plan.problem && (
                 <div className={`search-problem ${plan.problem.kind}`}>
                   <p>
-                    {plan.problem.kind === "busy" ? `${plan.problem.message}${plan.show === "words" ? " Until then, these results are found by words only." : ""}`
+                    {plan.problem.kind === "busy" || plan.problem.kind === "notready" ? `${plan.problem.message}${plan.show === "words" ? " Until then, these results are found by words only." : ""}`
                       : plan.show === "words" ? "Search by meaning is not available right now, so these results are found by words only."
                       : "Search by meaning is not available right now."}
                   </p>
-                  {(plan.problem.kind === "unavailable" || plan.show === "none") && (
+                  {(plan.problem.kind !== "busy" || plan.show === "none") && (
                     <button type="button" className="btn small" onClick={() => setMode("words")}>{plan.show === "words" ? "Search by words" : "Search by words instead"}</button>
                   )}
                 </div>

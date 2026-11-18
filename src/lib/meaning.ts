@@ -154,6 +154,8 @@ export type MeaningProblem =
   | { kind: "busy"; message: string }
   /** the service that compares the texts cannot be reached, or another failure */
   | { kind: "unavailable"; message: string }
+  /** the server is still building what it searches; the server's sentence says so */
+  | { kind: "notready"; message: string }
   /** search by meaning was switched off on the server while the page was open */
   | { kind: "off"; message: string };
 
@@ -162,6 +164,7 @@ export function problemOf(e: unknown): MeaningProblem {
   const message = e instanceof Error ? e.message : String(e);
   if (status === 404) return { kind: "off", message };
   if (status === 429) return { kind: "busy", message: message || "You searched very often. Wait a moment, then search again." };
+  if (status === 503) return { kind: "notready", message: message || "Search by meaning is not ready yet. Try again in a moment, or search by words." };
   return { kind: "unavailable", message: "Search by meaning is not available right now." };
 }
 
