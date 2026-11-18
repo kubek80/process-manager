@@ -124,6 +124,23 @@ test("Tier, environment and language are single-choice dropdowns with counts, re
   await expect(page.locator("#req-SEC-LOG-03")).not.toContainText("Does not apply to your application");
 });
 
+test("an application option with no results is offered, can be chosen, and gives the empty state", async ({ page }) => {
+  await signIn(page, SAM);
+  await open(page, "/search?q=akamai");
+  await expect(cards(page).first()).toBeVisible(); // only the Akamai process, for tiers 0 and 1
+  const panel = page.getByRole("complementary", { name: "Filters" });
+  await panel.getByRole("button", { name: /^Tier: / }).click();
+  const tier3 = panel.getByRole("radiogroup", { name: "Tier" }).getByRole("radio", { name: "Tier 3, 0 results" });
+  await expect(tier3).toBeEnabled();
+  await expect(panel.locator('.filter-dd[data-filter="tier"] .filter-none')).toHaveCount(0);
+  await tier3.check();
+  await expect(panel.getByRole("button", { name: "Tier: Tier 3", exact: true })).toBeVisible();
+  await expect(cards(page)).toHaveCount(0);
+  await expect(page.locator("p.list-count")).toContainText("No results");
+  await pickFilter(page, "Tier", /^Any tier, \d+ results?$/);
+  await expect(cards(page).first()).toBeVisible();
+});
+
 test("a filter with nothing to choose says why instead of offering dead options", async ({ page }) => {
   await signIn(page, SAM);
   await open(page, "/processes");
@@ -236,6 +253,8 @@ test("the marks “Draft” and “Unpublished changes” are shown only to the 
       };
     };
     expect(await marks(ALEX)).toEqual({ draft: 1, draftCard: 1, changes: 1 }); // he may change both
+    // the mark says who saved the changes, by name
+    await expect(page.locator(`li.card[data-id="${IDS[2]}"] .card-mark.changes`)).toHaveAttribute("title", "Saved by Alex Editor, not yet published");
     expect(await marks(CASEY)).toEqual({ draft: 1, draftCard: 1, changes: 0 }); // looks after the team's draft; changes are the editors'
     expect(await marks(SAM)).toEqual({ draft: 0, draftCard: 0, changes: 0 }); // a reader: neither exists
   } finally {
