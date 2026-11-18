@@ -692,8 +692,8 @@ func (ix *Index) RetryEvery(ctx context.Context, every time.Duration) {
 // unrelated texts have some similarity; below the floor a part is noise. See docs/backend.md
 // for how the numbers were measured.
 var floors = map[string]float64{
-	"builtin": 0.25,
-	"vertex":  0.55,
+	"builtin": 0.20,
+	"vertex":  0.60,
 }
 
 // Floor returns the floor of the configured provider.
