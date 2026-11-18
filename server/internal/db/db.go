@@ -4,6 +4,7 @@ package db
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -125,4 +126,39 @@ func migrate(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 		}
 	}
 	return applied, nil
+}
+
+// ErrBehind is returned by Current when the database lacks migrations of this version.
+var ErrBehind = errors.New("the database is not up to date")
+
+// Latest is the number of the newest migration this version of the server has.
+func Latest() int {
+	entries, _ := migrations.ReadDir("migrations")
+	latest := 0
+	for _, e := range entries {
+		if n, err := strconv.Atoi(strings.SplitN(e.Name(), "_", 2)[0]); err == nil && n > latest {
+			latest = n
+		}
+	}
+	return latest
+}
+
+// Current checks, without changing anything, that the database has every migration of this
+// version: for a program that reads the database but does not upgrade it (the MCP server).
+// ErrBehind (wrapped, with a plain explanation) when it does not.
+func Current(ctx context.Context, pool *pgxpool.Pool) error {
+	var exists bool
+	if err := pool.QueryRow(ctx, `select to_regclass('schema_migrations') is not null`).Scan(&exists); err != nil {
+		return err
+	}
+	have := 0
+	if exists {
+		if err := pool.QueryRow(ctx, `select coalesce(max(version), 0) from schema_migrations`).Scan(&have); err != nil {
+			return err
+		}
+	}
+	if have < Latest() {
+		return fmt.Errorf("%w: it has migration %d, this version needs %d. Start the portal server (or run it with -migrate) first", ErrBehind, have, Latest())
+	}
+	return nil
 }

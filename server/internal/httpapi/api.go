@@ -371,7 +371,7 @@ func (a *api) record(r *http.Request, action, target, detail string) {
 // ---------- sign-in
 
 func (a *api) me(w http.ResponseWriter, r *http.Request) {
-	out := map[string]any{"provider": a.Cfg.Auth, "search": map[string]bool{"meaning": a.Index.Enabled(), "outside": a.Index.Outside()}}
+	out := map[string]any{"provider": a.Cfg.Auth, "search": a.searchInfo()}
 	s, err := a.signedIn(r)
 	if errors.Is(err, errUnavailable) {
 		writeError(w, 503, "The server cannot reach its database right now. Try again in a moment.")

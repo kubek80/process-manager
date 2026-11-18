@@ -63,6 +63,9 @@ type Embeddings struct {
 	Project, Location string   // vertex only
 	Parts             []string // which parts of a document are searched on their own
 	MaxChars          int      // the largest part, in characters
+	// MinScore is the lowest score of a match (PM_SEARCH_MIN_SCORE, 0 to 1); -1 when not set:
+	// the floor of the provider applies.
+	MinScore float64
 }
 
 // On reports whether search by meaning is switched on.
@@ -80,8 +83,8 @@ func (e Embeddings) ChunkOptions() chunking.Options {
 
 // Limits of the embedding settings. 2000 is the largest vector pgvector can index.
 const (
-	minDimensions = 8
-	maxDimensions = 2000
+	minDimensions = embedding.MinDimensions // the smallest vector the providers make
+	maxDimensions = 2000                    // the largest vector pgvector can index
 	minChunkChars = 200
 	maxChunkChars = 20000
 )
@@ -130,6 +133,15 @@ func LoadEmbeddings(getenv func(string) string) (Embeddings, error) {
 		problems = append(problems, fmt.Sprintf("PM_CHUNK_MAX_CHARS=%q must be a whole number from %d to %d", chars, minChunkChars, maxChunkChars))
 	}
 	e.MaxChars = n
+	e.MinScore = -1
+	if raw := get("PM_SEARCH_MIN_SCORE", ""); raw != "" {
+		f, err := strconv.ParseFloat(raw, 64)
+		if err != nil || f < 0 || f > 1 {
+			problems = append(problems, fmt.Sprintf("PM_SEARCH_MIN_SCORE=%q must be a number from 0 to 1, e.g. 0.6: the lowest score a part needs to count as a match", raw))
+		} else {
+			e.MinScore = f
+		}
+	}
 	if len(problems) > 0 {
 		return e, errors.New(strings.Join(problems, "; "))
 	}

@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -193,54 +192,64 @@ func baseOf(r *http.Request) (*int, bool) {
 func (a *api) syncSkills(ctx context.Context, kind, id string) {
 	// The save has happened. Whether the person who made it is still connected, or how long
 	// their request has been running, must not decide whether the skills follow: the work runs
-	// on its own. The answer waits for it a while - normally it is done in a moment - but not
-	// for ever: other regenerations may be ahead of it in the queue.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), syncTimeout)
-	var work sync.WaitGroup
-	start := func(fn func()) {
-		work.Add(1)
-		if a.Background != nil {
-			a.Background.Add(1)
-		}
-		go func() {
-			defer work.Done()
-			if a.Background != nil {
-				defer a.Background.Done()
-			}
-			fn()
-		}()
+	// on its own. The answer waits for the skills a while - normally they are done in a moment -
+	// but not for ever: other regenerations may be ahead of it in the queue.
+	ctx = context.WithoutCancel(ctx)
+	a.syncIndex(ctx, kind, id)
+	skillsCtx, cancel := context.WithTimeout(ctx, syncTimeout)
+	done := make(chan struct{})
+	if a.Background != nil {
+		a.Background.Add(1)
 	}
-	start(func() {
+	go func() {
+		defer close(done)
+		defer cancel()
+		if a.Background != nil {
+			defer a.Background.Done()
+		}
 		var err error
 		if kind == docs.Catalog {
-			err = a.Skills.SyncAll(ctx, a.Docs) // names of teams and tools appear in the text
+			err = a.Skills.SyncAll(skillsCtx, a.Docs) // names of teams and tools appear in the text
 		} else {
-			err = a.Skills.SyncChanged(ctx, a.Docs, kind, id)
+			err = a.Skills.SyncChanged(skillsCtx, a.Docs, kind, id)
 		}
 		if err != nil {
 			a.Log.Error("skills not regenerated", "kind", kind, "id", id, "error", err)
 		}
-	})
-	if a.Index.Enabled() {
-		start(func() {
-			// the catalog goes through every document: names of the lists appear in the parts
-			if err := a.Index.Sync(ctx, kind, id); err != nil {
-				a.Log.Warn("search by meaning: the search index could not be brought up to date after a change; the earlier text stays searchable and it is tried again in a few minutes",
-					"kind", kind, "id", id, "error", err)
-			}
-		})
-	}
-	done := make(chan struct{})
-	go func() {
-		work.Wait()
-		cancel()
-		close(done)
 	}()
 	select {
 	case <-done:
 	case <-time.After(syncWait):
-		a.Log.Warn("skills or the search index are still being brought up to date; the save is answered", "kind", kind, "id", id)
+		a.Log.Warn("skills are still being regenerated; the save is answered", "kind", kind, "id", id)
 	}
+}
+
+// indexTimeout bounds bringing the search index up to date after one change (the catalog goes
+// through every document).
+const indexTimeout = 10 * time.Minute
+
+// syncIndex brings the search index up to date after a change, in the background: the save does
+// not wait for it, since the provider may be slow or unreachable. With the built-in embedder it is
+// done in a moment. A failure marks the document; it is tried again by itself.
+func (a *api) syncIndex(ctx context.Context, kind, id string) {
+	if !a.Index.Enabled() {
+		return
+	}
+	if a.Background != nil {
+		a.Background.Add(1)
+	}
+	go func() {
+		if a.Background != nil {
+			defer a.Background.Done()
+		}
+		ctx, cancel := context.WithTimeout(ctx, indexTimeout)
+		defer cancel()
+		// the catalog goes through every document: names of the lists appear in the parts
+		if err := a.Index.Sync(ctx, kind, id); err != nil {
+			a.Log.Warn("search by meaning: the search index could not be brought up to date after a change; the earlier text stays searchable and it is tried again in a few minutes",
+				"kind", kind, "id", id, "error", err)
+		}
+	}()
 }
 
 // stillUsed refuses to drop entries of the lists that processes, standards or roles still

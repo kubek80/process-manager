@@ -26,8 +26,8 @@ func (a *api) search(w http.ResponseWriter, r *http.Request) {
 	limit := 50
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		n, err := strconv.Atoi(raw)
-		if err != nil || n < 1 || n > 100 {
-			writeError(w, 400, "limit must be a number from 1 to 100.")
+		if err != nil || n < 1 || n > retrieval.MaxLimit {
+			writeError(w, 400, "Ask for 1 to 500 results.")
 			return
 		}
 		limit = n
@@ -36,7 +36,7 @@ func (a *api) search(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "The question is too long: use at most 1000 characters.")
 		return
 	}
-	results := []retrieval.Result{}
+	page := retrieval.Page{Results: []retrieval.Result{}}
 	if !blank(q) {
 		if !a.searches.allow(who(r).Email, time.Now()) {
 			w.Header().Set("Retry-After", "60")
@@ -44,14 +44,14 @@ func (a *api) search(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var err error
-		results, err = a.Index.Search(r.Context(), q, limit)
+		page, err = a.Index.SearchPage(r.Context(), q, limit)
 		switch {
 		case errors.Is(err, retrieval.ErrProvider):
 			a.Log.Error("search by meaning failed: the embeddings provider could not be reached", "provider", a.Index.Provider(), "error", err)
 			writeError(w, 502, "Search by meaning is not available right now. Try again in a moment, or search by words.")
 			return
 		case errors.Is(err, retrieval.ErrNotSetUp):
-			a.Log.Error("search by meaning failed", "error", err)
+			a.Log.Warn("search by meaning is not ready", "reason", err)
 			writeError(w, 503, "Search by meaning is not ready yet. Try again in a moment, or search by words.")
 			return
 		case err != nil:
@@ -59,7 +59,7 @@ func (a *api) search(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, 200, map[string]any{"results": results})
+	writeJSON(w, 200, map[string]any{"results": page.Results, "truncated": page.Truncated})
 }
 
 func blank(s string) bool {
@@ -108,4 +108,14 @@ func (b *brake) allow(who string, now time.Time) bool {
 	}
 	c.n++
 	return true
+}
+
+// searchInfo is what /api/me says about search by meaning: whether it is on, whether the
+// question leaves the company, and with which provider ("builtin" or "vertex"; left out when off).
+func (a *api) searchInfo() map[string]any {
+	info := map[string]any{"meaning": a.Index.Enabled(), "outside": a.Index.Outside()}
+	if p := a.Index.ProviderKind(); p != "" {
+		info["provider"] = p
+	}
+	return info
 }

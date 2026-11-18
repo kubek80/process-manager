@@ -188,7 +188,8 @@ type meaning struct{ ix *retrieval.Index }
 func (m meaning) Enabled() bool { return m.ix.Enabled() }
 
 func (m meaning) Search(ctx context.Context, query string, limit int) ([]mcpserver.Found, bool, error) {
-	results, err := m.ix.Search(ctx, query, limit)
+	page, err := m.ix.SearchPage(ctx, query, limit)
+	results := page.Results
 	switch {
 	case errors.Is(err, retrieval.ErrNotSetUp):
 		return nil, false, fmt.Errorf("%w: %v", mcpserver.ErrIndexNotReady, err)
@@ -197,8 +198,7 @@ func (m meaning) Search(ctx context.Context, query string, limit int) ([]mcpserv
 	case err != nil:
 		return nil, false, err
 	}
-	// Until the index says itself that it had more, a full page is taken to mean that it had.
-	truncated := len(results) >= limit
+	truncated := page.Truncated
 	out := make([]mcpserver.Found, 0, len(results))
 	for _, r := range results {
 		if r.Status != "active" { // the search tools return active documents only (the server checks again)

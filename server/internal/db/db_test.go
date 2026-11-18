@@ -2,6 +2,8 @@ package db_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -126,5 +128,19 @@ func TestWithLockLetsOneInAtATime(t *testing.T) {
 	wg.Wait()
 	if most != 1 {
 		t.Fatalf("%d were inside at the same time", most)
+	}
+}
+
+func TestCurrentSaysWhetherTheDatabaseIsUpToDate(t *testing.T) {
+	ctx := context.Background()
+	empty := dbtest.NewEmptyPool(t)
+	if err := db.Current(ctx, empty); !errors.Is(err, db.ErrBehind) || !strings.Contains(err.Error(), fmt.Sprintf("this version needs %d", db.Latest())) {
+		t.Fatalf("empty: %v", err)
+	}
+	if err := db.Current(ctx, dbtest.NewPool(t)); err != nil {
+		t.Fatalf("migrated: %v", err)
+	}
+	if db.Latest() < 6 {
+		t.Fatalf("latest: %d", db.Latest())
 	}
 }

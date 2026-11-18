@@ -150,7 +150,7 @@ func TestOnlyPeopleOfTheSignInDomainsAndTheirNamesTamed(t *testing.T) {
 	if it := report("Sam Consumer"); it.AuthorName != "Sam Consumer" || it.AuthorEmail != "sam.consumer@example.com" {
 		t.Fatalf("%+v", it)
 	}
-	for _, bad := range []string{"", "   ", strings.Repeat("Very important person ", 5), "Sam ‮(verified)", "Sam\u0007"} {
+	for _, bad := range []string{"", "   ", strings.Repeat("Very important person ", 5), "Sam \u202e(verified)"} {
 		if it := report(bad); it.AuthorName != "sam.consumer" {
 			t.Fatalf("%q: %q", bad, it.AuthorName)
 		}

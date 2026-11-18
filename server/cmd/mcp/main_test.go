@@ -48,6 +48,11 @@ func TestSettings(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
+	// the domains of the portal's sign-in limit whom an agent may act for
+	s, err = loadSettings(env(map[string]string{"DATABASE_URL": "x", "PM_ALLOWED_EMAIL_DOMAINS": " @Example.com, other.org", "PM_GOOGLE_HOSTED_DOMAIN": "example.com"}))
+	if err != nil || strings.Join(s.EmailDomains, ",") != "example.com,other.org" {
+		t.Fatalf("%v %v", s.EmailDomains, err)
+	}
 	s, err = loadSettings(env(map[string]string{"DATABASE_URL": "x", "PM_MCP_ADDR": "0.0.0.0:8081", "PM_MCP_SECRET": secret, "PM_EMBEDDINGS": "builtin"}))
 	if err != nil || s.Secret != secret || !s.Embeddings.On() {
 		t.Fatalf("%+v %v", s, err)
@@ -166,7 +171,11 @@ func TestSearchesWithThePortalsIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := retrieval.New(pool, store, e, s.Embeddings.ChunkOptions(), quiet).Ensure(ctx); err != nil {
+	ix := retrieval.New(pool, store, e, s.Embeddings.ChunkOptions(), quiet)
+	if err := ix.Ensure(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ix.CatchUp(ctx); err != nil {
 		t.Fatal(err)
 	}
 	ready := make(chan string, 1)

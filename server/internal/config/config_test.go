@@ -123,7 +123,13 @@ func TestEmbeddingSettings(t *testing.T) {
 	if err != nil || c.Embeddings.On() || c.Embeddings.Provider != "off" || c.Embeddings.Dimensions != 768 || c.Embeddings.MaxChars != 2000 || len(c.Embeddings.Parts) == 0 {
 		t.Fatalf("default: %v %+v", err, c.Embeddings)
 	}
-	c, err = Load(with(map[string]string{"PM_EMBEDDINGS": "builtin", "PM_EMBEDDINGS_DIMENSIONS": "256", "PM_CHUNK_MAX_CHARS": "1000"}))
+	if c.Embeddings.MinScore != -1 {
+		t.Fatalf("min score without a setting: %v", c.Embeddings.MinScore)
+	}
+	c, err = Load(with(map[string]string{"PM_EMBEDDINGS": "builtin", "PM_EMBEDDINGS_DIMENSIONS": "256", "PM_CHUNK_MAX_CHARS": "1000", "PM_SEARCH_MIN_SCORE": "0.35"}))
+	if err == nil && c.Embeddings.MinScore != 0.35 {
+		t.Fatalf("min score: %v", c.Embeddings.MinScore)
+	}
 	if err != nil || !c.Embeddings.On() || c.Embeddings.Dimensions != 256 || c.Embeddings.ChunkOptions().MaxChars != 1000 {
 		t.Fatalf("builtin: %v %+v", err, c.Embeddings)
 	}
@@ -141,8 +147,11 @@ func TestEmbeddingSettings(t *testing.T) {
 	}{
 		{map[string]string{"PM_EMBEDDINGS": "vertex"}, "PM_VERTEX_PROJECT and PM_VERTEX_LOCATION are required"},
 		{map[string]string{"PM_EMBEDDINGS": "openai"}, `PM_EMBEDDINGS="openai" is not supported`},
-		{map[string]string{"PM_EMBEDDINGS": "builtin", "PM_EMBEDDINGS_DIMENSIONS": "4000"}, "must be a whole number from 8 to 2000"},
-		{map[string]string{"PM_EMBEDDINGS": "builtin", "PM_EMBEDDINGS_DIMENSIONS": "many"}, "must be a whole number from 8 to 2000"},
+		{map[string]string{"PM_EMBEDDINGS": "builtin", "PM_EMBEDDINGS_DIMENSIONS": "4000"}, "must be a whole number from 64 to 2000"},
+		{map[string]string{"PM_EMBEDDINGS": "builtin", "PM_EMBEDDINGS_DIMENSIONS": "many"}, "must be a whole number from 64 to 2000"},
+		{map[string]string{"PM_EMBEDDINGS": "builtin", "PM_EMBEDDINGS_DIMENSIONS": "32"}, "must be a whole number from 64 to 2000"},
+		{map[string]string{"PM_SEARCH_MIN_SCORE": "2"}, "PM_SEARCH_MIN_SCORE=\"2\" must be a number from 0 to 1"},
+		{map[string]string{"PM_SEARCH_MIN_SCORE": "high"}, "PM_SEARCH_MIN_SCORE=\"high\" must be a number from 0 to 1"},
 		{map[string]string{"PM_EMBEDDINGS": "builtin", "PM_CHUNK_MAX_CHARS": "10"}, "PM_CHUNK_MAX_CHARS"},
 	} {
 		_, err := Load(with(tc.env))

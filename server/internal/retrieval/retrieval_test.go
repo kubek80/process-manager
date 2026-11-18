@@ -35,6 +35,10 @@ type fake struct {
 	calls int
 	texts int
 	fail  bool
+	// gate, when set, holds every call until it is closed (or the call's time is up); entered
+	// gets a signal when a call starts waiting
+	gate    chan struct{}
+	entered chan struct{}
 }
 
 func newFake() *fake { return &fake{name: "fake", dims: 64} }
@@ -43,7 +47,23 @@ func (f *fake) Name() string    { return f.name }
 func (f *fake) Dimensions() int { return f.dims }
 func (f *fake) Outside() bool   { return false }
 
-func (f *fake) Embed(_ context.Context, texts []string, _ embedding.Purpose) ([][]float32, error) {
+func (f *fake) Embed(ctx context.Context, texts []string, _ embedding.Purpose) ([][]float32, error) {
+	f.mu.Lock()
+	gate, entered := f.gate, f.entered
+	f.mu.Unlock()
+	if gate != nil {
+		if entered != nil {
+			select {
+			case entered <- struct{}{}:
+			default:
+			}
+		}
+		select {
+		case <-gate:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.fail {
