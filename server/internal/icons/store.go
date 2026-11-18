@@ -161,15 +161,22 @@ func Folder(dir string) string { return filepath.Join(dir, "catalog", "icons") }
 // skipped. It returns how many icons were added.
 func (s *Store) ImportDir(ctx context.Context, dir, by string) (added int, problems []string, err error) {
 	folder := Folder(dir)
-	entries, err := os.ReadDir(folder)
+	info, err := os.Lstat(folder)
 	if errors.Is(err, os.ErrNotExist) {
 		return 0, nil, nil
 	}
 	if err != nil {
 		return 0, nil, err
 	}
+	if !info.IsDir() {
+		return 0, []string{folder + ": the icons folder must be a folder, not a link or a file; nothing in it was imported."}, nil
+	}
+	entries, err := os.ReadDir(folder)
+	if err != nil {
+		return 0, nil, err
+	}
 	for _, e := range entries {
-		if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+		if strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
 		file := filepath.Join(folder, e.Name())
@@ -197,11 +204,27 @@ func readFile(file string) (Icon, string) {
 	if kind == "" || !ValidID(stem) {
 		return Icon{}, "the name of an icon file must be its id (64 characters 0-9 and a-f) and .png, .jpg, .webp or .svg."
 	}
+	// Only an ordinary file is read: never a link, a folder, a pipe or a device (opening a pipe
+	// would wait for ever). It is checked before it is opened and again once it is open, in case
+	// it was swapped in between.
+	info, err := os.Lstat(file)
+	if err != nil {
+		return Icon{}, err.Error()
+	}
+	if !info.Mode().IsRegular() {
+		return Icon{}, "only ordinary files are imported, not links, folders or other special files."
+	}
+	if info.Size() > MaxBytes {
+		return Icon{}, MessageOf(refuse("The image is larger than 64 KB. Make it smaller and try again."))
+	}
 	f, err := os.Open(file)
 	if err != nil {
 		return Icon{}, err.Error()
 	}
 	defer f.Close()
+	if open, err := f.Stat(); err != nil || !open.Mode().IsRegular() || !os.SameFile(info, open) {
+		return Icon{}, "the file changed while it was being read; import again."
+	}
 	data, err := io.ReadAll(io.LimitReader(f, MaxBytes+1)) // never more than an icon may be
 	if err != nil {
 		return Icon{}, err.Error()
@@ -242,14 +265,17 @@ func (s *Store) ExportDir(ctx context.Context, dir string, lists []byte) (int, e
 		if err != nil {
 			return len(written), err
 		}
-		if err := os.MkdirAll(folder, 0o755); err != nil {
+		if err := ensureFolder(folder); err != nil {
 			return len(written), err
 		}
 		name := id + "." + Ext(ic.ContentType)
-		if err := os.WriteFile(filepath.Join(folder, name), ic.Data, 0o644); err != nil {
+		if err := writeNew(filepath.Join(folder, name), ic.Data); err != nil {
 			return len(written), err
 		}
 		written[name] = true
+	}
+	if info, err := os.Lstat(folder); err != nil || !info.IsDir() {
+		return len(written), nil // nothing written and no folder of ours to tidy
 	}
 	entries, _ := os.ReadDir(folder)
 	for _, e := range entries {
@@ -262,4 +288,40 @@ func (s *Store) ExportDir(ctx context.Context, dir string, lists []byte) (int, e
 		}
 	}
 	return len(written), nil
+}
+
+// ensureFolder makes the icons folder; it refuses one that is a link, so that an export never
+// writes somewhere else.
+func ensureFolder(folder string) error {
+	if err := os.MkdirAll(filepath.Dir(folder), 0o755); err != nil {
+		return err
+	}
+	info, err := os.Lstat(folder)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return os.Mkdir(folder, 0o755)
+	case err != nil:
+		return err
+	case !info.IsDir():
+		return fmt.Errorf("%s is a link or a file, not a folder: the icons are not written through it", folder)
+	}
+	return nil
+}
+
+// writeNew writes a file that is created afresh: whatever was at the path before (a link
+// included) is removed first, and the file is created exclusively, so the write never follows a
+// link.
+func writeNew(path string, data []byte) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }

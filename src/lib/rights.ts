@@ -89,5 +89,5 @@ export function roleLabel(p: Perms): string {
   if ((p.practices ?? []).length) parts.push("Practice owner");
   if (p.catalog) parts.push("Manages the lists");
   if ((p.owns ?? []).length) parts.push("Owner");
-  return parts.join(" · ") || "Consumer";
+  return parts.join(" · ") || "Reader";
 }

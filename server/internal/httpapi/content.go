@@ -415,7 +415,7 @@ func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 		deniedFor(w, kind, s)
 		return
 	}
-	if err := a.Schemas.Validate(kind, body); err != nil {
+	if err := a.validateFormat(kind, body); err != nil {
 		a.fail(w, r, err)
 		return
 	}
@@ -526,8 +526,11 @@ func (a *api) reviewDoc(kind string) http.HandlerFunc {
 		case !s.CanManageFeedback(kind, belongs):
 			writeError(w, 403, "Only the team that owns this, and the people who can edit it, can confirm its review.")
 			return
+		case status == "draft":
+			writeError(w, 400, fmt.Sprintf("Only a published %s is reviewed. Publish it first.", noun[kind]))
+			return
 		case status != "" && status != "active":
-			writeError(w, 400, "Only something that is in use is reviewed. Set its status to Active first.")
+			writeError(w, 400, fmt.Sprintf("A retired %s is not reviewed any more.", noun[kind]))
 			return
 		}
 		base, ok := baseOf(r)
@@ -554,6 +557,10 @@ func (a *api) reviewDoc(kind string) http.HandlerFunc {
 		doc, changed, err := a.Docs.Save(r.Context(), docs.Change{
 			Kind: kind, ID: id, Body: body, By: s.Email, Note: note, Base: &current.Version,
 			After: func(ctx context.Context, tx pgx.Tx, saved docs.Doc) error {
+				// unpublished changes based on the reviewed version stay based on what readers see
+				if err := docs.MoveDraftBaseIn(ctx, tx, kind, id, current.Version, saved.Version); err != nil {
+					return err
+				}
 				return audit.AddIn(ctx, tx, s.Email, s.Name, noun[kind]+".review", id, fmt.Sprintf("version %d", saved.Version))
 			},
 		})

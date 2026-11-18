@@ -104,8 +104,8 @@ func TestAWorkingDraftFromStartToPublished(t *testing.T) {
 	if after.Version != before.Version+1 || !strings.Contains(string(after.Body), "Request a Google Cloud project, now") || after.UpdatedBy != alex {
 		t.Fatalf("published: %d %s", after.Version, after.UpdatedBy)
 	}
-	if status, _ := a.do("GET", drafts, nil); status != 404 {
-		t.Fatalf("the draft is still there: %d", status)
+	if status, raw, _ := a.raw("GET", drafts, nil, false); status != 204 || len(raw) != 0 {
+		t.Fatalf("the draft is still there: %d %s", status, raw)
 	}
 	// like any save: in the history with its note, in the activity log, the skills follow
 	h, _ := e.deps.Docs.History(bg, docs.Process, gcp)
@@ -180,7 +180,7 @@ func TestWhoMayWorkOnAWorkingDraft(t *testing.T) {
 	wantStatus(t, status, 200, body)
 	status, body = e.as(alex).do("PUT", "/api/processes/"+repoP+"/draft?rev=0", e.body(docs.Process, repoP, "", ""))
 	wantError(t, status, body, 409, "This process is not published yet, so readers do not see it: save your changes to it directly.")
-	if status, _ := e.as(alex).do("GET", "/api/processes/"+repoP+"/draft", nil); status != 404 {
+	if status, _ := e.as(alex).do("GET", "/api/processes/"+repoP+"/draft", nil); status != 204 {
 		t.Fatal("a draft of something never published")
 	}
 }
@@ -203,7 +203,7 @@ func TestWhatADraftNeedsAndWhatPublishingNeeds(t *testing.T) {
 		{`[]`, "The draft must be a whole process or standard in JSON."},
 		{`{"id": "request-github-repository"}`, "The id in the draft must stay “request-gcp-project”."},
 		{`{"id": "request-gcp-project", "title": "a\u0000b"}`, "The draft contains characters that cannot be stored. Remove them and try again."},
-		{`{"id": "request-gcp-project", "summary": "` + strings.Repeat("x", docs.MaxDraftBytes) + `"}`, "The draft is too large to save (more than 512 KB). Shorten it and try again."},
+		{`{"id": "request-gcp-project", "x": ` + strings.Repeat("[", 5000) + strings.Repeat("]", 5000) + `}`, "The draft has too many parts inside one another (more than 32 levels) to be saved."},
 	} {
 		status, body := a.do("PUT", drafts+"?rev=1", c.body)
 		wantError(t, status, body, 400, c.want)
@@ -285,29 +285,129 @@ func TestADraftIsMovedOverAReviewConfirmation(t *testing.T) {
 	e := setup(t, nil)
 	a := e.as(alex)
 	v := e.version(docs.Process, gcp).Version
-	a.startDraft(docs.Process, gcp, e.body(docs.Process, gcp, "Request a GCP project", "Request a GCP project, revised"))
-	// the owning team confirms the review of the published version meanwhile
+	// the draft changes the title and how often it is reviewed
+	draft := e.body(docs.Process, gcp, "Request a GCP project", "Request a GCP project, revised")
+	draft = strings.Replace(draft, `"intervalMonths": 6`, `"intervalMonths": 3`, 1)
+	a.startDraft(docs.Process, gcp, draft)
+	// the owning team confirms the review of the published version meanwhile: the draft is then
+	// based on the reviewed version, with the same revision and body
 	status, body := e.as(casey).do("POST", "/api/processes/"+gcp+"/review", nil)
 	wantStatus(t, status, 200, body)
+	status, body = a.do("GET", drafts, nil)
+	wantStatus(t, status, 200, body)
+	if num(body["base"]) != v+1 || num(body["revision"]) != 1 || !strings.Contains(fmt.Sprint(body["doc"]), "intervalMonths:3") {
+		t.Fatalf("after the review: %v", body)
+	}
 	reviewed := e.version(docs.Process, gcp)
-	var want struct{ Review any }
-	must(t, json.Unmarshal(reviewed.Body, &want))
+	var pub struct{ Review map[string]any }
+	must(t, json.Unmarshal(reviewed.Body, &pub))
 
+	check := func(version int) {
+		t.Helper()
+		d := e.version(docs.Process, gcp)
+		var got struct{ Review map[string]any }
+		must(t, json.Unmarshal(d.Body, &got))
+		if d.Version != version || !strings.Contains(string(d.Body), "revised") || got.Review["intervalMonths"] != float64(3) ||
+			got.Review["lastReviewedAt"] != pub.Review["lastReviewedAt"] || got.Review["reviewedBy"] != pub.Review["reviewedBy"] || got.Review["reviewedBy"] == nil {
+			t.Fatalf("published %d with review %v; the published one is %v", d.Version, got.Review, pub.Review)
+		}
+	}
 	status, body = a.do("POST", draftPath(docs.Process, gcp, "publish", 1), nil)
 	wantStatus(t, status, 200, body)
-	d := e.version(docs.Process, gcp)
-	var got struct{ Review any }
-	must(t, json.Unmarshal(d.Body, &got))
-	if d.Version != v+2 || !strings.Contains(string(d.Body), "revised") || fmt.Sprint(got.Review) != fmt.Sprint(want.Review) {
-		t.Fatalf("published %d with review %v, want %v", d.Version, got.Review, want.Review)
-	}
+	check(v + 2)
+
+	// a draft still based on the version before a review (saved by an earlier server) is moved
+	// onto it at publishing
+	a.startDraft(docs.Process, gcp, e.body(docs.Process, gcp, "revised", "revised again"))
+	status, body = a.do("POST", "/api/processes/"+gcp+"/review", nil) // another person: a new version
+	wantStatus(t, status, 200, body)
+	_, err := e.deps.Docs.Pool.Exec(bg, `update working_drafts set base = $1`, v+2)
+	must(t, err)
+	must(t, json.Unmarshal(e.version(docs.Process, gcp).Body, &pub))
+	status, body = a.do("POST", draftPath(docs.Process, gcp, "publish", 1), nil)
+	wantStatus(t, status, 200, body)
+	check(v + 4)
 
 	// anything else in between is a real conflict
 	a.startDraft(docs.Process, gcp, e.body(docs.Process, gcp, "revised", "revised twice"))
-	_, _, err := e.deps.Docs.Put(bg, docs.Process, gcp, []byte(e.body(docs.Process, gcp, `"rigour": "mandatory"`, `"rigour": "recommended"`)), "import")
+	_, _, err = e.deps.Docs.Put(bg, docs.Process, gcp, []byte(e.body(docs.Process, gcp, `"rigour": "mandatory"`, `"rigour": "recommended"`)), "import")
 	must(t, err)
 	status, body = a.do("POST", draftPath(docs.Process, gcp, "publish", 1), nil)
 	wantStatus(t, status, 409, body)
+	// and a review afterwards does not hide that: the base stays where it was
+	status, body = e.as(casey).do("POST", "/api/processes/"+gcp+"/review", nil)
+	wantStatus(t, status, 200, body)
+	if d, _ := e.deps.Docs.GetDraft(bg, docs.Process, gcp); d.Base != v+4 {
+		t.Fatalf("base moved over a real change: %d", d.Base)
+	}
+}
+
+func TestAReviewIsOnlyForWhatReadersUse(t *testing.T) {
+	e := setup(t, nil)
+	a := e.as(alex)
+	status, body := a.do("PUT", "/api/processes/"+repoP, e.asDraft(docs.Process, repoP, "Hidden"))
+	wantStatus(t, status, 200, body)
+	status, body = a.do("POST", "/api/processes/"+repoP+"/review", nil)
+	wantError(t, status, body, 400, "Only a published process is reviewed. Publish it first.")
+	status, body = a.do("PUT", "/api/processes/"+gcp, e.body(docs.Process, gcp, `"status": "active"`, `"status": "deprecated", "replacedBy": "`+library+`"`))
+	wantStatus(t, status, 200, body)
+	status, body = a.do("POST", "/api/processes/"+gcp+"/review", nil)
+	wantError(t, status, body, 400, "A retired process is not reviewed any more.")
+}
+
+func TestARecreatedDraftKeepsTheVersionItsWorkCameFrom(t *testing.T) {
+	e := setup(t, nil)
+	a, j := e.as(alex), e.as(jordan)
+	v := e.version(docs.Process, gcp).Version
+	a.startDraft(docs.Process, gcp, e.body(docs.Process, gcp, "Request a GCP project", "Alex's name"))
+	// jordan publishes alex's draft with a change of his own
+	status, body := j.do("PUT", drafts+"?rev=1", e.body(docs.Process, gcp, "Request a GCP project", "Jordan's name"))
+	wantStatus(t, status, 200, body)
+	status, body = j.do("POST", draftPath(docs.Process, gcp, "publish", 2), nil)
+	wantStatus(t, status, 200, body)
+	// alex saves again: the draft is gone, so the app starts it again on the version alex had
+	status, body = a.do("PUT", drafts+"?rev=1", e.body(docs.Process, gcp, "Jordan's name", "Alex's name"))
+	wantStatus(t, status, 409, body)
+	status, body = a.do("PUT", drafts+fmt.Sprintf("?rev=0&base=%d", v), e.body(docs.Process, gcp, "Jordan's name", "Alex's name"))
+	wantStatus(t, status, 200, body)
+	if num(body["base"]) != v {
+		t.Fatalf("base: %v", body)
+	}
+	// publishing meets jordan's version, as an ordinary conflict
+	status, body = a.do("POST", draftPath(docs.Process, gcp, "publish", 1), nil)
+	wantStatus(t, status, 409, body)
+	if c := body["conflict"].(map[string]any); num(c["version"]) != v+1 || c["draft"] != nil || c["updatedBy"] != jordan {
+		t.Fatalf("conflict: %v", body)
+	}
+	status, body = a.do("POST", draftPath(docs.Process, gcp, "publish", 1)+fmt.Sprintf("&over=%d", v+1), nil)
+	wantStatus(t, status, 200, body)
+	// a version that is not one of this process, or one that does not exist yet
+	a.startDraft(docs.Process, gcp, e.body(docs.Process, gcp, "", ""))
+	must(t, e.deps.Docs.DiscardDraft(bg, docs.Process, gcp, 1, nil, nil))
+	status, body = a.do("PUT", drafts+"?rev=0&base=0", e.body(docs.Process, gcp, "", ""))
+	wantError(t, status, body, 400, "The version the draft was started from is not a version of this process.")
+	status, body = a.do("PUT", drafts+fmt.Sprintf("?rev=0&base=%d", v+9), e.body(docs.Process, gcp, "", ""))
+	wantStatus(t, status, 409, body)
+}
+
+func TestDraftAnswersNameThePerson(t *testing.T) {
+	e := setup(t, nil)
+	out := e.as(jordan).startDraft(docs.Process, gcp, e.body(docs.Process, gcp, "", ""))
+	if out["updatedByName"] != "Jordan Platform" || out["updatedBy"] != jordan {
+		t.Fatalf("put: %v", out)
+	}
+	_, body := e.as(alex).do("GET", drafts, nil)
+	if body["updatedByName"] != "Jordan Platform" {
+		t.Fatalf("get: %v", body)
+	}
+	_, body = e.as(alex).do("PUT", drafts+"?rev=0", e.body(docs.Process, gcp, "", ""))
+	if c := body["conflict"].(map[string]any); c["updatedByName"] != "Jordan Platform" {
+		t.Fatalf("conflict: %v", body)
+	}
+	_, body = e.as(alex).do("PUT", "/api/processes/"+gcp, e.body(docs.Process, gcp, "Request a GCP project", "Changed"))
+	if d := body["draft"].(map[string]any); d["updatedByName"] != "Jordan Platform" {
+		t.Fatalf("refused save: %v", body)
+	}
 }
 
 func TestOrdinarySavesWhileThereAreUnpublishedChanges(t *testing.T) {
@@ -400,7 +500,7 @@ func TestListsSayWhenADocumentWasAddedAndWhoHasUnpublishedChanges(t *testing.T) 
 			}
 		}
 		d, has := m[gcp]["draft"].(map[string]any)
-		if has != sees || (sees && (d["updatedBy"] != jordan || d["updatedAt"] == nil || len(d) != 2)) {
+		if has != sees || (sees && (d["updatedBy"] != jordan || d["updatedByName"] != "Jordan Platform" || d["updatedAt"] == nil || len(d) != 3)) {
 			t.Errorf("%s sees the draft: %v (want %v)", who, m[gcp]["draft"], sees)
 		}
 	}

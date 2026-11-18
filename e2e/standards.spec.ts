@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { ALEX, answer, clearFeedback, open, pickFilter, putDoc, readSkill, readStandard, report, RILEY, SAM, save, serverToday, signIn, watchErrors } from "./helpers";
+import { ALEX, answer, clearFeedback, editState, fields, more, open, openEditor, outline, pickFilter, publish, putDoc, readSkill, readStandard, readWorkingDraft, report, RILEY, SAM, saveDraft, serverToday, signIn, watchErrors } from "./helpers";
 
 const LOGGING = "secure-logging"; // belongs to the practice Cyber security: Riley edits it
 const IAC = "infrastructure-as-code"; // issued by the Cloud Platform team
@@ -31,7 +31,7 @@ test("a consumer finds standards by the team that issues them and by what applie
   await expect(cards).toHaveCount(3);
 
   // for a development environment one of the four mandatory logging rules falls away
-  await page.locator(".profile-filter").getByLabel("Environment").selectOption({ label: "Development" });
+  await pickFilter(page, "Environment", "Development");
   await expect(cards.filter({ hasText: "Secure logging" }).locator('[data-line="rigour"] dd')).toContainText("3 mandatory");
   expect(errors).toEqual([]);
 });
@@ -57,10 +57,11 @@ test("a standard reads as a document: rule, reason, how to comply, examples, how
   await expect(first.locator(".req-review")).toContainText("passed to a log call");
   await expect(first.locator(".req-review")).toContainText("Reported as blocker");
 
-  // nothing to edit for a consumer
+  // nothing to edit for a reader
+  await expect(page.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
   await expect(page.locator('[aria-label^="Edit "]')).toHaveCount(0);
   await expect(page.getByRole("tab", { name: "JSON" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Add requirement" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Add (a )?requirement/ })).toHaveCount(0);
 
   // only what applies to my application
   await page.locator(".req-bar").getByRole("button", { name: /Should/ }).click();
@@ -122,8 +123,7 @@ test("a practice owner edits the standards of the practice only", async ({ page 
   await signIn(page, RILEY);
   await open(page, `/s/${REVIEW}/doc`); // belongs to another practice: reading only
   await expect(page.locator(".req").first()).toBeVisible();
-  await expect(page.locator('[aria-label^="Edit "]')).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Details", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
   const theirs = await readStandard(page, REVIEW);
   const res = await putDoc(page, "standard", REVIEW, { ...theirs, title: "Hijacked" });
   expect(res.status()).toBe(403);
@@ -134,8 +134,9 @@ test("a practice owner edits the standards of the practice only", async ({ page 
   expect((await takeOver.json()).error).toContain("Only standards editors and the owners of its platform or practice can change this standard.");
 
   await open(page, `/s/${LOGGING}/doc`);
-  await expect(page.locator('[aria-label^="Edit "]')).toHaveCount(5);
-  await expect(page.getByRole("button", { name: "Add requirement" })).toBeVisible();
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await expect(page.locator(".edit-preview .req")).toHaveCount(5);
+  await expect(page.getByRole("button", { name: "Add a requirement at the end" })).toBeVisible();
 });
 
 test("changing a requirement gives the skill and the review agent a new version and marks old feedback", async ({ page, request }) => {
@@ -144,21 +145,27 @@ test("changing a requirement gives the skill and the review agent a new version 
   await signIn(page, RILEY);
   const before = await readSkill(page, `review-${LOGGING}`);
 
-  await open(page, `/s/${LOGGING}/doc`);
-  await page.locator('[aria-label="Edit SEC-LOG-05"]').click();
-  const drawer = page.locator(".drawer");
-  await drawer.getByLabel("The rule").fill("Logs are written as structured key/value records in JSON, not free text.");
-  await drawer.getByRole("button", { name: "Add" }).first().click(); // how to comply
+  await openEditor(page, "standard", LOGGING, "SEC-LOG-05");
+  const drawer = fields(page);
+  // the open feedback about it is shown next to its fields
+  await expect(drawer.locator(".item-feedback")).toContainText("Which logger for Python?");
+  await drawer.getByRole("textbox", { name: /^The rule/ }).fill("Logs are written as structured key/value records in JSON, not free text.");
+  await drawer.locator(".field", { hasText: "Steps to comply" }).getByRole("button", { name: "Add", exact: true }).click();
   await drawer.getByPlaceholder("Use the logging library's redaction list.").last().fill("Use structlog for Python.");
-  await drawer.locator(".field", { hasText: "Signs of a violation" }).getByRole("button", { name: "Add" }).click();
+  await drawer.locator(".field", { hasText: "Signs of a violation" }).getByRole("button", { name: "Add", exact: true }).click();
   await drawer.getByPlaceholder(/A variable named like password/).last().fill("logging.info with an f-string");
-  await expect(page.locator("#req-SEC-LOG-05")).toContainText("in JSON, not free text");
-  await save(page);
+  await expect(page.locator(".edit-preview #req-SEC-LOG-05")).toContainText("in JSON, not free text");
+  // saved as a draft, nothing changes for readers, the skill or the agent
+  await saveDraft(page);
+  expect((await readStandard(page, LOGGING))!.requirements.find((r: { id: string }) => r.id === "SEC-LOG-05").statement).not.toContain("in JSON");
+  expect((await readSkill(page, `review-${LOGGING}`)).skill.version).toBe(before.skill.version);
+  await publish(page);
 
   const stored = (await readStandard(page, LOGGING))!.requirements.find((r: { id: string }) => r.id === "SEC-LOG-05");
   expect(stored.statement).toContain("in JSON");
   expect(stored.guidance.at(-1)).toBe("Use structlog for Python.");
   expect(stored.review.lookFor.at(-1)).toBe("logging.info with an f-string");
+  await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
 
   // both generated items follow, each with a new version; the old one is kept
   await page.getByRole("tab", { name: "Skills" }).click();
@@ -177,34 +184,45 @@ test("changing a requirement gives the skill and the review agent a new version 
   await expect(page.locator(".fb-item .fb-stale")).toContainText("This requirement was changed after the feedback was written");
 });
 
-test("add and remove a requirement; the checker guards the format", async ({ page }) => {
+test("add, reorder and remove a requirement; the checker guards the format", async ({ page }) => {
   await signIn(page, RILEY);
-  await open(page, `/s/${LOGGING}/doc`);
-  await page.getByRole("button", { name: "Add requirement" }).click();
-  const drawer = page.locator(".drawer");
-  await expect(drawer.getByLabel("Id")).toHaveValue("SEC-LOG-06"); // continues the numbering
-  await expect(page.locator(".req")).toHaveCount(6);
+  await openEditor(page, "standard", LOGGING);
+  await page.getByRole("button", { name: "Add a requirement at the end" }).click();
+  const drawer = fields(page);
+  await expect(drawer.getByLabel(/^Id/)).toHaveValue("SEC-LOG-06"); // continues the numbering
+  await expect(page.locator(".edit-preview .req")).toHaveCount(6);
+  const nav = page.getByRole("navigation", { name: "Outline of the standard" });
+  await expect(nav.locator('[aria-current="true"]')).toContainText("SEC-LOG-06");
 
-  await drawer.getByLabel("Short name").fill("x"); // too short
-  await expect(page.locator(".status.bad")).toContainText("problem");
-  await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
-  await drawer.getByLabel("Short name").fill("Rotate log access keys");
+  await drawer.getByLabel(/^Short name/).fill("x"); // too short
+  await expect(page.locator(".eb-status.bad")).toContainText("problem");
+  await expect(nav.getByRole("button", { name: /^SEC-LOG-06 .*, \d+ problems?/ })).toBeVisible();
+  await drawer.getByLabel(/^Short name/).fill("Rotate log access keys");
   await drawer.getByRole("button", { name: "Must", exact: true }).click();
-  await drawer.getByLabel("The rule").fill("Keys that give access to the log platform are rotated every 90 days.");
-  await drawer.getByLabel("Why").fill("A leaked key is useful for a limited time only.");
+  await drawer.getByRole("textbox", { name: /^The rule/ }).fill("Keys that give access to the log platform are rotated every 90 days.");
+  await drawer.getByLabel(/^Why/).fill("A leaked key is useful for a limited time only.");
   await drawer.getByRole("button", { name: "by a person" }).click();
   await drawer.locator(".field", { hasText: "Environments" }).getByRole("button", { name: "Production", exact: true }).click();
-  await expect(page.locator(".status.good")).toBeVisible();
-  await save(page);
+  await expect(page.locator(".eb-status.bad")).toHaveCount(0);
+
+  // moved up one place and back, from its fields
+  const order = () => page.locator(".edit-preview .req .req-id").allTextContents();
+  await drawer.getByRole("button", { name: "Move up" }).click();
+  expect((await order()).slice(-2)).toEqual(["SEC-LOG-06", "SEC-LOG-05"]);
+  await expect(nav.locator(".outline-row.depth-1 .outline-n")).toHaveText(["SEC-LOG-01", "SEC-LOG-02", "SEC-LOG-03", "SEC-LOG-04", "SEC-LOG-06", "SEC-LOG-05"]);
+  await drawer.getByRole("button", { name: "Move down" }).click();
+  expect((await order()).slice(-2)).toEqual(["SEC-LOG-05", "SEC-LOG-06"]);
+  await publish(page);
   const added = (await readStandard(page, LOGGING))!.requirements.at(-1);
   expect(added).toMatchObject({ id: "SEC-LOG-06", level: "must", verification: { method: "manual" }, environments: ["production"] });
   expect(added.review).toBeUndefined(); // nothing for a reviewer to see: no review block
-  await expect(page.locator("#req-SEC-LOG-06")).toContainText("Checked by a person");
+  await expect(page.locator(".edit-preview #req-SEC-LOG-06")).toContainText("Checked by a person");
 
-  await page.locator('[aria-label="Edit SEC-LOG-06"]').click();
+  await outline(page, "SEC-LOG-06");
   await drawer.getByRole("button", { name: "Delete requirement" }).click();
   await answer(page, "Delete SEC-LOG-06?", "Delete requirement");
-  await save(page);
+  await expect(page.locator(".edit-preview .req")).toHaveCount(5);
+  await publish(page);
   expect((await readStandard(page, LOGGING))!.requirements).toHaveLength(5);
 });
 
@@ -229,9 +247,12 @@ test("create a standard from a policy text with AI; it is a draft without skills
   await expect(modal.locator(".check.good")).toContainText("Valid: Dependency updates - 3 requirements (2 must)");
   await modal.getByRole("button", { name: "Create standard" }).click();
 
-  await expect(page.getByRole("heading", { name: "Dependency updates" })).toBeVisible();
-  await expect(page.locator(".banner", { hasText: "Draft." })).toBeVisible();
-  await expect(page.locator(".req")).toHaveCount(3);
+  await expect(page).toHaveURL(/#\/s\/dependency-updates\/edit/);
+  await expect(page.locator(".eb-title h1")).toHaveText("Dependency updates");
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Draft\. Readers do not see this yet/);
+  await expect(page.locator(".edit-preview .req")).toHaveCount(3);
+  await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
+  await expect(page.locator(".draft-line.never")).toContainText("Readers do not see this standard yet");
   await page.getByRole("tab", { name: "Skills" }).click();
   await expect(page.locator(".skills-empty")).toContainText("No skill yet");
 
@@ -243,26 +264,30 @@ test("create a standard from a policy text with AI; it is a draft without skills
 
   await signIn(page, RILEY);
   await open(page, "/s/dependency-updates/doc");
-  await page.getByRole("button", { name: "Details", exact: true }).click();
-  await page.locator(".modal").getByRole("button", { name: "Active" }).click();
-  await page.locator(".modal").getByRole("button", { name: "Done" }).click();
-  await save(page);
+  await page.locator(".draft-line").getByRole("link", { name: "Continue editing" }).click();
+  await page.locator(".edit-bar").getByRole("button", { name: "Publish…" }).click();
+  const first = page.getByRole("dialog", { name: "Publish this standard" });
+  await expect(first).toContainText("Everybody who signs in to the portal will be able to find and read it.");
+  await first.getByRole("button", { name: "Publish", exact: true }).click();
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Published\./);
+  await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
   await page.getByRole("tab", { name: "Skills" }).click();
   await expect(page.locator(".skill-picker").getByRole("tab")).toHaveCount(2); // a skill and a review agent
   await expect(page.locator(".skill-content")).toContainText("# Standard: Dependency updates");
   await expect(page.locator(".skill-head code")).toHaveText(".claude/skills/standard-dependency-updates/SKILL.md");
 
   // retire it: the skills are withdrawn, the document stays for reference
-  await page.getByRole("button", { name: "Details", exact: true }).click();
-  await page.locator(".modal").getByRole("button", { name: "Retired" }).click();
-  await page.locator(".modal").getByLabel("Use instead").selectOption({ label: "Secure logging" });
-  await page.locator(".modal").getByRole("button", { name: "Done" }).click();
-  await save(page);
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await more(page, "Retire…");
+  await page.getByRole("dialog", { name: "Retire this standard?" }).getByLabel(/^Use instead/).selectOption({ label: "Secure logging" });
+  await page.getByRole("dialog", { name: "Retire this standard?" }).getByRole("button", { name: "Retire" }).click();
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Retired\./);
+  await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
   await expect(page.locator(".banner", { hasText: "This standard is retired." }).getByRole("link", { name: "Secure logging" })).toBeVisible();
   expect((await readSkill(page, "standard-dependency-updates")).skill.active).toBe(false);
 
-  await page.getByRole("button", { name: "Details", exact: true }).click();
-  await page.locator(".modal").getByRole("button", { name: "Delete standard" }).click();
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await more(page, "Delete…");
   await answer(page, "Delete this standard?", "Delete standard");
   await expect(page.getByRole("heading", { name: "What must I meet?" })).toBeVisible();
   expect(await readStandard(page, "dependency-updates")).toBeUndefined();
@@ -283,7 +308,8 @@ test("mark a standard as reviewed, look at its history, edit its JSON", async ({
   await expect(page.locator(".history li").last()).toContainText("import");
   await page.locator(".modal-foot").getByRole("button", { name: "Close" }).click();
 
-  await page.getByRole("tab", { name: "JSON" }).click();
+  await openEditor(page, "standard", LOGGING);
+  await more(page, "JSON");
   await expect(page.locator(".cm-content")).toContainText('"requirements"');
   const original = JSON.stringify(await readStandard(page, LOGGING), null, 2);
   await page.locator(".cm-content").click();
@@ -291,4 +317,6 @@ test("mark a standard as reviewed, look at its history, edit its JSON", async ({
   await page.keyboard.insertText(original.replace('"id": "SEC-LOG-02"', '"id": "SEC-LOG-01"'));
   await expect(page.locator(".json-side .issues")).toContainText('duplicate requirement id "SEC-LOG-01"');
   await expect(page.locator(".json-side .check.bad")).toContainText("Not applied to the draft");
+  await expect(page.locator(".edit-bar").getByRole("button", { name: "Publish…" })).toBeDisabled();
+  expect(await readWorkingDraft(page, "standard", LOGGING)).toBeUndefined(); // nothing was saved
 });

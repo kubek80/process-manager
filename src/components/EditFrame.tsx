@@ -1,11 +1,10 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   ArrowDown, ArrowLeft, ArrowUp, ChevronRight, CircleAlert, CircleCheck, Flag, ListTree, MoreHorizontal, PanelRight, Plus, Redo2, Send, TriangleAlert, Undo2, X,
 } from "lucide-react";
 import type { Feedback, Issue } from "../types";
 import { checkerSummary, issueText, type EditState, type OutlineEntry } from "../lib/editing";
-import type { Change } from "../lib/diff";
-import { ChangeList } from "./Editing";
+import type { Notice } from "./EditSession";
 import { FeedbackItem, type FeedbackTarget } from "./Feedback";
 import { Modal, useLayer } from "./ui";
 import "../edit.css";
@@ -46,13 +45,18 @@ export function FieldsHead({ icon, kicker, title, tools }: { icon?: ReactNode; k
   );
 }
 
+/** Whether a problem has to be fixed before saving (a draft never published) or only before publishing. */
+const FixBefore = createContext<(i: Issue) => "saving" | "publishing">(() => "publishing");
+
 /** The checker's findings about what is selected, at the top of its fields. */
 export function ItemIssues({ issues }: { issues: Issue[] }) {
+  const fixBefore = useContext(FixBefore);
   if (!issues.length) return null;
   const errors = issues.filter((i) => i.level === "error").length;
+  const when = issues.some((i) => i.level === "error" && fixBefore(i) === "saving") ? "saving" : "publishing";
   return (
     <div className={`item-issues ${errors ? "bad" : "warn"}`} role="status">
-      <strong>{errors ? <CircleAlert size={15} /> : <TriangleAlert size={15} />}{errors ? `${errors} problem${errors > 1 ? "s" : ""} to fix before publishing` : "Worth a look"}</strong>
+      <strong>{errors ? <CircleAlert size={15} /> : <TriangleAlert size={15} />}{errors ? `${errors} problem${errors > 1 ? "s" : ""} to fix before ${when}` : "Worth a look"}</strong>
       <ul>{issues.map((i, k) => <li key={k} className={i.level}>{issueText(i)}</li>)}</ul>
     </div>
   );
@@ -108,10 +112,10 @@ export function Outline({ entries, selected, onSelect, issues, feedback, onAdd, 
               {e.depth === 0 && e.section === onAdd.section && (
                 <button className="icon-btn outline-add" onClick={onAdd.run} aria-label={onAdd.label} title={onAdd.label}><Plus size={15} /></button>
               )}
-              {on && e.item && (
+              {on && e.item && items.length > 1 && (
                 <span className="outline-move">
-                  <button className="icon-btn" disabled={at <= 0} onClick={() => onMove(e.item!, -1)} aria-label={`Move ${e.label} earlier`} title="Move earlier"><ArrowUp size={14} /></button>
-                  <button className="icon-btn" disabled={at === items.length - 1} onClick={() => onMove(e.item!, 1)} aria-label={`Move ${e.label} later`} title="Move later"><ArrowDown size={14} /></button>
+                  <button className="btn small ghost" disabled={at <= 0} onClick={() => onMove(e.item!, -1)} aria-label={`Move ${e.label} earlier`}><ArrowUp size={13} />Earlier</button>
+                  <button className="btn small ghost" disabled={at === items.length - 1} onClick={() => onMove(e.item!, 1)} aria-label={`Move ${e.label} later`}><ArrowDown size={13} />Later</button>
                 </span>
               )}
             </li>
@@ -227,9 +231,13 @@ function CheckerPop({ issues, place, onClose, onPick }: { issues: Issue[]; place
   );
 }
 
-export interface BarAction { label: string; run: () => void; blocked?: string; busy?: boolean }
+/**
+ * A button of the editing bar. `blocked`: off (nothing to do). `unavailable`: looks unavailable
+ * but can be pressed and focused - pressing it says why (the reason is also shown under the bar).
+ */
+export interface BarAction { label: string; run: () => void; blocked?: string; unavailable?: string; busy?: boolean }
 
-export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo, onBack, discard, save, publish, more, unsaved, banners, outline, middle, fields, fieldsLabel, panel, setPanel, json }: {
+export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo, onBack, discard, save, publish, more, unsaved, banners, outline, middle, fields, fieldsLabel, panel, setPanel, json, notice, onNotice, fixBefore }: {
   kind: "process" | "standard"; title: string; state: EditState;
   issues: Issue[]; place: (i: Issue) => string; onPickIssue: (i: Issue) => void;
   undo: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
@@ -249,6 +257,8 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
   panel: Panel; setPanel: (p: Panel) => void;
   /** The JSON of the whole document is shown: it takes the whole width. */
   json?: boolean;
+  notice?: Notice | null; onNotice: () => void;
+  fixBefore: (i: Issue) => "saving" | "publishing";
 }) {
   const off = (unavailable: boolean) => (unavailable ? { "aria-disabled": true, className: "eb-icon off" } : { className: "eb-icon" });
   const noun = kind === "process" ? "process" : "standard";
@@ -277,9 +287,18 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
           <MoreMenu items={items} />
           {discard && !phone && <button className="eb-btn eb-discard" disabled={!!discard.blocked || discard.busy} onClick={discard.run} title={discard.blocked}>{discard.label}</button>}
           <button className="eb-btn eb-save" disabled={!!save.blocked || save.busy} onClick={save.run} title={save.blocked}>{save.busy ? "Saving…" : save.label}</button>
-          <button className="eb-btn eb-publish" disabled={!!publish.blocked || publish.busy} onClick={publish.run} title={publish.blocked}><Send size={15} />{publish.label}</button>
+          <button className={`eb-btn eb-publish ${publish.unavailable ? "unavailable" : ""}`} disabled={!!publish.blocked || publish.busy} onClick={publish.run}
+            title={publish.blocked} aria-disabled={publish.unavailable ? true : undefined} aria-describedby={publish.unavailable && notice ? "edit-notice" : undefined}><Send size={15} />{publish.label}</button>
         </div>
       </header>
+      {notice && (
+        <div id="edit-notice" className={`edit-notice ${notice.tone}`} role={notice.persistent ? "status" : "alert"}>
+          {notice.tone === "bad" ? <CircleAlert size={16} /> : <TriangleAlert size={16} />}
+          <span>{notice.text}</span>
+          {notice.issue && <button className="btn small" onClick={() => onPickIssue(notice.issue!)}>Show it</button>}
+          {!notice.persistent && <button className="icon-btn" onClick={onNotice} aria-label="Close this message"><X size={16} /></button>}
+        </div>
+      )}
       {banners && <div className="edit-banners">{banners}</div>}
       <div className="panel-strip">
         <button className="btn small" onClick={() => setPanel(panel === "outline" ? null : "outline")} aria-expanded={panel === "outline"}><ListTree size={15} />Outline</button>
@@ -293,7 +312,7 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
         <main className="edit-middle" aria-label="What readers will see">{middle}</main>
         <aside className="edit-fields" aria-label={`Fields: ${fieldsLabel}`}>
           <div className="panel-close"><b>{fieldsLabel}</b><button className="icon-btn" onClick={() => setPanel(null)} aria-label="Close the fields"><X size={18} /></button></div>
-          {fields}
+          <FixBefore.Provider value={fixBefore}>{fields}</FixBefore.Provider>
         </aside>
         {panel && <div className="panel-scrim" onClick={() => setPanel(null)} aria-hidden="true" />}
       </div>
@@ -325,7 +344,8 @@ export function PublishDialog({ noun, first, changes, version, blocked, onPublis
   noun: string;
   /** Never published before: says who will be able to see it. */
   first: boolean;
-  changes: Change[]; version?: number; blocked?: string;
+  /** What readers will see differently, a line each (see publishLines). */
+  changes: string[]; version?: number; blocked?: string;
   onPublish: (note: string) => Promise<boolean>; onClose: () => void;
 }) {
   const [note, setNote] = useState("");
@@ -344,10 +364,15 @@ export function PublishDialog({ noun, first, changes, version, blocked, onPublis
       <div className="publish-body">
         {first
           ? <p>Everybody who signs in to the portal will be able to find and read it. Its skill is generated, and search and AI agents find it.</p>
-          : <><h3 className="mini-title">What changed since the published version</h3><ChangeList changes={changes} /></>}
+          : <>
+              <h3 className="mini-title">What readers will see differently</h3>
+              {changes.length
+                ? <ul className="publish-changes">{changes.map((c, i) => <li key={i}>{c}</li>)}</ul>
+                : <p className="muted">Nothing that readers see is different.</p>}
+            </>}
         <label className="field">
           <span className="field-label">Note for the list of versions<em>Optional. Tells others what changed and why.</em></span>
-          <input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder={first ? "First version" : "Added the security review"} data-autofocus=""
+          <input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder={first ? "For example: first version" : "For example: added the security review"} data-autofocus=""
             onKeyDown={(e) => { if (e.key === "Enter") go(); }} />
         </label>
         {blocked

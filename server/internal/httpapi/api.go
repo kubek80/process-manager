@@ -76,6 +76,7 @@ type Deps struct {
 type api struct {
 	Deps
 	searches *brake
+	uploads  *brake // icons
 }
 
 type ctxKey struct{}
@@ -87,7 +88,7 @@ type session struct {
 
 // New builds the handler.
 func New(d Deps) http.Handler {
-	a := &api{Deps: d, searches: newBrake(searchesPerMinute, time.Minute)}
+	a := &api{Deps: d, searches: newBrake(searchesPerMinute, time.Minute), uploads: newBrake(iconUploadsPerHour, time.Hour)}
 	mux := http.NewServeMux()
 
 	// healthz: the process is alive. readyz: it can also reach the database, so it may get traffic.

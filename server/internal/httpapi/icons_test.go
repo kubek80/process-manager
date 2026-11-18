@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/png"
 	"io"
@@ -334,4 +335,39 @@ func TestListsCannotNameAnIconThatIsNotStored(t *testing.T) {
 		c["tools"].([]any)[0].(map[string]any)["description"] = "Changed."
 	}))
 	wantStatus(t, status, 200, out)
+}
+
+func TestUploadsHaveABrake(t *testing.T) {
+	e := setup(t, nil)
+	a := e.as(alex)
+	for i := 0; i < iconUploadsPerHour; i++ {
+		svg := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="` + fmt.Sprint(i+1) + `" height="1"/></svg>`
+		if status, out := a.upload("image/svg+xml", []byte(svg)); status != 200 {
+			t.Fatalf("upload %d: %d %v", i, status, out)
+		}
+	}
+	req, _ := http.NewRequest("POST", e.srv.URL+"/api/icons", strings.NewReader(plainSVG))
+	req.Header.Set(CSRFHeader, CSRFValue)
+	req.Header.Set("Content-Type", "image/svg+xml")
+	res, err := a.http.Do(req)
+	must(t, err)
+	var out map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&out)
+	res.Body.Close()
+	wantError(t, res.StatusCode, out, 429, "You have added a lot of icons in the last hour. Please try again later.")
+	if after := res.Header.Get("Retry-After"); after == "" || after == "0" {
+		t.Fatalf("Retry-After: %q", after)
+	}
+	// the brake is per person
+	if status, out := e.as(dana).upload("image/svg+xml", []byte(plainSVG)); status != 200 {
+		t.Fatalf("another person: %d %v", status, out)
+	}
+}
+
+func TestListsNamingAnIconOfTheWrongFormGetAPlainSentence(t *testing.T) {
+	e := setup(t, nil)
+	for _, bad := range []string{"not-an-icon", strings.Repeat("A", 64), "../../etc/passwd"} {
+		status, out := e.as(alex).do("PUT", "/api/catalog", e.catalogWith(setIcon("tools", "github", bad)))
+		wantError(t, status, out, 400, "The icon of the tool “GitHub” is not one that was uploaded here. Upload it again.")
+	}
 }

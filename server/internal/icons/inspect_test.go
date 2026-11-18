@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
 	"hash/crc32"
 	"image"
 	"image/color"
@@ -125,11 +126,10 @@ func TestPlainSVGIsAccepted(t *testing.T) {
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>
     <clipPath id="c"><circle cx="24" cy="24" r="20"/></clipPath>
-    <path id="p" d="M0 0h10"/>
   </defs>
   <style>.a { fill: url(#g); stroke: #333 } text { font-family: sans-serif }</style>
   <g clip-path="url(#c)" style="fill: url('#g')"><rect class="a" width="48" height="48"/></g>
-  <use href="#p" x="4"/><use xlink:href="#p" y="4"/>
+  <path d="M4 0h10" mask="url(#c)"/>
   <text x="24" y="30" text-anchor="middle" xml:space="preserve">A &amp; B</text>
 </svg>`, 48},
 		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0,0,24.5,24.5" width="100" height="100"><circle cx="12" cy="12" r="10"/></svg>`, 100},
@@ -162,10 +162,17 @@ func TestSVGThatIsNotPlainDrawingIsRefused(t *testing.T) {
 		{wrap(`<object data="x"/>`), "(<object>)"},
 		{wrap(`<image href="https://evil.example/a.png" width="10" height="10"/>`), "(<image>)"},
 		{wrap(`<a href="https://evil.example"><rect/></a>`), "(<a>)"},
-		{wrap(`<use href="https://evil.example/s.svg#x"/>`), "points to something outside itself (https://evil.example/s.svg#x)"},
-		{wrap(`<use xlink:href="other.svg#x"/>`), "outside itself"},
-		{wrap(`<use href="#nowhere"/>`), "points to “#nowhere”, which is not in the file"},
-		{wrap(`<use href="javascript:alert(1)"/>`), "outside itself"},
+		{wrap(`<use href="https://evil.example/s.svg#x"/>`), "The SVG file repeats parts of its drawing (<use>)."},
+		{wrap(`<g id="a"/><use href="#a"/>`), "repeats parts of its drawing (<use>)"},
+		{wrap(`<symbol id="s"/>`), "(<symbol>)"},
+		{wrap(`<pattern id="p" width="1" height="1"><rect width="1" height="1"/></pattern>`), "(<pattern>)"},
+		{wrap(`<marker id="m"><path d="M0 0h1"/></marker>`), "(<marker>)"},
+		{wrap(`<filter id="f"><feGaussianBlur stdDeviation="99"/></filter>`), "The SVG file contains effects (<filter>)."},
+		{wrap(`<linearGradient id="a"/><linearGradient id="b" href="#a"/>`), "The SVG file links one part of its drawing to another (href on <linearGradient>)."},
+		{wrap(`<linearGradient id="a"/><radialGradient id="b" xlink:href="#a"/>`), "links one part of its drawing to another (href on <radialGradient>)"},
+		{wrap(`<g href="other.svg#x"/>`), "points to something outside itself (other.svg#x)"},
+		{wrap(`<rect fill="url(#nowhere)"/>`), "points to “#nowhere”, which is not in the file"},
+		{wrap(`<g xlink:href="javascript:alert(1)"/>`), "outside itself"},
 		{wrap(`<rect fill="url(https://evil.example/p)"/>`), "outside itself"},
 		{wrap(`<rect fill="url( 'https://evil.example/p' )"/>`), "outside itself"},
 		{wrap(`<rect style="fill: url(//evil.example/p)"/>`), "outside itself"},
@@ -192,12 +199,63 @@ func TestSVGThatIsNotPlainDrawingIsRefused(t *testing.T) {
 		{`<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"/>`, "The image must be square: it is 20 × 10."},
 		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="20" height="10"/>`, "must be square"},
 		{`<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"/>`, "does not say how large it is"},
-		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 x y"/>`, "(viewBox) cannot be read"},
+		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 x y"/>`, "“x” is not one"},
 		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"/><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"/>`, "more than one drawing"},
 		{`<!-- only a comment -->`, "not an SVG drawing"},
 		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"/>text after`, "text outside its drawing"},
-		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1">` + strings.Repeat("<g>", 70) + strings.Repeat("</g>", 70) + `</svg>`, "too complex"},
+		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1">` + strings.Repeat("<g>", 32) + strings.Repeat("</g>", 32) + `</svg>`, "The SVG file puts parts inside each other more than 32 levels deep: too deep for an icon."},
+		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1">` + strings.Repeat("<g/>", 2000) + `</svg>`, "The SVG file has more than 2000 parts: too many for an icon."},
+		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1e308 1e308"/>`, "The numbers of the drawing area of the SVG file (viewBox) must be at most 100000."},
+		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1e400 1e400"/>`, "The drawing area of the SVG file (viewBox) must be four ordinary numbers: “1e400” is not one."},
+		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 NaN NaN"/>`, "“NaN” is not one"},
+		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="Infinity 0 1 1"/>`, "“Infinity” is not one"},
+		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0"/>`, "The width and height of the drawing area of the SVG file (viewBox) must be greater than 0."},
+		{`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1 1"/>`, "The drawing area of the SVG file (viewBox) must be four numbers."},
+		{`<svg xmlns="http://www.w3.org/2000/svg" width="NaN" height="NaN"/>`, "The width of the SVG file must be an ordinary number: “NaN” is not one."},
+		{`<svg xmlns="http://www.w3.org/2000/svg" width="1e999" height="1e999"/>`, "The width of the SVG file must be an ordinary number"},
+		{`<svg xmlns="http://www.w3.org/2000/svg" width="200000" height="200000"/>`, "The width of the SVG file must be at most 100000."},
+		{`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="-10"/>`, "The height of the SVG file must be greater than 0."},
 	} {
 		wantRefused(t, SVG, []byte(c.svg), c.part)
+	}
+}
+
+// A small file that makes a browser draw a huge number of shapes: nine nested groups of ten
+// <use> each (10^9 copies). It was once accepted; nothing that repeats parts is allowed now.
+func TestAUseBombIsRefused(t *testing.T) {
+	var b strings.Builder
+	b.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 10 10"><defs><path id="g0" d="M0 0h1v1z"/>`)
+	for i := 1; i <= 9; i++ {
+		fmt.Fprintf(&b, `<g id="g%d">`, i)
+		for j := 0; j < 10; j++ {
+			fmt.Fprintf(&b, `<use xlink:href="#g%d"/>`, i-1)
+		}
+		b.WriteString(`</g>`)
+	}
+	b.WriteString(`</defs><use href="#g9"/></svg>`)
+	if b.Len() > 8<<10 {
+		t.Fatalf("the bomb is %d bytes", b.Len())
+	}
+	wantRefused(t, SVG, []byte(b.String()), "repeats parts of its drawing (<use>)")
+	// the same with gradients that inherit from each other through href
+	g := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><linearGradient id="a"/><linearGradient id="b" href="#a"/><rect fill="url(#b)"/></svg>`
+	wantRefused(t, SVG, []byte(g), "links one part of its drawing to another")
+}
+
+func TestMovingImagesAreRefused(t *testing.T) {
+	still := pngOf(t, 8, 8)
+	// an acTL chunk right after IHDR (8 bytes signature + 25 bytes IHDR) makes it an animated PNG
+	actl := []byte{0, 0, 0, 8, 'a', 'c', 'T', 'L', 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0}
+	apng := append(append(append([]byte{}, still[:33]...), actl...), still[33:]...)
+	wantRefused(t, PNG, apng, "Moving images cannot be used as icons: this PNG image is animated.")
+	if _, err := Inspect(PNG, still); err != nil {
+		t.Fatal(err)
+	}
+	vp8x := []byte("RIFF\x00\x00\x00\x00WEBPVP8X\x0a\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+	wantRefused(t, WebP, vp8x, "this WebP image is animated")
+	anim := []byte("RIFF\x00\x00\x00\x00WEBPANIM\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+	wantRefused(t, WebP, anim, "this WebP image is animated")
+	if _, err := Inspect(WebP, webp1); err != nil {
+		t.Fatal(err)
 	}
 }

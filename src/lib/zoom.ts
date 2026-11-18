@@ -2,7 +2,7 @@
  * Zooming the map with Ctrl + scroll (Cmd + scroll on a Mac; a pinch on a trackpad arrives as a
  * wheel event with Ctrl held). The point under the pointer stays where it is.
  */
-export const ZOOM_MIN = 0.5;
+export const ZOOM_MIN = 0.4;
 export const ZOOM_MAX = 1.5;
 
 /** Keeps a zoom within its limits. Not rounded: a pinch sends steps far smaller than a percent. */

@@ -106,7 +106,7 @@ test("change an existing process with AI, then delete it", async ({ page }) => {
   expect(await readProcess(page, "request-vpn-access")).toBeUndefined();
 });
 
-test("a blank process starts as a valid draft", async ({ page }) => {
+test("a blank process starts as a draft whose example text must be replaced before it is published", async ({ page }) => {
   await open(page, "/processes");
   await page.getByRole("button", { name: "Blank process" }).click();
   // it is named first: the name gives it its address, which never changes
@@ -115,8 +115,23 @@ test("a blank process starts as a valid draft", async ({ page }) => {
   await expect(page).toHaveURL(/#\/p\/order-a-laptop\/edit/);
   await expect(page.locator(".eb-title h1")).toHaveText("Order a laptop");
   await expect(editState(page)).toHaveAttribute("aria-label", /^Draft\./);
-  await expect(page.locator(".eb-status.good, .eb-status.warn")).toBeVisible();
   expect((await readProcess(page, "order-a-laptop"))!.status).toBe("draft");
+  // the example sentences count as problems: it cannot be published with them
+  await expect(page.locator(".eb-status.bad")).toBeVisible();
+  await page.locator(".eb-status.bad").click();
+  await expect(page.getByRole("dialog", { name: "What the checker found" })).toContainText("example text");
+  await page.keyboard.press("Escape");
+  const about = page.getByRole("navigation", { name: "Outline of the process" }).getByRole("button", { name: /^About, \d+ problems?/ });
+  await expect(about.locator(".outline-mark.bad")).toBeVisible();
+  // replaced, it can be published
+  await outline(page, "About");
+  await fields(page).getByLabel(/^Summary/).fill("A laptop that is set up for work, delivered to your desk.");
+  await outline(page, /^1 /);
+  await fields(page).getByLabel(/^What happens/).fill("Fill in the laptop request");
+  await fields(page).getByLabel("Action a").fill("Choose the model and say where it should be delivered.");
+  await expect(page.locator(".eb-status.bad")).toHaveCount(0);
+  await publish(page);
+  expect((await readProcess(page, "order-a-laptop"))!.status).toBe("active");
   await more(page, "Delete…");
   await answer(page, "Delete this process?", "Delete process");
   await expect(page.locator(".card").first()).toBeVisible();

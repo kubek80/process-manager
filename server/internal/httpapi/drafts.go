@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -35,7 +36,19 @@ func revOf(r *http.Request) (int, bool) {
 }
 
 func draftJSON(d docs.WorkingDraft) map[string]any {
-	return map[string]any{"revision": d.Revision, "base": d.Base, "updatedBy": d.UpdatedBy, "updatedAt": d.UpdatedAt}
+	out := map[string]any{"revision": d.Revision, "base": d.Base, "updatedBy": d.UpdatedBy, "updatedAt": d.UpdatedAt}
+	if d.UpdatedByName != "" {
+		out["updatedByName"] = d.UpdatedByName
+	}
+	return out
+}
+
+// nameOf is the name to keep with a draft: the one the sign-in gave, "" when it gave none.
+func nameOf(s session) string {
+	if name := strings.TrimSpace(s.Name); name != "" && !strings.EqualFold(name, s.Email) {
+		return name
+	}
+	return ""
 }
 
 // draftConflict tells the app that somebody else saved, published or discarded the working
@@ -49,9 +62,13 @@ func draftConflict(w http.ResponseWriter, c *docs.DraftConflict) {
 		})
 		return
 	}
+	info := map[string]any{"exists": true, "draft": true, "version": c.Current.Revision, "updatedAt": c.Current.UpdatedAt, "updatedBy": c.Current.UpdatedBy}
+	if c.Current.UpdatedByName != "" {
+		info["updatedByName"] = c.Current.UpdatedByName
+	}
 	writeJSON(w, 409, map[string]any{
 		"error":    fmt.Sprintf("%s saved newer unpublished changes while you were working on this.", c.Current.UpdatedBy),
-		"conflict": map[string]any{"exists": true, "draft": true, "version": c.Current.Revision, "updatedAt": c.Current.UpdatedAt, "updatedBy": c.Current.UpdatedBy},
+		"conflict": info,
 	})
 }
 
@@ -67,7 +84,7 @@ func draftPending(w http.ResponseWriter, kind string, p *docs.DraftPending) {
 	}
 	writeJSON(w, 409, map[string]any{
 		"error": msg,
-		"draft": docs.DraftInfo{UpdatedAt: p.Draft.UpdatedAt, UpdatedBy: p.Draft.UpdatedBy},
+		"draft": p.Draft.Info(),
 	})
 }
 
@@ -107,7 +124,9 @@ func (a *api) getDraft(kind string) http.HandlerFunc {
 		}
 		d, err := a.Docs.GetDraft(r.Context(), kind, cur.ID)
 		if errors.Is(err, docs.ErrNotFound) {
-			notThere(w)
+			// for an editor "no unpublished changes" is an ordinary answer, not an error
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		if err != nil {
@@ -146,7 +165,7 @@ func (a *api) putDraft(kind string) http.HandlerFunc {
 		s := who(r)
 		var m *misplaced
 		d, err := a.Docs.SaveDraft(r.Context(), docs.DraftChange{
-			Kind: kind, ID: id, Body: body, By: s.Email, Revision: rev, Base: base,
+			Kind: kind, ID: id, Body: body, By: s.Email, ByName: nameOf(s), Revision: rev, Base: base,
 			// the same rule as a save: the published document and what the draft makes of it
 			Check: func(current docs.Doc) error {
 				stored := belongsOf(current.Body)
@@ -260,8 +279,9 @@ func (a *api) publishDraft(kind string) http.HandlerFunc {
 		// What it is saved on top of: the version the draft was based on, so that a version
 		// somebody published since is not overwritten unseen - unless the person decided to
 		// publish over it (over), or all that came in between is a review confirmation: then the
-		// draft is moved onto the current version and keeps that review.
-		base, takeReview := d.Base, false
+		// draft is moved onto the current version. Either way the review record (when, by whom)
+		// is the published one; see docs.ForPublishing.
+		base := d.Base
 		switch {
 		case over != nil:
 			base = *over
@@ -272,10 +292,10 @@ func (a *api) publishDraft(kind string) http.HandlerFunc {
 				return
 			}
 			if err == nil && docs.OnlyReviewDiffers(was, cur.Body) {
-				base, takeReview = cur.Version, true
+				base = cur.Version
 			}
 		}
-		body, err := docs.ForPublishing(d.Body, cur.Body, takeReview)
+		body, err := docs.ForPublishing(d.Body, cur.Body)
 		if err != nil {
 			a.fail(w, r, err)
 			return

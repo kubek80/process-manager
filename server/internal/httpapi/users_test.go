@@ -173,9 +173,11 @@ func TestAdminsListAndReplaceTheRolesOfAPerson(t *testing.T) {
 	if out["bootstrap"] != true {
 		t.Fatalf("dana: %v", out)
 	}
-	status, _, _ = d.raw("DELETE", "/api/admin/users/"+dana, nil, true)
-	if status != 204 || usersOf(t, d)[dana] == nil {
-		t.Fatalf("dana deleted: %d", status)
+	// nobody removes all of their own roles: the app does not offer it, the server refuses it
+	status, out = d.do("DELETE", "/api/admin/users/"+url.PathEscape("DANA@example.com "), nil)
+	wantError(t, status, out, 409, "You cannot remove all of your own roles. Ask another admin to do it.")
+	if got := rolesOf(usersOf(t, d)[dana]); got != "process-editor" {
+		t.Fatalf("dana: %s", got)
 	}
 	_, me = d.do("GET", "/api/me", nil)
 	if me["perms"].(map[string]any)["admin"] != true {
@@ -198,14 +200,18 @@ func TestTheLastAdminIsKeptByUsers(t *testing.T) {
 	status, out := d.do("PUT", "/api/admin/users/"+dana, roles("process-editor"))
 	wantError(t, status, out, 409, "This is the last admin. Make someone else an admin first.")
 	status, out = d.do("DELETE", "/api/admin/users/"+dana, nil)
-	wantError(t, status, out, 409, "This is the last admin. Make someone else an admin first.")
+	wantError(t, status, out, 409, "You cannot remove all of your own roles. Ask another admin to do it.")
 	if users := usersOf(t, d); rolesOf(users[dana]) != "admin" || users[dana]["bootstrap"] != false {
 		t.Fatalf("dana: %v", users[dana])
 	}
 	// with another admin, an admin may also take the role from themself
 	status, out = d.do("PUT", "/api/admin/users/"+riley, roles("admin", "practice-owner:security"))
 	wantStatus(t, status, 200, out)
-	status, _, _ = d.raw("DELETE", "/api/admin/users/"+dana, nil, true)
+	status, out = d.do("PUT", "/api/admin/users/"+dana, roles("process-editor"))
+	wantStatus(t, status, 200, out)
+	status, out = e.as(riley).do("PUT", "/api/admin/users/"+dana, roles("admin"))
+	wantStatus(t, status, 200, out)
+	status, _, _ = e.as(riley).raw("DELETE", "/api/admin/users/"+dana, nil, true)
 	wantStatus(t, status, 204, nil)
 	status, out = d.do("GET", "/api/admin/users", nil)
 	wantError(t, status, out, 403, "Only admins can do that.")

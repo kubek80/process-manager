@@ -84,18 +84,25 @@ export const removeStandard = (id: string, base: number) => call<void>("DELETE",
 // Unpublished changes to a published process or standard: one shared working draft beside it,
 // seen only by its editors. Readers, skills and search keep the published version until it is
 // published. `revision` counts the saves of the draft; a save says which one it was made from.
-export interface WorkingDraft<T> { doc: T; base: number; revision: number; updatedBy: string; updatedAt: string }
-export interface DraftSaved { revision: number; base: number; updatedBy: string; updatedAt: string }
+/** `updatedByName`: the person's name when the server knew it; `updatedBy` is their email. */
+export interface WorkingDraft<T> { doc: T; base: number; revision: number; updatedBy: string; updatedByName?: string; updatedAt: string }
+export interface DraftSaved { revision: number; base: number; updatedBy: string; updatedByName?: string; updatedAt: string }
 const docsPath = (kind: TargetKind, id: string) => `/api/${kind === "process" ? "processes" : "standards"}/${encodeURIComponent(id)}`;
 /** The working draft, or null when there is none. */
 export async function loadWorkingDraft<T>(kind: TargetKind, id: string): Promise<WorkingDraft<T> | null> {
-  try { return await call<WorkingDraft<T>>("GET", `${docsPath(kind, id)}/draft`); } catch (e) {
+  // no draft: 204 without a body (an older server answered 404)
+  try { return (await call<WorkingDraft<T> | undefined>("GET", `${docsPath(kind, id)}/draft`)) ?? null; } catch (e) {
     if (e instanceof ApiError && e.status === 404) return null;
     throw e;
   }
 }
-/** Saves the working draft on top of revision `rev` (0: creates it). */
-export const putWorkingDraft = <T>(kind: TargetKind, id: string, doc: T, rev: number) => call<DraftSaved>("PUT", `${docsPath(kind, id)}/draft?rev=${rev}`, doc);
+/**
+ * Saves the working draft on top of revision `rev` (0: creates it). `base`: the published version
+ * the changes were made from - with rev 0 the draft is created on it (so that publishing meets
+ * any version published since), with a revision it moves the draft onto that version.
+ */
+export const putWorkingDraft = <T>(kind: TargetKind, id: string, doc: T, rev: number, base?: number) =>
+  call<DraftSaved>("PUT", `${docsPath(kind, id)}/draft?rev=${rev}${base ? `&base=${base}` : ""}`, doc);
 export const deleteWorkingDraft = (kind: TargetKind, id: string, rev: number) => call<void>("DELETE", `${docsPath(kind, id)}/draft?rev=${rev}`);
 /** Publishes the working draft as the next version. `over`: publish it over a version somebody else published since. */
 export const publishWorkingDraft = (kind: TargetKind, id: string, rev: number, note = "", over?: number) =>

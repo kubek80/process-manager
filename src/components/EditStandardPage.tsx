@@ -29,7 +29,7 @@ export function EditStandardPage(props: {
   onReload: () => Promise<{ saved: Standard; version: number } | null>;
   onRefresh: () => Promise<void>;
   onDelete: (base: number) => void;
-  onDraftMeta: (d: { updatedAt: string; updatedBy: string } | null) => void;
+  onDraftMeta: (d: { updatedAt: string; updatedBy: string; updatedByName?: string } | null) => void;
 }) {
   const { standard, all, processes } = props;
   const perms = usePerms();
@@ -75,6 +75,9 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
     const t = setTimeout(() => document.getElementById(`req-${reqId}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" }), 30);
     return () => clearTimeout(t);
   }, [reqId]);
+
+  // a refused save or publish brings its first problem into view
+  useEffect(() => { if (s.focus) choose(issueTarget("standard", draft, s.focus.issue.path)); }, [s.focus?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const byPlace = useMemo(() => (drawable ? issuesByPlace("standard", draft, s.issues) : new Map()), [drawable, draft, s.issues]);
   const add = (after?: string) => { const r = addRequirement(draft, after); setDraft(r.standard); selectReq(r.id); s.setPanel("fields"); };

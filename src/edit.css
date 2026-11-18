@@ -31,7 +31,10 @@
 .eb-btn:focus-visible, .eb-icon:focus-visible, .eb-status:focus-visible { outline-color: #c7c9ff; }
 .eb-back { background: transparent; border-color: var(--eb-line); }
 .eb-publish { background: var(--eb-primary); color: var(--eb-primary-ink); }
-.eb-publish:hover:not(:disabled) { background: color-mix(in srgb, var(--eb-primary) 85%, #fff); }
+.eb-publish:hover:not(:disabled):not(.unavailable) { background: color-mix(in srgb, var(--eb-primary) 85%, #fff); }
+/* can be pressed (it says why), but does not look like the way out */
+.eb-publish.unavailable { background: transparent; color: var(--eb-muted); border: 1px dashed var(--eb-line); }
+.eb-publish.unavailable:hover { background: var(--eb-btn); }
 .eb-save { border-color: color-mix(in srgb, var(--eb-text) 30%, transparent); }
 .eb-discard { background: transparent; color: var(--eb-muted); }
 .eb-title { min-width: 120px; flex: 0 1 auto; display: grid; }
@@ -82,6 +85,12 @@
 .menu-item[aria-disabled] em { color: var(--warn); }
 
 .edit-banners { padding: 8px 16px 0; }
+/* why Save draft or Publish did nothing, right under the bar */
+.edit-notice { display: flex; align-items: center; gap: 10px; padding: 8px 16px; font-size: 13.5px; border-bottom: 1px solid var(--line); }
+.edit-notice > span { flex: 1; min-width: 0; color: var(--text); }
+.edit-notice > svg { flex: none; }
+.edit-notice.bad { background: var(--bad-bg); color: var(--bad); }
+.edit-notice.warn { background: var(--warn-bg); color: var(--warn); }
 .edit-banners .banner { margin: 0 0 8px; }
 .check.info { background: var(--accent-soft); color: var(--accent); }
 
@@ -104,7 +113,9 @@
 .outline-item:hover { background: var(--surface-2); }
 .outline-row.on > .outline-item { background: var(--accent-soft); color: var(--accent); }
 .depth-1.on > .outline-item { border-left-color: var(--accent); }
-.outline-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* names wrap to two lines rather than being cut short */
+.outline-label { flex: 1; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; line-height: 1.3; }
+.outline-row { flex-wrap: wrap; }
 .outline-n { flex: none; min-width: 20px; height: 20px; padding: 0 4px; display: inline-grid; place-items: center; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); font-size: 11px; font-weight: 650; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .outline-count { flex: none; font-size: 12px; font-weight: 550; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .outline-flag { flex: none; display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 700; color: var(--bad); }
@@ -112,8 +123,9 @@
 .outline-mark.bad { background: var(--bad); } .outline-mark.warn { background: var(--warn); }
 :root[data-theme="dark"] .outline-mark { color: #141726; }
 .outline-add { width: 28px; height: 28px; margin-left: 2px; }
-.outline-move { display: flex; flex: none; }
-.outline-move .icon-btn { width: 26px; height: 26px; }
+/* reordering the selected item: a row of its own under it, so the name keeps its room */
+.outline-move { display: flex; gap: 4px; flex: 1 0 100%; padding: 2px 0 4px 40px; }
+.outline-move .btn.small { height: 26px; padding: 0 8px; font-size: 12px; }
 
 /* the middle: what readers will see, always editable */
 .edit-preview { max-width: 1100px; margin: 0 auto; display: grid; gap: 12px; }
@@ -154,7 +166,8 @@
 .edit-fields .field-label { display: grid; gap: 1px; }
 .edit-fields .field-label em { display: block; margin-left: 0; font-size: 12.5px; }
 .edit-fields .field-label em::first-letter { text-transform: uppercase; }
-.edit-fields .grid2 { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+/* one field per row: the panel is too narrow for two values side by side without cutting them */
+.edit-fields .grid2, .edit-fields .grid3 { grid-template-columns: minmax(0, 1fr); }
 .edit-fields .type-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
 .with-icon { display: flex; align-items: center; gap: 8px; }
 .with-icon select { flex: 1; }
@@ -178,6 +191,7 @@
 /* Publish */
 .publish-body { display: grid; gap: 14px; }
 .publish-body .mini-title { margin-top: 0; }
+.publish-changes { margin: 4px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13.5px; max-height: 40vh; overflow: auto; overflow-wrap: anywhere; }
 .publish-sentence { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); }
 
 /* a laptop: the outline slides over */
@@ -203,9 +217,10 @@
 /* a phone: the fields slide over too, the bar takes two rows */
 @media (max-width: 760px) {
   .edit-bar { flex-wrap: wrap; padding: 8px 10px; gap: 8px; }
-  .eb-title { flex: 1 1 0; }
+  .eb-title { flex: 1 1 calc(100% - 60px); }
   .eb-title h1 { max-width: none; font-size: 15px; }
-  .eb-state { order: 3; flex: 1 1 0; flex-direction: row; align-items: center; gap: 8px; padding-left: 0; border-left: 0; }
+  .eb-state { order: 3; flex: 1 1 0; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 2px 8px; padding-left: 0; border-left: 0; }
+  .eb-sentence { white-space: normal; }
   .edit-bar > .spacer { display: none; }
   .eb-tools { order: 4; margin-left: auto; }
   .eb-tools .eb-icon { width: 30px; }
@@ -225,6 +240,5 @@
   .edit-fields .panel-close b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .panel-fields .panel-scrim { display: block; }
   .preview-head h2 { font-size: 20px; }
-  .edit-fields .grid2 { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { .edit-outline, .edit-fields { transition: none; } }

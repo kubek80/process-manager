@@ -116,6 +116,8 @@ export interface Conflict {
   version?: number;
   updatedBy?: string;
   updatedAt?: string;
+  /** The name of whoever saved, when the server knew it. */
+  updatedByName?: string;
   /** The conflict is about the working draft (its revision), not about the published versions. */
   draft?: boolean;
 }

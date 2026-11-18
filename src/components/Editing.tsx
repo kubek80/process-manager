@@ -5,6 +5,8 @@ import type { Draft } from "../lib/draft";
 import { compare, describeChange, summarize, type Change } from "../lib/diff";
 import { ApiError, loadHistory, loadVersion } from "../lib/store";
 import { useCatalog } from "../lib/catalog";
+import { author } from "../lib/editing";
+import { useMe } from "../lib/session";
 import { LoadError, Modal } from "./ui";
 
 /** Shared by the pages that edit something: processes, standards and the lists. */
@@ -40,7 +42,7 @@ export function DraftLine({ meta, status, editHref, noun }: { meta?: DocMeta; st
   return (
     <p className="draft-line" role="note">
       <PencilLine size={16} aria-hidden="true" />
-      <span>There are unpublished changes by {meta.draft.updatedBy || "an editor"} from {savedWhen(meta.draft.updatedAt)}. Readers see the published version.</span>
+      <span>There are unpublished changes by {meta.draft.updatedByName || meta.draft.updatedBy || "an editor"} from {savedWhen(meta.draft.updatedAt)}. Readers see the published version.</span>
       <a href={editHref}>Continue editing</a>
     </p>
   );
@@ -143,6 +145,7 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
 }) {
   const c = d.conflict;
   const { catalog } = useCatalog();
+  const who = author(c ?? undefined, useMe().user?.email);
   const [theirs, setTheirs] = useState<Change[] | "failed" | null>(null);
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -158,7 +161,7 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
 
   if (!c.exists && loadTheirs) {
     return (
-      <Modal title="The unpublished changes are gone" subtitle="Somebody else published or discarded the shared draft while you were editing." onClose={d.dismissConflict}
+      <Modal title="The unpublished changes are gone" subtitle="The shared draft was published or discarded, perhaps in another window, while you were editing." onClose={d.dismissConflict}
         footer={<><span className="spacer" /><button className="btn" onClick={d.dismissConflict}>Keep editing</button>
           <button className="btn primary" disabled={busy} onClick={run(() => d.keepMine())}>Save mine as a new draft</button></>}>
         <p>Your changes are still here and not saved. Saving starts a new draft with your changes, on top of what readers see now; look at the versions in the More menu first if you are not sure what was published.</p>
@@ -167,7 +170,8 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
   }
   if (loadTheirs) {
     return (
-      <Modal title="Somebody else saved the draft first" subtitle={`${c.updatedBy ?? "Somebody else"} saved the unpublished changes ${c.updatedAt ? `at ${when(c.updatedAt)}` : ""}, after you started editing.`} onClose={d.dismissConflict}
+      <Modal title={who.you ? "You saved the draft in another window first" : "Somebody else saved the draft first"}
+        subtitle={`${who.you ? "You" : who.name} saved the unpublished changes ${c.updatedAt ? `at ${when(c.updatedAt)}` : ""}${who.you ? " in another window or tab" : ""}, after you started editing here.`} onClose={d.dismissConflict}
         footer={<>
           <button className="btn" onClick={d.dismissConflict}>Keep editing</button>
           <span className="spacer" />
@@ -194,7 +198,7 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
     );
   }
   return (
-    <Modal title="Somebody else saved first" subtitle={`${c.updatedBy ?? "Somebody else"} saved version ${c.version} ${c.updatedAt ? `at ${when(c.updatedAt)}` : ""}, after you started editing version ${d.base}.`} onClose={d.dismissConflict}
+    <Modal title={who.you ? "You saved in another window first" : "Somebody else saved first"} subtitle={`${who.name} saved version ${c.version} ${c.updatedAt ? `at ${when(c.updatedAt)}` : ""}, after you started editing version ${d.base}.`} onClose={d.dismissConflict}
       footer={<>
         <button className="btn" onClick={d.dismissConflict}>Keep editing</button>
         <span className="spacer" />

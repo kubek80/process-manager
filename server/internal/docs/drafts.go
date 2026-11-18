@@ -21,8 +21,13 @@ import (
 // way a version comes into being. A document that was never published (status "draft") has no
 // working draft: it is saved the ordinary way.
 
-// MaxDraftBytes is the largest working draft that is stored, measured as stored (re-indented).
-const MaxDraftBytes = 512 << 10
+// MaxDraftBytes is the largest working draft that is stored, measured on the body as it was
+// sent: the same limit as for any save (the server refuses a larger request before it is read).
+const MaxDraftBytes = 1 << 20
+
+// MaxDraftDepth is how many levels of objects and lists inside one another a draft may have. A
+// process or standard needs about six; the limit only stops bodies built to be expensive.
+const MaxDraftDepth = 32
 
 // WorkingDraft is the unpublished changes to one document.
 type WorkingDraft struct {
@@ -32,12 +37,21 @@ type WorkingDraft struct {
 	Revision  int // grows with every save of the draft
 	UpdatedAt time.Time
 	UpdatedBy string
+	// UpdatedByName is the name of whoever saved it last, as the sign-in gave it; "" when unknown.
+	UpdatedByName string
 }
 
-// DraftInfo is what a list says about a working draft: who saved it last, and when.
+// Info is what a list says about the draft.
+func (d WorkingDraft) Info() DraftInfo {
+	return DraftInfo{UpdatedAt: d.UpdatedAt, UpdatedBy: d.UpdatedBy, UpdatedByName: d.UpdatedByName}
+}
+
+// DraftInfo is what a list says about a working draft: who saved it last (email, and the name
+// when it is known), and when.
 type DraftInfo struct {
-	UpdatedAt time.Time `json:"updatedAt"`
-	UpdatedBy string    `json:"updatedBy"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	UpdatedBy     string    `json:"updatedBy"`
+	UpdatedByName string    `json:"updatedByName,omitempty"`
 }
 
 // DraftRule says what a save does when the document has a working draft.
@@ -47,7 +61,7 @@ const (
 	// KeepDraft: the working draft stays as it is; its base is not moved, so publishing it later
 	// meets the ordinary version conflict (or is rebased, when only a review confirmation came
 	// in between). For saves that are no person's editing: imports, the conversion of older
-	// content, review confirmations. When such a save makes the document unpublished
+	// content, review confirmations (which move the base themselves, see MoveDraftBaseIn). When such a save makes the document unpublished
 	// (status "draft"), the working draft is dropped and that is logged: only a published
 	// document has one.
 	KeepDraft DraftRule = iota
@@ -101,8 +115,8 @@ func Published(body []byte) bool { return StatusOf(body) != "draft" }
 
 func draftIn(ctx context.Context, q pgx.Tx, kind, id string) (*WorkingDraft, error) {
 	d := WorkingDraft{}
-	err := q.QueryRow(ctx, `select kind, id, body, base, revision, updated_at, updated_by from working_drafts where kind = $1 and id = $2`, kind, id).
-		Scan(&d.Kind, &d.ID, &d.Body, &d.Base, &d.Revision, &d.UpdatedAt, &d.UpdatedBy)
+	err := q.QueryRow(ctx, `select kind, id, body, base, revision, updated_at, updated_by, updated_by_name from working_drafts where kind = $1 and id = $2`, kind, id).
+		Scan(&d.Kind, &d.ID, &d.Body, &d.Base, &d.Revision, &d.UpdatedAt, &d.UpdatedBy, &d.UpdatedByName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -132,8 +146,8 @@ func dropDraftIn(ctx context.Context, tx pgx.Tx, kind, id string, log *slog.Logg
 // GetDraft returns the working draft of a document, or ErrNotFound.
 func (s *Store) GetDraft(ctx context.Context, kind, id string) (WorkingDraft, error) {
 	var d WorkingDraft
-	err := s.Pool.QueryRow(ctx, `select kind, id, body, base, revision, updated_at, updated_by from working_drafts where kind = $1 and id = $2`, kind, id).
-		Scan(&d.Kind, &d.ID, &d.Body, &d.Base, &d.Revision, &d.UpdatedAt, &d.UpdatedBy)
+	err := s.Pool.QueryRow(ctx, `select kind, id, body, base, revision, updated_at, updated_by, updated_by_name from working_drafts where kind = $1 and id = $2`, kind, id).
+		Scan(&d.Kind, &d.ID, &d.Body, &d.Base, &d.Revision, &d.UpdatedAt, &d.UpdatedBy, &d.UpdatedByName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return d, ErrNotFound
 	}
@@ -142,7 +156,7 @@ func (s *Store) GetDraft(ctx context.Context, kind, id string) (WorkingDraft, er
 
 // Drafts says which documents of one kind have a working draft, by id: one query for a list.
 func (s *Store) Drafts(ctx context.Context, kind string) (map[string]DraftInfo, error) {
-	rows, err := s.Pool.Query(ctx, `select id, updated_at, updated_by from working_drafts where kind = $1`, kind)
+	rows, err := s.Pool.Query(ctx, `select id, updated_at, updated_by, updated_by_name from working_drafts where kind = $1`, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +165,7 @@ func (s *Store) Drafts(ctx context.Context, kind string) (map[string]DraftInfo, 
 	for rows.Next() {
 		var id string
 		var d DraftInfo
-		if err := rows.Scan(&id, &d.UpdatedAt, &d.UpdatedBy); err != nil {
+		if err := rows.Scan(&id, &d.UpdatedAt, &d.UpdatedBy, &d.UpdatedByName); err != nil {
 			return nil, err
 		}
 		out[id] = d
@@ -164,10 +178,14 @@ type DraftChange struct {
 	Kind, ID string
 	Body     []byte
 	By       string
+	ByName   string // the name of whoever saves, "" when not known
 	// Revision is the revision the change was made from; 0 means "I am starting one": refused
 	// when one exists.
 	Revision int
-	// Base, when given, moves the draft onto that version of the document, which must be the
+	// Base, when given with Revision 0, starts the draft on that version of the document: the
+	// current one or an older one (somebody re-creates their draft on the version their work
+	// came from, after it was discarded or published meanwhile; publishing it then meets the
+	// newer version). With Revision > 0 it moves the draft onto that version, which must be the
 	// current one (the person took over what was published since). nil: a new draft starts from
 	// the current version, an existing one keeps its base.
 	Base *int
@@ -177,10 +195,17 @@ type DraftChange struct {
 
 // CheckDraftBody is what a working draft must satisfy to be stored. It need not pass the format
 // or the checker - an unfinished draft can be saved - but it must be a JSON object whose "id" is
-// the id in the address, hold only text that can be stored, and be at most MaxDraftBytes long
-// as stored. It returns the body as stored (re-indented, the order of the keys kept).
+// the id in the address, hold only text that can be stored, be at most MaxDraftBytes long as
+// sent and at most MaxDraftDepth levels deep. It returns the body as stored (re-indented, the
+// order of the keys kept).
 func CheckDraftBody(id string, body []byte) ([]byte, error) {
+	if len(body) > MaxDraftBytes {
+		return nil, fmt.Errorf("%w: The draft is too large to save (more than %d MB). Shorten it and try again.", ErrInvalid, MaxDraftBytes>>20)
+	}
 	trimmed := bytes.TrimSpace(body)
+	if depthOf(trimmed) > MaxDraftDepth {
+		return nil, fmt.Errorf("%w: The draft has too many parts inside one another (more than %d levels) to be saved.", ErrInvalid, MaxDraftDepth)
+	}
 	if len(trimmed) == 0 || trimmed[0] != '{' || !json.Valid(trimmed) {
 		return nil, fmt.Errorf("%w: The draft must be a whole process or standard in JSON.", ErrInvalid)
 	}
@@ -196,14 +221,34 @@ func CheckDraftBody(id string, body []byte) ([]byte, error) {
 	if got, _ := head.ID.(string); got != id {
 		return nil, fmt.Errorf("%w: The id in the draft must stay “%s”.", ErrInvalid, id)
 	}
-	pretty, err := Pretty(trimmed)
-	if err != nil {
-		return nil, err
+	return Pretty(trimmed)
+}
+
+// depthOf is the deepest nesting of objects and lists in a JSON text (brackets inside strings do
+// not count). It reads the text once and stops early, whatever the text is.
+func depthOf(b []byte) int {
+	depth, deepest, inString := 0, 0, false
+	for i := 0; i < len(b); i++ {
+		c := b[i]
+		switch {
+		case inString && c == '\\':
+			i++
+		case c == '"':
+			inString = !inString
+		case inString:
+		case c == '{' || c == '[':
+			depth++
+			if depth > deepest {
+				deepest = depth
+				if deepest > MaxDraftDepth {
+					return deepest
+				}
+			}
+		case c == '}' || c == ']':
+			depth--
+		}
 	}
-	if len(pretty) > MaxDraftBytes {
-		return nil, fmt.Errorf("%w: The draft is too large to save (more than %d KB). Shorten it and try again.", ErrInvalid, MaxDraftBytes>>10)
-	}
-	return pretty, nil
+	return deepest
 }
 
 // storableJSON reports whether every text in valid JSON can be stored and read back as text:
@@ -319,8 +364,18 @@ func (s *Store) SaveDraft(ctx context.Context, c DraftChange) (WorkingDraft, err
 		switch {
 		case have == nil && c.Revision != 0, have != nil && c.Revision != have.Revision:
 			return &DraftConflict{Current: have}
-		case c.Base != nil && *c.Base != cur.Version:
+		case c.Base != nil && *c.Base > cur.Version, c.Base != nil && c.Revision > 0 && *c.Base != cur.Version:
 			return &Conflict{Current: *cur, Exists: true}
+		case c.Base != nil && *c.Base < cur.Version:
+			// an older version: one of this document, not of one deleted before it
+			var ok bool
+			if err := tx.QueryRow(ctx, `select exists (select 1 from document_versions where kind = $1 and id = $2 and version = $3 and body is not null)
+				and not exists (select 1 from document_versions where kind = $1 and id = $2 and version > $3 and body is null)`, c.Kind, c.ID, *c.Base).Scan(&ok); err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("%w: The version the draft was started from is not a version of this %s.", ErrInvalid, c.Kind)
+			}
 		}
 		base := cur.Version
 		switch {
@@ -329,10 +384,11 @@ func (s *Store) SaveDraft(ctx context.Context, c DraftChange) (WorkingDraft, err
 		case have != nil:
 			base = have.Base
 		}
-		return tx.QueryRow(ctx, `insert into working_drafts (kind, id, body, base, revision, updated_by) values ($1, $2, $3, $4, $5, $6)
-			on conflict (kind, id) do update set body = excluded.body, base = excluded.base, revision = excluded.revision, updated_by = excluded.updated_by, updated_at = now()
-			returning kind, id, body, base, revision, updated_at, updated_by`, c.Kind, c.ID, pretty, base, c.Revision+1, c.By).
-			Scan(&out.Kind, &out.ID, &out.Body, &out.Base, &out.Revision, &out.UpdatedAt, &out.UpdatedBy)
+		return tx.QueryRow(ctx, `insert into working_drafts (kind, id, body, base, revision, updated_by, updated_by_name) values ($1, $2, $3, $4, $5, $6, $7)
+			on conflict (kind, id) do update set body = excluded.body, base = excluded.base, revision = excluded.revision,
+				updated_by = excluded.updated_by, updated_by_name = excluded.updated_by_name, updated_at = now()
+			returning kind, id, body, base, revision, updated_at, updated_by, updated_by_name`, c.Kind, c.ID, pretty, base, c.Revision+1, c.By, c.ByName).
+			Scan(&out.Kind, &out.ID, &out.Body, &out.Base, &out.Revision, &out.UpdatedAt, &out.UpdatedBy, &out.UpdatedByName)
 	})
 	if err != nil {
 		return WorkingDraft{}, err
@@ -392,11 +448,23 @@ func OnlyReviewDiffers(a, b []byte) bool {
 	return reflect.DeepEqual(x, y)
 }
 
-// ForPublishing prepares a working draft for publishing over the published document: the status
+// MoveDraftBaseIn moves the working draft of a document from version from onto version to, in
+// the transaction of a review confirmation that made version to out of version from: the draft
+// is then still based on what readers see, and its revision and body stay as they are. A draft
+// based on an even older version keeps that base: something else changed in between.
+func MoveDraftBaseIn(ctx context.Context, tx pgx.Tx, kind, id string, from, to int) error {
+	_, err := tx.Exec(ctx, `update working_drafts set base = $4 where kind = $1 and id = $2 and base = $3`, kind, id, from, to)
+	return err
+}
+
+// ForPublishing prepares a working draft for publishing over the published document. The status
 // is the published one (publishing neither un-retires nor hides anything; "status" in the draft
-// is ignored), and with takeReview the review fields are the published ones (the draft is
-// rebased over a review confirmation). The order of the keys is kept.
-func ForPublishing(draft, published []byte, takeReview bool) ([]byte, error) {
+// is ignored). The review record - when it was last confirmed and by whom - is the published
+// one too: a confirmation is made on the published document, never in a draft. The rest of
+// "review" (how often it is reviewed) comes from the draft. A draft without "review" keeps the
+// published review when that records a confirmation, so that the record is not lost. The order
+// of the keys is kept.
+func ForPublishing(draft, published []byte) ([]byte, error) {
 	pub, err := fieldsOf(published)
 	if err != nil {
 		return nil, err
@@ -406,8 +474,34 @@ func ForPublishing(draft, published []byte, takeReview bool) ([]byte, error) {
 		return nil, err
 	}
 	out = out.set("status", pub.get("status"), "review", "updatedAt")
-	if takeReview {
-		out = out.set("review", pub.get("review"), "", "status")
+	review, err := mergeReview(out.get("review"), pub.get("review"))
+	if err != nil {
+		return nil, err
 	}
+	out = out.set("review", review, "", "status")
 	return out.join()
+}
+
+// mergeReview is the review of a published draft: see ForPublishing. nil: none.
+func mergeReview(draft, published json.RawMessage) (json.RawMessage, error) {
+	var pub fields
+	if published != nil {
+		if p, err := fieldsOf(published); err == nil {
+			pub = p
+		}
+	}
+	if draft == nil || bytes.Equal(bytes.TrimSpace(draft), []byte("null")) {
+		if pub.get("lastReviewedAt") != nil {
+			return published, nil
+		}
+		return draft, nil
+	}
+	d, err := fieldsOf(draft)
+	if err != nil {
+		return draft, nil // not an object: left to the format to refuse
+	}
+	d = d.set("lastReviewedAt", pub.get("lastReviewedAt"), "reviewedBy", "intervalMonths")
+	d = d.set("reviewedBy", pub.get("reviewedBy"), "", "lastReviewedAt")
+	merged, err := d.join()
+	return merged, err
 }

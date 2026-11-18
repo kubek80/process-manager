@@ -197,7 +197,7 @@ test("when nothing is found, the filters can be dropped from there", async ({ pa
   await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
 });
 
-test("a draft is found only by the people who may edit it, in editor mode, and is marked as one", async ({ page }) => {
+test("a draft is found only by the people who may see it (its editors and its team), and is marked as one", async ({ page }) => {
   // a draft process of the Cloud Platform team on Azure, made by a process editor
   await page.request.post("/auth/dev/login", { data: { email: ALEX }, headers: CSRF });
   const { processes } = await (await page.request.get("/api/processes")).json();
@@ -211,12 +211,11 @@ test("a draft is found only by the people who may edit it, in editor mode, and i
     await open(page, "/search?q=zebra");
     await expect(page.locator(".search-empty h2")).toHaveText("Nothing found");
 
-    // Jordan is Owner of the team, so the draft reaches his browser, and he has an editor mode
-    // for his platform Google Cloud - but he may not edit this draft, so it is not listed for him
+    // Jordan is Owner of the team, so the draft reaches him: he looks after it, and finds it marked as a draft
     await signIn(page, JORDAN);
     expect((await (await page.request.get("/api/processes")).json()).processes.some((p: { id: string }) => p.id === "search-draft-demo")).toBe(true);
     await open(page, "/search?q=zebra");
-    await expect(page.locator(".search-empty h2")).toHaveText("Nothing found");
+    await expect(page.locator('li.card[data-id="search-draft-demo"] .card-mark.draft')).toHaveText("Draft");
 
     await signIn(page, ALEX);
     await open(page, "/search?q=zebra");
@@ -224,9 +223,6 @@ test("a draft is found only by the people who may edit it, in editor mode, and i
     await expect(hit).toBeVisible();
     await expect(hit).toHaveClass(/\bdraft\b/);
     await expect(hit.locator(".card-mark.draft")).toHaveText("Draft");
-    // in Consumer mode the same person sees what readers see
-    await page.locator(".mode-switch").getByRole("button", { name: "Consumer" }).click();
-    await expect(page.locator(".search-empty h2")).toHaveText("Nothing found");
   } finally {
     await page.request.post("/auth/dev/login", { data: { email: ALEX }, headers: CSRF });
     expect((await page.request.delete("/api/processes/search-draft-demo", { headers: CSRF })).ok()).toBeTruthy();

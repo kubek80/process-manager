@@ -1,5 +1,6 @@
-import type { Issue, Process, Standard, Status, TargetKind } from "../types";
-import { fieldName } from "./diff";
+import type { Catalog, Issue, Process, Standard, Status, TargetKind } from "../types";
+import { compare, describeChange, fieldName } from "./diff";
+import { EXAMPLE } from "./edit";
 
 /**
  * The editing screen, as plain functions: which kind of draft a document has, what its state is
@@ -206,4 +207,117 @@ export function issueText(issue: Issue): string {
   if (!key || issue.path === "(root)") return `${issue.message[0]?.toUpperCase() ?? ""}${issue.message.slice(1)}`;
   const words = key === "title" ? "name" : key === "to" ? "goes to" : key === "next" ? "what comes next" : key === "lookFor" ? "signs of a violation" : fieldName(key);
   return `${words[0].toUpperCase()}${words.slice(1)} ${issue.message}`;
+}
+
+// ---------- example texts
+
+const EXAMPLE_MESSAGE = "still has the example text. Say it in your own words before publishing.";
+/** Whether a problem is an example text left in (it waits for publishing, not for saving). */
+export const isExampleIssue = (i: Issue) => i.message === EXAMPLE_MESSAGE;
+
+/**
+ * The example texts a blank process or standard starts with, as problems to fix before
+ * publishing (not before saving a draft). The texts are the ones `blankProcess`, `blankStandard`,
+ * `addStepAfter` and `addRequirement` put in (EXAMPLE in lib/edit).
+ */
+export function exampleIssues(kind: TargetKind, doc: Process | Standard): Issue[] {
+  const out: Issue[] = [];
+  const is = (v: unknown, ...texts: string[]) => typeof v === "string" && texts.includes(v.trim());
+  const flag = (path: string) => out.push({ level: "error", path, message: EXAMPLE_MESSAGE });
+  if (is(doc.summary, EXAMPLE.processSummary, EXAMPLE.standardSummary)) flag("summary");
+  if (kind === "process") {
+    const steps = Array.isArray((doc as Process).steps) ? (doc as Process).steps : [];
+    steps.forEach((st, i) => {
+      if (is(st?.title, EXAMPLE.firstStep, EXAMPLE.newStep)) flag(`steps[${i}].title`);
+      (Array.isArray(st?.instructions) ? st.instructions : []).forEach((ins, j) => { if (is(ins, EXAMPLE.instruction)) flag(`steps[${i}].instructions[${j}]`); });
+    });
+  } else {
+    const reqs = Array.isArray((doc as Standard).requirements) ? (doc as Standard).requirements : [];
+    reqs.forEach((r, i) => {
+      if (is(r?.title, EXAMPLE.firstRequirement, EXAMPLE.newRequirement)) flag(`requirements[${i}].title`);
+      if (is(r?.statement, EXAMPLE.statement)) flag(`requirements[${i}].statement`);
+      if (is(r?.rationale, EXAMPLE.rationale)) flag(`requirements[${i}].rationale`);
+    });
+  }
+  return out;
+}
+
+// ---------- what publishing changes
+
+/** The review dates: the server keeps those of the published version, so they are never a change of the draft. */
+export function withoutReviewDates<T extends Process | Standard>(doc: T): T {
+  if (!doc || typeof doc !== "object" || !doc.review || typeof doc.review !== "object") return doc;
+  const { lastReviewedAt: _a, reviewedBy: _b, ...review } = doc.review; // eslint-disable-line @typescript-eslint/no-unused-vars
+  return { ...doc, review };
+}
+
+/** A value short enough to show before and after: a line of text, a number, nothing. */
+const shortValue = (v: unknown): v is string | number | undefined | null =>
+  v === undefined || v === null || typeof v === "number" || (typeof v === "string" && v.length <= 70 && !v.includes("\n"));
+const quoted = (v: unknown) => (v === undefined || v === null || v === "" ? "nothing" : `“${v}”`);
+const keyFor = (label: string, ...objects: unknown[]) => {
+  const keys = new Set(objects.flatMap((o) => (o && typeof o === "object" ? Object.keys(o) : [])));
+  return [...keys].find((k) => fieldName(k) === label);
+};
+const words = (key: string) => (key === "title" ? "name" : fieldName(key));
+const cap = (t: string) => `${t[0]?.toUpperCase() ?? ""}${t.slice(1)}`;
+
+/**
+ * What readers will see differently once the draft is published, in lines of plain words: a
+ * short field as before and after ("Name: “A” → “B”"), a long one by what and where it is
+ * ("Step “Approve the budget” changed: instructions"). Compared with the version readers see
+ * now; the review dates are left out.
+ */
+export function publishLines(kind: TargetKind, published: Process | Standard, draft: Process | Standard, catalog?: Catalog): string[] {
+  const before = withoutReviewDates(published) as unknown as Record<string, unknown>;
+  const after = withoutReviewDates(draft) as unknown as Record<string, unknown>;
+  const items = (o: Record<string, unknown>) => (Array.isArray(o[kind === "process" ? "steps" : "requirements"]) ? o[kind === "process" ? "steps" : "requirements"] as Record<string, unknown>[] : []);
+  return compare(kind, before, after, catalog).map((c) => {
+    if (c.what === "Details" && c.from === undefined && c.to === undefined) {
+      const key = keyFor(c.label, before, after);
+      if (key && shortValue(before[key]) && shortValue(after[key])) return `${cap(words(key))}: ${quoted(before[key])} → ${quoted(after[key])}`;
+      return describeChange(c);
+    }
+    if (c.kind === "changed" && c.what !== "Details" && c.details?.length) {
+      const now = items(after).find((x) => (kind === "process" ? x.title : `${x.id} ${x.title}`) === c.label);
+      const was = now ? items(before).find((x) => x.id === now.id) : undefined;
+      const parts = c.details.map((d) => {
+        const key = keyFor(d, was, now);
+        if (key && was && now && shortValue(was[key]) && shortValue(now[key])) return `${words(key)} ${quoted(was[key])} → ${quoted(now[key])}`;
+        return key ? words(key) : d;
+      });
+      return `${c.what} “${c.label}” changed: ${parts.join(", ")}`;
+    }
+    return describeChange(c);
+  });
+}
+
+/**
+ * Said when the draft was started from an older version than readers see now - somebody really
+ * published since (a review alone moves the draft along on the server). "" when it was not.
+ */
+export function baseBehindSentence(base: number, version: number): string {
+  if (!base || version <= base) return "";
+  return `Version ${version} was published after these changes were started from version ${base}. Publishing will show what changed in it and ask whether to publish yours over it.`;
+}
+
+/**
+ * Who saved something, for a sentence: "You" when it was the person themselves (in another
+ * window), else their name, else their email, else "Somebody else".
+ */
+export function author(by: { updatedBy?: string; updatedByName?: string } | undefined, myEmail?: string): { you: boolean; name: string } {
+  const you = !!by?.updatedBy && !!myEmail && by.updatedBy.toLowerCase() === myEmail.toLowerCase();
+  return { you, name: you ? "You" : by?.updatedByName || by?.updatedBy || "Somebody else" };
+}
+
+/**
+ * The `base` a save of the working draft sends. Creating it (rev 0) - also again after somebody
+ * published or discarded it meanwhile - creates it on the version the changes were made from, so
+ * that publishing meets any version published since instead of silently going over it. A save
+ * after "Continue from theirs" moves the draft onto their version. Otherwise none: the draft
+ * keeps its base.
+ */
+export function draftSaveBase(rev: number, startedFrom: number, continueFrom: number | null): number | undefined {
+  if (rev === 0) return startedFrom || undefined;
+  return continueFrom ?? undefined;
 }

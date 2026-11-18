@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { answer, CASEY, CSRF, JORDAN, open, putDoc, readProcess, readStandard, RILEY, SAM, save, serverToday, signIn, versionOf } from "./helpers";
+import { answer, CASEY, CSRF, editState, fields, JORDAN, more, open, openEditor, outline, publish, publishChange, putDoc, putWorkingDraft, readProcess, readStandard, readWorkingDraft, RILEY, SAM, serverToday, signIn, versionOf } from "./helpers";
 
 // Jordan is an ordinary reader who is Platform owner of Google Cloud and Practice owner of
 // Engineering: he may change what belongs to them, and nothing else. Where the app hides a
@@ -14,7 +14,7 @@ const LIBRARY = "publish-internal-library"; // practice Engineering, platform Gi
 const PROCESS_NOT_YOURS = "You can only save a process that belongs to a platform or practice you own.";
 const PROCESS_DENIED = "Only process editors and the owners of its platform or practice can change this process.";
 
-const details = (page: Page) => page.getByRole("button", { name: "Details", exact: true });
+const edit = (page: Page) => page.getByRole("link", { name: "Edit", exact: true });
 
 test("a platform owner edits a process of the platform and a standard of the practice", async ({ page }) => {
   await signIn(page, JORDAN);
@@ -23,37 +23,45 @@ test("a platform owner edits a process of the platform and a standard of the pra
   // a process that belongs to Google Cloud
   const process = (await readProcess(page, GCP))!;
   await open(page, `/p/${GCP}/flow`);
-  await expect(page.locator(".mode-switch")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add step" })).toBeVisible();
-  await details(page).click();
-  await page.locator(".modal").getByLabel("Summary").fill("A new project on Google Cloud, set up by the platform owner.");
-  await page.locator(".modal").getByRole("button", { name: "Done" }).click();
-  await save(page);
+  await edit(page).click();
+  await outline(page, "About");
+  await fields(page).getByLabel(/^Summary/).fill("A new project on Google Cloud, set up by the platform owner.");
+  await publish(page);
   expect((await readProcess(page, GCP))!.summary).toBe("A new project on Google Cloud, set up by the platform owner.");
-  expect((await putDoc(page, "process", GCP, process)).ok()).toBeTruthy(); // as it was
+  await publishChange(page, "process", GCP, process); // as it was
 
   // a standard that belongs to Engineering
   const standard = (await readStandard(page, REVIEW))!;
   await open(page, `/s/${REVIEW}/doc`);
-  await expect(page.locator('[aria-label^="Edit "]')).toHaveCount(4);
-  await page.locator('[aria-label="Edit REV-01"]').click();
-  await page.locator(".drawer").getByLabel("Short name").fill("Every change is reviewed by somebody else");
-  await save(page);
+  await edit(page).click();
+  await outline(page, "REV-01");
+  await fields(page).getByLabel(/^Short name/).fill("Every change is reviewed by somebody else");
+  await publish(page);
   expect((await readStandard(page, REVIEW))!.requirements[0].title).toBe("Every change is reviewed by somebody else");
-  expect((await putDoc(page, "standard", REVIEW, standard)).ok()).toBeTruthy();
+  await publishChange(page, "standard", REVIEW, standard);
 });
 
 test("a platform owner cannot change what belongs to neither of his groups; the server refuses it too", async ({ page }) => {
   await signIn(page, JORDAN);
   await open(page, `/p/${AZURE}/flow`);
   await expect(page.locator(".block").first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add step" })).toHaveCount(0);
-  await expect(details(page)).toHaveCount(0);
+  await expect(edit(page)).toHaveCount(0);
   await expect(page.locator(".edge-add")).toHaveCount(0);
   await expect(page.getByRole("tab", { name: "JSON" })).toHaveCount(0);
+  // the editing screen, opened by its address, tells him so
+  await open(page, `/p/${AZURE}/edit`);
+  await expect(page.getByText("You may not change this process. Its editors, and the owners of its platform or practice, can.")).toBeVisible();
+  await expect(page.locator(".edit-bar")).toHaveCount(0);
   await open(page, `/s/${LOGGING}/doc`);
   await expect(page.locator(".req").first()).toBeVisible();
-  await expect(page.locator('[aria-label^="Edit "]')).toHaveCount(0);
+  await expect(edit(page)).toHaveCount(0);
+
+  // nor through unpublished changes: no draft, no publishing, and a draft is not even there for him
+  const draft = await putWorkingDraft(page, "process", AZURE, { ...(await readProcess(page, AZURE))!, summary: "A draft by somebody who may not." });
+  expect(draft.status()).toBe(404);
+  expect((await page.request.post(`/api/processes/${AZURE}/publish?rev=1`, { headers: CSRF })).status()).toBe(404);
+  expect((await page.request.delete(`/api/processes/${AZURE}/draft?rev=1`, { headers: CSRF })).status()).toBe(404);
+  expect((await page.request.get(`/api/processes/${AZURE}/draft`)).status()).toBe(404);
 
   const azure = (await readProcess(page, AZURE))!;
   let res = await putDoc(page, "process", AZURE, { ...azure, summary: "Changed by somebody who may not." });
@@ -69,9 +77,9 @@ test("a platform owner cannot change what belongs to neither of his groups; the 
 
 test("moving a document away from his platform is warned about, blocked, and refused by the server", async ({ page }) => {
   await signIn(page, JORDAN);
-  await open(page, `/p/${GCP}/flow`);
-  await details(page).click();
-  const modal = page.locator(".modal");
+  await openEditor(page, "process", GCP);
+  await outline(page, "About");
+  const modal = fields(page);
   const platform = modal.getByLabel(/^Platform/);
   // he is offered only his own platform and practice
   await expect(platform.locator("option")).toHaveText(["None", "Google Cloud"]);
@@ -84,12 +92,17 @@ test("moving a document away from his platform is warned about, blocked, and ref
   await expect(modal.getByRole("alert")).toHaveCount(0);
   await modal.getByLabel(/^Practice/).selectOption({ label: "None" });
   await expect(modal.getByRole("alert")).toBeVisible();
-  await modal.getByRole("button", { name: "Done" }).click();
-  const saveButton = page.getByRole("button", { name: "Save changes" });
-  await expect(saveButton).toBeDisabled();
-  await expect(saveButton).toHaveAttribute("title", "Keep it with a platform or practice of yours (in Details).");
-  await page.getByRole("button", { name: "Discard" }).click();
-  await expect(page.locator(".saved")).toBeVisible();
+  const bar = page.locator(".edit-bar");
+  for (const name of ["Save draft", "Publish…"]) {
+    await expect(bar.getByRole("button", { name })).toBeDisabled();
+    await expect(bar.getByRole("button", { name })).toHaveAttribute("title", "Keep it with a platform or practice of yours (under About).");
+  }
+  await bar.getByRole("button", { name: "Discard changes" }).click();
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Published\./);
+  // a draft that moves it away is refused by the server too
+  const res0 = await putWorkingDraft(page, "process", GCP, { ...(await readProcess(page, GCP))!, platform: "azure" });
+  expect(res0.status()).toBe(403);
+  expect(await readWorkingDraft(page, "process", GCP)).toBeUndefined();
 
   const gcp = (await readProcess(page, GCP))!;
   const res = await putDoc(page, "process", GCP, { ...gcp, platform: "azure" });
@@ -102,9 +115,9 @@ test("a platform that is not his stays as it is on a document of his practice", 
   await signIn(page, JORDAN);
   const library = (await readProcess(page, LIBRARY))!;
   expect(library).toMatchObject({ practice: "engineering", platform: "github" });
-  await open(page, `/p/${LIBRARY}/flow`);
-  await details(page).click();
-  const modal = page.locator(".modal");
+  await openEditor(page, "process", LIBRARY);
+  await outline(page, "About");
+  const modal = fields(page);
   const platform = modal.getByLabel(/^Platform/);
   await expect(platform).toBeDisabled();
   await expect(platform).toHaveValue("github");
@@ -113,10 +126,9 @@ test("a platform that is not his stays as it is on a document of his practice", 
   await expect(modal.getByLabel(/^Practice/)).toBeEnabled();
   await expect(modal.getByLabel(/^Practice/).locator("option")).toHaveText(["None", "Engineering"]);
   // everything else he may change, the owning team included
-  await modal.getByLabel("Summary").fill("Share code inside the company, changed by a practice owner.");
+  await modal.getByLabel(/^Summary/).fill("Share code inside the company, changed by a practice owner.");
   await modal.getByLabel(/^Owning team/).selectOption({ label: "Cloud Platform team" });
-  await modal.getByRole("button", { name: "Done" }).click();
-  await save(page);
+  await publish(page);
   expect((await readProcess(page, LIBRARY))!).toMatchObject({ summary: "Share code inside the company, changed by a practice owner.", owner: "cloud-platform-team", platform: "github" });
 
   // the server refuses a change of the platform, also to his own, and also taking it away
@@ -127,7 +139,7 @@ test("a platform that is not his stays as it is on a document of his practice", 
     expect((await res.json()).error).toMatch(/GitHub/);
   }
   expect((await readProcess(page, LIBRARY))!.platform).toBe("github");
-  expect((await putDoc(page, "process", LIBRARY, library)).ok()).toBeTruthy(); // as it was
+  await publishChange(page, "process", LIBRARY, library); // as it was
 });
 
 test("a platform owner creates a process for his platform and a standard for his practice, and deletes them", async ({ page }) => {
@@ -140,11 +152,10 @@ test("a platform owner creates a process for his platform and a standard for his
   await expect(belongs.locator("option")).toHaveText(["Platform: Google Cloud", "Practice: Engineering"]);
   await dialog.getByLabel("Name of the process").fill("Order a Google Cloud quota increase");
   await dialog.getByRole("button", { name: "Create process" }).click();
-  await expect(page.locator("h1")).toHaveText("Order a Google Cloud quota increase");
-  await expect(page.locator(".banner", { hasText: "Draft." })).toBeVisible();
+  await expect(page.locator(".eb-title h1")).toHaveText("Order a Google Cloud quota increase");
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Draft\./);
   expect((await readProcess(page, "order-a-google-cloud-quota-increase"))!).toMatchObject({ status: "draft", platform: "google-cloud" });
-  await details(page).click();
-  await page.locator(".modal").getByRole("button", { name: "Delete process" }).click();
+  await more(page, "Delete…");
   await answer(page, "Delete this process?", "Delete process");
   await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
   expect(await readProcess(page, "order-a-google-cloud-quota-increase")).toBeUndefined();
@@ -157,10 +168,9 @@ test("a platform owner creates a process for his platform and a standard for his
   await expect(named.getByLabel("Issued by")).toHaveValue("cloud-platform-team"); // his own team comes first
   await named.getByLabel("Issued by").selectOption({ label: "Developer Experience team" });
   await named.getByRole("button", { name: "Create standard" }).click();
-  await expect(page.locator("h1")).toHaveText("Pull request templates");
+  await expect(page.locator(".eb-title h1")).toHaveText("Pull request templates");
   expect((await readStandard(page, "pull-request-templates"))!).toMatchObject({ status: "draft", practice: "engineering", owner: "developer-experience-team" });
-  await details(page).click();
-  await page.locator(".modal").getByRole("button", { name: "Delete standard" }).click();
+  await more(page, "Delete…");
   await answer(page, "Delete this standard?", "Delete standard");
   await expect(page.getByRole("heading", { name: "What must I meet?" })).toBeVisible(); // deleted: back to the list
   expect(await readStandard(page, "pull-request-templates")).toBeUndefined();
@@ -176,8 +186,7 @@ test("a reader can do none of it", async ({ page }) => {
   await signIn(page, SAM);
   await open(page, `/p/${GCP}/flow`);
   await expect(page.locator(".block").first()).toBeVisible();
-  await expect(page.locator(".mode-switch")).toHaveCount(0);
-  await expect(details(page)).toHaveCount(0);
+  await expect(edit(page)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Mark as reviewed" })).toHaveCount(0);
   await open(page, "/processes");
   await expect(page.locator(".card").first()).toBeVisible();
@@ -196,30 +205,48 @@ test("a reader can do none of it", async ({ page }) => {
 test("a practice owner edits the standards of her practice, not those of another", async ({ page }) => {
   await signIn(page, RILEY);
   await open(page, `/s/${LOGGING}/doc`);
-  await expect(page.locator('[aria-label^="Edit "]')).toHaveCount(5);
-  await expect(details(page)).toBeVisible();
+  await expect(edit(page)).toBeVisible();
   await open(page, `/s/${REVIEW}/doc`);
   await expect(page.locator(".req").first()).toBeVisible();
-  await expect(page.locator('[aria-label^="Edit "]')).toHaveCount(0);
+  await expect(edit(page)).toHaveCount(0);
+  await open(page, `/s/${REVIEW}/edit`);
+  await expect(page.getByText("You may not change this standard.")).toBeVisible();
   // the server agrees: the standard of another practice is refused
   const review = (await readStandard(page, REVIEW))!;
   expect((await putDoc(page, "standard", REVIEW, { ...review, title: "Changed by another practice" })).status()).toBe(403);
 });
 
-test("a team Owner still cannot edit, but confirms the review", async ({ page }) => {
-  await signIn(page, CASEY);
-  await open(page, `/p/${GCP}/flow`);
-  await expect(page.locator(".block").first()).toBeVisible();
-  await expect(page.locator(".mode-switch")).toHaveCount(0);
-  await expect(details(page)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Add step" })).toHaveCount(0);
-  const before = await versionOf(page, "process", GCP);
-  await page.getByRole("button", { name: "Mark as reviewed" }).click();
-  await expect.poll(async () => (await readProcess(page, GCP))!.review).toMatchObject({ lastReviewedAt: serverToday(), reviewedBy: "Casey Owner" });
-  expect(await versionOf(page, "process", GCP)).toBe(before + 1);
+test("a team Owner cannot edit and never sees unpublished changes, but confirms the review", async ({ page }) => {
+  // an editor has unpublished changes to the GCP process
+  await signIn(page, JORDAN);
+  const gcp0 = (await readProcess(page, GCP))!;
+  expect((await putWorkingDraft(page, "process", GCP, { ...gcp0, summary: "Unpublished words the owner of the team must not see." })).ok()).toBeTruthy();
+  try {
+    await signIn(page, CASEY);
+    await open(page, `/p/${GCP}/flow`);
+    await expect(page.locator(".block").first()).toBeVisible();
+    await expect(edit(page)).toHaveCount(0);
+    await expect(page.locator(".draft-line")).toHaveCount(0);
+    await expect(page.locator(".lead")).toHaveText(gcp0.summary);
+    expect((await page.request.get(`/api/processes/${GCP}/draft`)).status()).toBe(404);
+    const { meta } = await (await page.request.get("/api/processes")).json();
+    expect(meta[GCP].draft).toBeUndefined();
+    await open(page, `/p/${GCP}/edit`);
+    await expect(page.getByText("You may not change this process.")).toBeVisible();
 
-  const gcp = (await readProcess(page, GCP))!;
-  const res = await putDoc(page, "process", GCP, { ...gcp, summary: "Changed by the team owner." });
-  expect(res.status()).toBe(403);
-  expect((await res.json()).error).toBe(PROCESS_DENIED);
+    await open(page, `/p/${GCP}/flow`);
+    const before = await versionOf(page, "process", GCP);
+    await page.getByRole("button", { name: "Mark as reviewed" }).click();
+    await expect.poll(async () => (await readProcess(page, GCP))!.review).toMatchObject({ lastReviewedAt: serverToday(), reviewedBy: "Casey Owner" });
+    expect(await versionOf(page, "process", GCP)).toBe(before + 1);
+
+    const gcp = (await readProcess(page, GCP))!;
+    const res = await putDoc(page, "process", GCP, { ...gcp, summary: "Changed by the team owner." });
+    expect(res.status()).toBe(403);
+    expect((await res.json()).error).toBe(PROCESS_DENIED);
+  } finally {
+    await signIn(page, JORDAN);
+    const w = await readWorkingDraft(page, "process", GCP);
+    if (w) await page.request.delete(`/api/processes/${GCP}/draft?rev=${w.revision}`, { headers: CSRF });
+  }
 });

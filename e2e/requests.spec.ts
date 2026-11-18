@@ -118,14 +118,16 @@ test("Jordan, owner of Google Cloud, manages the requests that name it, and only
   const gcp = await ask(request, CASEY, { kind: "process", title: title("Delete a GCP project"), platform: "google-cloud" });
   const azure = await ask(request, CASEY, { kind: "process", title: title("Delete an Azure subscription"), platform: "azure" });
   const declined = await ask(request, CASEY, { kind: "process", title: title("Move a GCP project to another folder"), platform: "google-cloud" });
-  // in Consumer mode a reader's view: nothing to manage
-  await signIn(page, JORDAN);
+  // a reader sees the request, with nothing to manage
+  await signIn(page, SAM);
   await open(page, "/requests");
   await expect(item(page, gcp.title)).toBeVisible();
   await expect(item(page, gcp.title).locator(".req-actions")).toHaveCount(0);
-  expect((await list(page.request)).find((r) => r.id === gcp.id)!.canManage).toBe(true); // the right is there all the same
+  expect((await list(page.request)).find((r) => r.id === gcp.id)!.canManage).toBe(false);
 
+  // Jordan gets the controls by his right alone: no mode to switch on
   await signIn(page, JORDAN);
+  expect((await list(page.request)).find((r) => r.id === gcp.id)!.canManage).toBe(true);
   await open(page, "/requests");
 
   // nothing to do on the Azure one, and the server refuses it too
@@ -362,8 +364,8 @@ test("an admin removes a request for good", async ({ page, request }) => {
   const r = await ask(request, RILEY, { kind: "standard", title: title("Something nobody needs") });
   await as(request, DANA);
   expect((await setState(request, r.id, { state: "planned", note: "Maybe later." })).ok()).toBeTruthy();
-  // not in Consumer mode
-  await signIn(page, DANA);
+  // nobody but an admin gets the button: not the person who asked
+  await signIn(page, RILEY);
   await open(page, "/requests?state=planned");
   await expect(item(page, r.title)).toBeVisible();
   await expect(item(page, r.title).getByRole("button", { name: "Remove" })).toHaveCount(0);

@@ -20,8 +20,10 @@ const NO_PAN = "button:not(.block-main), a, input, select, textarea, label, .qui
 /** How far the pointer moves before a press becomes a drag of the map (and no longer a click). */
 const PAN_START = 5;
 
-export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, editable = true, bare }: {
+export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, editable = true, bare, fitMin }: {
   editable?: boolean; bare?: boolean;
+  /** The smallest zoom "Fit" (and opening) goes down to; the reader's page keeps text readable (75%), the editing screen shows the whole flow. */
+  fitMin?: number;
   /** Opens the report form for one step, without opening the step. */
   onReport?: (stepId: string) => void;
   process: Process; selectedId: string | null; done: Set<string>; feedback: Feedback[];
@@ -122,9 +124,9 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   }, [zoom]);
   const fit = () => {
     const w = scroller.current?.clientWidth ?? 0;
-    if (w) setZoom(Math.max(bare ? 0.6 : 0.75, Math.min(1, Math.floor((w / layout.width) * 20) / 20)));
+    if (w) setZoom(Math.max(fitMin ?? (bare ? 0.6 : 0.75), Math.min(1, Math.floor((w / layout.width) * 20) / 20)));
   };
-  // open zoomed to fit the width (never below 75%, where text stops being readable)
+  // open zoomed to fit the width (on the reader's page never below 75%, where text stops being readable)
   useLayoutEffect(fit, [process.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const focus = hover ?? selectedId;

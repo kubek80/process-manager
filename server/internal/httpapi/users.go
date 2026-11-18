@@ -150,6 +150,11 @@ func (a *api) deleteUser(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// like the app, which offers it for everybody else: nobody removes all of their own roles
+	if email == strings.ToLower(strings.TrimSpace(who(r).Email)) {
+		writeError(w, 409, "You cannot remove all of your own roles. Ask another admin to do it.")
+		return
+	}
 	lists, err := a.Docs.Lists(r.Context())
 	if err != nil {
 		a.Log.Error("lists not read for the activity log", "error", err) // the names fall back to ids

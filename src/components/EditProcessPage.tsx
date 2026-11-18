@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import type { DocMeta, Feedback, Process, Standard, Step } from "../types";
-import { addStepAfter, deleteStep, insertStep, moveStep, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
+import { addStepAfter, deleteStep, EXAMPLE, insertStep, moveStep, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
 import { issueTarget, issuesByPlace, issuesFor, PROCESS_SECTIONS, processOutline, selectionKey, type ProcessSection, type Selection } from "../lib/editing";
 import { isDrawableProcess, processSchema, validateProcess } from "../lib/validate";
 import { useSelectedItem } from "../lib/selection";
@@ -39,7 +39,7 @@ export function EditProcessPage(props: {
   onReload: () => Promise<{ saved: Process; version: number } | null>;
   onRefresh: () => Promise<void>;
   onDelete: (base: number) => void;
-  onDraftMeta: (d: { updatedAt: string; updatedBy: string } | null) => void;
+  onDraftMeta: (d: { updatedAt: string; updatedBy: string; updatedByName?: string } | null) => void;
 }) {
   const { process, all, standards } = props;
   const perms = usePerms();
@@ -88,6 +88,9 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
     document.querySelector(`.outline [aria-current="true"]`)?.scrollIntoView({ block: "nearest" });
   }, [stepId]);
 
+  // a refused save or publish brings its first problem into view
+  useEffect(() => { if (s.focus) choose(issueTarget("process", draft, s.focus.issue.path)); }, [s.focus?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const byPlace = useMemo(() => (drawable ? issuesByPlace("process", draft, s.issues) : new Map()), [drawable, draft, s.issues]);
   const outline = drawable ? processOutline(draft) : [];
   const addAfter = (id: string | null) => {
@@ -106,7 +109,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
       onChange={(patch: Partial<Step>) => setDraft(updateStep(draft, step.id, patch))}
       onTitleBlur={() => {
         // a new step gets its address from its name, once it has one
-        if (!/^new-step(-\d+)?$/.test(step.id) || step.title === "New step" || !slugify(step.title)) return;
+        if (!/^new-step(-\d+)?$/.test(step.id) || step.title === EXAMPLE.newStep || !slugify(step.title)) return;
         const r = renameStepId(draft, step.id, slugify(step.title));
         setDraft(r.process); selectStep(r.id);
       }}
@@ -150,7 +153,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
             <BeforeYouStart process={draft} all={all} standards={standards} open={beforeOpen} onToggle={() => setBeforeOpen(!beforeOpen)} />
           </div>
         : <button className="preview-empty" onClick={() => choose({ section: "before" })}>Nothing needed before step 1 yet. <b>Add what readers must have in place</b></button>}
-      <FlowView editable process={draft} selectedId={stepId} done={NONE} feedback={feedback}
+      <FlowView editable fitMin={0.4} process={draft} selectedId={stepId} done={NONE} feedback={feedback}
         onSelect={(id) => choose({ section: "steps", item: id })}
         onInsert={(at, spec) => { const r = insertStep(draft, at, spec); setDraft(r.process); selectStep(r.id); }}
         onMoveToLane={(id, actor) => setDraft(updateStep(draft, id, { actor }))} />

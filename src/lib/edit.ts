@@ -65,7 +65,7 @@ export function updateStep(p: Process, id: string, patch: Partial<Step>): Proces
 export function addStepAfter(p: Process, afterId: string | null): { process: Process; id: string } {
   const id = uniqueId("new-step", p.steps.map((s) => s.id));
   const after = p.steps.find((s) => s.id === afterId) ?? p.steps[p.steps.length - 1];
-  const step: Step = { id, title: "New step", actor: after?.actor ?? "me", type: "task", next: [] };
+  const step: Step = { id, title: EXAMPLE.newStep, actor: after?.actor ?? "me", type: "task", next: [] };
   if (!after) return { process: { ...p, steps: [step] }, id };
   // a decision keeps its branches; the new step is added as an extra branch target instead
   if (after.type === "decision") {
@@ -171,6 +171,22 @@ export function renameStepId(p: Process, oldId: string, wanted: string): { proce
 /** The platform or practice a new process or standard belongs to, when its maker chose one. */
 export type BelongsTo = { platform?: string; practice?: string };
 
+/**
+ * The example texts a new process, standard, step or requirement starts with. They tell the
+ * editor what to write; the checker on the editing screen does not let them be published.
+ */
+export const EXAMPLE = {
+  processSummary: "Describe in one or two sentences what the reader gets at the end.",
+  standardSummary: "Describe in one or two sentences what this standard protects or achieves.",
+  firstStep: "First step",
+  newStep: "New step",
+  instruction: "Describe exactly what to do.",
+  firstRequirement: "First requirement",
+  newRequirement: "New requirement",
+  statement: "Say in one testable sentence what must be true.",
+  rationale: "Say which risk this removes.",
+} as const;
+
 /** A new process. Its id is made from the name it is given and never changes afterwards. */
 export function blankProcess(existingIds: string[], title = "", belongs: BelongsTo = {}): Process {
   return {
@@ -178,14 +194,14 @@ export function blankProcess(existingIds: string[], title = "", belongs: Belongs
     schemaVersion: "1.0",
     id: uniqueId(slugify(title) || "new-process", existingIds),
     title: title.trim() || "New process",
-    summary: "Describe in one or two sentences what the reader gets at the end.",
+    summary: EXAMPLE.processSummary,
     ...belongs,
     updatedAt: today(),
     status: "draft",
     review: { intervalMonths: 6 },
     prerequisites: [],
     actors: [{ id: "me", name: "You" }],
-    steps: [{ id: "first-step", title: "First step", actor: "me", type: "task", instructions: ["Describe exactly what to do."], next: [] }],
+    steps: [{ id: "first-step", title: EXAMPLE.firstStep, actor: "me", type: "task", instructions: [EXAMPLE.instruction], next: [] }],
   };
 }
 
@@ -244,7 +260,7 @@ export function nextRequirementId(s: Standard): string {
 
 export function addRequirement(s: Standard, afterId?: string): { standard: Standard; id: string } {
   const id = nextRequirementId(s);
-  const fresh: Requirement = { id, title: "New requirement", level: "should", statement: "Say in one testable sentence what must be true.", verification: { method: "review" } };
+  const fresh: Requirement = { id, title: EXAMPLE.newRequirement, level: "should", statement: EXAMPLE.statement, verification: { method: "review" } };
   const at = s.requirements.findIndex((r) => r.id === afterId);
   const requirements = at < 0 ? [...s.requirements, fresh] : [...s.requirements.slice(0, at + 1), fresh, ...s.requirements.slice(at + 1)];
   return { standard: { ...s, requirements }, id };
@@ -271,13 +287,13 @@ export function blankStandard(existingIds: string[], owner: string, title = "", 
     schemaVersion: "1.0",
     id: uniqueId(slugify(title) || "new-standard", existingIds),
     title: title.trim() || "New standard",
-    summary: "Describe in one or two sentences what this standard protects or achieves.",
+    summary: EXAMPLE.standardSummary,
     owner,
     ...belongs,
     updatedAt: today(),
     status: "draft",
     review: { intervalMonths: 12 },
-    requirements: [{ id: "REQ-01", title: "First requirement", level: "must", statement: "Say in one testable sentence what must be true.", rationale: "Say which risk this removes.", verification: { method: "review" } }],
+    requirements: [{ id: "REQ-01", title: EXAMPLE.firstRequirement, level: "must", statement: EXAMPLE.statement, rationale: EXAMPLE.rationale, verification: { method: "review" } }],
   };
 }
 

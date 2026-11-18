@@ -15,6 +15,11 @@ import (
 
 func TestWhatADraftMustSatisfy(t *testing.T) {
 	big := `{"id":"secure-logging","summary":"` + strings.Repeat("x", docs.MaxDraftBytes) + `"}`
+	// as large as a sizeable published document, and larger once re-indented: fine
+	wide := `{"id":"secure-logging","requirements":[` + strings.TrimSuffix(strings.Repeat(`{"id":"R","statement":"`+strings.Repeat("y", 200)+`"},`, 2000), ",") + `]}`
+	deep := `{"id":"secure-logging","x":` + strings.Repeat("[", 5000) + strings.Repeat("]", 5000) + `}`
+	deepEnough := `{"id":"secure-logging","x":` + strings.Repeat("[", docs.MaxDraftDepth-1) + strings.Repeat("]", docs.MaxDraftDepth-1) + `}`
+	bracketsInText := `{"id":"secure-logging","x":"` + strings.Repeat("[{", 100) + `\"[["}`
 	for _, c := range []struct {
 		name, body, want string
 	}{
@@ -31,7 +36,11 @@ func TestWhatADraftMustSatisfy(t *testing.T) {
 		{"the other half alone", `{"id":"secure-logging","title":"\udc00"}`, "The draft contains characters that cannot be stored. Remove them and try again."},
 		{"not UTF-8", "{\"id\":\"secure-logging\",\"title\":\"\xff\"}", "The draft contains characters that cannot be stored. Remove them and try again."},
 		{"a whole surrogate pair and escapes", `{"id":"secure-logging","title":"\ud83d\ude00 \\u0000 \" \\ \n"}`, ""},
-		{"too large", big, "The draft is too large to save (more than 512 KB). Shorten it and try again."},
+		{"too large", big, "The draft is too large to save (more than 1 MB). Shorten it and try again."},
+		{"large", wide, ""},
+		{"deep", deep, "The draft has too many parts inside one another (more than 32 levels) to be saved."},
+		{"deep enough", deepEnough, ""},
+		{"brackets in a text", bracketsInText, ""},
 	} {
 		_, err := docs.CheckDraftBody("secure-logging", []byte(c.body))
 		switch {
@@ -56,33 +65,37 @@ func TestOnlyReviewDiffers(t *testing.T) {
 	}
 }
 
-func TestForPublishingKeepsThePublishedStatus(t *testing.T) {
-	published := `{"id":"x","title":"Old","updatedAt":"2026-01-01","status":"deprecated","replacedBy":"y","review":{"intervalMonths":6,"lastReviewedAt":"2026-11-18"}}`
-	for _, c := range []struct {
-		draft      string
-		takeReview bool
-		want       string
-	}{
-		// "status" in the draft is ignored: publishing neither un-retires nor hides
-		{`{"id":"x","title":"New","status":"active","review":{"intervalMonths":12}}`, false,
-			`{"id":"x","title":"New","status":"deprecated","review":{"intervalMonths":12}}`},
-		{`{"id":"x","title":"New","status":"draft"}`, true,
-			`{"id":"x","title":"New","status":"deprecated","review":{"intervalMonths":6,"lastReviewedAt":"2026-11-18"}}`},
+func TestForPublishingKeepsThePublishedStatusAndReviewRecord(t *testing.T) {
+	published := `{"id":"x","title":"Old","updatedAt":"2026-01-01","status":"deprecated","replacedBy":"y","review":{"intervalMonths":6,"lastReviewedAt":"2026-11-18","reviewedBy":"Casey"}}`
+	for _, c := range []struct{ draft, want string }{
+		// "status" in the draft is ignored: publishing neither un-retires nor hides; the review
+		// record is the published one, the rhythm the draft's
+		{`{"id":"x","title":"New","status":"active","review":{"intervalMonths":12}}`,
+			`{"id":"x","title":"New","status":"deprecated","review":{"intervalMonths":12,"lastReviewedAt":"2026-11-18","reviewedBy":"Casey"}}`},
+		{`{"id":"x","title":"New","status":"draft","review":{"reviewedBy":"Me","intervalMonths":3,"lastReviewedAt":"2020-01-01"}}`,
+			`{"id":"x","title":"New","status":"deprecated","review":{"reviewedBy":"Casey","intervalMonths":3,"lastReviewedAt":"2026-11-18"}}`},
+		// no review in the draft: the record is not lost
+		{`{"id":"x","title":"New","status":"draft"}`,
+			`{"id":"x","title":"New","status":"deprecated","review":{"intervalMonths":6,"lastReviewedAt":"2026-11-18","reviewedBy":"Casey"}}`},
 		// no status in the draft: it goes before the review, or after updatedAt
-		{`{"id":"x","updatedAt":"2026-02-02","title":"New","review":{"intervalMonths":1}}`, false,
-			`{"id":"x","updatedAt":"2026-02-02","title":"New","status":"deprecated","review":{"intervalMonths":1}}`},
-		{`{"id":"x","updatedAt":"2026-02-02","title":"New"}`, false,
-			`{"id":"x","updatedAt":"2026-02-02","status":"deprecated","title":"New"}`},
+		{`{"id":"x","updatedAt":"2026-02-02","title":"New","review":{"intervalMonths":1}}`,
+			`{"id":"x","updatedAt":"2026-02-02","title":"New","status":"deprecated","review":{"intervalMonths":1,"lastReviewedAt":"2026-11-18","reviewedBy":"Casey"}}`},
 	} {
-		got, err := docs.ForPublishing([]byte(c.draft), []byte(published), c.takeReview)
+		got, err := docs.ForPublishing([]byte(c.draft), []byte(published))
 		want, _ := docs.Pretty([]byte(c.want))
 		if err != nil || !bytes.Equal(got, want) {
 			t.Errorf("%s:\n%s\nwant\n%s (%v)", c.draft, got, want, err)
 		}
 	}
-	// a published document without a status keeps having none
-	got, err := docs.ForPublishing([]byte(`{"id":"x","status":"draft","title":"New"}`), []byte(`{"id":"x"}`), true)
-	want, _ := docs.Pretty([]byte(`{"id":"x","title":"New"}`))
+	// a published document without a status or a review record: the draft's review stays, minus
+	// a record the draft made up
+	got, err := docs.ForPublishing([]byte(`{"id":"x","status":"draft","title":"New","review":{"intervalMonths":2,"lastReviewedAt":"2020-01-01"}}`), []byte(`{"id":"x","review":{"intervalMonths":6}}`))
+	want, _ := docs.Pretty([]byte(`{"id":"x","title":"New","review":{"intervalMonths":2}}`))
+	if err != nil || !bytes.Equal(got, want) {
+		t.Errorf("%s (%v)", got, err)
+	}
+	got, err = docs.ForPublishing([]byte(`{"id":"x","title":"New"}`), []byte(`{"id":"x"}`))
+	want, _ = docs.Pretty([]byte(`{"id":"x","title":"New"}`))
 	if err != nil || !bytes.Equal(got, want) {
 		t.Errorf("%s (%v)", got, err)
 	}
@@ -108,9 +121,12 @@ func TestWorkingDraftsInTheStore(t *testing.T) {
 		t.Fatalf("never published: %v", err)
 	}
 
-	d, err := s.SaveDraft(ctx, docs.DraftChange{Kind: docs.Standard, ID: "secure-logging", Body: []byte(draft), By: "alex@example.com"})
-	if err != nil || d.Revision != 1 || d.Base != 1 || d.UpdatedBy != "alex@example.com" {
+	d, err := s.SaveDraft(ctx, docs.DraftChange{Kind: docs.Standard, ID: "secure-logging", Body: []byte(draft), By: "alex@example.com", ByName: "Alex Editor"})
+	if err != nil || d.Revision != 1 || d.Base != 1 || d.UpdatedBy != "alex@example.com" || d.UpdatedByName != "Alex Editor" {
 		t.Fatalf("start: %+v %v", d, err)
+	}
+	if got, _ := s.GetDraft(ctx, docs.Standard, "secure-logging"); got.UpdatedByName != "Alex Editor" {
+		t.Fatalf("name not kept: %+v", got)
 	}
 	// the published document is untouched
 	if cur, _ := s.Get(ctx, docs.Standard, "secure-logging"); cur.Version != 1 || strings.Contains(string(cur.Body), "revised") {
@@ -119,7 +135,7 @@ func TestWorkingDraftsInTheStore(t *testing.T) {
 	if h, _ := s.History(ctx, docs.Standard, "secure-logging"); len(h) != 1 {
 		t.Fatalf("the draft made a version: %+v", h)
 	}
-	if all, _ := s.Drafts(ctx, docs.Standard); len(all) != 1 || all["secure-logging"].UpdatedBy != "alex@example.com" {
+	if all, _ := s.Drafts(ctx, docs.Standard); len(all) != 1 || all["secure-logging"].UpdatedBy != "alex@example.com" || all["secure-logging"].UpdatedByName != "Alex Editor" {
 		t.Fatalf("drafts: %+v", all)
 	}
 	// starting a second one, or saving from an old revision, is a conflict
@@ -253,5 +269,49 @@ func TestCreatedAtIsWhenTheDocumentWasAdded(t *testing.T) {
 	again, _, err := s.Put(ctx, docs.Standard, "secure-logging", []byte(logging), "a")
 	if err != nil || !again.CreatedAt.After(first.CreatedAt) {
 		t.Fatalf("again: %+v %v", again, err)
+	}
+}
+
+func TestADraftCanBeStartedOnAnOlderVersion(t *testing.T) {
+	s := newStore(t)
+	for _, title := range []string{"One", "Two", "Three"} {
+		if _, _, err := s.Put(ctx, docs.Standard, "secure-logging", []byte(strings.Replace(logging, "Secure logging", title, 1)), "a"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at := func(n int) *int { return &n }
+	var c *docs.Conflict
+	// later than the current version: the ordinary conflict
+	if _, err := s.SaveDraft(ctx, docs.DraftChange{Kind: docs.Standard, ID: "secure-logging", Body: []byte(logging), By: "a", Base: at(4)}); !errors.As(err, &c) || c.Current.Version != 3 {
+		t.Fatalf("later: %v", err)
+	}
+	// not a version of it
+	if _, err := s.SaveDraft(ctx, docs.DraftChange{Kind: docs.Standard, ID: "secure-logging", Body: []byte(logging), By: "a", Base: at(0)}); !errors.Is(err, docs.ErrInvalid) {
+		t.Fatalf("version 0: %v", err)
+	}
+	d, err := s.SaveDraft(ctx, docs.DraftChange{Kind: docs.Standard, ID: "secure-logging", Body: []byte(logging), By: "a", Base: at(2)})
+	if err != nil || d.Base != 2 || d.Revision != 1 {
+		t.Fatalf("older: %+v %v", d, err)
+	}
+	// moving an existing draft must name the current version, as before
+	if _, err := s.SaveDraft(ctx, docs.DraftChange{Kind: docs.Standard, ID: "secure-logging", Body: []byte(logging), By: "a", Revision: 1, Base: at(2)}); !errors.As(err, &c) {
+		t.Fatalf("move to an older one: %v", err)
+	}
+	// publishing it meets the newer version
+	if _, _, err := s.Save(ctx, docs.Change{Kind: docs.Standard, ID: "secure-logging", Body: []byte(logging), By: "a", Base: at(d.Base), Drafts: docs.PublishDraft, Revision: 1}); !errors.As(err, &c) || c.Current.Version != 3 {
+		t.Fatalf("publish: %v", err)
+	}
+	if err := s.DiscardDraft(ctx, docs.Standard, "secure-logging", 1, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	// versions from before a deletion belong to another document
+	if err := s.Delete(ctx, docs.Standard, "secure-logging", "a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Put(ctx, docs.Standard, "secure-logging", []byte(logging), "a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SaveDraft(ctx, docs.DraftChange{Kind: docs.Standard, ID: "secure-logging", Body: []byte(logging), By: "a", Base: at(2)}); !errors.Is(err, docs.ErrInvalid) {
+		t.Fatalf("before the deletion: %v", err)
 	}
 }

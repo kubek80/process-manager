@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kubek80/process-manager/server/internal/docs"
 	"github.com/kubek80/process-manager/server/internal/icons"
@@ -16,6 +18,21 @@ import (
 // iconPolicy is the content security policy of a served icon: nothing in it may run or load
 // anything, also when it is opened on its own in a browser tab.
 const iconPolicy = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+
+// iconUploadsPerHour is how many icons one person may upload in an hour: a brake on a script.
+const iconUploadsPerHour = 60
+
+// wait is how long until who may do something again (the end of their window).
+func (b *brake) wait(who string, now time.Time) time.Duration {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if c := b.counts[who]; c != nil {
+		if left := b.window - now.Sub(c.start); left > 0 {
+			return left
+		}
+	}
+	return 0
+}
 
 func (a *api) icons() *icons.Store { return &icons.Store{Pool: a.Docs.Pool} }
 
@@ -27,6 +44,12 @@ var kindName = map[string]string{icons.PNG: "PNG", icons.JPEG: "JPEG", icons.Web
 func (a *api) uploadIcon(w http.ResponseWriter, r *http.Request) {
 	if !who(r).Catalog {
 		writeError(w, 403, "Only people who manage the lists can add icons.")
+		return
+	}
+	if email := who(r).Email; !a.uploads.allow(email, time.Now()) {
+		secs := int(math.Ceil(a.uploads.wait(email, time.Now()).Seconds()))
+		w.Header().Set("Retry-After", strconv.Itoa(max(secs, 1)))
+		writeError(w, 429, "You have added a lot of icons in the last hour. Please try again later.")
 		return
 	}
 	const tooLarge = "The image is larger than 64 KB. Make it smaller and try again."
@@ -104,6 +127,21 @@ func matches(header, etag string) bool {
 		}
 	}
 	return false
+}
+
+// validateFormat is the format check of a save, with a plain sentence for an icon id that is not
+// of the form the portal gives: the format itself would only quote its pattern.
+func (a *api) validateFormat(kind string, body []byte) error {
+	if kind == docs.Catalog {
+		if uses, err := icons.Uses(body); err == nil { // not the lists: the format says why
+			for _, u := range uses {
+				if !icons.ValidID(u.Icon) {
+					return fmt.Errorf("%w: The icon of %s is not one that was uploaded here. Upload it again.", docs.ErrInvalid, u.What())
+				}
+			}
+		}
+	}
+	return a.Schemas.Validate(kind, body)
 }
 
 // knownIcons refuses lists that name an icon that is not stored. An icon the stored lists

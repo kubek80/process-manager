@@ -15,7 +15,7 @@ describe("who may change a process or standard", () => {
       expect(canCreate(NO_PERMS, kind)).toBe(false);
     }
     expect(canOpenAdmin(NO_PERMS)).toBe(false);
-    expect(roleLabel(NO_PERMS)).toBe("Consumer");
+    expect(roleLabel(NO_PERMS)).toBe("Reader");
   });
 
   it("an admin may change everything", () => {

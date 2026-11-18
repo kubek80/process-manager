@@ -15,28 +15,30 @@ import (
 // elements and settings (attributes) below, in the SVG namespace. Everything else is refused,
 // among it scripts, event handlers (on…), <foreignObject>, <iframe>, <embed>, <object>,
 // <image>, links (<a>), animation (<animate>, <set>, …), a DOCTYPE or ENTITY declaration and
-// elements or settings of other namespaces (editor metadata included). References (href,
-// xlink:href and url(…) in values and styles) may only point to an id inside the same file;
-// "javascript:" and "data:" are refused in every value, and styles may not import anything.
+// elements or settings of other namespaces (editor metadata included). Nothing that repeats or
+// multiplies parts of the drawing is allowed - <use>, <symbol>, <pattern>, <marker>, filters and
+// href / xlink:href on any element - since a small file could otherwise make a browser draw
+// millions of shapes. A url(…) in a value or style (a gradient, a clip path, a mask) may only
+// point to an id inside the same file; "javascript:" and "data:" are refused in every value, and
+// styles may not import anything. The number of elements, their nesting and the numbers that
+// give the size are limited.
 
 const (
 	svgNS   = "http://www.w3.org/2000/svg"
 	xlinkNS = "http://www.w3.org/1999/xlink"
 	xmlNS   = "http://www.w3.org/XML/1998/namespace"
 
-	maxDepth    = 64
-	maxElements = 5000
+	maxDepth    = 32
+	maxElements = 2000
+	maxNumber   = 100000 // the largest width, height or viewBox number
 )
 
 // allowedElements are the plain drawing elements.
 var allowedElements = set(
-	"svg", "g", "defs", "title", "desc", "symbol", "use", "style",
+	"svg", "g", "defs", "title", "desc", "style",
 	"path", "rect", "circle", "ellipse", "line", "polyline", "polygon",
-	"text", "tspan", "textPath",
-	"linearGradient", "radialGradient", "stop", "pattern", "clipPath", "mask", "marker",
-	"filter", "feBlend", "feColorMatrix", "feComponentTransfer", "feComposite", "feDropShadow",
-	"feFlood", "feFuncA", "feFuncB", "feFuncG", "feFuncR", "feGaussianBlur", "feMerge",
-	"feMergeNode", "feMorphology", "feOffset",
+	"text", "tspan",
+	"linearGradient", "radialGradient", "stop", "clipPath", "mask",
 )
 
 // allowedAttributes are geometry, presentation and the settings of the elements above.
@@ -59,7 +61,6 @@ var allowedAttributes = set(
 	"mode", "operator", "k1", "k2", "k3", "k4", "values", "type", "tableValues", "slope",
 	"intercept", "amplitude", "exponent", "flood-color", "flood-opacity", "radius",
 	"markerWidth", "markerHeight", "markerUnits", "refX", "refY", "orient", "media",
-	"href", // only to an id in the file: checked below
 )
 
 func set(names ...string) map[string]bool {
@@ -72,7 +73,6 @@ func set(names ...string) map[string]bool {
 
 var (
 	internalRef = regexp.MustCompile(`^#([A-Za-z_][A-Za-z0-9_.:-]*)$`)
-	number      = regexp.MustCompile(`^\s*([0-9]*\.?[0-9]+(?:[eE][+-]?[0-9]+)?)\s*(px)?\s*$`)
 	// what may not appear in any value or style, once white space and control characters are
 	// taken out and letters are lowercase
 	forbiddenSchemes = []string{"javascript:", "vbscript:", "data:"}
@@ -199,8 +199,11 @@ func checkSVG(data []byte) (int, int, error) {
 			}
 			depth++
 			elements++
-			if depth > maxDepth || elements > maxElements {
-				return 0, 0, refuse("The SVG file is too complex for an icon.")
+			if elements > maxElements {
+				return 0, 0, refuse("The SVG file has more than %d parts: too many for an icon.", maxElements)
+			}
+			if depth > maxDepth {
+				return 0, 0, refuse("The SVG file puts parts inside each other more than %d levels deep: too deep for an icon.", maxDepth)
 			}
 			name := t.Name.Local
 			if err := checkElement(t); err != nil {
@@ -253,6 +256,10 @@ func checkElement(t xml.StartElement) error {
 		return refuse("The SVG file embeds other content (<foreignObject>)." + plain)
 	case "iframe", "embed", "object", "image", "a", "audio", "video":
 		return refuse("The SVG file embeds or links to other content (<%s>)."+plain, name)
+	case "use", "symbol", "pattern", "marker":
+		return refuse("The SVG file repeats parts of its drawing (<%s>)."+plain, name)
+	case "filter":
+		return refuse("The SVG file contains effects (<filter>)." + plain)
 	}
 	if !allowedElements[name] {
 		return refuse("The SVG file contains <%s>, which is not plain drawing."+plain, clip(name))
@@ -270,12 +277,10 @@ func checkAttribute(element string, a xml.Attr, ids, refs map[string]bool) error
 	case a.Name.Space == xmlNS && (local == "space" || local == "lang"):
 		return nil
 	case a.Name.Space == xlinkNS && local == "href", a.Name.Space == "" && local == "href":
-		m := internalRef.FindStringSubmatch(strings.TrimSpace(a.Value))
-		if m == nil {
-			return refuse("The SVG file points to something outside itself (%s)."+plain, clip(a.Value))
+		if internalRef.MatchString(strings.TrimSpace(a.Value)) {
+			return refuse("The SVG file links one part of its drawing to another (href on <%s>)."+plain, element)
 		}
-		refs[m[1]] = true
-		return nil
+		return refuse("The SVG file points to something outside itself (%s)."+plain, clip(a.Value))
 	case a.Name.Space != "" || !allowedAttributes[local]:
 		name := local
 		if a.Name.Space != "" {
@@ -308,18 +313,33 @@ func squareOf(t xml.StartElement) (int, int, error) {
 			height = a.Value
 		}
 	}
-	w, wok := length(width)
-	h, hok := length(height)
-	if viewBox != "" {
+	w, wok, err := length("width", width)
+	if err != nil {
+		return 0, 0, err
+	}
+	h, hok, err := length("height", height)
+	if err != nil {
+		return 0, 0, err
+	}
+	if strings.TrimSpace(viewBox) != "" {
 		f := strings.FieldsFunc(viewBox, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == '\n' || r == '\r' })
-		var vw, vh float64
-		var err1, err2 error
-		if len(f) == 4 {
-			vw, err1 = strconv.ParseFloat(f[2], 64)
-			vh, err2 = strconv.ParseFloat(f[3], 64)
+		if len(f) != 4 {
+			return 0, 0, refuse("The drawing area of the SVG file (viewBox) must be four numbers.")
 		}
-		if len(f) != 4 || err1 != nil || err2 != nil || vw <= 0 || vh <= 0 || math.IsInf(vw, 0) || math.IsInf(vh, 0) {
-			return 0, 0, refuse("The drawing area of the SVG file (viewBox) cannot be read.")
+		var v [4]float64
+		for i, field := range f {
+			n, err := strconv.ParseFloat(field, 64)
+			if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
+				return 0, 0, refuse("The drawing area of the SVG file (viewBox) must be four ordinary numbers: “%s” is not one.", clip(field))
+			}
+			if math.Abs(n) > maxNumber {
+				return 0, 0, refuse("The numbers of the drawing area of the SVG file (viewBox) must be at most %d.", maxNumber)
+			}
+			v[i] = n
+		}
+		vw, vh := v[2], v[3]
+		if vw <= 0 || vh <= 0 {
+			return 0, 0, refuse("The width and height of the drawing area of the SVG file (viewBox) must be greater than 0.")
 		}
 		if vw != vh {
 			return 0, 0, refuse("The image must be square: its drawing area (viewBox) is %s × %s.", f[2], f[3])
@@ -341,23 +361,33 @@ func squareOf(t xml.StartElement) (int, int, error) {
 	return size(w), size(h), nil
 }
 
-// length reads a width or height in pixels ("64" or "64px").
-func length(v string) (float64, bool) {
-	m := number.FindStringSubmatch(v)
-	if m == nil {
-		return 0, false
+// length reads a width or height in pixels ("64" or "64px"). A size in other units or in
+// percent says nothing about the shape: ok is false. A number that cannot be used (NaN,
+// Infinity, too large, 0 or less) is refused.
+func length(name, v string) (n float64, ok bool, err error) {
+	t := strings.TrimSuffix(strings.TrimSpace(v), "px")
+	if t == "" {
+		return 0, false, nil
 	}
-	f, err := strconv.ParseFloat(m[1], 64)
-	return f, err == nil && f > 0 && !math.IsInf(f, 0)
+	f, perr := strconv.ParseFloat(strings.TrimSpace(t), 64)
+	var numErr *strconv.NumError
+	switch {
+	case perr != nil && !(errors.As(perr, &numErr) && errors.Is(numErr.Err, strconv.ErrRange)):
+		return 0, false, nil // "100%", "2em": not a size in pixels
+	case perr != nil || math.IsNaN(f) || math.IsInf(f, 0):
+		return 0, false, refuse("The %s of the SVG file must be an ordinary number: “%s” is not one.", name, clip(v))
+	case f <= 0:
+		return 0, false, refuse("The %s of the SVG file must be greater than 0.", name)
+	case f > maxNumber:
+		return 0, false, refuse("The %s of the SVG file must be at most %d.", name, maxNumber)
+	}
+	return f, true, nil
 }
 
+// size rounds a checked size (greater than 0, at most maxNumber) to whole pixels.
 func size(f float64) int {
-	n := int(math.Round(f))
-	if n < 1 {
-		return 1
+	if n := int(math.Round(f)); n >= 1 {
+		return n
 	}
-	if n > 1<<20 {
-		return 1 << 20
-	}
-	return n
+	return 1
 }

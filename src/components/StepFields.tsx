@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
 import type { Feedback, Issue, NextLink, Process, Step } from "../types";
-import { slugify, uniqueId } from "../lib/edit";
+import { EXAMPLE, slugify, uniqueId } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
 import { usePerms } from "../lib/session";
 import { STEP_META, STEP_TYPES, stepHelp } from "../lib/stepMeta";
@@ -68,7 +68,7 @@ export function StepFields({ process, all, step, feedback, issues, onChange, onT
       <EditSection title="The step">
         <Field label="What happens" hint="Start with a verb, as the reader would say it">
           <input value={step.title} maxLength={70} onChange={(e) => onChange({ title: e.target.value })} onBlur={onTitleBlur} placeholder="Fill in the ServiceNow request"
-            data-autofocus={step.title === "New step" ? "" : undefined} onFocus={(e) => { if (step.title === "New step") e.target.select(); }} />
+            data-autofocus={step.title === EXAMPLE.newStep ? "" : undefined} onFocus={(e) => { if (step.title === EXAMPLE.newStep) e.target.select(); }} />
         </Field>
 
         <div className="field">

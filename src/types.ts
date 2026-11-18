@@ -174,7 +174,7 @@ export interface DocMeta {
   /** When the first version was saved. */
   createdAt: string;
   /** Unpublished changes exist. Only sent to people who may edit the process or standard. */
-  draft?: { updatedAt: string; updatedBy: string };
+  draft?: { updatedAt: string; updatedBy: string; updatedByName?: string };
 }
 
 export interface Skill {

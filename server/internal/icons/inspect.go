@@ -7,6 +7,7 @@ package icons
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -58,7 +59,9 @@ type Icon struct {
 	ContentType string `json:"contentType"`
 	Width       int    `json:"width"`
 	Height      int    `json:"height"`
-	Data        []byte `json:"-"`
+	// Data is stored exactly as uploaded: its id is the fingerprint of these bytes, so metadata
+	// in a bitmap (EXIF, text chunks) is kept, not stripped.
+	Data []byte `json:"-"`
 }
 
 // Ext is the file extension of a kind of image, without the dot.
@@ -150,6 +153,39 @@ func Inspect(declared string, data []byte) (Icon, error) {
 	return ic, err
 }
 
+// animated reports whether a PNG (an acTL chunk before the image data) or a WebP (the
+// animation flag of VP8X, or an ANIM or ANMF chunk) is a moving image. It only walks the chunk
+// headers.
+func animated(kind string, data []byte) bool {
+	switch kind {
+	case PNG:
+		for at := 8; at+8 <= len(data); {
+			n := int(binary.BigEndian.Uint32(data[at:]))
+			chunk := string(data[at+4 : at+8])
+			if chunk == "acTL" {
+				return true
+			}
+			if chunk == "IDAT" || n < 0 || n > len(data) {
+				return false
+			}
+			at += 12 + n
+		}
+	case WebP:
+		for at := 12; at+8 <= len(data); {
+			chunk := string(data[at : at+4])
+			n := int(binary.LittleEndian.Uint32(data[at+4:]))
+			if chunk == "ANIM" || chunk == "ANMF" || (chunk == "VP8X" && at+8 < len(data) && data[at+8]&0x02 != 0) {
+				return true
+			}
+			if n < 0 || n > len(data) {
+				return false
+			}
+			at += 8 + n + n%2
+		}
+	}
+	return false
+}
+
 // checkBitmap reads the size from the header first, so that an image that claims to be huge
 // is refused before any memory is spent on its pixels; only then is it decoded completely
 // (at most 512 x 512), so that a damaged file is refused too.
@@ -162,6 +198,9 @@ func checkBitmap(kind string, data []byte) (int, int, error) {
 		decodeConfig, decode = webp.DecodeConfig, webp.Decode
 	}
 	name := strings.TrimPrefix(friendly[kind], "a ")
+	if animated(kind, data) {
+		return 0, 0, refuse("Moving images cannot be used as icons: this %s is animated.", name)
+	}
 	cfg, err := decodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return 0, 0, refuse("The %s is damaged and cannot be read.", name)
