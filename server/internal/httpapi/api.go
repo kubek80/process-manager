@@ -473,8 +473,12 @@ func (a *api) static() http.Handler {
 			writeError(w, 405, "Method not allowed.")
 			return
 		}
+		// PM_STATIC_DIR may name something that is not a folder (a wrong mount): then no path
+		// is a file in it, and the app's pages are not in place
+		folder, err := os.Stat(a.Cfg.StaticDir)
+		isFolder := err == nil && folder.IsDir()
 		clean := filepath.Join(a.Cfg.StaticDir, filepath.Clean("/"+r.URL.Path))
-		if info, err := os.Stat(clean); err == nil && !info.IsDir() {
+		if info, err := os.Stat(clean); isFolder && err == nil && !info.IsDir() {
 			if strings.HasPrefix(r.URL.Path, "/assets/") {
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			}
@@ -488,7 +492,7 @@ func (a *api) static() http.Handler {
 			return
 		}
 		// the app routes on the hash, so every other path is the app itself
-		if info, err := os.Stat(index); err != nil || info.IsDir() {
+		if info, err := os.Stat(index); !isFolder || err != nil || info.IsDir() {
 			// The app's files are not there (yet): an empty bucket before the first upload, or
 			// the wrong folder. Looked up on every request, so they count as soon as they arrive.
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -523,12 +527,19 @@ func StaticProblem(dir string) string {
 	if dir == "" {
 		return ""
 	}
-	index := filepath.Join(dir, "index.html")
-	info, err := os.Stat(index)
-	if err == nil && !info.IsDir() {
-		return ""
+	var what string
+	switch info, err := os.Stat(dir); {
+	case err != nil:
+		what = "the folder " + dir + " (PM_STATIC_DIR) cannot be found"
+	case !info.IsDir():
+		what = "PM_STATIC_DIR=" + dir + " is not a folder"
+	default:
+		if info, err := os.Stat(filepath.Join(dir, "index.html")); err == nil && !info.IsDir() {
+			return ""
+		}
+		what = "there is no index.html in the folder " + dir + " (PM_STATIC_DIR)"
 	}
-	return "the portal's pages are not in place: there is no index.html in the folder " + dir + " (PM_STATIC_DIR). " +
+	return "the portal's pages are not in place: " + what + ". " +
 		"The server runs and answers the API, but people see a page saying the portal's pages are not in place yet. " +
 		"Put the built app's files there (on Cloud Run: deploy/cloudrun/upload-app.sh) or point PM_STATIC_DIR at the right folder; " +
 		"no restart is needed once they are there"

@@ -1067,8 +1067,8 @@ func TestAppFilesNotInPlaceYet(t *testing.T) {
 	if !strings.Contains(problem, "no index.html in the folder "+static) || !strings.Contains(problem, "PM_STATIC_DIR") {
 		t.Fatalf("start-up warning: %q", problem)
 	}
-	if p := StaticProblem(filepath.Join(static, "missing")); p == "" {
-		t.Fatal("a folder that does not exist must be a problem")
+	if p := StaticProblem(filepath.Join(static, "missing")); !strings.Contains(p, "cannot be found") {
+		t.Fatalf("a folder that does not exist: %q", p)
 	}
 	if p := StaticProblem(""); p != "" {
 		t.Fatalf("no folder set (the app is served separately) is no problem: %q", p)
@@ -1105,5 +1105,29 @@ func TestAppFilesNotInPlaceYet(t *testing.T) {
 	}
 	if problem := StaticProblem(static); problem != "" {
 		t.Fatalf("after the upload: %q", problem)
+	}
+}
+
+// PM_STATIC_DIR naming a file or a folder that does not exist (a wrong mount) answers like an
+// empty folder: the page that says the app's pages are not in place, never a server error.
+func TestAppFolderIsNotAFolder(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "index.html")
+	must(t, os.WriteFile(file, []byte("<html>app</html>"), 0o644))
+	if p := StaticProblem(file); !strings.Contains(p, "PM_STATIC_DIR="+file+" is not a folder") {
+		t.Fatalf("start-up warning: %q", p)
+	}
+	for _, dir := range []string{file, filepath.Join(t.TempDir(), "missing")} {
+		e := setup(t, func(d *Deps) { d.Cfg.StaticDir = dir })
+		c := e.anonymous()
+		for _, path := range []string{"/", "/p/x", "/some/deep/link"} {
+			if status, body, _ := c.raw("GET", path, nil, false); status != 503 || !strings.Contains(string(body), "The portal's pages are not in place yet") {
+				t.Errorf("%s %s: %d %q", dir, path, status, body)
+			}
+		}
+		for _, path := range []string{"/assets/app.js", "/index.html"} {
+			if status, _, _ := c.raw("GET", path, nil, false); status != 404 {
+				t.Errorf("%s %s: %d", dir, path, status)
+			}
+		}
 	}
 }

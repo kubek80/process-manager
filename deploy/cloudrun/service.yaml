@@ -2,21 +2,23 @@
 # Dockerfile answers /api/* and serves the app's pages from a private bucket mounted read-only.
 # Steps and checks: deploy/cloudrun/README.md (read its "Not tested" section first).
 #
-# Replace every placeholder (the words in capitals listed below), then:
-#   gcloud run services replace deploy/cloudrun/service.yaml --project PROJECT_ID --region REGION
+# Do not fill in this file and do not commit real values. As the README's "Deploy" step shows,
+# fill-service.sh writes a filled copy outside the repository (for example to
+# /tmp/service.filled.yaml), and that copy is deployed with `gcloud run services replace`.
 #
-# Placeholders: SERVICE, PROJECT_ID, PROJECT_NUMBER, REGION, REPOSITORY, IMAGE_TAG, BUCKET,
-# CONNECTOR, SERVICE_ACCOUNT, WORKSPACE_DOMAIN, ADMIN_EMAIL.
+# Placeholders: SERVICE, SERVICE_ACCOUNT, PROJECT_ID, REGION, REPOSITORY, IMAGE_TAG, BUCKET,
+# CONNECTOR, WORKSPACE_DOMAIN, ADMIN_EMAIL, PORTAL_URL.
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
   name: SERVICE
   annotations:
     # Reachable from the internet, but only through IAP: nobody is given the invoker role
-    # except IAP's own service agent (README step 9). IAP on Cloud Run needs ingress "all".
+    # except IAP's own service agent (README, "Switch IAP on and let the group in").
     run.googleapis.com/ingress: all
-    # IAP in front of the service. NOT TESTED in a definition file: if `services replace`
-    # refuses or ignores it, remove this line and switch IAP on with the command in README step 9.
+    # IAP in front of the service. Google's Terraform sample sets this; whether
+    # `services replace` accepts it was NOT TESTED. If it is refused, remove the line and switch
+    # IAP on by command (README, "Switch IAP on and let the group in").
     run.googleapis.com/iap-enabled: "true"
 spec:
   template:
@@ -53,10 +55,12 @@ spec:
           env:
             - name: PM_AUTH
               value: google
-            # The address people open; the sign-in comes back to PM_BASE_URL/auth/callback.
-            # Must match the OAuth client's redirect address exactly (README steps 5 and 10).
+            # The address people open: the service's address as `gcloud run services describe`
+            # shows it. The sign-in comes back to <this>/auth/callback, which must be the OAuth
+            # client's redirect address exactly (README, "The OAuth client for the portal's own
+            # sign-in" and "Check that it works").
             - name: PM_BASE_URL
-              value: https://SERVICE-PROJECT_NUMBER.REGION.run.app
+              value: PORTAL_URL
             # Where the bucket is mounted (see volumeMounts below).
             - name: PM_STATIC_DIR
               value: /srv/www
@@ -69,7 +73,7 @@ spec:
             # One JSON object per log line, which Cloud Logging reads as structured entries.
             - name: PM_LOG_FORMAT
               value: json
-            # From Secret Manager, latest version (README step 4).
+            # From Secret Manager, latest version (README, "The secrets").
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -94,7 +98,7 @@ spec:
             - name: app
               mountPath: /srv/www
           # The server only starts listening once it has reached the database and upgraded the
-          # tables, so /healthz answering means it is ready. Up to 10 s x 24 = 4 minutes.
+          # tables, so /healthz answering means it is ready. Tried every 10 s, up to 24 times.
           startupProbe:
             httpGet:
               path: /healthz
@@ -111,5 +115,5 @@ spec:
             volumeAttributes:
               bucketName: BUCKET
               # Folders such as assets/ exist only as part of file names in a bucket; without
-              # this option the mount may not show them. NOT TESTED: see README "Not tested".
+              # this option the mount does not show them (README, "Not tested").
               mountOptions: implicit-dirs

@@ -119,8 +119,12 @@ func TestListenAddressFromPort(t *testing.T) {
 	}
 	// development sign-in on a port Cloud Run gives is reachable from the network: still refused
 	_, err := Load(env(map[string]string{"PM_AUTH": "dev", "DATABASE_URL": "x", "PORT": "8080"}))
-	if err == nil || !strings.Contains(err.Error(), "only runs on this machine") || !strings.Contains(err.Error(), "0.0.0.0:8080") {
-		t.Errorf("dev sign-in with PORT: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "only runs on this machine: PORT=8080 is set, so it would listen on 0.0.0.0:8080, which is reachable from the network") || strings.Contains(err.Error(), "PM_ADDR=") {
+		t.Errorf("dev sign-in with PORT must name PORT, not PM_ADDR: %v", err)
+	}
+	_, err = Load(env(map[string]string{"PM_AUTH": "dev", "DATABASE_URL": "x", "PORT": "8080", "PM_ADDR": "0.0.0.0:9000"}))
+	if err == nil || !strings.Contains(err.Error(), "PM_ADDR=0.0.0.0:9000 is reachable") {
+		t.Errorf("dev sign-in with PM_ADDR must name PM_ADDR: %v", err)
 	}
 	if _, err := Load(env(map[string]string{"PM_AUTH": "dev", "DATABASE_URL": "x"})); err != nil {
 		t.Errorf("dev sign-in without PORT: %v", err)
