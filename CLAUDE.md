@@ -41,4 +41,5 @@ A portal for company processes (request a GCP project, onboard to Akamai…) and
 - Tools and languages can name an icon (`"icon"`: the SHA-256 of the image). Icons are checked and stored by `server/internal/icons` (an allow-list for SVG in `svg.go`: keep it an allow-list, with nothing that repeats parts of a drawing - no `<use>`, `<symbol>`, `<pattern>`, `href`), served by `/api/icons/{id}` and shown with `EntryIcon`; their files are `catalog/icons/<id>.<ext>`.
 - Nothing in tests or CI may call an outside service: Vertex AI is tested against a local stand-in only.
 - Text shown to users is written for business analysts: plain words, no implementation terms.
+- `deploy/cloudrun/` (Cloud Run behind IAP; steps in its `README.md`) names settings, the port, `/healthz` and the build output: change it with them.
 - Go: `gofmt` and `go vet` clean. Database tests use a real Postgres through `dbtest.NewPool`.

@@ -206,7 +206,8 @@ Periods are counted in days by the server's clock in UTC. `period=7` is today an
 | `PM_OIDC_ISSUER` | Optional: override the issuer (sovereign clouds, tests) |
 | `PM_SEED_DIR` | Folder with `processes/`, `standards/`, `catalog/` that fills an empty database, and with `schema/`. Default: the working directory. |
 | `PM_SCHEMA_DIR` | Folder with the JSON schemas. Default: `<PM_SEED_DIR>/schema`. |
-| `PM_STATIC_DIR`, `PM_ADDR` | The built app and the listen address; set by the `Dockerfile` and by `npm run dev` |
+| `PM_ADDR` | The listen address. Wins whenever it is set; the `Dockerfile` sets `0.0.0.0:8080`. When it is not set and `PORT` is (Cloud Run sets `PORT`), the server listens on `0.0.0.0:$PORT`; a `PORT` that is not a port number (1 to 65535) stops the start with a message saying so. Otherwise `127.0.0.1:8080`. |
+| `PM_STATIC_DIR` | The folder with the built app (the output of `npm run build`); the `Dockerfile` sets `/app/dist`. Any path without a file extension is answered with its `index.html`; a missing file under `/assets/` or with an extension is 404. Without an `index.html` in it (an empty bucket before the first upload, a wrong folder) the server still starts and answers the API, logs a warning naming the folder, and answers the app's pages with 503 and a short page "The portal's pages are not in place yet"; once the file is there it is served, without a restart. |
 | `PM_NOTIFY`, `PM_NOTIFY_WEBHOOK_URL` | `log` (default) or `webhook` |
 | `PM_LOG_FORMAT` | `text` (default) or `json` |
 | `PM_EMBEDDINGS` | Search by meaning: `off` (default: the app works as without it), `builtin` (no network, the same vectors every time; used by `npm run dev`, the tests and CI) or `vertex` (Vertex AI: document text and questions are sent to Google Cloud). Needs pgvector, see [Search by meaning](#search-by-meaning). |
@@ -329,6 +330,8 @@ To switch it off again, set `PM_EMBEDDINGS=off`: the switch disappears from the 
 
 `Dockerfile` builds one image with the server, the built app, the schemas and the sample content. It needs a Postgres database (with pgvector when search by meaning is on) and the settings above; see `.env.example`. After the first start, changes are made in the portal and are live at once.
 
+**Google Cloud Run behind Identity-Aware Proxy:** `deploy/cloudrun/` holds a service definition (`service.yaml`), a script that builds the app and uploads it to a private bucket (`upload-app.sh`) and the steps in order (`deploy/cloudrun/README.md`, including what has not been tried on a real project). One service runs this image; the app's files come from the bucket, mounted read-only and named by `PM_STATIC_DIR`; Postgres has a private address. IAP is only the gate in front of the service: the portal keeps its own sign-in and the server does not read anything IAP sends. That set-up runs no MCP server and leaves search by meaning off.
+
 The image also holds the MCP server for agents, as `/app/mcp`: run a second container from it with that entrypoint (`docker run --entrypoint /app/mcp …`, in Kubernetes `command: ["/app/mcp"]`), with `PM_MCP_ADDR=0.0.0.0:8081`, a `PM_MCP_SECRET` and the same database and search settings as the portal (`docs/mcp.md`). The image exposes 8080 (portal) and 8081 (MCP).
 
 Not built yet: sign-in of agents with their own tokens (the MCP server in `docs/mcp.md` accepts one shared secret), mapping Entra or Google groups to roles, ending the sessions of one person from the Admin panel (their own sign-out does it; removing them at the provider takes effect when their session expires, after at most 12 hours), and per-person run tracking.
@@ -356,4 +359,5 @@ server/internal/chunking       cuts a process or standard into the parts search 
 server/internal/embedding      turns text into vectors: built-in or Vertex AI
 server/internal/retrieval      the search index in pgvector: keeping it up to date, searching it
 server/internal/httpapi        routes, permissions, working drafts, icons, people and roles, views, statistics, the CSV file, search
+deploy/cloudrun                the Cloud Run service definition, the app upload script, the deployment steps
 ```
