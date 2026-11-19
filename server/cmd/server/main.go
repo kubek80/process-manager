@@ -253,6 +253,9 @@ func run(log *slog.Logger, o options) error {
 		}
 	}
 
+	if problem := httpapi.StaticProblem(cfg.StaticDir); problem != "" {
+		log.Warn(problem)
+	}
 	srv := &http.Server{
 		Addr: cfg.Addr, Handler: httpapi.New(deps),
 		// a client that sends or reads slowly cannot hold a connection open for ever

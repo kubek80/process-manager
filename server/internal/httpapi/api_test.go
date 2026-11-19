@@ -1051,4 +1051,59 @@ func TestServesTheBuiltApp(t *testing.T) {
 	if status, _ := c.do("POST", "/", nil); status != 405 {
 		t.Fatalf("POST /: %d", status)
 	}
+	if problem := StaticProblem(static); problem != "" {
+		t.Fatalf("a folder with index.html has no problem: %q", problem)
+	}
+}
+
+// Before the app's files are uploaded (an empty bucket, a wrong folder) the API works and the
+// app's page says so in plain words; the files count as soon as they are there.
+func TestAppFilesNotInPlaceYet(t *testing.T) {
+	static := t.TempDir()
+	e := setup(t, func(d *Deps) { d.Cfg.StaticDir = static })
+	c := e.anonymous()
+
+	problem := StaticProblem(static)
+	if !strings.Contains(problem, "no index.html in the folder "+static) || !strings.Contains(problem, "PM_STATIC_DIR") {
+		t.Fatalf("start-up warning: %q", problem)
+	}
+	if p := StaticProblem(filepath.Join(static, "missing")); p == "" {
+		t.Fatal("a folder that does not exist must be a problem")
+	}
+	if p := StaticProblem(""); p != "" {
+		t.Fatalf("no folder set (the app is served separately) is no problem: %q", p)
+	}
+
+	for _, path := range []string{"/", "/some/deep/link"} {
+		status, body, header := c.raw("GET", path, nil, false)
+		if status != 503 || !strings.Contains(string(body), "The portal's pages are not in place yet") ||
+			strings.Contains(string(body), "<script") || header.Get("Cache-Control") != "no-store" ||
+			!strings.HasPrefix(header.Get("Content-Type"), "text/html") || header.Get("Content-Security-Policy") == "" {
+			t.Errorf("%s: %d %q %v", path, status, body, header)
+		}
+		if status, body, _ := c.raw("HEAD", path, nil, false); status != 503 || len(body) != 0 {
+			t.Errorf("HEAD %s: %d %q", path, status, body)
+		}
+	}
+	// a missing script or file stays a missing file
+	for _, path := range []string{"/assets/app.js", "/favicon.svg", "/index.html"} {
+		if status, _, _ := c.raw("GET", path, nil, false); status != 404 {
+			t.Errorf("%s: %d", path, status)
+		}
+	}
+	if status, body := c.do("GET", "/healthz", nil); status != 200 || body["ok"] != true {
+		t.Fatalf("healthz: %d %v", status, body)
+	}
+	if status, body := c.do("GET", "/api/nope", nil); status != 404 || body["error"] == nil {
+		t.Fatalf("the API still answers: %d %v", status, body)
+	}
+
+	// the upload arrives: served at once, without a restart
+	must(t, os.WriteFile(filepath.Join(static, "index.html"), []byte("<html>app</html>"), 0o644))
+	if status, body, header := c.raw("GET", "/", nil, false); status != 200 || string(body) != "<html>app</html>" || header.Get("Cache-Control") != "no-cache" {
+		t.Fatalf("after the upload: %d %q %q", status, body, header.Get("Cache-Control"))
+	}
+	if problem := StaticProblem(static); problem != "" {
+		t.Fatalf("after the upload: %q", problem)
+	}
 }

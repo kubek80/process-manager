@@ -22,7 +22,7 @@ const (
 )
 
 type Config struct {
-	Addr        string // listen address
+	Addr        string // listen address: PM_ADDR, else 0.0.0.0:$PORT when PORT is set, else 127.0.0.1:8080
 	BaseURL     string // public URL of the app, used for the sign-in redirect
 	DatabaseURL string
 	SeedDir     string   // folder with processes/, standards/ and catalog/ used to fill an empty database
@@ -157,7 +157,7 @@ func Load(getenv func(string) string) (Config, error) {
 		return fallback
 	}
 	c := Config{
-		Addr:         get("PM_ADDR", "127.0.0.1:8080"),
+		Addr:         get("PM_ADDR", ""),
 		BaseURL:      strings.TrimRight(get("PM_BASE_URL", "http://localhost:5173"), "/"),
 		DatabaseURL:  get("DATABASE_URL", ""),
 		SeedDir:      get("PM_SEED_DIR", "."),
@@ -184,6 +184,17 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 
 	var problems []string
+	if c.Addr == "" {
+		// Cloud Run (and similar platforms) say in PORT which port to listen on
+		c.Addr = "127.0.0.1:8080"
+		if port := get("PORT", ""); port != "" {
+			if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 || strconv.Itoa(n) != port {
+				problems = append(problems, fmt.Sprintf("PORT=%q is not a port number: it must be a whole number from 1 to 65535, the port the server listens on. Or set PM_ADDR, e.g. 0.0.0.0:8080", port))
+			} else {
+				c.Addr = net.JoinHostPort("0.0.0.0", port)
+			}
+		}
+	}
 	if c.DatabaseURL == "" {
 		problems = append(problems, "DATABASE_URL is required")
 	}

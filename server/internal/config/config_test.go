@@ -81,6 +81,52 @@ func TestDevSignInOnlyOnThisMachine(t *testing.T) {
 	}
 }
 
+// Cloud Run says in PORT which port to listen on; PM_ADDR, when set, wins.
+func TestListenAddressFromPort(t *testing.T) {
+	const good = "kJ8v2Qx7Lm4Zp9Wn3Rt6Yb1Hc5Fd0GsAeUi"
+	google := map[string]string{"PM_AUTH": "google", "PM_GOOGLE_HOSTED_DOMAIN": "example.com", "DATABASE_URL": "x", "PM_OIDC_CLIENT_ID": "a",
+		"PM_OIDC_CLIENT_SECRET": "b", "PM_SESSION_SECRET": good, "PM_ADMINS": "a@example.com", "PM_BASE_URL": "https://pm.example.com"}
+	with := func(extra map[string]string) map[string]string {
+		m := map[string]string{}
+		for k, v := range google {
+			m[k] = v
+		}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
+	}
+	for _, tc := range []struct {
+		vars map[string]string
+		addr string
+	}{
+		{map[string]string{}, "127.0.0.1:8080"},
+		{map[string]string{"PORT": "9090"}, "0.0.0.0:9090"},
+		{map[string]string{"PORT": " 8080 "}, "0.0.0.0:8080"},
+		{map[string]string{"PORT": "9090", "PM_ADDR": "127.0.0.1:7000"}, "127.0.0.1:7000"},
+		{map[string]string{"PORT": "not-a-port", "PM_ADDR": "0.0.0.0:8080"}, "0.0.0.0:8080"}, // PORT is not read at all
+	} {
+		c, err := Load(env(with(tc.vars)))
+		if err != nil || c.Addr != tc.addr {
+			t.Errorf("%v: %q %v, want %q", tc.vars, c.Addr, err, tc.addr)
+		}
+	}
+	for _, port := range []string{"http", "0", "65536", "-1", "80.5", "+80", "080"} {
+		_, err := Load(env(with(map[string]string{"PORT": port})))
+		if err == nil || !strings.Contains(err.Error(), "PORT=\""+port+"\" is not a port number") {
+			t.Errorf("PORT=%q: %v", port, err)
+		}
+	}
+	// development sign-in on a port Cloud Run gives is reachable from the network: still refused
+	_, err := Load(env(map[string]string{"PM_AUTH": "dev", "DATABASE_URL": "x", "PORT": "8080"}))
+	if err == nil || !strings.Contains(err.Error(), "only runs on this machine") || !strings.Contains(err.Error(), "0.0.0.0:8080") {
+		t.Errorf("dev sign-in with PORT: %v", err)
+	}
+	if _, err := Load(env(map[string]string{"PM_AUTH": "dev", "DATABASE_URL": "x"})); err != nil {
+		t.Errorf("dev sign-in without PORT: %v", err)
+	}
+}
+
 func TestLoadRejects(t *testing.T) {
 	const good = "kJ8v2Qx7Lm4Zp9Wn3Rt6Yb1Hc5Fd0GsAeUi"
 	cases := map[string]map[string]string{
