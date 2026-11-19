@@ -1,0 +1,119 @@
+# The Process Manager portal as one Cloud Run service: the Go server from the repository's
+# Dockerfile answers /api/* and serves the app's pages from a private bucket mounted read-only.
+# Steps and checks: deploy/cloudrun/README.md (read its "Not tested" section first).
+#
+# Do not fill in this file and do not commit real values. As the README's "Deploy" step shows,
+# fill-service.sh writes a filled copy outside the repository (for example to
+# /tmp/service.filled.yaml), and that copy is deployed with `gcloud run services replace`.
+#
+# Placeholders: SERVICE, SERVICE_ACCOUNT, PROJECT_ID, REGION, REPOSITORY, IMAGE_TAG, BUCKET,
+# CONNECTOR, WORKSPACE_DOMAIN, ADMIN_EMAIL, PORTAL_URL.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: SERVICE
+  annotations:
+    # Reachable from the internet, but only through IAP: nobody is given the invoker role
+    # except IAP's own service agent (README, "Switch IAP on and let the group in").
+    run.googleapis.com/ingress: all
+    # IAP in front of the service. Google's Terraform sample sets this; whether
+    # `services replace` accepts it was NOT TESTED. If it is refused, remove the line and switch
+    # IAP on by command (README, "Switch IAP on and let the group in").
+    run.googleapis.com/iap-enabled: "true"
+spec:
+  template:
+    metadata:
+      annotations:
+        # Second generation: needed for the Cloud Storage volume.
+        run.googleapis.com/execution-environment: gen2
+        # CPU stays allocated between requests: after it has answered, the server still sends
+        # notifications and brings skills and counts up to date in the background.
+        run.googleapis.com/cpu-throttling: "false"
+        # Always one instance running, so that background work is never cut off by scaling to zero.
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "3"
+        # Postgres has a private address only: reached through this Serverless VPC Access connector.
+        run.googleapis.com/vpc-access-connector: projects/PROJECT_ID/locations/REGION/connectors/CONNECTOR
+        # Only private addresses go through the connector; Google sign-in goes out directly.
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+    spec:
+      # The service's own identity: reads the bucket and the secrets, nothing else.
+      serviceAccountName: SERVICE_ACCOUNT@PROJECT_ID.iam.gserviceaccount.com
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: REGION-docker.pkg.dev/PROJECT_ID/REPOSITORY/process-manager:IMAGE_TAG
+          ports:
+            # The image listens on 0.0.0.0:8080 (PM_ADDR in the Dockerfile).
+            - name: http1
+              containerPort: 8080
+          resources:
+            limits:
+              cpu: "1"
+              # The bucket mount uses some of this memory too.
+              memory: 512Mi
+          env:
+            - name: PM_AUTH
+              value: google
+            # The address people open: the service's address as `gcloud run services describe`
+            # shows it. The sign-in comes back to <this>/auth/callback, which must be the OAuth
+            # client's redirect address exactly (README, "The OAuth client for the portal's own
+            # sign-in" and "Check that it works").
+            - name: PM_BASE_URL
+              value: PORTAL_URL
+            # Where the bucket is mounted (see volumeMounts below).
+            - name: PM_STATIC_DIR
+              value: /srv/www
+            # Only accounts of this Google Workspace domain can sign in to the portal.
+            - name: PM_GOOGLE_HOSTED_DOMAIN
+              value: WORKSPACE_DOMAIN
+            # The first admin(s), comma-separated: always admin, so there is always a way in.
+            - name: PM_ADMINS
+              value: ADMIN_EMAIL
+            # One JSON object per log line, which Cloud Logging reads as structured entries.
+            - name: PM_LOG_FORMAT
+              value: json
+            # From Secret Manager, latest version (README, "The secrets").
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: pm-database-url
+                  key: latest
+            - name: PM_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: pm-session-secret
+                  key: latest
+            - name: PM_OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: pm-oidc-client-id
+                  key: latest
+            - name: PM_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: pm-oidc-client-secret
+                  key: latest
+          volumeMounts:
+            - name: app
+              mountPath: /srv/www
+          # The server only starts listening once it has reached the database and upgraded the
+          # tables, so /healthz answering means it is ready. Tried every 10 s, up to 24 times.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 24
+      volumes:
+        # The private bucket with the app's files (the output of `npm run build`), read-only.
+        - name: app
+          csi:
+            driver: gcsfuse.run.googleapis.com
+            readOnly: true
+            volumeAttributes:
+              bucketName: BUCKET
+              # Folders such as assets/ exist only as part of file names in a bucket; without
+              # this option the mount does not show them (README, "Not tested").
+              mountOptions: implicit-dirs

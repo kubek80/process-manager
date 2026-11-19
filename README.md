@@ -168,6 +168,7 @@ schema/               formats + the examples used in the prompts
 processes/ standards/ catalog/   sample content that fills an empty database (icons in catalog/icons/)
 e2e/                  end-to-end tests
 scripts/              dev, mcp, test, validate, validators, prompt, reviews
+deploy/cloudrun/      deploying on Google Cloud Run behind Identity-Aware Proxy (steps in its README.md)
 docs/                 backend.md, mcp.md, generated prompts, screenshots
 ```
 

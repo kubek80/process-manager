@@ -473,8 +473,12 @@ func (a *api) static() http.Handler {
 			writeError(w, 405, "Method not allowed.")
 			return
 		}
+		// PM_STATIC_DIR may name something that is not a folder (a wrong mount): then no path
+		// is a file in it, and the app's pages are not in place
+		folder, err := os.Stat(a.Cfg.StaticDir)
+		isFolder := err == nil && folder.IsDir()
 		clean := filepath.Join(a.Cfg.StaticDir, filepath.Clean("/"+r.URL.Path))
-		if info, err := os.Stat(clean); err == nil && !info.IsDir() {
+		if info, err := os.Stat(clean); isFolder && err == nil && !info.IsDir() {
 			if strings.HasPrefix(r.URL.Path, "/assets/") {
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			}
@@ -488,7 +492,55 @@ func (a *api) static() http.Handler {
 			return
 		}
 		// the app routes on the hash, so every other path is the app itself
+		if info, err := os.Stat(index); !isFolder || err != nil || info.IsDir() {
+			// The app's files are not there (yet): an empty bucket before the first upload, or
+			// the wrong folder. Looked up on every request, so they count as soon as they arrive.
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			if r.Method == http.MethodGet {
+				_, _ = io.WriteString(w, notInPlacePage)
+			}
+			return
+		}
 		w.Header().Set("Cache-Control", "no-cache")
 		http.ServeFile(w, r, index)
 	})
+}
+
+// notInPlacePage answers for the app while its files are missing. Plain HTML only: nothing the
+// content security policy would block.
+const notInPlacePage = `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Process Manager</title></head>
+<body>
+<h1>The portal's pages are not in place yet</h1>
+<p>The portal is running, but the files of its pages have not been put in place. Try again in a few minutes.</p>
+<p>If this does not go away, tell the team that runs the portal.</p>
+</body>
+</html>
+`
+
+// StaticProblem says in plain words what is wrong with the folder of the app's files, or ""
+// when its index.html is there. The server starts all the same: the files may arrive later.
+func StaticProblem(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	var what string
+	switch info, err := os.Stat(dir); {
+	case err != nil:
+		what = "the folder " + dir + " (PM_STATIC_DIR) cannot be found"
+	case !info.IsDir():
+		what = "PM_STATIC_DIR=" + dir + " is not a folder"
+	default:
+		if info, err := os.Stat(filepath.Join(dir, "index.html")); err == nil && !info.IsDir() {
+			return ""
+		}
+		what = "there is no index.html in the folder " + dir + " (PM_STATIC_DIR)"
+	}
+	return "the portal's pages are not in place: " + what + ". " +
+		"The server runs and answers the API, but people see a page saying the portal's pages are not in place yet. " +
+		"Put the built app's files there (on Cloud Run: deploy/cloudrun/upload-app.sh) or point PM_STATIC_DIR at the right folder; " +
+		"no restart is needed once they are there"
 }
