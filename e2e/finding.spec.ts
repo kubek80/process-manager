@@ -223,13 +223,14 @@ test("the lists keep their search and filters in the address: a reload and a cop
 test("a due review is a warning, an overdue one a problem, for the people who look after it", async ({ page, request }) => {
   const soon = new Date(Date.now() - 170 * 86_400_000).toISOString().slice(0, 10); // six months ago, less 10 days: due within 30 days
   await make(request, `${PREFIX}due`, { title: "Finding demo due", owner: "cloud-platform-team", review: { intervalMonths: 6, lastReviewedAt: soon, reviewedBy: "Somebody" } });
+  await make(request, `${PREFIX}overdue`, { title: "Finding demo overdue", owner: "cloud-platform-team", review: { intervalMonths: 6, lastReviewedAt: "2025-01-01", reviewedBy: "Somebody" } });
   await signIn(page, ALEX);
   await open(page, "/processes");
   const due = page.locator(`li.card[data-id="${PREFIX}due"] .card-mark[data-line="review"]`);
   await expect(due).toContainText(/^Review: Review due \d{4}-\d\d-\d\d$/);
   await expect(due).toHaveClass(/\bwarn\b/);
   await expect(due).not.toHaveClass(/\bbad\b/);
-  const overdue = page.locator('li.card[data-id="onboard-site-to-akamai"] .card-mark[data-line="review"]');
+  const overdue = page.locator(`li.card[data-id="${PREFIX}overdue"] .card-mark[data-line="review"]`);
   await expect(overdue).toHaveClass(/\bbad\b/);
   // the colours differ: amber and red
   const [a, b] = [await due.evaluate((e) => getComputedStyle(e).color), await overdue.evaluate((e) => getComputedStyle(e).color)];
