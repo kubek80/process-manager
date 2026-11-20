@@ -39,8 +39,8 @@ export function StepDrawer({ process, all, step, onClose, onSelect, feedback, re
         <button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
       </header>
       <div className="drawer-body">
+        {!step.description && !step.instructions?.length && !step.subProcessId && <p className="muted drawer-none">No further details for this step.</p>}
         <StepBody step={step} process={process} all={all} onSelect={onSelect} />
-        {!step.description && !step.instructions?.length && !step.subProcessId && <p className="muted">No further details for this step.</p>}
         <section className="drawer-fb">
           {mine.length > 0 && (
             <ul className="fb-list">

@@ -124,30 +124,45 @@ function decisionPaths(next: NextLink[], backTo: string): NextLink[] {
 }
 
 /**
- * Removes a step and connects the steps before it to what came after it. The names of paths
- * belong to decisions: an ordinary step that takes over several paths gets them without names,
- * and a decision never ends up with two paths of the same name.
+ * Removes a step and connects the steps before it to what came after it. The names of answers
+ * belong to decisions and are never changed by deleting something else:
+ * - a named answer of a decision keeps its name and now leads where the deleted step led; when
+ *   that step had several ways on, to the one that carried the flow on (see throughPath). When it
+ *   led nowhere (the end of the flow), the answer is removed - restructureNotice says so;
+ * - an unnamed way in from a decision takes over the deleted step's paths with their names (a
+ *   name another answer already has gets a number: "Yes 2");
+ * - an ordinary step takes over every path without names; one way in and one way out keeps the
+ *   name of the way in.
+ * A decision may end up with two answers to the same step: the checker asks to tell them apart,
+ * instead of one answer silently disappearing.
  */
 export function deleteStep(p: Process, id: string): Process {
   const gone = p.steps.find((s) => s.id === id);
   if (!gone || p.steps.length === 1) return p;
   const single = gone.next.length === 1;
+  const targets = new Set(gone.next.map((g) => g.to));
+  const onward = targets.size === 1 ? gone.next[0] : throughPath(p, gone);
+  type Path = NextLink & { inherited?: boolean };
   const steps = p.steps.filter((s) => s.id !== id).map((s) => {
     if (!s.next.some((n) => n.to === id)) return s;
     const decides = s.type === "decision";
-    // one path in, one path out: the way in keeps its name. Several out: a decision names each by
-    // what the removed step called it; an ordinary step has no use for the names.
-    const label = (n: NextLink, g: NextLink) => (single ? n.label ?? (decides ? g.label : undefined) : decides ? g.label ?? n.label : undefined);
+    const replace = (n: NextLink): Path[] => {
+      if (decides && n.label) return onward ? [{ to: onward.to, label: n.label }] : [];
+      return gone.next.map((g) => {
+        const l = decides ? g.label : single ? n.label : undefined;
+        return l ? { to: g.to, label: l, inherited: true } : { to: g.to, inherited: true };
+      });
+    };
     const seen = new Set<string>();
-    // An answer of a decision that led to a step with one way on keeps its name and now leads
-    // there, even when another answer already does: the answers stay, and the checker asks to tell
-    // them apart, instead of one answer silently disappearing.
-    const keeps = (n: NextLink) => decides && single && !!n.label;
-    const next = s.next
-      .flatMap((n): (NextLink & { inherited?: boolean })[] => (n.to === id ? gone.next.map((g) => { const l = label(n, g); return l ? { to: g.to, label: l, inherited: true } : { to: g.to, inherited: true }; }) : [n]))
-      .filter((n) => n.to !== s.id && n.to !== id && ((!seen.has(n.to) && !!seen.add(n.to)) || keeps(n)))
-      .map(({ inherited: _, ...n }) => n) // eslint-disable-line @typescript-eslint/no-unused-vars
-      .reduce<NextLink[]>((out, n) => [...out, decides && n.label && out.some((x) => x.label === n.label) ? { ...n, label: freeLabel(n.label, out) } : n], []);
+    const kept = s.next
+      .flatMap((n): Path[] => (n.to === id ? replace(n) : [n]))
+      .filter((n) => n.to !== s.id && n.to !== id && ((!seen.has(n.to) && !!seen.add(n.to)) || (decides && !!n.label && !n.inherited)));
+    // a name taken over from the deleted step never takes the name of an answer that was there
+    const own = kept.filter((n) => !n.inherited && n.label).map((n) => ({ to: n.to, label: n.label }));
+    const next = kept.reduce<NextLink[]>((out, { inherited, ...n }) => {
+      if (!inherited || !decides || !n.label) return [...out, n];
+      return [...out, { ...n, label: freeLabel(n.label, [...own, ...out]) }];
+    }, []);
     return { ...s, next };
   });
   return { ...p, steps };
@@ -240,25 +255,70 @@ const answerOf = (label: string | undefined, decision: Step, max = 40) =>
  * path that is new, or that leads to another step than before, is a change.
  */
 export function answerChanges(before: Process, after: Process): string[] {
-  return changedAnswers(before, after).map(({ step: s, answer: n }) => {
-    const also = s.next.filter((x) => x !== n && x.to === n.to).map((x) => `“${x.label}”`);
-    return `${answerOf(n.label, s)} now goes to ${numbered(after, n.to)}${also.length ? `, as ${also.join(" and ")} does` : ""}`;
+  return changedAnswers(before, after).map(({ step: s, answer: n, isNew }) => {
+    const also = s.next.filter((x) => x !== n && x.to === n.to && x.label).map((x) => `“${x.label}”`);
+    return `${answerOf(n.label, s)} ${isNew ? "is new: it goes" : "now goes"} to ${numbered(after, n.to)}${also.length ? `, as ${also.join(" and ")} does` : ""}`;
   });
 }
 
 /** The named answers of decisions that are new or lead to another step than before. */
-function changedAnswers(before: Process, after: Process): { step: Step; answer: Step["next"][number] }[] {
-  const out: { step: Step; answer: Step["next"][number] }[] = [];
+function changedAnswers(before: Process, after: Process): { step: Step; answer: Step["next"][number]; isNew: boolean }[] {
+  const out: { step: Step; answer: Step["next"][number]; isNew: boolean }[] = [];
   for (const s of after.steps) {
     const was = before.steps.find((x) => x.id === s.id);
     if (!was || s.type !== "decision") continue;
     for (const n of s.next) {
       if (!n.label) continue;
       const old = was.next.find((x) => x.label === n.label);
-      if (!old || old.to !== n.to) out.push({ step: s, answer: n });
+      if (!old || old.to !== n.to) out.push({ step: s, answer: n, isNew: !old });
     }
   }
   return out;
+}
+
+/** The named answers of decisions that are gone, each with where it led: “Yes” of “Release healthy?” is removed… */
+function removedAnswers(before: Process, after: Process): string[] {
+  const out: string[] = [];
+  for (const was of before.steps) {
+    const s = after.steps.find((x) => x.id === was.id);
+    if (!s || was.type !== "decision" || s.type !== "decision") continue;
+    for (const n of was.next) {
+      if (!n.label || s.next.some((x) => x.label === n.label)) continue;
+      const to = after.steps.find((x) => x.id === n.to);
+      const why = !to ? "it led to the deleted step, which ended the flow"
+        : to.id === s.id ? "it would lead back to the decision itself"
+        : `it led to “${shortName(to.title, 40) || "(no name yet)"}”, which was moved`;
+      out.push(`${answerOf(n.label, s)} is removed: ${why}`);
+    }
+  }
+  return out;
+}
+
+const targetsOf = (s: Step) => [...new Set(s.next.map((n) => n.to))];
+
+/**
+ * The plain arrows (of steps that are not decisions) that lead elsewhere now: "“Close the change
+ * record” now leads to 14. Change approved?", "“Roll out” now ends the flow". `subject`: the step
+ * that was moved or deleted, whose own place the message's first line already says.
+ */
+function changedArrows(before: Process, after: Process, subject?: string): string[] {
+  const out: string[] = [];
+  for (const s of after.steps) {
+    const was = before.steps.find((x) => x.id === s.id);
+    if (!was || s.id === subject || s.type === "decision" || was.type === "decision") continue;
+    const now = targetsOf(s), then = targetsOf(was);
+    if (now.length === then.length && now.every((t) => then.includes(t))) continue;
+    const name = `“${shortName(s.title, 40) || "(no name yet)"}”`;
+    out.push(now.length ? `${name} now leads to ${now.map((t) => numbered(after, t)).join(" and to ")}` : `${name} now ends the flow`);
+  }
+  return out;
+}
+
+/** Steps that something led to before and nothing leads to now (the first step needs nothing to lead to it). */
+function unreached(before: Process, after: Process): string[] {
+  const into = (p: Process) => new Set(p.steps.flatMap((s) => s.next.filter((n) => n.to !== s.id).map((n) => n.to)));
+  const was = into(before), now = into(after);
+  return after.steps.filter((s, i) => i > 0 && was.has(s.id) && !now.has(s.id)).map((s) => `Nothing leads to ${numbered(after, s.id)} any more`);
 }
 
 /** A name in a short message: cut to `max` characters, with an ellipsis. Nothing stays "". */
@@ -267,24 +327,45 @@ export const shortName = (t: string | undefined, max = 36): string => {
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
 };
 
-/** How many answers a message names one by one; the rest are counted ("and 2 more"). */
-export const NOTICE_ANSWERS = 2;
+/** How many lines a message says under its first line; more are counted ("And 2 more…"). */
+export const NOTICE_LINES = 3;
 
 /**
- * The message after a delete or a move: what was done, then each answer of a decision that now
- * leads elsewhere with where it goes (at most two, then "and N more"). A move says nothing when no
- * answer changed. `all` holds every line, for a list of them all. Null: nothing to say.
+ * The first line of the message after a move: where the step is now, by its number and its
+ * neighbour in the list. "Step “Change approved?” is now step 14, the last."
  */
-export function restructureNotice(before: Process, after: Process, done?: string): { title: string; detail?: string; all?: string[] } | null {
-  // a sentence ends with a full stop, unless the name it ends with already has its own mark
-  const lines = answerChanges(before, after).map((l) => (/[.?!…]$/.test(l) ? l : `${l}.`));
+export function movedHead(after: Process, id: string): string {
+  const at = after.steps.findIndex((x) => x.id === id);
+  if (at < 0) return "";
+  const name = `Step “${shortName(after.steps[at].title, 40) || "(no name yet)"}”`;
+  if (at === after.steps.length - 1) return `${name} is now step ${at + 1}, the last.`;
+  if (at === 0) return `${name} is now step 1, the first.`;
+  return `${name} is now step ${at + 1}, before “${shortName(after.steps[at + 1].title, 40) || "(no name yet)"}”.`;
+}
+
+/**
+ * Everything a delete or a move did to the flow besides the step itself, a sentence each: answers
+ * of decisions that were removed, answers that lead elsewhere (or are new), steps nothing leads to
+ * any more, plain arrows that were reconnected. `subject`: the step moved or deleted.
+ */
+export function structureChanges(before: Process, after: Process, subject?: string): string[] {
+  const end = (l: string) => (/[.?!…]$/.test(l) ? l : `${l}.`);
+  return [...removedAnswers(before, after), ...answerChanges(before, after), ...unreached(before, after), ...changedArrows(before, after, subject)].map(end);
+}
+
+/**
+ * The message after a delete or a move: what was done (`done`), then every other change to the
+ * flow (structureChanges): at most three lines, the third "And N more…" when there are more.
+ * `all` holds every line. Null: nothing was done and nothing changed.
+ */
+export function restructureNotice(before: Process, after: Process, done?: string, subject?: string): { title: string; detail?: string; all?: string[] } | null {
+  const lines = structureChanges(before, after, subject);
   if (!done && !lines.length) return null;
   const head = done ?? lines[0];
   const rest = done ? lines : lines.slice(1);
-  const room = done ? NOTICE_ANSWERS : NOTICE_ANSWERS - 1;
-  const shown = rest.slice(0, room);
+  const shown = rest.length > NOTICE_LINES ? rest.slice(0, NOTICE_LINES - 1) : rest;
   const more = rest.length - shown.length;
-  const detail = [...shown, ...(more ? [`And ${more} more ${more === 1 ? "answer" : "answers"}: see “What comes next” of ${more === 1 ? "that decision" : "those decisions"}.`] : [])].join("\n");
+  const detail = [...shown, ...(more ? [`And ${more} more: see “What comes next” of the steps on the map.`] : [])].join("\n");
   return { title: head, ...(detail ? { detail } : {}), ...(lines.length > 1 ? { all: lines } : {}) };
 }
 

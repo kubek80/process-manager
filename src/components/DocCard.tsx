@@ -165,9 +165,12 @@ export function DocCard(props: DocCardProps) {
           ) : <span className="row-cat">{category}</span>}
         </div>
         {marks}
-        <span className="row-level"><Levels kind={kind} rigour={rigour} /></span>
-        <span className="row-fact">{fact && <Fact icon={FACT_ICON[fact.key]} label={fact.name}>{shortFact(fact, kind)}</Fact>}</span>
-        <span className="row-owner">{owner && <Fact icon={Users} label="Owner">{owner.value}</Fact>}</span>
+        {/* one part on a phone (a second line under the name); on a wider screen each is a column of its own */}
+        <span className="row-facts">
+          <span className="row-level"><Levels kind={kind} rigour={rigour} /></span>
+          <span className="row-fact">{fact && <Fact icon={FACT_ICON[fact.key]} label={fact.name}>{shortFact(fact, kind)}</Fact>}</span>
+          <span className="row-owner">{owner && <Fact icon={Users} label="Owner">{owner.value}</Fact>}</span>
+        </span>
         {engage}
       </li>
     );

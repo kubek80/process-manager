@@ -210,7 +210,8 @@
 .card.row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; column-gap: normal; row-gap: 4px; padding: 9px 14px; border: 0; border-radius: 0; box-shadow: none; }
 .card.row + .card.row { border-top: 1px solid var(--line); }
 .card.row:hover { background: var(--surface-2); box-shadow: none; }
-.card.row > * { grid-row: 1; }
+.card.row > *, .row-facts > * { grid-row: 1; }
+.row-facts { display: contents; }
 .card.row > .kind-tag { grid-column: kind; justify-self: start; }
 /* the name over its category (or where the search found it): each gets the whole width of the column */
 .row-main { grid-column: main; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -324,14 +325,15 @@
   .type-tabs .tab { padding: 0 10px; font-size: 13.5px; }
   .type-tab-mark { display: none; }
   .hero.list-hero h1 { font-size: 26px; }
-  /* a phone: each row wraps to two lines and keeps its order - the title and category, then the
-     rigour, the lead time (or requirements) and the actions */
+  /* a phone: each row is two lines in the same order - the name and category, under it the rigour
+     and the lead time (or requirements); the actions at the right of both */
   .cards.rows, .cards.rows:not(:has(> .card.row > .kind-tag)) { display: flex; flex-direction: column; }
-  .card.row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 10px 12px; }
+  .card.row { grid-column: auto; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main act" "facts act"; gap: 4px 12px; padding: 10px 12px; }
   .card.row > .kind-tag { display: none; }
-  .row-main { flex: 1 1 100%; gap: 2px; }
-  .row-fact { min-width: 0; flex: 0 1 auto; }
-  .card.row > .card-engage { margin-left: auto; }
+  .card.row > .row-main { grid-area: main; gap: 2px; }
+  .card.row > .row-facts { grid-area: facts; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; min-width: 0; }
+  .row-facts > * { grid-row: auto; }
+  .card.row > .card-engage { grid-area: act; }
   .card.row .card-marks { display: none; }
 }
 
