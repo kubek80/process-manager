@@ -94,6 +94,12 @@ func TestForPublishingKeepsThePublishedStatusAndReviewRecord(t *testing.T) {
 	if err != nil || !bytes.Equal(got, want) {
 		t.Errorf("%s (%v)", got, err)
 	}
+	// a document that was never published: publishing makes it active
+	got, err = docs.ForPublishing([]byte(`{"id":"x","status":"draft","title":"New"}`), []byte(`{"id":"x","status":"draft","title":"Old"}`))
+	want, _ = docs.Pretty([]byte(`{"id":"x","status":"active","title":"New"}`))
+	if err != nil || !bytes.Equal(got, want) {
+		t.Errorf("never published: %s (%v)", got, err)
+	}
 	got, err = docs.ForPublishing([]byte(`{"id":"x","title":"New"}`), []byte(`{"id":"x"}`))
 	want, _ = docs.Pretty([]byte(`{"id":"x","title":"New"}`))
 	if err != nil || !bytes.Equal(got, want) {
@@ -126,8 +132,8 @@ func TestWorkingDraftsInTheStore(t *testing.T) {
 	one, fixed := 1, []byte(strings.Replace(vpn, `"zebra"`, `"status":"draft","note":"fixed","zebra"`, 1))
 	var dc0 *docs.DraftConflict
 	// an ordinary save is refused while it exists; one that replaces it needs its revision
-	var pending *docs.DraftPending
-	if _, _, err := s.Save(ctx, docs.Change{Kind: docs.Process, ID: "request-vpn", Body: fixed, By: "a", Base: &one, Drafts: docs.RefuseIfDraft}); !errors.As(err, &pending) || pending.Status != "draft" {
+	var pending0 *docs.DraftPending
+	if _, _, err := s.Save(ctx, docs.Change{Kind: docs.Process, ID: "request-vpn", Body: fixed, By: "a", Base: &one, Drafts: docs.RefuseIfDraft}); !errors.As(err, &pending0) || pending0.Status != "draft" {
 		t.Fatalf("saved past the working draft: %v", err)
 	}
 	if _, _, err := s.Save(ctx, docs.Change{Kind: docs.Process, ID: "request-vpn", Body: fixed, By: "a", Base: &one, Drafts: docs.ReplaceDraft, Revision: 2}); !errors.As(err, &dc0) || dc0.Current.Revision != 1 {
@@ -268,6 +274,20 @@ func TestWorkingDraftsInTheStore(t *testing.T) {
 	}
 	if all, _ := s.Drafts(ctx, docs.Standard); len(all) != 0 {
 		t.Fatalf("left behind: %+v", all)
+	}
+	// who deleted it, when, and what it was
+	del, err := s.LastDeleted(ctx, docs.Standard, "secure-logging")
+	if err != nil || del.By != "a" || del.At.IsZero() || !strings.Contains(string(del.Last), "Secure logging") {
+		t.Fatalf("last deleted: %+v %v", del, err)
+	}
+	if _, err := s.LastDeleted(ctx, docs.Process, "request-vpn"); !errors.Is(err, docs.ErrNotFound) {
+		t.Fatalf("never deleted: %v", err)
+	}
+	if _, _, err := s.Put(ctx, docs.Standard, "secure-logging", []byte(logging), "a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.LastDeleted(ctx, docs.Standard, "secure-logging"); !errors.Is(err, docs.ErrNotFound) {
+		t.Fatalf("exists again: %v", err)
 	}
 }
 
