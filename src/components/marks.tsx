@@ -32,6 +32,7 @@ import "../controls.css";
  * Classes without a component (src/controls.css):
  *   `.tabs` > `button.tab` (`.on` + `aria-selected` / `aria-checked`), with an optional count in
  *   `.tab-count`: underline tabs that switch views. A tab may hold a `KindTag`-like mark first.
+ *   (The older pill tabs of styles.css, `.tabs` > `button` without `.tab`, keep their look.)
  *   `.seg` > `button.seg-item` (`.on` + `aria-checked` or `aria-pressed`): ONE segmented control to
  *   pick among a few options; the chosen one in the brand colour. An icon inside is fine.
  */

@@ -186,7 +186,8 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
 
   // words found nothing (whatever the filters): on a search asked for on purpose, the closest by meaning
   const wordHits = plan.show === "words" && asked ? search({ processes, standards, catalog, q: asked, drafts, profile }).results.length : -1;
-  const wantClosest = closestWanted({ mode, offered, asked, submitted, wordHits });
+  // (with filters chosen, it is the filters that hide what words find: the empty state says so)
+  const wantClosest = closestWanted({ mode, offered, asked, submitted, wordHits }) && !anyChosen;
   const closestState = useMeaningSearch(asked, wantClosest, attempt, stamp);
   const closest = useMemo(() => {
     if (!wantClosest || closestState.for !== asked || closestState.loading || !closestState.answer || closestState.answer.query !== asked) return null;
@@ -231,6 +232,8 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   const clear = () => { setBookmarked(false); setDue(false); setProfile({}); setFilters({}); };
   // nothing found and nothing chosen to blame: no tabs, filters, order or pages to offer
   const bare = n === 0 && !anyChosen && !plan.busy;
+  // nothing found: nothing to order or page through (the chosen filters stay, with a way to remove them)
+  const noTools = n === 0 && !plan.busy;
   const summary = <>{shownQ.trim() ? <> for “{shownQ.trim()}”</> : null}{chosen.length ? <> with {plural(chosen.length, "filter")}</> : null}</>;
 
   return (
@@ -245,10 +248,10 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
 
       <div className={`list-layout ${bare ? "no-panel" : ""}`.trim()}>
         <div className="list-head">
-          {!bare && <TypeTabs value={tab} counts={tabCounts} atLeast={truncated} onChange={(t) => setFilters(withTypeTab(filters, t))} />}
+          {(!noTools || !!tab) && <TypeTabs value={tab} counts={tabCounts} atLeast={truncated} onChange={(t) => setFilters(withTypeTab(filters, t))} />}
           <ResultsBar page={page} noun={{ one: "result", many: "results" }} panelId="search-filters" open={open} onOpen={setOpen}
             chosen={chosen.length} size={size} onSize={changeSize} extra={summary}
-            sort={sort} onSort={changeSort} searched={!!shownQ.trim()} view={view} onView={setView} bare={bare}
+            sort={sort} onSort={changeSort} searched={!!shownQ.trim()} view={view} onView={setView} bare={noTools}
             pager={<Pager page={page} onPage={goTo} label="Pages of results" compact />} />
           {truncated && <p className="search-truncated">{truncatedText(plan.meaning.length)}</p>}
           <ChosenFilters chosen={chosen} onClear={clear} />
@@ -284,12 +287,10 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
               )}
             </div>
           )}
-          {wantClosest && n === 0 && !closestState.problem ? (
+          {wantClosest && n === 0 && !closestState.problem && (closest === null || closest.length > 0) ? (
             <div className="search-closest" role="status" aria-live="polite">
               {closest === null ? (
                 <p className="search-busy"><span className="search-spinner" aria-hidden="true" />Nothing contains all these words. Looking for the closest by meaning…</p>
-              ) : closest.length === 0 ? (
-                <p className="search-closest-line">Nothing contains all these words, and nothing close was found by meaning. <a href={href({ page: "library" })}>Browse all processes</a> or <a href={href({ page: "standards" })}>all standards</a>.</p>
               ) : (
                 <>
                   <p className="search-closest-line"><b>Nothing contains all these words.</b> Closest by meaning:</p>

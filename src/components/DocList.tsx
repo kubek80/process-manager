@@ -132,7 +132,7 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
       <div className={`list-layout ${bare ? "no-panel" : ""}`.trim()}>
         <div className="list-head">
           <ResultsBar page={pg} noun={NOUN[kind]} panelId={panelId} open={open} onOpen={setOpen} chosen={chosen.length} size={size} onSize={changeSize}
-            sort={sort} onSort={changeSort} searched={!!q.trim()} view={view} onView={setView} bare={bare}
+            sort={sort} onSort={changeSort} searched={!!q.trim()} view={view} onView={setView} bare={n === 0}
             pager={<Pager page={pg} onPage={goTo} label={`Pages of ${NOUN[kind].many}`} compact />} />
           <ChosenFilters chosen={chosen} onClear={clear} />
         </div>

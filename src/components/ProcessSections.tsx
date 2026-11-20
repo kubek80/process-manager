@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import type { Issue, Process, Standard } from "../types";
 import { EXAMPLE, slugify, uniqueId } from "../lib/edit";
@@ -33,8 +34,6 @@ export function GovernedSections<T extends Process | Standard>({ kind, doc, save
     nameIn(catalog.categories, doc.category), nameIn(catalog.platforms, doc.platform), nameIn(catalog.practices, doc.practice),
     kind === "process" && (doc as Process).rigour ? RIGOUR_LABEL[(doc as Process).rigour!] : "",
   ].filter(Boolean);
-  const where = !!(doc.tiers?.length || doc.languages?.length || doc.environments?.length);
-  const tags = (doc.tags ?? []).filter(Boolean);
   const none = (text: string) => <span className="muted">{text}</span>;
   return (
     <>
@@ -42,14 +41,7 @@ export function GovernedSections<T extends Process | Standard>({ kind, doc, save
         summary={belongs.length ? belongs.join(" · ") : none("Nothing chosen yet")}>
         <BelongsEditor kind={kind} doc={doc} saved={saved} onChange={set as (p: Partial<Process | Standard>) => void} />
       </EditSection>
-      <EditSection title="Where it applies" hint={kind === "process" ? "Nothing selected means everywhere. Readers who describe their application only see what applies to it." : "Nothing selected means everywhere. A requirement can narrow this further."}
-        folded={!has("tiers", "languages", "environments", "tags")}
-        summary={<>{where ? <DimTags doc={doc} compact /> : none("Everywhere")}{tags.length > 0 && <span className="fold-tags"> · {tags.length} tag{tags.length === 1 ? "" : "s"}</span>}</>}>
-        <DimsEditor value={doc} onChange={set as (p: Partial<Process | Standard>) => void} />
-        <Field label="Tags" hint="Words readers might search for, separated by commas">
-          <input value={(doc.tags ?? []).join(", ")} onChange={(e) => set({ tags: e.target.value.split(",").map((t) => t.trimStart().slice(0, 30)).slice(0, 12) } as Partial<T>)} />
-        </Field>
-      </EditSection>
+      {kind === "process" && <WhereSection kind={kind} doc={doc} set={set} issues={issues} />}
       <EditSection title="Review" folded={!has("review", "replacedBy")}
         summary={doc.review?.intervalMonths
           ? <>Every {doc.review.intervalMonths} months{doc.review.lastReviewedAt ? ` · last reviewed ${doc.review.lastReviewedAt}` : ""}</>
@@ -57,6 +49,23 @@ export function GovernedSections<T extends Process | Standard>({ kind, doc, save
         <ReviewEditor doc={doc} others={others} onChange={set as (p: Partial<Process | Standard>) => void} />
       </EditSection>
     </>
+  );
+}
+
+/** Where it applies (tiers, environments, languages) and its tags, folded with a line saying what is set. */
+export function WhereSection<T extends Process | Standard>({ kind, doc, set, issues, open }: { kind: "process" | "standard"; doc: T; set: (patch: Partial<T>) => void; issues: Issue[]; open?: boolean }) {
+  const flagged = flaggedKeys(issues);
+  const where = !!(doc.tiers?.length || doc.languages?.length || doc.environments?.length);
+  const tags = (doc.tags ?? []).filter(Boolean);
+  return (
+    <EditSection title="Where it applies" hint={kind === "process" ? "Nothing selected means everywhere. Readers who describe their application only see what applies to it." : "Nothing selected means everywhere. A requirement can narrow this further."}
+      folded={open ? undefined : !["tiers", "languages", "environments", "tags"].some((k) => flagged.has(k))}
+      summary={<>{where ? <DimTags doc={doc} compact /> : <span className="muted">Everywhere</span>}{tags.length > 0 && <span className="fold-tags"> · {tags.length} tag{tags.length === 1 ? "" : "s"}</span>}</>}>
+      <DimsEditor value={doc} onChange={set as (p: Partial<Process | Standard>) => void} />
+      <Field label="Tags" hint="Words readers might search for, separated by commas">
+        <input value={(doc.tags ?? []).join(", ")} onChange={(e) => set({ tags: e.target.value.split(",").map((t) => t.trimStart().slice(0, 30)).slice(0, 12) } as Partial<T>)} />
+      </Field>
+    </EditSection>
   );
 }
 
@@ -85,9 +94,10 @@ export function ProcessAbout({ process, saved, all, set, issues }: { process: Pr
   );
 }
 
-/** What must be in place before step 1. */
+/** What must be in place before step 1. Enter adds the next one, Backspace in an empty one removes it. */
 export function ProcessBefore({ process, all, set }: { process: Process; all: Process[]; set: Set }) {
   const pre = process.prerequisites;
+  const refs = useRef<(HTMLInputElement | null)[]>([]);
   return (
     <EditSection title="Before you start" hint="What the reader must have before step 1, such as an approved cost centre. Readers tick each one off.">
       {pre.length === 0 && <p className="empty-hint">Nothing is needed yet. Add what a reader must have in place, so nobody gets stuck halfway.</p>}
@@ -98,7 +108,15 @@ export function ProcessBefore({ process, all, set }: { process: Process; all: Pr
             <div className="prereq-edit" key={i}>
               <div className="row">
                 <span className="row-n">{i + 1}</span>
-                <input value={q.title} maxLength={120} placeholder="Approved cost centre" aria-label={`Prerequisite ${i + 1}`} autoFocus={q.title === ""} onChange={(e) => upd({ title: e.target.value })} />
+                <input ref={(el) => { refs.current[i] = el; }} value={q.title} maxLength={120} placeholder="Approved cost centre" aria-label={`Prerequisite ${i + 1}`} autoFocus={q.title === ""}
+                  onChange={(e) => upd({ title: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); set({ prerequisites: [...pre.slice(0, i + 1), { title: "" }, ...pre.slice(i + 1)] }); }
+                    if (e.key === "Backspace" && q.title === "" && !q.description && !q.processId) {
+                      e.preventDefault(); set({ prerequisites: pre.filter((_, j) => j !== i) });
+                      if (i > 0) requestAnimationFrame(() => refs.current[i - 1]?.focus());
+                    }
+                  }} />
                 <button className="icon-btn" onClick={() => set({ prerequisites: pre.filter((_, j) => j !== i) })} aria-label={`Remove prerequisite ${i + 1}`}><X size={15} /></button>
               </div>
               <div className="row indent">
@@ -119,12 +137,16 @@ export function ProcessBefore({ process, all, set }: { process: Process; all: Pr
   );
 }
 
-/** Who takes part: each one is a lane on the map. */
+/**
+ * Who takes part: each one is a lane on the map. The name has the row; moving is by the arrows,
+ * removing is on the second line, quieter. A new participant's name is selected, ready to type.
+ */
 export function ProcessPeople({ process, set }: { process: Process; set: Set }) {
   const { catalog } = useCatalog();
   const actors = process.actors;
   const freeTeams = catalog.teams.filter((t) => !actors.some((a) => a.teamId === t.id || a.id === t.id));
-  const used = (id: string) => process.steps.some((s) => s.actor === id);
+  const used = (id: string) => process.steps.filter((s) => s.actor === id).length;
+  const [fresh, setFresh] = useState<string | null>(null);
   const swap = (i: number, j: number) => {
     const a = [...actors];
     [a[i], a[j]] = [a[j], a[i]];
@@ -132,22 +154,30 @@ export function ProcessPeople({ process, set }: { process: Process; set: Set }) 
   };
   return (
     <EditSection title="Who takes part" hint="Each one is a lane on the map. The first is always the reader. A lane that still has steps cannot be removed: give its steps to someone else first.">
-      <div className="rows">
+      <div className="rows people-rows">
         {actors.map((a, i) => (
           <div className="actor-edit" key={a.id}>
             <div className="row">
               <span className="row-n">{i + 1}</span>
-              <input className="w-name" value={a.name} maxLength={40} placeholder="Team or role" aria-label={`Name of participant ${i + 1}`}
+              <input className="actor-name" value={a.name} maxLength={40} placeholder="Team or role" aria-label={`Name of participant ${i + 1}`} autoFocus={a.id === fresh}
+                onFocus={(e) => { if (a.id === fresh) { e.target.select(); setFresh(null); } }}
                 onChange={(e) => set({ actors: actors.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
-              <button className="icon-btn" disabled={i < 2} onClick={() => swap(i, i - 1)} aria-label={`Move participant ${i + 1} up`}><ArrowUp size={15} /></button>
-              <button className="icon-btn" disabled={i === 0 || i === actors.length - 1} onClick={() => swap(i, i + 1)} aria-label={`Move participant ${i + 1} down`}><ArrowDown size={15} /></button>
-              <button className="icon-btn" disabled={i === 0 || used(a.id)} title={used(a.id) ? "Has steps - give them to someone else first" : "Remove"} aria-label={`Remove participant ${i + 1}`}
-                onClick={() => set({ actors: actors.filter((_, j) => j !== i) })}><X size={15} /></button>
+              {i > 0 && <>
+                <button className="icon-btn" disabled={i < 2} onClick={() => swap(i, i - 1)} aria-label={`Move participant ${i + 1} up`} title="Move up"><ArrowUp size={15} /></button>
+                <button className="icon-btn" disabled={i === actors.length - 1} onClick={() => swap(i, i + 1)} aria-label={`Move participant ${i + 1} down`} title="Move down"><ArrowDown size={15} /></button>
+              </>}
             </div>
             <div className="row indent">
               <input value={a.description ?? ""} maxLength={200} placeholder={i === 0 ? "The person following this process" : "How to reach them"} aria-label={`About participant ${i + 1}`}
                 onChange={(e) => set({ actors: actors.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)) })} />
             </div>
+            {i > 0 && (
+              <div className="actor-foot">
+                <span className="muted small">{used(a.id) ? `${used(a.id)} step${used(a.id) === 1 ? "" : "s"}` : "No steps yet"}</span>
+                <button className="btn small ghost quiet-danger" disabled={used(a.id) > 0} title={used(a.id) ? "Has steps - give them to someone else first" : undefined} aria-label={`Remove participant ${i + 1}`}
+                  onClick={() => set({ actors: actors.filter((_, j) => j !== i) })}><X size={14} />Remove</button>
+              </div>
+            )}
           </div>
         ))}
         <select className="add-select" value="" aria-label="Add a participant" onChange={(e) => {
@@ -155,8 +185,10 @@ export function ProcessPeople({ process, set }: { process: Process; set: Set }) 
           if (!v) return;
           const taken = actors.map((a) => a.id);
           if (v === "__custom") {
-            const name = `Participant ${actors.length}`;
-            return set({ actors: [...actors, { id: uniqueId(slugify(name), taken), name }] });
+            const name = `Participant ${actors.length + 1}`;
+            const id = uniqueId(slugify(name), taken);
+            setFresh(id);
+            return set({ actors: [...actors, { id, name }] });
           }
           const team = catalog.teams.find((t) => t.id === v)!;
           set({ actors: [...actors, { id: uniqueId(team.id, taken), name: team.name, description: team.contact, teamId: team.id }] });

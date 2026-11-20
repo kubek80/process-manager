@@ -1,10 +1,11 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Bot, Check, ChevronDown, ChevronRight, Eye, Flag, Plus, Trash2, Workflow, X } from "lucide-react";
 import type { Feedback, Issue, Level, Process, Requirement, Severity, Standard, VerificationMethod } from "../types";
 import { go } from "../lib/store";
 import { standardTarget } from "./Feedback";
 import { DimTags, DimsEditor } from "./Governance";
-import { EditSection, FieldsHead, ItemFeedback, ItemIssues } from "./EditFrame";
+import { EditSection, FieldsHead, ItemFeedback, ItemIssues, selectExample } from "./EditFrame";
+import { EXAMPLE } from "../lib/edit";
 import { Field } from "./ui";
 
 export const LEVEL: Record<Level, { label: string; hint: string }> = {
@@ -89,6 +90,21 @@ export function Rows({ label, hint, items, onChange, placeholder, code, line, ma
   label: string; hint?: string; items: string[]; onChange: (v: string[]) => void; placeholder: string; code?: boolean;
   /** one short line per item instead of a text box */ line?: boolean; max?: number;
 }) {
+  const refs = useRef<(HTMLInputElement | HTMLTextAreaElement | null)[]>([]);
+  const full = max !== undefined && items.length >= max;
+  // as in every list of this kind: Enter adds the next item, Backspace in an empty one removes it
+  // (code examples keep Enter for a new line)
+  const keys = (i: number) => (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey && !code) {
+      e.preventDefault();
+      if (!full) onChange([...items.slice(0, i + 1), "", ...items.slice(i + 1)]);
+    }
+    if (e.key === "Backspace" && items[i] === "") {
+      e.preventDefault();
+      onChange(items.filter((_, j) => j !== i));
+      if (i > 0) requestAnimationFrame(() => refs.current[i - 1]?.focus());
+    }
+  };
   return (
     <div className="field">
       <span className="field-label">{label}{hint && <em>{hint}</em>}</span>
@@ -96,14 +112,14 @@ export function Rows({ label, hint, items, onChange, placeholder, code, line, ma
         {items.map((v, i) => (
           <div className="row" key={i}>
             {line
-              ? <input className="mono" value={v} placeholder={placeholder} autoFocus={v === ""} aria-label={`${label} ${i + 1}`} maxLength={100}
-                  onChange={(e) => onChange(items.map((x, j) => (j === i ? e.target.value : x)))} />
-              : <textarea rows={code ? 3 : 2} className={code ? "mono" : ""} value={v} placeholder={placeholder} autoFocus={v === ""} aria-label={`${label} ${i + 1}`}
-                  onChange={(e) => onChange(items.map((x, j) => (j === i ? e.target.value : x)))} />}
+              ? <input ref={(el) => { refs.current[i] = el; }} className="mono" value={v} placeholder={placeholder} autoFocus={v === ""} aria-label={`${label} ${i + 1}`} maxLength={100}
+                  onKeyDown={keys(i)} onChange={(e) => onChange(items.map((x, j) => (j === i ? e.target.value : x)))} />
+              : <textarea ref={(el) => { refs.current[i] = el; }} rows={code ? 3 : 1} className={code ? "mono" : ""} value={v} placeholder={placeholder} autoFocus={v === ""} aria-label={`${label} ${i + 1}`}
+                  onKeyDown={keys(i)} onChange={(e) => onChange(items.map((x, j) => (j === i ? e.target.value : x)))} />}
             <button className="icon-btn" onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label={`Remove ${label} ${i + 1}`}><X size={15} /></button>
           </div>
         ))}
-        {(max === undefined || items.length < max) && <button className="btn small ghost" onClick={() => onChange([...items, ""])}><Plus size={14} />Add</button>}
+        {!full && <button className="btn small ghost" onClick={() => onChange([...items, ""])}><Plus size={14} />Add</button>}
       </div>
     </div>
   );
@@ -184,9 +200,9 @@ export function RequirementFields({ r, standard, processes, feedback, issues, on
             {(Object.keys(LEVEL) as Level[]).map((l) => <button key={l} className={`chip lvl-${l} ${r.level === l ? "on" : ""}`} aria-pressed={r.level === l} title={LEVEL[l].hint} onClick={() => onChange({ level: l })}>{LEVEL[l].label}</button>)}
           </div>
         </div>
-        <Field label="Short name" hint="A few words that name the rule"><input value={r.title} maxLength={80} onChange={(e) => onChange({ title: e.target.value })} /></Field>
-        <Field label="The rule" hint="One or two sentences that can be checked"><textarea rows={3} maxLength={600} value={r.statement} onChange={(e) => onChange({ statement: e.target.value })} /></Field>
-        <Field label="Why" hint="The risk it removes"><textarea rows={2} maxLength={600} value={r.rationale ?? ""} onChange={(e) => onChange({ rationale: e.target.value })} /></Field>
+        <Field label="Short name" hint="A few words that name the rule"><input value={r.title} maxLength={80} onChange={(e) => onChange({ title: e.target.value })} onFocus={selectExample(EXAMPLE.newRequirement, EXAMPLE.firstRequirement)} /></Field>
+        <Field label="The rule" hint="One or two sentences that can be checked"><textarea rows={3} maxLength={600} value={r.statement} onChange={(e) => onChange({ statement: e.target.value })} onFocus={selectExample(EXAMPLE.statement)} /></Field>
+        <Field label="Why" hint="The risk it removes"><textarea rows={2} maxLength={600} value={r.rationale ?? ""} onChange={(e) => onChange({ rationale: e.target.value })} onFocus={selectExample(EXAMPLE.rationale)} /></Field>
         <IdField id={r.id} taken={standard.requirements.filter((x) => x !== r).map((x) => x.id)} onRename={onRename} />
       </div>
       <EditSection title="How to comply">

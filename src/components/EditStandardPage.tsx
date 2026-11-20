@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import type { DocMeta, Feedback, Process, Standard } from "../types";
 import { addRequirement, appendRequirement, deleteRequirement, EXAMPLE, moveRequirementTo, tidyStandard, today, updateRequirement } from "../lib/edit";
-import { issueTarget, issuesByPlace, issuesFor, selectionKey, STANDARD_SECTIONS, standardOutline, type Selection, type StandardSection } from "../lib/editing";
+import { issueTarget, issuesByPlace, issuesFor, selectionKey, STANDARD_SECTIONS, standardOutline, withoutEarlySuggestions, type Selection, type StandardSection } from "../lib/editing";
 import { isDrawableStandard, standardSchema, validateStandard } from "../lib/validate";
 import { useSelectedItem } from "../lib/selection";
 import { canEdit } from "../lib/rights";
@@ -14,11 +14,11 @@ import { openCount } from "./Feedback";
 import { EditFrame, EditSection, ItemIssues, Outline } from "./EditFrame";
 import { EditSession, type Session } from "./EditSession";
 import { NoRight } from "./EditProcessPage";
-import { GovernedSections } from "./ProcessSections";
+import { GovernedSections, WhereSection } from "./ProcessSections";
 import { RequirementCard, RequirementFields } from "./Requirements";
 import { ResourceEditor, Resources } from "./Resources";
 import { standardAiSpec, StandardIntro } from "./StandardPage";
-import { confirmDialog, Field, scrollBehavior } from "./ui";
+import { Field, notify, scrollBehavior } from "./ui";
 
 const stamp = (s: Standard): Standard => ({ ...s, updatedAt: today() });
 
@@ -76,10 +76,30 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
     return () => clearTimeout(t);
   }, [reqId]);
 
+  // while its fields are changed, the selected requirement stays in view in the middle
+  useEffect(() => {
+    if (!reqId) return;
+    const t = setTimeout(() => document.getElementById(`req-${reqId}`)?.scrollIntoView({ block: "nearest" }), 120);
+    return () => clearTimeout(t);
+  }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // a refused save or publish brings its first problem into view
   useEffect(() => { if (s.focus) choose(issueTarget("standard", draft, s.focus.issue.path)); }, [s.focus?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const byPlace = useMemo(() => (drawable ? issuesByPlace("standard", draft, s.issues) : new Map()), [drawable, draft, s.issues]);
+  // what Undo or Redo brought back is selected
+  useEffect(() => { if (s.reveal && draft.requirements.some((x) => x.id === s.reveal!.item)) choose({ section: "requirements", item: s.reveal.item }, false); }, [s.reveal?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+  // suggestions about a requirement added on this screen wait until it has been left once
+  const [left, setLeft] = useState<Set<string>>(() => new Set());
+  const lastReq = useRef<string | null>(null);
+  useEffect(() => {
+    const was = lastReq.current;
+    if (was && was !== reqId) setLeft((l) => (l.has(was) ? l : new Set(l).add(was)));
+    lastReq.current = reqId;
+  }, [reqId]);
+  const issues = useMemo(() => (drawable
+    ? withoutEarlySuggestions("standard", draft, s.issues, (id) => !left.has(id) && !(d.saved.requirements ?? []).some((x) => x.id === id))
+    : s.issues), [drawable, draft, s.issues, left, d.saved]);
+  const byPlace = useMemo(() => (drawable ? issuesByPlace("standard", draft, issues) : new Map()), [drawable, draft, issues]);
   const add = (after?: string) => { const r = addRequirement(draft, after); setDraft(r.standard); selectReq(r.id); s.setPanel("fields"); };
   const sectionLabel = STANDARD_SECTIONS.find((x) => x.id === section)?.label ?? "About";
   const fieldsLabel = current ? `${current.id}: ${current.title || "(no name yet)"}` : sectionLabel;
@@ -88,18 +108,23 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
   let fields;
   if (!drawable) fields = <p className="empty-hint pad">Repair the JSON first: its problems are listed next to it.</p>;
   else if (current) {
-    fields = <RequirementFields key={current.id} r={current} standard={draft} processes={processes} feedback={feedback} issues={issuesFor("standard", draft, s.issues, sel)}
+    fields = <RequirementFields key={current.id} r={current} standard={draft} processes={processes} feedback={feedback} issues={issuesFor("standard", draft, issues, sel)}
       onChange={(patch) => setDraft(updateRequirement(draft, current.id, patch))}
       onRename={(id) => { if (!draft.requirements.some((x) => x.id === id && x !== current)) { setDraft(updateRequirement(draft, current.id, { id })); selectReq(id); } }}
-      onDelete={async () => {
-        if (!await confirmDialog({ title: `Delete ${current.id}?`, body: <>The requirement “{current.title}” is removed from the draft. Undo brings it back; readers see nothing until you publish.</>, confirmLabel: "Delete requirement", danger: true })) return;
-        setDraft((x) => deleteRequirement(x, current.id)); selectReq(null); setSection("requirements");
+      onDelete={() => {
+        // no question: it is deleted at once, and the message offers Undo
+        const at = draft.requirements.indexOf(current);
+        const next = deleteRequirement(draft, current.id);
+        setDraft(next);
+        notify.info(`Requirement ${current.id} “${current.title}” deleted.`, { label: "Undo", run: () => d.undo() });
+        const neighbour = next.requirements[Math.min(at, next.requirements.length - 1)];
+        if (neighbour) selectReq(neighbour.id); else { selectReq(null); setSection("requirements"); }
       }}
       onMove={(before) => setDraft(moveRequirementTo(draft, current.id, before))}
       onAddAfter={() => add(current.id)} />;
   } else {
     const head = <h2 className="fields-section-title">{sectionLabel}</h2>;
-    const own = issuesFor("standard", draft, s.issues, { section }).filter((i) => !issueTarget("standard", draft, i.path).item);
+    const own = issuesFor("standard", draft, issues, { section }).filter((i) => !issueTarget("standard", draft, i.path).item);
     const body = {
       about: (
         <>
@@ -117,7 +142,7 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
           <GovernedSections kind="standard" doc={draft} saved={d.saved} others={all} set={set} issues={own} />
         </>
       ),
-      scope: (
+      scope: (<>
         <EditSection title="Scope and exceptions">
           <Field label="Scope" hint="What it covers and what it does not"><textarea rows={4} maxLength={400} value={draft.scope ?? ""} onChange={(e) => set({ scope: e.target.value })} /></Field>
           <Field label="How to ask for an exception" hint="Readers who cannot comply follow this">
@@ -127,7 +152,8 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
             </select>
           </Field>
         </EditSection>
-      ),
+        <WhereSection kind="standard" doc={draft} set={set} issues={own} open />
+      </>),
       requirements: (
         <div className="empty-hint">
           <p>{draft.requirements.length} requirement{draft.requirements.length === 1 ? "" : "s"}. Select one in the outline or in the middle to change it.</p>
@@ -170,12 +196,13 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
 
   return (
     <>
-      <EditFrame kind="standard" title={draft.title} issues={s.issues} {...s.frame}
+      <EditFrame kind="standard" title={draft.title} {...s.frame} issues={issues} selection={selectionKey(sel)}
         place={(i) => { const t = issueTarget("standard", draft, i.path); return t.item ?? STANDARD_SECTIONS.find((x) => x.id === t.section)?.label ?? "About"; }}
         onPickIssue={(i) => choose(issueTarget("standard", draft, i.path))}
         outline={drawable ? <Outline label="Outline of the standard" entries={standardOutline(draft)} selected={selectionKey(sel)} issues={byPlace}
           feedback={(id) => openCount(feedback, id)}
           onSelect={(e) => choose({ section: e.section, item: e.item })}
+          onEnter={() => { s.setPanel("fields"); setTimeout(() => document.querySelector<HTMLElement>(".edit-fields-body :is(input, textarea, select):not([disabled])")?.focus(), 60); }}
           onAdd={{ section: "requirements", label: "Add a requirement", placeholder: "Short name of the rule", run: (name) => { const r = appendRequirement(draft, name); setDraft(r.standard); selectReq(r.id); } }}
           onMove={(id, before) => setDraft(moveRequirementTo(draft, id, before))}
           onNudge={(id, dir) => {

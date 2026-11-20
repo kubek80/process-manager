@@ -64,6 +64,15 @@ export function FieldsHead({ icon, kicker, title, tools }: { icon?: ReactNode; k
   );
 }
 
+/**
+ * On focus, a field that still holds one of the example texts selects it, so typing replaces it
+ * (and is never appended to it).
+ */
+export const selectExample = (...texts: string[]) => (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const el = e.target;
+  if (texts.includes(el.value.trim())) requestAnimationFrame(() => { if (document.activeElement === el) el.select(); });
+};
+
 /** Whether a problem has to be fixed before saving (a draft never published) or only before publishing. */
 const FixBefore = createContext<(i: Issue) => "saving" | "publishing">(() => "publishing");
 
@@ -426,7 +435,7 @@ export interface BarAction { label: string; run: () => void; blocked?: string; u
 export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo, onBack, discard, save, publish, more, unsaved, saveLine, banners, outline, middle, fields, fieldsLabel, selection, panel, setPanel, json, notice, onNotice, fixBefore }: {
   kind: "process" | "standard"; title: string; state: EditState;
   issues: Issue[]; place: (i: Issue) => string; onPickIssue: (i: Issue) => void;
-  undo: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
+  undo: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void; undoTitle?: string; redoTitle?: string };
   onBack: () => void;
   /** "Discard changes" (to the last save) or "Discard draft" (the working draft), when there is one to discard. */
   discard?: BarAction;
@@ -483,7 +492,7 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
         <span className="spacer" />
         <div className="eb-tools">
           {!phone && <>
-            <button {...off(!undo.canUndo)} onClick={() => undo.canUndo && undo.undo()} aria-label="Undo" title="Undo the last change (Ctrl+Z)"><Undo2 size={17} /></button>
+            <button {...off(!undo.canUndo)} onClick={() => undo.canUndo && undo.undo()} aria-label="Undo" title={undo.undoTitle ?? "Undo the last change (Ctrl+Z)"}><Undo2 size={17} /></button>
             <button {...off(!undo.canRedo)} onClick={() => undo.canRedo && undo.redo()} aria-label="Redo" title="Redo (Ctrl+Shift+Z)"><Redo2 size={17} /></button>
           </>}
           <Checker issues={issues} place={place} onPick={onPickIssue} reason={notice} onReason={onNotice} />

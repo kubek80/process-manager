@@ -116,9 +116,9 @@
 
 /* the kind (where kinds are mixed) and the category on the left, the tiers on the right; the category wraps, it is never cut */
 .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 4px 12px; }
-.card-eyebrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; line-height: 22px; }
+.card-eyebrow { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; line-height: 22px; }
 .card-cat { min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--text-2); overflow-wrap: anywhere; }
-.card-tiers { flex: 0 1 auto; max-width: 45%; font-size: 12px; font-weight: 600; color: var(--text-2); text-align: right; line-height: 22px; }
+.card-tiers { flex: none; font-size: 12px; font-weight: 600; color: var(--text-2); text-align: right; line-height: 22px; white-space: nowrap; }
 
 .card-marks { display: flex; flex-wrap: wrap; gap: 6px; }
 .card-mark { display: inline-flex; align-items: center; gap: 4px; min-height: 22px; padding: 0 8px; border-radius: 6px; font-size: 11.5px; font-weight: 650; background: var(--surface-2); color: var(--text-2); }
@@ -136,12 +136,12 @@
 .card:hover .card-link { color: var(--accent); }
 .card-summary { margin-top: -2px; color: var(--text-2); font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
-/* the facts: one line to compare, one line of who; an icon and the value, no labels; never more than two lines */
-.card-facts { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; font-size: 13px; line-height: 1.45; }
-.card-lines { display: flex; flex-wrap: nowrap; align-items: center; gap: 0 14px; margin: 0; min-width: 0; overflow: hidden; }
-.card-line { display: flex; min-width: 0; flex: 0 1 auto; }
-.card-line.rigour { flex: none; }
-.card-lines dd { display: flex; align-items: center; gap: 0 6px; margin: 0; min-width: 0; }
+/* the facts: those to compare first, then who looks after it, flowing on at most two lines; a fact
+   that does not fit is left out whole (never cut to a fragment); the full list is read out */
+.card-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 14px; margin-top: 2px; max-height: calc(2 * 1.45em + 3px); overflow: hidden; font-size: 13px; line-height: 1.45; }
+.card-lines { display: contents; }
+.card-line { display: flex; min-width: 0; max-width: 100%; flex: none; }
+.card-lines dd { display: flex; align-items: center; gap: 0 6px; margin: 0; min-width: 0; max-width: 100%; }
 .card-who .fact { color: var(--text-2); }
 .card-entry { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .card-entry .entry-icon { border-radius: 3px; }

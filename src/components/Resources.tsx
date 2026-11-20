@@ -34,26 +34,25 @@ export function Resources({ list, compact }: { list: Resource[]; compact?: boole
   );
 }
 
+/** Links and skills, one field per row: the kind, its name, its address, what it does for the reader. */
 export function ResourceEditor({ list, onChange }: { list: Resource[]; onChange: (l: Resource[]) => void }) {
   const upd = (i: number, patch: Partial<Resource>) => onChange(list.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   return (
     <div className="rows">
       {list.map((r, i) => (
-        <div className="prereq-edit" key={i}>
+        <div className="prereq-edit res-edit" key={i}>
           <div className="row">
             <select className="res-kind" value={r.kind ?? "other"} aria-label={`Kind of link ${i + 1}`} onChange={(e) => upd(i, { kind: e.target.value as ResourceKind })}>
               {(Object.keys(RESOURCE_KINDS) as ResourceKind[]).map((k) => <option key={k} value={k}>{RESOURCE_KINDS[k].label}</option>)}
             </select>
-            <input value={r.title} maxLength={80} placeholder="Name, e.g. Skill: add a GCP project" aria-label={`Name of link ${i + 1}`} onChange={(e) => upd(i, { title: e.target.value })} />
             <button className="icon-btn" onClick={() => onChange(list.filter((_, j) => j !== i))} aria-label={`Remove link ${i + 1}`}><X size={15} /></button>
           </div>
-          <div className="row indent-r">
-            <input value={r.url} placeholder="https://…" aria-label={`Address of link ${i + 1}`} onChange={(e) => upd(i, { url: e.target.value })} />
-            <input value={r.description ?? ""} maxLength={200} placeholder="What it does for the reader" aria-label={`What link ${i + 1} does for the reader`} onChange={(e) => upd(i, { description: e.target.value })} />
-          </div>
+          <input value={r.title} maxLength={80} placeholder="Name, e.g. Order form" aria-label={`Name of link ${i + 1}`} autoFocus={r.title === "" && r.url === ""} onChange={(e) => upd(i, { title: e.target.value })} />
+          <input value={r.url} placeholder="https://…" aria-label={`Address of link ${i + 1}`} onChange={(e) => upd(i, { url: e.target.value })} />
+          <input value={r.description ?? ""} maxLength={200} placeholder="What it does for the reader" aria-label={`What link ${i + 1} does for the reader`} onChange={(e) => upd(i, { description: e.target.value })} />
         </div>
       ))}
-      <button className="btn small ghost" onClick={() => onChange([...list, { title: "", url: "", kind: "skill" }])}><Plus size={14} />Add link or skill</button>
+      <button className="btn small ghost" onClick={() => onChange([...list, { title: "", url: "", kind: "other" }])}><Plus size={14} />Add link or skill</button>
     </div>
   );
 }

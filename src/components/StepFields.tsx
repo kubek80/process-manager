@@ -8,7 +8,7 @@ import { STEP_META, STEP_TYPES, stepHelp } from "../lib/stepMeta";
 import { processTarget } from "./Feedback";
 import { ResourceEditor } from "./Resources";
 import { EntryIcon } from "./EntryIcon";
-import { EditSection, FieldsHead, ItemFeedback, ItemIssues } from "./EditFrame";
+import { EditSection, FieldsHead, ItemFeedback, ItemIssues, selectExample } from "./EditFrame";
 import { Field, TypeIcon, notify, useLayer } from "./ui";
 
 /** The fields of a step that most steps do without: offered as "+ Tool", "+ Typical time"… until they have a value. */
@@ -83,9 +83,10 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
       <ItemFeedback feedback={feedback.filter((f) => f.itemId === step.id && !f.resolved)} target={processTarget(process)} noun="step" />
 
       <div className="step-core form">
-        <Field label="What happens" hint="Start with a verb, as the reader would say it">
-          <input className="step-title" value={step.title} maxLength={70} onChange={(e) => onChange({ title: e.target.value })} onBlur={onTitleBlur} placeholder="Fill in the ServiceNow request"
-            data-autofocus={step.title === EXAMPLE.newStep ? "" : undefined} onFocus={(e) => { if (step.title === EXAMPLE.newStep) e.target.select(); }} />
+        <Field label="What happens" hint={step.type === "decision" ? "Ask the question the step decides, e.g. “Is it a standard model?”" : "Start with a verb, as the reader would say it"}>
+          <input className="step-title" value={step.title} maxLength={70} onChange={(e) => onChange({ title: e.target.value })} onBlur={onTitleBlur}
+            placeholder={step.type === "decision" ? "Is it a standard model?" : "Fill in the ServiceNow request"}
+            data-autofocus={step.title === EXAMPLE.newStep ? "" : undefined} onFocus={selectExample(EXAMPLE.newStep, EXAMPLE.firstStep)} />
         </Field>
         <WhoField process={process} step={step} onChange={onChange} setProcess={setProcess} />
         <KindField type={step.type} onPick={(t) => setProcess(setStepType(process, step.id, t))} />
@@ -99,6 +100,7 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
               <li className="row" key={i}>
                 <span className="row-n" aria-hidden="true">{i + 1}</span>
                 <textarea ref={(el) => { insRefs.current[i] = el; }} rows={1} value={ins} maxLength={300} autoFocus={ins === ""} placeholder="Describe one action" aria-label={`Action ${i + 1}`}
+                  onFocus={selectExample(EXAMPLE.instruction)}
                   onChange={(e) => onChange({ instructions: instructions.map((x, j) => (j === i ? e.target.value : x)) })}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onChange({ instructions: [...instructions.slice(0, i + 1), "", ...instructions.slice(i + 1)] }); }
@@ -166,7 +168,7 @@ function WhoField({ process, step, onChange, setProcess }: { process: Process; s
         {!adding && <button className="chip add-chip" onClick={() => setAdding(true)}><Plus size={13} />Someone else</button>}
       </div>
       {adding && (
-        <div className="new-tool">
+        <div className="who-new">
           <input autoFocus value={name} maxLength={40} list={list} placeholder="Team, role or system" aria-label="Who else takes part"
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
@@ -174,13 +176,18 @@ function WhoField({ process, step, onChange, setProcess }: { process: Process; s
               if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setAdding(false); setName(""); }
             }} />
           <datalist id={list}>{free.map((t) => <option key={t.id} value={t.name} />)}</datalist>
-          <button className="btn small primary" disabled={name.trim().length < 2} onClick={add}><Plus size={14} />Add and give them this step</button>
-          <button className="btn small ghost" onClick={() => { setAdding(false); setName(""); }}>Cancel</button>
+          <span className="who-new-actions">
+            <button className="btn small primary" disabled={name.trim().length < 2} onClick={add}><Plus size={14} />Add and give them this step</button>
+            <button className="btn small ghost" onClick={() => { setAdding(false); setName(""); }}>Cancel</button>
+          </span>
         </div>
       )}
     </div>
   );
 }
+
+/** When to use a kind, under the closed choice. "Task" is described by what it is not: the other kinds are listed in the choice. */
+const kindHint = (t: StepType) => (t === "task" ? "Manual work that is none of the other kinds." : stepHelp(t));
 
 /** The kind of step: one button showing it; the choice opens on demand, so it does not push "what to do" away. */
 function KindField({ type, onPick }: { type: StepType; onPick: (t: StepType) => void }) {
@@ -188,7 +195,7 @@ function KindField({ type, onPick }: { type: StepType; onPick: (t: StepType) => 
   const label = useId();
   return (
     <div className="field kind-field">
-      <span className="field-label" id={label}>Kind of step<em>{stepHelp(type)}</em></span>
+      <span className="field-label" id={label}>Kind of step<em>{kindHint(type)}</em></span>
       <button className="kind-pick" aria-expanded={open} aria-haspopup="true" aria-describedby={label} onClick={() => setOpen(!open)}
         style={{ "--c": STEP_META[type].color } as React.CSSProperties}>
         <TypeIcon type={type} size={26} /><span>{STEP_META[type].label}</span><ChevronDown size={15} aria-hidden="true" />
@@ -219,7 +226,7 @@ function KindPop({ type, onPick, onClose }: { type: StepType; onPick: (t: StepTy
           </button>
         ))}
       </div>
-      <p className="kind-hint"><b>{STEP_META[hint].label}:</b> {stepHelp(hint)}</p>
+      <p className="kind-hint"><b>{STEP_META[hint].label}:</b> {kindHint(hint)}</p>
     </div>
   );
 }
@@ -307,7 +314,7 @@ function DetailField({ d, process, all, step, onChange, autoFocus }: {
     case "resources": return (
       <div className="field">
         <span className="field-label">Skills and links for this step<em>For example a skill that does it for you</em></span>
-        <ResourceEditor list={step.resources?.length ? step.resources : autoFocus ? [{ title: "", url: "", kind: "skill" }] : []} onChange={(resources) => onChange({ resources })} />
+        <ResourceEditor list={step.resources?.length ? step.resources : autoFocus ? [{ title: "", url: "", kind: "other" }] : []} onChange={(resources) => onChange({ resources })} />
       </div>
     );
     case "subProcessId": return (

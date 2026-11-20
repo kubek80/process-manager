@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ListPlus, PenLine, Plus, Send, UserRound } from "lucide-react";
 import type { DocMeta, Feedback, Process, Standard, Step } from "../types";
-import { appendStep, deleteStep, EXAMPLE, flowMoveBlocked, insertStep, moveStepInFlow, nudgeStep, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
-import { issueTarget, issuesByPlace, issuesFor, PROCESS_SECTIONS, processOutline, selectionKey, type ProcessSection, type Selection } from "../lib/editing";
+import { answerChanges, appendStep, deleteStep, EXAMPLE, flowMoveBlocked, insertStep, moveStepInFlow, nudgeStep, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
+import { issueTarget, issuesByPlace, issuesFor, PROCESS_SECTIONS, processOutline, selectionKey, withoutEarlySuggestions, type ProcessSection, type Selection } from "../lib/editing";
 import { isDrawableProcess, processSchema, validateProcess } from "../lib/validate";
 import { useSelectedItem } from "../lib/selection";
 import { canEdit } from "../lib/rights";
@@ -16,7 +16,7 @@ import { FlowView } from "./FlowView";
 import { BeforeYouStart, processAiSpec } from "./ProcessPage";
 import { ProcessAbout, ProcessBefore, ProcessLinks, ProcessPeople, ProcessStandards } from "./ProcessSections";
 import { StepFields } from "./StepFields";
-import { confirmDialog } from "./ui";
+import { notify } from "./ui";
 
 const stamp = (p: Process): Process => ({ ...p, updatedAt: today() });
 const NONE = new Set<string>();
@@ -90,9 +90,40 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
 
   // a refused save or publish brings its first problem into view
   useEffect(() => { if (s.focus) choose(issueTarget("process", draft, s.focus.issue.path)); }, [s.focus?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+  // what Undo or Redo brought back is selected
+  useEffect(() => { if (s.reveal && draft.steps.some((x) => x.id === s.reveal!.item)) choose({ section: "steps", item: s.reveal.item }, false); }, [s.reveal?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const byPlace = useMemo(() => (drawable ? issuesByPlace("process", draft, s.issues) : new Map()), [drawable, draft, s.issues]);
+  // suggestions about a step added on this screen wait until it has been left once
+  const [left, setLeft] = useState<Set<string>>(() => new Set());
+  const lastStep = useRef<string | null>(null);
+  useEffect(() => {
+    const was = lastStep.current;
+    if (was && was !== stepId) setLeft((l) => (l.has(was) ? l : new Set(l).add(was)));
+    lastStep.current = stepId;
+  }, [stepId]);
+  const issues = useMemo(() => (drawable
+    ? withoutEarlySuggestions("process", draft, s.issues, (id) => !left.has(id) && !(d.saved.steps ?? []).some((x) => x.id === id))
+    : s.issues), [drawable, draft, s.issues, left, d.saved]);
+
+  // a change of the structure says what it did to the answers of decisions, with Undo
+  // only the newest such message offers Undo: an older one would undo something else by now
+  const toast = useRef<number | null>(null);
+  useEffect(() => { if (toast.current !== null) { notify.dismiss(toast.current); toast.current = null; } }, [d.stepped?.n]);
+  const restructure = (next: Process, done?: string) => {
+    const changes = answerChanges(draft, next);
+    setDraft(next);
+    const text = [done, ...changes.map((c) => `${c}.`)].filter(Boolean).join(" ");
+    if (toast.current !== null) notify.dismiss(toast.current);
+    toast.current = text ? notify.info(text, { label: "Undo", run: () => d.undo() }) : null;
+  };
+
+  const byPlace = useMemo(() => (drawable ? issuesByPlace("process", draft, issues) : new Map()), [drawable, draft, issues]);
   const outline = drawable ? processOutline(draft) : [];
+  // Enter on an item of the outline: the focus goes to the first field of what it selected
+  const focusFields = () => {
+    s.setPanel("fields");
+    setTimeout(() => document.querySelector<HTMLElement>(".edit-fields-body :is(input, textarea, select):not([disabled])")?.focus(), 60);
+  };
   // the line under the steps in the outline that adds one by its name
   const openAddLine = () => {
     s.setPanel("outline");
@@ -107,7 +138,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
   let fields;
   if (!drawable) fields = <p className="empty-hint pad">Repair the JSON first: its problems are listed next to it.</p>;
   else if (step) {
-    fields = <StepFields key={step.id} process={draft} all={all} step={step} feedback={feedback} issues={issuesFor("process", draft, s.issues, sel)}
+    fields = <StepFields key={step.id} process={draft} all={all} step={step} feedback={feedback} issues={issuesFor("process", draft, issues, sel)}
       onChange={(patch: Partial<Step>) => setDraft(updateStep(draft, step.id, patch))}
       onTitleBlur={() => {
         // a new step gets its address from its name, once it has one
@@ -116,15 +147,19 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
         setDraft(r.process); selectStep(r.id);
       }}
       setProcess={setDraft}
-      onDelete={async () => {
-        if (!await confirmDialog({ title: "Delete this step?", body: <>“{step.title}” is removed from the draft and the steps around it are connected to each other. Undo brings it back; readers see nothing until you publish.</>, confirmLabel: "Delete step", danger: true })) return;
-        setDraft((p) => deleteStep(p, step.id)); selectStep(null); setSection("steps");
+      onDelete={() => {
+        // no question: it is deleted at once, and the message offers Undo
+        const at = draft.steps.indexOf(step);
+        const next = deleteStep(draft, step.id);
+        restructure(next, `Step “${step.title || "(no name yet)"}” deleted.`);
+        const neighbour = next.steps[Math.min(at, next.steps.length - 1)];
+        if (neighbour) selectStep(neighbour.id); else { selectStep(null); setSection("steps"); }
       }}
-      onMove={(before) => setDraft(moveStepInFlow(draft, step.id, before))}
+      onMove={(before) => restructure(moveStepInFlow(draft, step.id, before))}
       onAddAfter={(name) => { const r = insertStep(draft, { afterId: step.id }, { title: name, type: "task", actor: step.actor }); setDraft(r.process); selectStep(r.id); }} />;
   } else {
     const head = <h2 className="fields-section-title">{sectionLabel}</h2>;
-    const own = issuesFor("process", draft, s.issues, { section });
+    const own = issuesFor("process", draft, issues, { section });
     switch (section) {
       case "about": fields = <>{head}<ItemIssues issues={own} /><ProcessAbout process={draft} saved={d.saved} all={all} set={set} issues={own} /></>; break;
       case "before": fields = <>{head}<ItemIssues issues={own} /><ProcessBefore process={draft} all={all} set={set} /></>; break;
@@ -171,15 +206,16 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
 
   return (
     <>
-      <EditFrame kind="process" title={draft.title} issues={s.issues} {...s.frame}
+      <EditFrame kind="process" title={draft.title} {...s.frame} issues={issues} selection={selectionKey(sel)}
         place={(i) => placeOf(draft, i.path)}
         onPickIssue={(i) => choose(issueTarget("process", draft, i.path))}
         outline={<Outline label="Outline of the process" entries={outline} selected={selectionKey(sel)} issues={byPlace}
           feedback={(id) => openCount(feedback, id)}
           onSelect={(e) => choose({ section: e.section, item: e.item }, !!e.item || e.depth === 0)}
           onAdd={{ section: "steps", label: "Add a step", placeholder: "Name of the next step", run: (name) => { const r = appendStep(draft, name); setDraft(r.process); selectStep(r.id); } }}
-          onMove={(id, before) => setDraft(moveStepInFlow(draft, id, before))}
-          onNudge={(id, dir) => setDraft(nudgeStep(draft, id, dir))}
+          onMove={(id, before) => restructure(moveStepInFlow(draft, id, before))}
+          onNudge={(id, dir) => restructure(nudgeStep(draft, id, dir))}
+          onEnter={focusFields}
           moveBlocked={(id) => flowMoveBlocked(draft, id)} />}
         middle={middle} fields={<div className="edit-fields-body">{fields}</div>} fieldsLabel={fieldsLabel}
         panel={s.panel} setPanel={s.setPanel} json={s.json} />

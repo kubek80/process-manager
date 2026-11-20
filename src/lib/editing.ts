@@ -117,7 +117,8 @@ export function standardIssueTarget(s: Pick<Standard, "requirements">, path: str
       const r = i !== undefined && Array.isArray(s.requirements) ? s.requirements[i] : undefined;
       return r?.id ? { section: "requirements", item: r.id } : { section: "requirements" };
     }
-    case "scope": case "exceptionProcessId": return { section: "scope" };
+    // a standard's scope, exceptions and where it applies are changed together, under "Scope and exceptions"
+    case "scope": case "exceptionProcessId": case "tiers": case "languages": case "environments": case "tags": return { section: "scope" };
     case "resources": return { section: "background" };
     default: return { section: "about" };
   }

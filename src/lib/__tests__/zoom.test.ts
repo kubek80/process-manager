@@ -81,3 +81,18 @@ describe("the fade at the edges of the map", () => {
     expect(hiddenEdges(1000, 2000, 1000)).toEqual({ left: true, right: false });
   });
 });
+
+describe("the lane names at the left of the map", () => {
+  it("hide what is under them: a step there is scrolled out from under them", () => {
+    // step 1 at 160-368 px, the names take 156 px, the map is scrolled 192 px: it is under the names
+    const to = scrollToShow({ x: 160, y: 20, w: 208, h: 94 }, 1, { left: 192, top: 0, width: 800, height: 400 }, 24, 156);
+    expect(to).toEqual({ left: 0, top: 0 });
+    // already beside the names: nothing to do
+    expect(scrollToShow({ x: 400, y: 20, w: 208, h: 94 }, 1, { left: 0, top: 0, width: 800, height: 400 }, 24, 156)).toBeNull();
+  });
+  it("keep their place when zooming around the pointer", () => {
+    // the point under the pointer stays where it is; the names do not zoom
+    expect(scrollForZoom(1, 0.5, { x: 556, y: 0 }, { left: 0, top: 0 }, 156)).toEqual({ left: 0, top: 0 });
+    expect(scrollForZoom(0.5, 1, { x: 356, y: 0 }, { left: 0, top: 0 }, 156).left).toBe(200);
+  });
+});

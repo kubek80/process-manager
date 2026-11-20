@@ -3,7 +3,7 @@ import { ArrowLeft, Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash
 import type { DocMeta, Issue, Process, Standard, TargetKind } from "../types";
 import { conflictOf, useDraft, type Conflict, type Draft } from "../lib/draft";
 import { author, baseBehindSentence, clock, draftKindOf, draftSaveBase, saveCallOf, editState, exampleIssues, isExampleIssue, issueText, publishLines, statusChangeBlocked, type DraftKind } from "../lib/editing";
-import { compare, type Change } from "../lib/diff";
+import { compare, describeChange, type Change } from "../lib/diff";
 import { belongsRefused } from "../lib/rights";
 import { useMe, usePerms } from "../lib/session";
 import { useCatalog } from "../lib/catalog";
@@ -58,11 +58,13 @@ export interface Session<T extends Doc> {
   json: boolean;
   /** A problem to bring into view (a refused save or publish points at the first one); `n` counts the requests. */
   focus: { issue: Issue; n: number } | null;
+  /** A step or requirement that Undo or Redo brought back or changed: selected and shown; `n` counts. */
+  reveal: { item: string; n: number } | null;
   jsonView: ReactNode;
   panel: Panel; setPanel: (p: Panel) => void;
   frame: {
     state: ReturnType<typeof editState>; unsaved: boolean;
-    undo: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
+    undo: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void; undoTitle?: string; redoTitle?: string };
     onBack: () => void; discard?: BarAction; save: BarAction; publish: BarAction; more: MenuItem[];
     banners?: ReactNode;
     /** Why a press on Save draft or Publish did nothing, or why publishing waits: shown under the bar. */
@@ -233,6 +235,25 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
   const goTo = (issue?: Issue) => { if (issue) setFocus((f) => ({ issue, n: (f?.n ?? 0) + 1 })); };
   // a change makes an earlier "could not" out of date
   useEffect(() => { setNotice(null); }, [d.draft]);
+  // Undo and Redo say what they did, and what they brought back is selected
+  const items = (doc: T) => ((doc as Process).steps ?? (doc as Standard).requirements ?? []) as { id: string }[];
+  const describe = (a: T | undefined, b: T | undefined) => {
+    if (!a || !b) return "";
+    // a step or requirement that came or went says the most about a change
+    try { const c = compare(kind, a, b, catalog); const main = c.find((x) => x.kind !== "changed") ?? c[0]; return main ? describeChange(main) : ""; } catch { return ""; }
+  };
+  const undoWhat = useMemo(() => describe(d.previous, d.draft), [d.previous, d.draft]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [reveal, setReveal] = useState<{ item: string; n: number } | null>(null);
+  useEffect(() => {
+    const st = d.stepped;
+    if (!st) return;
+    // what the undone (or redone) change did: from what Undo brings back to what was on screen
+    const what = st.dir === "undo" ? describe(st.to, st.from) : describe(st.from, st.to);
+    notify.info(`${st.dir === "undo" ? "Undone" : "Done again"}: ${what ? `${what[0].toLowerCase()}${what.slice(1)}` : "the last change"}.`);
+    const before = new Map(items(st.from).map((x) => [x.id, JSON.stringify(x)]));
+    const touched = items(st.to).find((x) => !before.has(x.id)) ?? items(st.to).find((x) => before.get(x.id) !== JSON.stringify(x));
+    if (touched) setReveal((r) => ({ item: touched.id, n: (r?.n ?? 0) + 1 }));
+  }, [d.stepped?.n]); // eslint-disable-line react-hooks/exhaustive-deps
   const [jsonWanted, setJsonWanted] = useState(false);
   const json = jsonWanted || !drawable;
   const [jsonPending, setJsonPending] = useState(false);
@@ -492,14 +513,14 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
   ) : null;
 
   return <>{children({
-    d, draftKind, drawable, working, issues, json, jsonView, panel, setPanel, dialogs, focus,
+    d, draftKind, drawable, working, issues, json, jsonView, panel, setPanel, dialogs, focus, reveal,
     frame: {
       state, unsaved,
       notice,
       saveLine: unsaved ? "Not saved yet" : working ? `Draft saved ${clock(working.updatedAt)}` : unpublished && o.meta?.updatedAt ? `Saved ${clock(o.meta.updatedAt)}` : "Saved",
       onNotice: () => setNotice(null),
       fixBefore: (i) => (unpublished && !isExampleIssue(i) ? "saving" : "publishing"),
-      undo: { canUndo: d.canUndo, canRedo: d.canRedo, undo: d.undo, redo: d.redo },
+      undo: { canUndo: d.canUndo, canRedo: d.canRedo, undo: d.undo, redo: d.redo, undoTitle: undoWhat ? `Undo: ${undoWhat[0].toLowerCase()}${undoWhat.slice(1)} (Ctrl+Z)` : undefined },
       onBack: () => go(kind === "process" ? { page: "process", id, tab: "flow" } : { page: "standard", id, tab: "doc" }),
       discard,
       save: { label: "Save draft", run: saveDraft, blocked: saveBlocked, busy: d.saving },

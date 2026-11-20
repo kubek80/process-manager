@@ -28,16 +28,18 @@
 .fact-icon { flex: none; color: var(--text-3); }
 .fact-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ---------- underline tabs: switch views ---------- */
-.tabs { display: flex; gap: 4px; margin: 0; padding: 0; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
-.tabs::-webkit-scrollbar { display: none; }
-.tab { position: relative; display: inline-flex; align-items: center; gap: 7px; flex: none; height: 40px; padding: 0 12px; color: var(--text-2); font-size: 14px; font-weight: 600; white-space: nowrap; border-radius: 8px 8px 0 0; }
-.tab:hover { color: var(--text); background: var(--surface-2); }
-.tab:focus-visible { outline-offset: -2px; }
-.tab::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: transparent; }
-.tab.on { color: var(--text); }
-.tab.on::after { background: var(--accent); }
-.tab-count { min-width: 22px; height: 20px; padding: 0 7px; display: grid; place-items: center; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2); font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
+/* ---------- underline tabs: switch views ----------
+   `.tabs` > `.tab`. Scoped to a `.tabs` that holds `.tab` items, so that the older pill tabs of
+   styles.css (`.tabs` > `button`, without `.tab`) look as before until their page moves over. */
+.tabs:has(> .tab) { display: flex; gap: 4px; margin: 0; padding: 0; background: none; border-radius: 0; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.tabs:has(> .tab)::-webkit-scrollbar { display: none; }
+.tabs > .tab { position: relative; display: inline-flex; align-items: center; gap: 7px; flex: none; height: 40px; padding: 0 12px; color: var(--text-2); font-size: 14px; font-weight: 600; white-space: nowrap; border-radius: 8px 8px 0 0; background: none; box-shadow: none; }
+.tabs > .tab:hover { color: var(--text); background: var(--surface-2); }
+.tabs > .tab:focus-visible { outline-offset: -2px; }
+.tabs > .tab::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: transparent; }
+.tabs > .tab.on { color: var(--text); background: none; box-shadow: none; }
+.tabs > .tab.on::after { background: var(--accent); }
+.tab .tab-count { min-width: 22px; height: 20px; padding: 0 7px; display: grid; place-items: center; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2); font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .tab.on .tab-count { background: var(--accent-fill, var(--accent)); border-color: transparent; color: var(--accent-ink); }
 
 /* ---------- the segmented control: one of a few, the chosen one in the brand colour ---------- */

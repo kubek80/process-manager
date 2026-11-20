@@ -27,10 +27,11 @@ export function wheelZoom(zoom: number, deltaY: number, deltaMode = 0): number {
  * to `to`. `pointer` is the pointer's position inside the visible part of the map, `scroll` how
  * far the map is scrolled. Content positions grow with the zoom.
  */
-export function scrollForZoom(from: number, to: number, pointer: { x: number; y: number }, scroll: { left: number; top: number }): { left: number; top: number } {
+export function scrollForZoom(from: number, to: number, pointer: { x: number; y: number }, scroll: { left: number; top: number }, lead = 0): { left: number; top: number } {
+  // `lead`: a column at the left (the lane names) that does not zoom
   const k = to / from;
   return {
-    left: Math.max(0, (scroll.left + pointer.x) * k - pointer.x),
+    left: Math.max(0, lead + (scroll.left + pointer.x - lead) * k - pointer.x),
     top: Math.max(0, (scroll.top + pointer.y) * k - pointer.y),
   };
 }
@@ -59,6 +60,8 @@ export function fitZoom(viewWidth: number, contentWidth: number, floor: number):
 export function scrollToShow(
   box: { x: number; y: number; w: number; h: number }, zoom: number,
   view: { left: number; top: number; width: number; height: number }, margin = 24,
+  /** A column at the left edge that stays put while the map scrolls (the lane names): it hides what is under it. */
+  lead = 0,
 ): { left: number; top: number } | null {
   const axis = (start: number, size: number, from: number, length: number) => {
     const a = start * zoom - margin, b = (start + size) * zoom + margin;
@@ -66,7 +69,7 @@ export function scrollToShow(
     if (b - a > length || a < from) return Math.max(0, a); // too big, or before: show its start
     return Math.max(0, b - length);
   };
-  const left = axis(box.x, box.w, view.left, view.width), top = axis(box.y, box.h, view.top, view.height);
+  const left = Math.max(0, axis(box.x, box.w, view.left + lead, view.width - lead) - lead), top = axis(box.y, box.h, view.top, view.height);
   return left === view.left && top === view.top ? null : { left, top };
 }
 

@@ -113,3 +113,29 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
 .flow-viewport::after { right: 0; background: linear-gradient(to left, var(--surface), transparent); }
 .flow-viewport.fade-left::before, .flow-viewport.fade-right::after { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .flow-viewport::before, .flow-viewport::after { transition: none; } }
+/* the lane names are a column of their own beside the zoomed drawing: the same size at every zoom */
+.flow-stage { position: relative; display: flex; }
+.flow-lanes { position: sticky; left: 0; z-index: 4; flex: none; }
+.lane-label { position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--line); background: var(--surface); }
+.lane-label.even { background: var(--surface-2); }
+.lane-label.me { background: color-mix(in srgb, var(--lane) 6%, var(--surface)); }
+.flow-lanes .lane-head { position: static; width: 100%; height: 100%; }
+.lane-label.short .lane-text span { display: none; }
+.flow-draw { position: relative; flex: none; overflow: hidden; }
+.flow-draw > .flow-canvas { min-width: 0; }
+/* step numbers and the + buttons keep their size whatever the zoom */
+.flow-canvas .block-num { transform: scale(calc(1 / var(--z, 1))); }
+.flow-canvas .edge-add { transform: scale(calc(1 / var(--z, 1))); }
+.flow-canvas .edge-add:hover, .flow-canvas .edge-add:focus-visible { transform: scale(calc(1.35 / var(--z, 1))); }
+.flow-canvas .block-add { transform: scale(calc(.7 / var(--z, 1))); }
+.flow-canvas .block:hover .block-add, .flow-canvas .block-add:focus-visible { transform: scale(calc(1 / var(--z, 1))); }
+@media (pointer: coarse) { .flow-canvas .edge-add { width: 28px; height: 28px; margin: -14px 0 0 -14px; } }
+/* the legend of the editing map, behind its button */
+.legend-box { position: relative; flex: none; }
+.legend-pop { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; width: 260px; padding: 10px 12px; display: grid; gap: 8px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-3); }
+@media (max-width: 600px) {
+  .flow-lanes .lane-head { gap: 6px; padding: 0 8px 0 10px; }
+  .flow-lanes .lane-avatar { display: none; }
+  .flow-lanes .lane-text strong { font-size: 12.5px; overflow-wrap: anywhere; }
+  .flow-lanes .lane-text span { font-size: 11px; }
+}

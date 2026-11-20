@@ -4,7 +4,7 @@ import type { Feedback, Process, StepType } from "../types";
 import { diamondPoints, L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import { toolName, useCatalog } from "../lib/catalog";
-import { fitZoom, hiddenEdges, isZoomWheel, scrollForZoom, scrollToShow, wheelZoom, clampZoom, zoomKey } from "../lib/zoom";
+import { fitZoom, hiddenEdges, isZoomWheel, scrollForZoom, scrollToShow, wheelZoom, clampZoom, zoomKey, ZOOM_MIN } from "../lib/zoom";
 import { openCount } from "./Feedback";
 import { EntryIcon } from "./EntryIcon";
 import { scrollBehavior, TypeIcon } from "./ui";
@@ -24,9 +24,9 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   editable?: boolean; bare?: boolean;
   /** The legend of the kinds of steps. The editing screen leaves it out: every block names its kind, and the map needs the room. */
   legend?: boolean;
-  /** The smallest zoom "Fit" (and opening) goes down to; the reader's page keeps text readable (75%), the editing screen shows the whole flow. */
+  /** The smallest zoom "Fit" goes down to (40%): the whole flow in view. */
   fitMin?: number;
-  /** The smallest zoom the map opens at (default: `fitMin`): readable, a wider flow scrolls sideways. */
+  /** The smallest zoom the map opens at (60%): names stay readable, a wider flow scrolls sideways. */
   openMin?: number;
   /** Bring the selected step into view whenever it changes or moves (the editing screen). */
   follow?: boolean;
@@ -40,6 +40,10 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const { catalog } = useCatalog();
   const L = bare ? L_COMPACT : L_FULL;
   const layout = useMemo(() => layoutProcess(process, L), [process, L]);
+  // The lane names are a column of their own that keeps its size at every zoom; the drawing is
+  // zoomed beside it. HEADW is that column, in pixels.
+  const narrow = useNarrowScreen();
+  const HEADW = bare ? 136 : narrow ? 96 : 156;
   const [zoom, setZoomState] = useState(1);
   // the zoom as the last event left it: several wheel events can arrive before the next render
   const zoomNow = useRef(1);
@@ -114,7 +118,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
       if (to === from) return;
       const box = el.getBoundingClientRect();
       const scroll = scrollTo.current ?? { left: el.scrollLeft, top: el.scrollTop };
-      scrollTo.current = scrollForZoom(from, to, { x: e.clientX - box.left, y: e.clientY - box.top }, scroll);
+      scrollTo.current = scrollForZoom(from, to, { x: e.clientX - box.left, y: e.clientY - box.top }, scroll, HEADW);
       zoomNow.current = to;
       setZoomState(to);
     };
@@ -128,24 +132,38 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
     el.scrollLeft = to.left;
     el.scrollTop = to.top;
   }, [zoom]);
-  const floor = fitMin ?? (bare ? 0.6 : 0.75);
-  const fit = (min = floor) => {
+  // One rule for the editing map and the reader's map: open as large as fits the width, but not
+  // below where a step's name can be read (60%); "Fit" shows the whole flow, down to 40%, from its start.
+  const floor = fitMin ?? (bare ? 0.6 : ZOOM_MIN);
+  const opening = openMin ?? (bare ? 0.6 : 0.6);
+  const drawW = layout.width - L.HEADER;
+  const fitWidth = (min: number) => {
     const w = scroller.current?.clientWidth ?? 0;
-    if (w) setZoom(fitZoom(w, layout.width, min));
+    return w ? fitZoom(w - HEADW, drawW, min) : 1;
   };
-  // open zoomed to fit the width, but never below where text stops being readable (75% on the
-  // reader's page, `openMin` on the editing screen): a wider flow scrolls sideways
-  useLayoutEffect(() => fit(openMin ?? floor), [process.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fit = () => {
+    const el = scroller.current;
+    if (!el) return;
+    // the height left on the screen below the top of the map
+    const room = Math.max(160, window.innerHeight - el.getBoundingClientRect().top - 16);
+    const z = Math.max(floor, Math.min(fitWidth(floor), fitZoom(room, layout.height, floor)));
+    scrollTo.current = { left: 0, top: 0 };
+    setZoom(z);
+    el.scrollTo({ left: 0, top: 0 });
+  };
+  useLayoutEffect(() => { setZoom(fitWidth(opening)); scroller.current?.scrollTo({ left: 0, top: 0 }); }, [process.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // the selected step is brought into view inside the map (never the page), when it is chosen
-  // and when it moves (added, reordered, another lane); also on opening with a step in the address
+  // the selected step is brought fully into view inside the map (never the page), beside the lane
+  // names: when it is chosen and when it moves (added, reordered, another lane), also on opening
   const node = follow && selectedId ? layout.nodes.find((n) => n.step.id === selectedId) : undefined;
   const nodeAt = node ? `${node.x},${node.y}` : "";
   useEffect(() => {
     const el = scroller.current;
     if (!el || !node) return;
     const frame = requestAnimationFrame(() => {
-      const to = scrollToShow({ x: node.x, y: node.y, w: L.W, h: L.H }, zoomNow.current, { left: el.scrollLeft, top: el.scrollTop, width: el.clientWidth, height: el.clientHeight });
+      const z = zoomNow.current;
+      const box = { x: HEADW + (node.x - L.HEADER) * z, y: node.y * z, w: L.W * z, h: L.H * z };
+      const to = scrollToShow(box, 1, { left: el.scrollLeft, top: el.scrollTop, width: el.clientWidth, height: el.clientHeight }, 24, HEADW);
       if (to) el.scrollTo({ ...to, behavior: scrollBehavior() });
     });
     return () => cancelAnimationFrame(frame);
@@ -188,42 +206,56 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
             ))}
             <span className="legend-item"><svg width="26" height="8" aria-hidden="true"><path d="M0,4 H26" className="edge back" /></svg>Loop back</span>
           </div>
-        ) : editable && (
+        ) : editable && (<>
+          <LegendButton types={usedTypes} />
           <p className="flow-tip" title="Press + on an arrow to insert a step there, + on a block to add one after it. Drag a block to another lane to change who does it. Drag the map by an empty spot to move it; Ctrl or ⌘ + scroll zooms.">
             <span className="kbd">+</span> on an arrow inserts a step · drag a block to another lane · <span className="flow-tip-loop"><svg width="20" height="8" aria-hidden="true"><path d="M0,4 H20" className="edge back" /></svg>loop back</span>
           </p>
-        )}
+        </>)}
         {!bare && <div className="map-tools">
           {legend && <span className="map-pan-hint"><Hand size={14} aria-hidden="true" />Drag to move · <kbd className="key">{zoomKey()}</kbd> + scroll to zoom</span>}
           <div className="zoom" role="group" aria-label="Zoom">
-            <button className="btn small ghost" onClick={() => fit()} title="Show the whole width of the flow"><Maximize2 size={14} />Fit</button>
+            <button className="btn small ghost" onClick={() => fit()} title="Show the whole flow"><Maximize2 size={14} />Fit</button>
             <button className="icon-btn" onClick={() => step(-1)} aria-label="Zoom out"><Minus size={16} /></button>
             <button className="zoom-val" onClick={() => setZoom(1)} aria-label={`Zoom ${Math.round(zoom * 100)}%, press for 100%`}>{Math.round(zoom * 100)}%</button>
             <button className="icon-btn" onClick={() => step(1)} aria-label="Zoom in"><Plus size={16} /></button>
           </div>
         </div>}
       </div>
-      <div className={`flow-viewport ${edges.left ? "fade-left" : ""} ${edges.right ? "fade-right" : ""}`} style={{ "--head": `${Math.round(L.HEADER * zoom)}px` } as React.CSSProperties}>
+      <div className={`flow-viewport ${edges.left ? "fade-left" : ""} ${edges.right ? "fade-right" : ""}`} style={{ "--head": `${HEADW}px` } as React.CSSProperties}>
       <div className={`flow-scroll ${bare ? "" : "pannable"} ${panning ? "panning" : ""}`} ref={scroller}>
-        <div className={`flow-canvas ${drag ? "dragging" : ""}`} style={{ width: layout.width, height, zoom }} onMouseDown={() => setAdding(null)}>
+        <div className="flow-stage" style={{ width: HEADW + drawW * zoom, height: height * zoom }}>
+          {/* the lane names, at the same size at every zoom, staying at the left while the map scrolls */}
+          <div className="flow-lanes" style={{ width: HEADW, height: height * zoom }}>
+            {layout.lanes.map((lane, k) => {
+              const actor = process.actors[lane.actorIndex];
+              const count = process.steps.filter((s) => s.actor === actor.id).length;
+              const color = LANE_COLORS[lane.actorIndex % LANE_COLORS.length];
+              return (
+                <div key={actor.id} className={`lane-label ${lane.actorIndex === 0 ? "me" : ""} ${k % 2 ? "even" : ""} ${lane.h * zoom < 52 ? "short" : ""}`}
+                  style={{ top: lane.y * zoom, height: lane.h * zoom, "--lane": color } as React.CSSProperties}>
+                  <div className="lane-head">
+                    <span className="lane-avatar">{lane.actorIndex === 0 ? <User size={16} /> : actor.name.slice(0, 1).toUpperCase()}</span>
+                    <div className="lane-text">
+                      <strong>{actor.name}</strong>
+                      <span>{count} {count === 1 ? "step" : "steps"}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flow-draw" style={{ width: drawW * zoom, height: height * zoom }}>
+        <div className={`flow-canvas ${drag ? "dragging" : ""}`} style={{ width: layout.width, height, zoom, marginLeft: -L.HEADER, "--z": zoom } as React.CSSProperties} onMouseDown={() => setAdding(null)}>
           {layout.lanes.map((lane) => {
             const actor = process.actors[lane.actorIndex];
-            const count = process.steps.filter((s) => s.actor === actor.id).length;
             const color = LANE_COLORS[lane.actorIndex % LANE_COLORS.length];
             return (
               <div key={actor.id} className={`lane ${lane.actorIndex === 0 ? "me" : ""} ${dropLane === actor.id ? "drop" : ""}`}
                 style={{ top: lane.y, height: lane.h, "--lane": color } as React.CSSProperties}
                 onDragOver={(e) => { if (drag) { e.preventDefault(); setDropLane(actor.id); } }}
                 onDragLeave={() => setDropLane((d) => (d === actor.id ? null : d))}
-                onDrop={(e) => { e.preventDefault(); if (drag) onMoveToLane?.(drag, actor.id); setDrag(null); setDropLane(null); }}>
-                <div className="lane-head" style={{ width: L.HEADER }}>
-                  <span className="lane-avatar">{lane.actorIndex === 0 ? <User size={16} /> : actor.name.slice(0, 1).toUpperCase()}</span>
-                  <div className="lane-text">
-                    <strong>{actor.name}</strong>
-                    <span>{count} {count === 1 ? "step" : "steps"}</span>
-                  </div>
-                </div>
-              </div>
+                onDrop={(e) => { e.preventDefault(); if (drag) onMoveToLane?.(drag, actor.id); setDrag(null); setDropLane(null); }} />
             );
           })}
 
@@ -238,7 +270,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
             {layout.edges.map((e) => {
               const hot = focus === e.from || focus === e.to || (adding?.afterId === e.from && adding?.beforeId === e.to);
               return (
-                <path key={`${e.from}>${e.to}`} d={e.d}
+                <path key={`${e.from}>${e.to}>${e.label ?? ""}`} d={e.d}
                   className={`edge ${e.back ? "back" : ""} ${hot ? "hot" : ""}`}
                   markerEnd={`url(#${hot ? "edge-hot" : e.back ? "edge-back" : "edge"})`} />
               );
@@ -246,14 +278,14 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
           </svg>
 
           {layout.edges.filter((e) => e.label).map((e) => (
-            <span key={`l${e.from}>${e.to}`} className={`edge-label ${focus === e.from || focus === e.to ? "hot" : ""}`}
+            <span key={`l${e.from}>${e.to}>${e.label}`} className={`edge-label ${focus === e.from || focus === e.to ? "hot" : ""}`}
               style={{ left: e.lx, top: e.ly, maxWidth: e.lw }} title={e.label}>{e.label}</span>
           ))}
 
           {editable && layout.edges.map((e) => (
-            <button key={`a${e.from}>${e.to}`} className="edge-add" style={{ left: e.px, top: e.py }} title="Insert a step here"
+            <button key={`a${e.from}>${e.to}>${e.label ?? ""}`} className="edge-add" style={{ left: e.px, top: e.py }} title="Insert a step here"
               aria-label={`Insert a step between “${titleOf(e.from)}” and “${titleOf(e.to)}”`}
-              onMouseDown={(ev) => ev.stopPropagation()} onClick={() => openAdd({ afterId: e.from, beforeId: e.to }, e.px, e.py)}><Plus size={12} strokeWidth={3} /></button>
+              tabIndex={-1} onMouseDown={(ev) => ev.stopPropagation()} onClick={() => openAdd({ afterId: e.from, beforeId: e.to }, e.px, e.py)}><Plus size={12} strokeWidth={3} /></button>
           ))}
 
           {layout.nodes.map((n) => {
@@ -302,7 +334,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                 )}
                 {editable && <button className="block-add" title={s.type === "decision" ? "Add a branch" : "Add a step after this one"}
                   aria-label={s.type === "decision" ? `Add a branch to “${s.title}”` : `Add a step after “${s.title}”`}
-                  onMouseDown={(ev) => ev.stopPropagation()} onClick={() => openAdd({ afterId: s.id }, n.x + L.W, n.y + L.H / 2)}><Plus size={14} /></button>}
+                  tabIndex={-1} onMouseDown={(ev) => ev.stopPropagation()} onClick={() => openAdd({ afterId: s.id }, n.x + L.W, n.y + L.H / 2)}><Plus size={14} /></button>}
               </div>
             );
           })}
@@ -312,10 +344,51 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
               onAdd={(spec) => { onInsert?.({ afterId: adding.afterId, beforeId: adding.beforeId }, spec); setAdding(null); }} />
           )}
         </div>
+          </div>
+        </div>
       </div>
       </div>
 
       {editable && legend && <p className="flow-hint"><b>Edit on the map:</b> press <span className="kbd">+</span> on an arrow to insert a step there · <span className="kbd">+</span> on a block to add one after it · drag a block to another lane to change who does it · select a block to change it.</p>}
     </div>
   );
+}
+
+/** The kinds of steps on the editing map, behind a small button: every block names its kind, so the legend is only there to look up. */
+function LegendButton({ types }: { types: StepType[] }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: Event) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  return (
+    <div className="legend-box" ref={box}>
+      <button className="btn small ghost" aria-expanded={open} onClick={() => setOpen(!open)}>Legend</button>
+      {open && (
+        <div className="legend legend-pop" role="group" aria-label="Kinds of steps">
+          {types.map((t) => <span key={t} className="legend-item"><TypeIcon type={t} size={20} />{STEP_META[t].label}</span>)}
+          <span className="legend-item"><svg width="26" height="8" aria-hidden="true"><path d="M0,4 H26" className="edge back" /></svg>Loop back</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A phone: the lane names get a narrower column. */
+function useNarrowScreen() {
+  const query = "(max-width: 600px)";
+  const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && !!window.matchMedia?.(query).matches);
+  useEffect(() => {
+    const m = window.matchMedia?.(query);
+    if (!m) return;
+    const on = () => setNarrow(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return narrow;
 }

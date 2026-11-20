@@ -88,3 +88,59 @@ describe("Home: recently updated, most viewed", () => {
     expect(agoText("nonsense", now)).toBe("");
   });
 });
+
+import { closestWanted } from "../meaning";
+import { levelWord, matchRanges, rigourFilterName, rigourOptionLabel } from "../search";
+import { viewOf } from "../paging";
+import { parseRoute, href } from "../store";
+
+describe("pass 2: the words of levels", () => {
+  it("a process is Mandatory, a requirement Must; mixed lists say both", () => {
+    expect(levelWord("mandatory")).toBe("Mandatory");
+    expect(levelWord("must")).toBe("Must");
+    expect(levelWord("may")).toBe("May");
+    expect(rigourOptionLabel("mandatory", "process")).toBe("Mandatory");
+    expect(rigourOptionLabel("recommended", "standard")).toBe("Should");
+    expect(rigourOptionLabel("optional", "any")).toBe("Optional or may");
+    expect(rigourFilterName("standard")).toBe("Level");
+    expect(rigourFilterName("any")).toBe("Rigour");
+  });
+});
+
+describe("pass 2: what is marked", () => {
+  it("one or two letters only as a word of their own, never inside other words", () => {
+    expect(matchRanges("A tested way back", ["a"])).toEqual([[0, 1]]);
+    expect(matchRanges("Automated tests and data", ["a"])).toEqual([]);
+    expect(matchRanges("CI/CD for ci", ["ci"])).toEqual([[0, 2], [10, 12]]);
+    expect(matchRanges("Decide", ["ci"])).toEqual([]);
+    expect(matchRanges("release", ["lea"])).toEqual([[2, 5]]);
+  });
+});
+
+describe("pass 2: the closest by meaning when words find nothing", () => {
+  const base = { mode: "words" as const, offered: true, asked: "a long query", submitted: "a long query", wordHits: 0 };
+  it("only on a search asked for on purpose, by words, with meaning offered", () => {
+    expect(closestWanted(base)).toBe(true);
+    expect(closestWanted({ ...base, submitted: "a long" })).toBe(false); // still typing
+    expect(closestWanted({ ...base, wordHits: 2 })).toBe(false);
+    expect(closestWanted({ ...base, wordHits: -1 })).toBe(false);
+    expect(closestWanted({ ...base, offered: false })).toBe(false);
+    expect(closestWanted({ ...base, mode: "meaning" })).toBe(false);
+    expect(closestWanted({ ...base, asked: " ", submitted: " " })).toBe(false);
+  });
+});
+
+describe("pass 2: the lists carry their filters in the address", () => {
+  it("reads and writes the same names as the search page, without type and mode", () => {
+    expect(parseRoute("#/processes?q=gcp&platform=google-cloud,github&rigour=mandatory&page=2&sort=newest"))
+      .toEqual({ page: "library", q: "gcp", platform: ["google-cloud", "github"], rigour: ["mandatory"], pageNo: 2, sort: "newest" });
+    expect(parseRoute("#/standards?type=process&mode=meaning&owner=sec")).toEqual({ page: "standards", owner: ["sec"] });
+    expect(parseRoute("#/processes")).toEqual({ page: "library" });
+    expect(href({ page: "standards", q: "log", category: ["security"], size: 12 })).toBe("#/standards?q=log&category=security&size=12");
+    expect(href({ page: "library" })).toBe("#/processes");
+  });
+  it("cards or rows", () => {
+    expect(viewOf("rows")).toBe("rows");
+    expect(viewOf("anything")).toBe("cards");
+  });
+});

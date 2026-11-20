@@ -45,6 +45,10 @@ export interface Draft<T> {
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  /** What Undo would bring back (the document before the last change), if anything. */
+  previous?: T;
+  /** The last Undo or Redo: what was on screen before it and what it brought back; `n` counts them. */
+  stepped: { dir: "undo" | "redo"; from: T; to: T; n: number } | null;
   /**
    * Saves; resolves to true when it went through. A refused save sets `conflict`. `finish` is
    * applied to what is sent, e.g. the status "active" when a draft is published; "Save mine
@@ -103,6 +107,17 @@ export function useDraft<T>(o: DraftOptions<T>): Draft<T> {
   const latest = useRef(state);
   latest.current = state;
 
+  // Undo and Redo, from the bar or the keys: what they changed is remembered, so the screen can
+  // say it and bring it into view
+  const [stepped, setStepped] = useState<Draft<T>["stepped"]>(null);
+  const step = useCallback((dir: "undo" | "redo") => {
+    const s = latest.current;
+    const to = dir === "undo" ? s.past[s.past.length - 1] : s.future[0];
+    if (to === undefined) return;
+    setStepped((x) => ({ dir, from: s.draft, to, n: (x?.n ?? 0) + 1 }));
+    setState(dir === "undo" ? undo : redo);
+  }, []);
+
   // what the last save added to the document, for "Save mine over theirs" after it was refused
   const finishing = useRef<((d: T) => T) | undefined>(undefined);
   const send = useCallback(async (base: number, note: string): Promise<boolean> => {
@@ -143,6 +158,8 @@ export function useDraft<T>(o: DraftOptions<T>): Draft<T> {
   const guarded = dirty && (o.editable !== false || state.past.length > 0);
   useEffect(() => (guarded ? guardLeaving(docKey, opts.current.what) : undefined), [guarded, docKey]);
 
+  const stepRef = useRef(step);
+  stepRef.current = step;
   // Ctrl+Z / Ctrl+Shift+Z (Cmd on a Mac) - except while typing, where the field has its own undo
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
@@ -150,7 +167,7 @@ export function useDraft<T>(o: DraftOptions<T>): Draft<T> {
       const el = document.activeElement as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable || el.closest(".cm-editor"))) return;
       e.preventDefault();
-      setState(e.shiftKey ? redo : undo);
+      stepRef.current(e.shiftKey ? "redo" : "undo");
     };
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
@@ -160,9 +177,10 @@ export function useDraft<T>(o: DraftOptions<T>): Draft<T> {
     draft: state.draft, saved: state.saved, clean, dirty, saving, base: state.base, behind: version > state.base,
     change,
     discard: useCallback(() => setState((s) => discard(s, Date.now())), []),
-    undo: useCallback(() => setState(undo), []),
-    redo: useCallback(() => setState(redo), []),
+    undo: useCallback(() => step("undo"), [step]),
+    redo: useCallback(() => step("redo"), [step]),
     canUndo: state.past.length > 0, canRedo: state.future.length > 0,
+    previous: state.past[state.past.length - 1], stepped,
     save, conflict, keepMine, takeTheirs, dismissConflict: useCallback(() => setConflict(null), []),
     raiseConflict: useCallback((c: Conflict) => setConflict(c), []),
     error, clearError: useCallback(() => setError(null), []),
