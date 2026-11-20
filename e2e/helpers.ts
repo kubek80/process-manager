@@ -26,6 +26,17 @@ export async function signIn(page: Page, email: string) {
   await page.addInitScript(() => { try { localStorage.setItem("pm:theme", "light"); } catch { /* ignore */ } });
 }
 
+/**
+ * Goes to a main place ("Processes", "Admin") the way a person does: the navigation in the top
+ * bar, or below 1120 px wide the "Menu" button and its sheet.
+ */
+export async function navigate(page: Page, place: string) {
+  const bar = page.locator("nav.nav").getByRole("link", { name: place, exact: true });
+  if (await bar.isVisible()) return bar.click();
+  await page.locator("button.menu-btn").click();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: new RegExp(`^${place}(,|$)`) }).click();
+}
+
 export async function open(page: Page, hash: string) {
   await page.goto(`/#${hash}`);
 }

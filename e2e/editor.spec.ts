@@ -118,7 +118,7 @@ test("edit a step in its fields; the checker blocks publishing until it is right
   await expect(page.locator(".edit-bar").getByRole("button", { name: "Publish…" })).toHaveClass(/\bunavailable\b/);
   await page.locator(".edit-bar").getByRole("button", { name: "Publish…" }).click();
   await expect(page.getByRole("dialog", { name: "Publish your changes" })).toHaveCount(0);
-  await expect(refusal(page)).toHaveText("Publishing waits until 1 thing is fixed.");
+  await expect(refusal(page)).toHaveText(/^This cannot be published yet\. First fix the 1 thing listed under “1 to fix”\.$/);
   await page.keyboard.press("Escape");
 
   await pickKind(page, "Check the result");

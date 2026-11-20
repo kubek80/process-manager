@@ -37,7 +37,7 @@ async function drawn(page: Page): Promise<string[]> {
 test("a new process: the first name typed replaces “First step”, the next ones follow; Start here says where to begin", async ({ page }) => {
   await signIn(page, ALEX);
   await page.goto("/#/processes");
-  await page.getByRole("button", { name: /^(Blank process|New process)$/ }).first().click();
+  await page.getByRole("button", { name: "New process", exact: true }).click();
   const named = page.getByRole("dialog", { name: "New process" });
   await named.getByLabel("Name of the process").fill("Editscreen demo new");
   await named.getByRole("button", { name: "Create process" }).click();
@@ -70,7 +70,7 @@ test("a new process: the first name typed replaces “First step”, the next on
 test("Start here: “Write the summary” and “Open the first step”; example text is selected when its field is entered", async ({ page }) => {
   await signIn(page, ALEX);
   await page.goto("/#/processes");
-  await page.getByRole("button", { name: /^(Blank process|New process)$/ }).first().click();
+  await page.getByRole("button", { name: "New process", exact: true }).click();
   await page.getByRole("dialog", { name: "New process" }).getByLabel("Name of the process").fill("Editscreen demo start");
   await page.getByRole("dialog", { name: "New process" }).getByRole("button", { name: "Create process" }).click();
   const start = page.getByRole("region", { name: "Start here" });

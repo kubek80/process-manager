@@ -186,13 +186,13 @@ test("an unfinished draft can be saved, but not published: the reason is given a
   // publishing is not: it looks unavailable, its tooltip says why, and pressing it gives the reason at the top of the list
   const publishButton = bar(page).getByRole("button", { name: "Publish…" });
   await expect(publishButton).toHaveClass(/\bunavailable\b/);
-  await expect(publishButton).toHaveAttribute("title", /^Publishing waits until (1 thing is|\d+ things are) fixed\.$/);
+  await expect(publishButton).toHaveAttribute("title", /^First fix the \d+ things? listed under “\d+ to fix”\.$/);
   await outline(page, "About");
   await publishButton.click();
   await expect(page.getByRole("dialog", { name: "Publish your changes" })).toHaveCount(0);
   const reason = refusal(page);
   await expect(reason).toHaveAttribute("role", "alert");
-  await expect(reason).toContainText("Publishing waits until");
+  await expect(reason).toContainText(/^This cannot be published yet\. First fix /);
   // the list itself is there below it, and the first problem is selected
   await expect(page.getByRole("dialog", { name: "What is to fix" }).getByRole("heading", { name: /^To fix/ })).toBeVisible();
   await expect(nav.locator('[aria-current="true"]')).toContainText((await readProcess(page, id))!.steps[1].title);
@@ -253,7 +253,7 @@ test("Discard changes goes back to the saved draft and can be undone; Discard dr
 test("a new process is a draft nobody else sees until it is published", async ({ page, browser }) => {
   await signIn(page, ALEX);
   await open(page, "/processes");
-  await page.getByRole("button", { name: "Blank process" }).click();
+  await page.getByRole("button", { name: "New process", exact: true }).click();
   const named = page.getByRole("dialog", { name: "New process" });
   await named.getByLabel("Name of the process").fill("Editing demo new one");
   await named.getByRole("button", { name: "Create process" }).click();
@@ -626,7 +626,7 @@ test.describe("more of the editing screen", () => {
   test("a blank standard must have its example text replaced before it is published; Save draft says why it cannot save", async ({ page }) => {
     await signIn(page, RILEY);
     await open(page, "/standards");
-    await page.getByRole("button", { name: "Blank standard" }).click();
+    await page.getByRole("button", { name: "New standard", exact: true }).click();
     const named = page.getByRole("dialog", { name: "New standard" });
     await named.getByLabel("Name of the standard").fill("Editing demo standard");
     await named.getByRole("button", { name: "Create standard" }).click();
@@ -639,7 +639,7 @@ test.describe("more of the editing screen", () => {
     await expect(publishButton).toHaveClass(/\bunavailable\b/);
     await publishButton.click();
     await expect(page.getByRole("dialog", { name: "Publish this standard" })).toHaveCount(0);
-    await expect(refusal(page)).toContainText(/^Publishing waits until (the example text is|the \d+ example texts are) replaced with your own words\.$/);
+    await expect(refusal(page)).toContainText(/^This cannot be published yet\. First replace the (example text|\d+ example texts) with your own words \(under “\d+ to fix”\)\.$/);
     await page.keyboard.press("Escape");
     // a checker error that is not example text stops a never-published draft from being saved, with the reason
     await outline(page, "About");

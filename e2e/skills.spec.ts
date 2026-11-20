@@ -39,7 +39,7 @@ test("publishing a process gives its skill a new version; a saved draft does not
   await publish(page);
   await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
 
-  await page.getByRole("tab", { name: "Skill" }).click();
+  await page.getByRole("tab", { name: "Skills" }).click();
   await expect(page.locator(".skill-content")).toContainText("Add the API to the service catalogue.");
   await expect(page.locator(".skill-content")).toContainText(`This is version ${before.skill.version + 1} of the generated text.`);
   const after = await readSkill(page, `process-${APIGEE}`);

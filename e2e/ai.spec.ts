@@ -108,7 +108,7 @@ test("change an existing process with AI, then delete it", async ({ page }) => {
 
 test("a blank process starts as a draft whose example text must be replaced before it is published", async ({ page }) => {
   await open(page, "/processes");
-  await page.getByRole("button", { name: "Blank process" }).click();
+  await page.getByRole("button", { name: "New process", exact: true }).click();
   // it is named first: the name gives it its address, which never changes
   await page.getByRole("dialog", { name: "New process" }).getByLabel("Name of the process").fill("Order a laptop");
   await page.getByRole("dialog", { name: "New process" }).getByRole("button", { name: "Create process" }).click();
@@ -120,7 +120,7 @@ test("a blank process starts as a draft whose example text must be replaced befo
   await expect(page.locator(".eb-status.warn")).toHaveText("3 to fix");
   await expect(page.locator(".eb-status.bad")).toHaveCount(0);
   const publishButton = page.locator(".edit-bar").getByRole("button", { name: "Publish…" });
-  await expect(publishButton).toHaveAttribute("title", "Publishing waits until the 3 example texts are replaced with your own words.");
+  await expect(publishButton).toHaveAttribute("title", "First replace the 3 example texts with your own words (under “3 to fix”).");
   await page.locator(".eb-status.warn").click();
   await expect(page.getByRole("dialog", { name: "What is to fix" })).toContainText("example");
   await page.keyboard.press("Escape");

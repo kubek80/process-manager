@@ -264,7 +264,7 @@ test("when the session ends in the middle of an edit, the edit survives signing 
 test("a new process starts with its name, as a draft that readers cannot reach", async ({ page }) => {
   await signIn(page, ALEX);
   await open(page, "/processes");
-  await page.getByRole("button", { name: "Blank process" }).click();
+  await page.getByRole("button", { name: "New process", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "New process" });
   await expect(dialog.getByRole("button", { name: "Create process" })).toBeDisabled();
   await dialog.getByLabel("Name of the process").fill("Request a database");

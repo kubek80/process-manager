@@ -153,7 +153,7 @@ test("a platform owner creates a process for his platform and a standard for his
   await signIn(page, JORDAN);
   await open(page, "/processes");
   await expect(page.getByRole("button", { name: "Create from text with AI" })).toBeVisible();
-  await page.getByRole("button", { name: "Blank process" }).click();
+  await page.getByRole("button", { name: "New process", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "New process" });
   const belongs = dialog.getByLabel("It belongs to");
   await expect(belongs.locator("option")).toHaveText(["Platform: Google Cloud", "Practice: Engineering"]);
@@ -168,7 +168,7 @@ test("a platform owner creates a process for his platform and a standard for his
   expect(await readProcess(page, "order-a-google-cloud-quota-increase")).toBeUndefined();
 
   await open(page, "/standards");
-  await page.getByRole("button", { name: "Blank standard" }).click();
+  await page.getByRole("button", { name: "New standard", exact: true }).click();
   const named = page.getByRole("dialog", { name: "New standard" });
   await named.getByLabel("Name of the standard").fill("Pull request templates");
   await named.getByLabel("It belongs to").selectOption({ label: "Practice: Engineering" });
@@ -197,7 +197,7 @@ test("a reader can do none of it", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Mark as reviewed" })).toHaveCount(0);
   await open(page, "/processes");
   await expect(page.locator(".card").first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Blank process" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "New process", exact: true })).toHaveCount(0);
 
   const gcp = (await readProcess(page, GCP))!;
   const res = await putDoc(page, "process", GCP, { ...gcp, summary: "Changed by a reader." });
