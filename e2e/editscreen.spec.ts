@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { addInOutline, ALEX, CSRF, deleteSelected, editState, fields, moveTo, openChecker, openEditor, outline, outlineNav, outlineTitles, pickKind, readWorkingDraft, RILEY, saveDraft, signIn } from "./helpers";
+import { addInOutline, ALEX, CSRF, deleteSelected, editState, fields, moveTo, open, openChecker, openEditor, outline, outlineNav, outlineTitles, pickKind, readWorkingDraft, RILEY, saveDraft, signIn } from "./helpers";
 
 // The editing screen of a process, part by part: adding steps by name, moving them in the flow,
 // decisions and their answers, deleting with Undo instead of a question, who does a step, its
@@ -152,9 +152,13 @@ test("a decision moves with its answers; the message names the answer that chang
   await moveTo(page, /^Before 4\. Check naming/);
   // no refusal: it moved, and says what it did to its answers
   // the message says where the step is now, then names the answer and its new target by number and name
-  const toast = page.locator(".toast", { hasText: "“Yes” of “Details complete?” now goes to 5. Check naming, folder and ownership." });
+  const toast = page.locator(".toast", { hasText: "“Yes” of “Details complete?” now goes to step 5 “Check naming, folder and ownership”." });
   await expect(toast).toBeVisible();
-  await expect(toast).toContainText(/^Step “Details complete\?” is now step 4\./);
+  await expect(toast).toContainText(/^Step “Details complete\?” is now step 4, before “Check naming, folder and ownership”\./);
+  // one message at a time
+  await expect(page.locator(".toast")).toHaveCount(1);
+  // the Undo button says what it takes back
+  await expect(page.locator(".edit-bar").getByRole("button", { name: /^Undo/ })).toHaveAttribute("title", "Undo: move of step “Details complete?” (Ctrl+Z)");
   await expect.poll(async () => (await outlineTitles(page)).slice(3, 5)).toEqual(["Details complete?", "Check naming, folder and ownership"]);
   // its "No" still goes where it went
   await expect(fields(page).getByRole("textbox", { name: "Name of path 2" })).toHaveValue("No");
@@ -179,7 +183,7 @@ test("deleting a step inside a branch: no question, both answers kept, “delete
   const toast = page.locator(".toast", { hasText: "deleted." });
   await expect(toast).toBeVisible();
   await expect(toast).toContainText("Step “Add your project to the proje…” deleted.");
-  await expect(toast).toContainText("“Yes” of “Details complete?” now goes to 7. Review and merge the pull request.");
+  await expect(toast).toContainText("“Yes” of “Details complete?” now goes to step 7 “Review and merge the pull request”.");
   // short: the head on one line, the one answer that changed on at most two
   const lines = await toast.evaluate((e) => {
     const t = e.querySelector("p")!; const head = t.querySelector("strong")!; const lh = parseFloat(getComputedStyle(head).lineHeight) || 20;
@@ -550,11 +554,15 @@ test("the checker: choosing an entry puts the cursor in the field and marks it u
   const pop = await openChecker(page);
   // a published document: what is to fix stops publishing, said in the field's own words
   await expect(pop.locator("h3.checker-head").first()).toHaveText("To fixstops publishing");
-  const entry = pop.locator("li button", { hasText: /^Step 3 “A”\s*What happens is too short/ });
+  const entry = pop.locator("li button", { hasText: /^Step 3 “A”\s*Write what happens in this step in a few more words\.$/ });
   await entry.click();
   await expect(what).toBeFocused();
   await expect(what).toHaveAttribute("aria-invalid", "true");
   await expect(what).toHaveClass(/\bneeds-fix\b/);
+  // the problem is shown on the field itself: red, said to assistive technology, and on a line under it
+  await expect(what).toHaveClass(/\bhas-problem\b/);
+  await expect(what).toHaveAttribute("aria-description", "Write what happens in this step in a few more words.");
+  await expect(fields(page).locator("[data-problem]")).toHaveAttribute("data-problem", "Write what happens in this step in a few more words.");
   // still a problem after more typing: still marked
   await what.press("End");
   await what.pressSequentially("b");
@@ -563,9 +571,11 @@ test("the checker: choosing an entry puts the cursor in the field and marks it u
   await what.pressSequentially("out the workflow");
   await expect(what).not.toHaveClass(/\bneeds-fix\b/);
   await expect(what).not.toHaveAttribute("aria-invalid", "true");
+  await expect(what).not.toHaveClass(/\bhas-problem\b/);
+  await expect(fields(page).locator("[data-problem]")).toHaveCount(0);
 });
 
-test("the checker of a never-published draft says what “stops saving”", async ({ page }) => {
+test("the checker of a never-published draft says what “stops publishing”: Save draft always works", async ({ page }) => {
   await signIn(page, ALEX);
   await page.goto("/#/processes");
   await page.getByRole("button", { name: "New process", exact: true }).click();
@@ -576,8 +586,8 @@ test("the checker of a never-published draft says what “stops saving”", asyn
   await outline(page, "About");
   await fields(page).getByRole("textbox", { name: /^Name/ }).first().fill("X");
   const pop = await openChecker(page);
-  await expect(pop.locator("h3.checker-head").first()).toHaveText("To fixstops saving");
-  await expect(pop).toContainText("Name is too short");
+  await expect(pop.locator("h3.checker-head").first()).toHaveText("To fixstops publishing");
+  await expect(pop).toContainText("Write the name in a few more words.");
 });
 
 test("Delete step waits a moment after a step is selected, says so, then deletes", async ({ page, request }) => {
@@ -659,4 +669,180 @@ test("Who takes part: the description of a participant grows with its text; move
   await expect(foot.getByRole("button", { name: "Move participant 2 up" })).toBeVisible();
   await expect(foot.getByRole("button", { name: "Move participant 2 down" })).toBeVisible();
   expect((await foot.boundingBox())!.y).toBeGreaterThan((await about.boundingBox())!.y);
+});
+
+// ---------- the fifth round: messages after a change of the flow, answers, the kind grid, links, Start here, touch
+
+test("deleting a step: an answer keeps its name and says where it goes now; the last step deleted says what ends the flow; nothing follows onto the reader's page", async ({ page, request }) => {
+  const id = `${PREFIX}structure`;
+  await copyOf(request, GCP, id, "Editscreen demo structure");
+  await signIn(page, ALEX);
+  await openEditor(page, "process", id);
+  // "No" of the decision led to step 6, which went back to step 4
+  await outline(page, /^6 Answer the platform team's questions/);
+  await deleteSelected(page, "Delete step");
+  const toast = page.locator(".toast", { hasText: "deleted." });
+  await expect(toast).toContainText("Step “Answer the platform team's qu…” deleted.");
+  await expect(toast).toContainText("“No” of “Details complete?” now goes to step 4 “Check naming, folder and ownership”.");
+  // the answer keeps its name
+  await outline(page, /^5 Details complete\?/);
+  await expect(fields(page).getByRole("textbox", { name: "Name of path 2" })).toHaveValue("No");
+  await expect(fields(page).getByRole("combobox", { name: "Path 2 goes to" }).locator("option:checked")).toContainText("Check naming, folder and ownership");
+
+  // the last step: the one before it now ends the flow; one message at a time
+  await outline(page, /^9 Check you can open the project/);
+  await deleteSelected(page, "Delete step");
+  await expect(page.locator(".toast")).toHaveCount(1);
+  await expect(page.locator(".toast")).toContainText("“Create the project” now ends the flow.");
+
+  // leaving the editing screen: its message stays behind
+  await bar(page).getByRole("button", { name: "Back to reading" }).click();
+  await page.getByRole("dialog", { name: "Save your changes before you leave?" }).getByRole("button", { name: "Leave without saving" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/p/${id}/flow`));
+  await expect(page.locator(".block").first()).toBeVisible();
+  await expect(page.locator(".toast", { hasText: /deleted\.|ends the flow/ })).toHaveCount(0);
+});
+
+test("a decision's answers: the name above where it goes; Add a branch puts the keyboard on the new answer's name and says where it goes", async ({ page, request }) => {
+  const id = `${PREFIX}answers`;
+  await copyOf(request, GCP, id, "Editscreen demo answers");
+  await signIn(page, ALEX);
+  await openEditor(page, "process", id);
+  await outline(page, /^5 Details complete\?/);
+  const rows = fields(page).locator(".path-rows.answers > li.answer-row");
+  await expect(rows).toHaveCount(2);
+  // each answer: its name over its target, both as wide as the row's fields
+  const first = rows.first();
+  const name = (await first.getByRole("textbox", { name: "Name of path 1" }).boundingBox())!;
+  const target = (await first.getByRole("combobox", { name: "Path 1 goes to" }).boundingBox())!;
+  expect(target.y, "the target under the name").toBeGreaterThanOrEqual(name.y + name.height - 1);
+  const fieldsBox = (await first.locator(".answer-fields").boundingBox())!;
+  expect(name.width, "the name as wide as the answer's column").toBeGreaterThan(fieldsBox.width * 0.9);
+
+  // (the other "Add a branch" adds a new step on a branch of its own)
+  await fields(page).locator("button:not([aria-expanded])", { hasText: "Add a branch" }).click();
+  await expect(rows).toHaveCount(3);
+  const added = fields(page).getByRole("textbox", { name: "Name of path 3" });
+  await expect(added).toBeFocused();
+  await expect(added).toHaveValue("Other");
+  await expect.poll(() => added.evaluate((e: HTMLInputElement) => [e.selectionStart, e.selectionEnd])).toEqual([0, 5]);
+  const goes = await fields(page).getByRole("combobox", { name: "Path 3 goes to" }).locator("option:checked").innerText();
+  const [, num, title] = goes.match(/^(\d+)\. (.*)$/)!;
+  await expect(page.locator(".toast", { hasText: "Answer “Other” added" })).toHaveText(new RegExp(`^Answer “Other” added: it goes to step ${num} “${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}”\\. Name it, and choose where it goes\\.`));
+  // typing replaces the name
+  await page.keyboard.type("Ask again");
+  await expect(added).toHaveValue("Ask again");
+});
+
+test("the kinds of step are one Tab stop: the arrow keys, Home and End move, Enter chooses", async ({ page, request }) => {
+  const id = `${PREFIX}kinds`;
+  await copyOf(request, LIB, id, "Editscreen demo kinds");
+  await signIn(page, ALEX);
+  await openEditor(page, "process", id);
+  await outline(page, /^4 Tag the first version/);
+  await fields(page).locator("button.kind-pick").click();
+  const grid = fields(page).getByRole("group", { name: "Kind of step" });
+  const opts = grid.locator(".type-opt");
+  // the chosen kind has the focus and is the only stop for Tab
+  await expect(grid.getByRole("button", { name: "Task" })).toBeFocused();
+  expect(await opts.evaluateAll((els) => els.filter((e) => (e as HTMLElement).tabIndex === 0).length)).toBe(1);
+  await page.keyboard.press("Home");
+  await expect(grid.getByRole("button", { name: "Fill in a form" })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(grid.getByRole("button", { name: "Change code" })).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(grid.getByRole("button", { name: "Fill in a form" })).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(grid.getByRole("button", { name: "Task" })).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(grid.locator(".type-opt:focus")).not.toHaveText("Task");
+  expect(await opts.evaluateAll((els) => els.filter((e) => (e as HTMLElement).tabIndex === 0).length), "still one stop").toBe(1);
+  await page.keyboard.press("Home");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Enter");
+  await expect(grid).toHaveCount(0);
+  await expect(fields(page).locator("button.kind-pick")).toContainText("Change code");
+});
+
+test("a link: its fields have labels that stay, its number and Remove on its head row; Undo names it", async ({ page, request }) => {
+  const id = `${PREFIX}links`;
+  await copyOf(request, LIB, id, "Editscreen demo links");
+  await signIn(page, ALEX);
+  await openEditor(page, "process", id);
+  await outline(page, "Links and resources");
+  const link = fields(page).locator(".res-edit").nth(1);
+  await expect(link.locator(".mini-label")).toHaveText(["Name", "Address", "What it does for the reader"]);
+  await expect(link.getByRole("textbox", { name: "Name of link 2" })).toHaveValue("Release workflow templates");
+  const head = link.locator(".res-head");
+  await expect(head.locator(".row-n")).toHaveText("2");
+  const remove = head.getByRole("button", { name: "Remove link 2" });
+  await expect(remove).toHaveAttribute("title", "Remove this link");
+  await remove.click();
+  await expect(fields(page).locator(".res-edit")).toHaveCount(1);
+  await bar(page).getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.locator(".toast", { hasText: "Link “Release workflow templates” is back." })).toBeVisible();
+  await bar(page).getByRole("button", { name: "Redo", exact: true }).click();
+  await expect(page.locator(".toast", { hasText: /^Link “Release workflow templates” is (gone|deleted) again\./ })).toBeVisible();
+});
+
+test("a new standard: Start here leads to the summary, the outline's Add a requirement and the first requirement; the first name replaces the example", async ({ page }) => {
+  await signIn(page, RILEY);
+  await page.goto("/#/standards");
+  await page.getByRole("button", { name: "New standard", exact: true }).click();
+  const named = page.getByRole("dialog", { name: "New standard" });
+  await named.getByLabel("Name of the standard").fill("Editscreen demo start standard");
+  await named.getByRole("button", { name: "Create standard" }).click();
+  await expect(page).toHaveURL(/#\/s\/editscreen-demo-start-standard\/edit/);
+  try {
+    // the readers' preview is one line; scope and exceptions fold away with Show / Hide
+    const intro = page.locator(".standard-preview .preview-before");
+    await expect(intro.locator(".preview-before-line b")).toHaveText("Scope and exceptions");
+    await expect(page.locator(".preview-intro-open")).toHaveCount(0);
+    await intro.getByRole("button", { name: "Show" }).click();
+    await expect(page.locator(".preview-intro-open")).toBeVisible();
+    await intro.getByRole("button", { name: "Hide" }).click();
+    await expect(page.locator(".preview-intro-open")).toHaveCount(0);
+
+    const start = page.getByRole("region", { name: "Start here" });
+    await start.getByRole("button", { name: "Write the summary" }).click();
+    await expect(fields(page).getByLabel(/^Summary/)).toBeFocused();
+    await start.getByRole("button", { name: "Add requirements" }).click();
+    const add = outlineNav(page).getByRole("textbox", { name: "Add a requirement" });
+    await expect(add).toBeFocused();
+    // the first name typed replaces the example requirement
+    await add.fill("Pin every dependency");
+    await add.press("Enter");
+    expect(await outlineTitles(page)).toEqual([expect.stringContaining("Pin every dependency")]);
+    await start.getByRole("button", { name: "Open the first requirement" }).click();
+    await expect(fields(page).getByLabel(/^Short name/)).toHaveValue("Pin every dependency");
+  } finally {
+    await page.request.post("/auth/dev/login", { data: { email: RILEY }, headers: CSRF });
+    await page.request.delete("/api/standards/editscreen-demo-start-standard", { headers: CSRF });
+  }
+});
+
+test.describe("on a touch screen", () => {
+  test.use({ hasTouch: true, isMobile: false, viewport: { width: 1366, height: 768 } });
+  test("the maps say “Swipe to move · pinch to zoom”, the reader's hint says “Tap a step”, and the outline has no keyboard tip", async ({ page }) => {
+    await signIn(page, ALEX);
+    // a touch screen as the browser sees it: no hover, a coarse pointer
+    await page.addInitScript(() => {
+      const real = window.matchMedia.bind(window);
+      window.matchMedia = (q: string) => {
+        const touch = /\(hover: none\)|\(pointer: coarse\)|\(any-pointer: coarse\)/.test(q) && !/\bnot\b/.test(q);
+        if (!touch) return real(q);
+        return { matches: true, media: q, onchange: null, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false } as unknown as MediaQueryList;
+      };
+    });
+    await open(page, "/p/request-gcp-project/flow");
+    await expect(page.locator(".map-pan-hint")).toHaveText(/^Swipe to move · pinch to zoom$/);
+    await expect(page.locator(".map-hint")).toHaveText("Tap a step for what to do");
+    await openEditor(page, "process", "request-gcp-project");
+    // the editing map's tip speaks of tapping and swiping, not of dragging blocks; the outline has no keyboard tip
+    await expect(page.locator(".edit-preview .flow-tip")).toHaveAttribute("title", /Swipe to move the map, pinch to zoom\./);
+    await expect(page.locator(".edit-preview .flow-tip")).not.toContainText("drag a block");
+    await expect(outlineNav(page)).toBeVisible();
+    await expect(page.locator(".outline-tip")).toHaveCount(0);
+    await expect(outlineNav(page)).not.toContainText("Alt + ↑ ↓");
+  });
 });

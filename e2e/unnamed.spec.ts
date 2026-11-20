@@ -61,8 +61,8 @@ test("a process: empty items added and names cleared never break the screen; Und
   await fields(page).getByRole("button", { name: "Add link or skill" }).click();
   await expect(fields(page).getByRole("textbox", { name: "Name of link 3" })).toHaveValue("");
   await stillThere(page, errors, "an empty link");
-  // a link without a name is not shown in the readers' preview
-  await expect(page.locator(".preview-before-part").nth(1)).toHaveText("2 links");
+  // the readers' preview counts it, and says it has no name yet
+  await expect(page.locator(".preview-before-part").nth(1)).toHaveText("3 links (1 without a name)");
 
   // a participant ("Someone else"), then its name cleared, and the name of another cleared too
   await outline(page, "Who takes part");
@@ -88,10 +88,10 @@ test("a process: empty items added and names cleared never break the screen; Und
   expect(await undoTitle(page)).toMatch(/^Undo: step 3 \(no name yet\) changed: what to do \(Ctrl\+Z\)$/);
   // Undo says what is true now, by the step's place
   await page.locator(".edit-bar").getByRole("button", { name: "Undo" }).click();
-  await expect(page.locator(".toast", { hasText: "Step 3 (no name yet) is as it was: what to do." })).toBeVisible();
+  await expect(page.locator(".toast", { hasText: "Step 3 (no name yet): what to do as before." })).toBeVisible();
   await stillThere(page, errors, "Undo of the empty action");
   await page.locator(".edit-bar").getByRole("button", { name: "Redo" }).click();
-  await expect(page.locator(".toast", { hasText: "Step 3 (no name yet) is changed again: what to do." })).toBeVisible();
+  await expect(page.locator(".toast", { hasText: "Step 3 (no name yet): what to do changed again." })).toBeVisible();
   await expect(fields(page).locator(".fields-head h2")).toHaveText("(no name yet)");
   await expect(page.locator('.edit-preview .block[data-step="add-release-workflow"] .block-main')).toHaveAttribute("aria-label", /^3\. \(no name yet\), /);
 
@@ -134,11 +134,14 @@ test("a process: empty items added and names cleared never break the screen; Und
   await expect(checkerChip(page)).toHaveText(/\d+ to fix/);
   const pop = await openChecker(page);
   const entries = pop.locator("li button");
-  await expect(entries.filter({ hasText: /^Step 3 \(no name yet\)What happens is too short/ })).toHaveCount(1);
-  // two participants without a name are told apart by their place; "is empty", not "minimum 1 characters"
-  await expect(entries.filter({ hasText: /^Participant 2 \(no name yet\)Name is empty$/ })).toHaveCount(1);
-  await expect(entries.filter({ hasText: /^Participant 4 \(no name yet\)Name is empty$/ })).toHaveCount(1);
-  await expect(entries.filter({ hasText: /^Prerequisite 3 \(no name yet\)Name is too short/ })).toHaveCount(1);
+  // each said as what to do, by its place; never "is empty" or "minimum 1 characters"
+  await expect(entries.filter({ hasText: /^Step 3 \(no name yet\)Write what happens in this step\.$/ })).toHaveCount(1);
+  await expect(entries.filter({ hasText: /^Participant 2 \(no name yet\)Write the name of who takes part\.$/ })).toHaveCount(1);
+  await expect(entries.filter({ hasText: /^Participant 4 \(no name yet\)Write the name of who takes part\.$/ })).toHaveCount(1);
+  await expect(entries.filter({ hasText: /^Prerequisite 3 \(no name yet\)Write the prerequisite\.$/ })).toHaveCount(1);
+  await expect(entries.filter({ hasText: /^AboutWrite the name\.$/ })).toHaveCount(1);
+  await expect(pop).not.toContainText("is empty");
+  await expect(pop).not.toContainText("minimum");
   await expect(pop).not.toContainText("minimum 1 characters");
   await stillThere(page, errors, "the checker opened");
 });

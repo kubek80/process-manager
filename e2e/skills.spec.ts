@@ -8,9 +8,16 @@ test("everyone can read and download the skill of a process", async ({ page }) =
   await signIn(page, SAM);
   await open(page, "/p/request-gcp-project/skills");
   await expect(page.locator(".skill-head h3")).toHaveText("Process: Request a GCP project");
-  await expect(page.locator(".skill-head code")).toHaveText(".claude/skills/process-request-gcp-project/SKILL.md");
-  const content = page.locator(".skill-content");
-  await expect(content).toContainText("name: process-request-gcp-project");
+  // what it is for in one sentence; where the file goes behind "Where to put it"
+  await expect(page.locator(".skill-purpose")).toHaveText("Lets an AI coding assistant walk a person through this process: it does their steps and says who does the others.");
+  const where = page.locator("details.skill-where");
+  await expect(where.locator("code")).toBeHidden();
+  await where.getByText("Where to put it").click();
+  await expect(where.locator("code")).toHaveText(".claude/skills/process-request-gcp-project/SKILL.md");
+  // the preview leaves out the front matter, which only the assistant reads; the download keeps it
+  const content = page.getByLabel("What the skill says");
+  await expect(content).toHaveClass(/\bskill-content\b/);
+  await expect(content).not.toContainText("name: process-request-gcp-project");
   await expect(content).toContainText("Never perform a step of another participant, and never approve anything.");
   await expect(content).toContainText("1. **You** - Decide the project details");
   await expect(content).toContainText("Infrastructure as code (skill `standard-infrastructure-as-code`)");
@@ -66,7 +73,10 @@ test("the registry lists every skill and review agent; extra guidance survives r
   await items.first().click();
 
   const panel = page.locator(".skill-panel");
-  await expect(panel.locator(".skill-head code")).toHaveText(".claude/agents/review-infrastructure-as-code.md");
+  await expect(panel.locator(".skill-purpose")).toHaveText("Lets an AI assistant check a pull request against this standard and point out what does not meet it.");
+  await panel.locator("details.skill-where summary").click();
+  await expect(panel.locator("details.skill-where code")).toHaveText(".claude/agents/review-infrastructure-as-code.md");
+  await expect(panel.getByLabel("What the review agent says")).toBeVisible();
   await expect(panel.locator(".skill-content")).toContainText("### IAC-03 · Pin versions · MUST · report as blocker");
   await expect(panel.locator(".skill-content")).toContainText("## Not checked in this review");
   const before = (await readSkill(page, "review-infrastructure-as-code")).skill.version;

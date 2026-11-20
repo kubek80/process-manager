@@ -52,8 +52,9 @@ test("the head of a process: kind, owner in words, how binding as a neutral mark
   await expect(head.locator(".doc-facts").first()).toContainText("3-5 working days");
   await expect(head.locator(".doc-facts")).toContainText("Google Cloud");
   await expect(head.locator('.doc-facts .fact[title^="Platform: "]')).toHaveCount(1);
-  // a quiet line with when it was updated and its version
-  await expect(head.locator(".doc-foot")).toContainText(/Updated \d{4}-\d\d-\d\d/);
+  // a quiet line with when its content last changed and its version
+  await expect(head.locator(".doc-foot .doc-changed")).toHaveText(/^Content changed \d{4}-\d\d-\d\d$/);
+  await expect(head.locator(".doc-foot .doc-changed")).toHaveAttribute("title", /Versions/);
   await expect(head.locator(".doc-foot").getByRole("button", { name: /^Version \d+$/ })).toBeVisible();
 
   // the views are underline tabs
@@ -214,7 +215,9 @@ test("a standard's page has the frame of a process page: the h1 at the same plac
     await open(page, "/s/secure-logging/doc");
     const s = (await page.locator("header.doc-head h1").boundingBox())!;
     expect(Math.abs(p.x - s.x), `the h1 of both pages at the same x at ${width} (${p.x} and ${s.x})`).toBeLessThanOrEqual(1);
-    expect((await page.locator(".standard-doc").boundingBox())!.width).toBeLessThanOrEqual(1080);
+    // the body as wide as the process page's
+    const pw = await (async () => { await open(page, "/p/request-gcp-project/flow"); const w = (await page.locator(".process-page").boundingBox())!.width; await open(page, "/s/secure-logging/doc"); return w; })();
+    expect(Math.abs((await page.locator(".page").first().boundingBox())!.width - pw), `the standard page as wide as the process page at ${width}`).toBeLessThanOrEqual(1);
   }
   // the requirement's code after its name, small and grey, in no box
   const req = page.locator("#req-SEC-LOG-01");
@@ -243,7 +246,9 @@ test("the head: Edit is the one primary button, Mark as reviewed quiet unless du
   const reviewed = head.getByRole("button", { name: "Mark as reviewed" });
   await expect(reviewed).toHaveClass(/\bquiet\b/);
   await expect(reviewed).not.toHaveClass(/\breview-due\b/);
-  const feedback = head.getByRole("button", { name: "Give feedback" });
+  // from 1000 px wide the reader's buttons sit on the tab row
+  await expect(head.getByRole("button", { name: "Give feedback" })).toHaveCount(0);
+  const feedback = page.locator(".tabs-row .engage-actions").getByRole("button", { name: "Give feedback" });
   await expect(feedback).not.toHaveClass(/\baccent-soft\b/);
   await expect(feedback).not.toHaveClass(/\bprimary\b/);
   // not styled as "on": the background of an ordinary button, not the brand's
@@ -321,4 +326,121 @@ test("the reader's map: arrow keys go from step to step; the step opened stays i
     return b.x >= v.x - 1 && b.x + b.width <= v.x + v.width + 1 && b.y >= v.y - 1 && b.y + b.height <= v.y + v.height + 1;
   };
   await expect.poll(inMap, { message: "the selected step is inside the visible part of the map" }).toBe(true);
+});
+
+// ---------- the fifth round: print, the tab row, arriving on a phone
+
+test("a process prints as a document: no bar or controls, “Before you start” in full, every step, and a last line that says which version", async ({ page }) => {
+  await signIn(page, SAM);
+  const gcp = (await readProcess(page, "request-gcp-project"))!;
+  await open(page, "/p/request-gcp-project/flow");
+  await expect(page.locator(".block").first()).toBeVisible();
+  await page.emulateMedia({ media: "print" });
+  await expect(page.locator(".process-page")).toHaveClass(/\bprinting\b/);
+  // nothing to press on paper: no top bar, skip link, tabs, buttons or switches
+  // (a tool's link in a step stays, with its address after it)
+  for (const sel of [".topbar", ".skip-link", ".tabs-row", ".engage-actions", "button.btn", "a.btn:not(.link-btn)"]) {
+    for (const el of await page.locator(sel).all()) await expect(el, sel).toBeHidden();
+  }
+  // the head, "Before you start" open with its whole texts, then every step as the checklist
+  await expect(page.locator("header.doc-head h1")).toHaveText("Request a GCP project");
+  await expect(page.locator("#before-body")).toBeVisible();
+  await expect(page.locator(".prereq")).toHaveCount(gcp.prerequisites.length);
+  await expect(page.locator(".block")).toHaveCount(0); // not the map
+  await expect(page.locator(".list-view .step")).toHaveCount(gcp.steps.length);
+  await expect(page.locator(".list-view .step .step-title")).toHaveText(gcp.steps.map((s: { title: string }) => s.title));
+  // every step open with what to do, also somebody else's
+  await expect(page.locator(".list-view .step .step-body")).toHaveCount(gcp.steps.length);
+  for (const body of await page.locator(".list-view .step .step-body").all()) await expect(body).toBeVisible();
+  // the last line: which process, which version, when its content changed, when and from where it was printed
+  await expect(page.locator(".print-foot")).toHaveText(/^Request a GCP project · Version \d+ · content changed \d{4}-\d\d-\d\d · printed \d{4}-\d\d-\d\d \d\d:\d\d from http:\/\/127\.0\.0\.1:8090\/#\/p\/request-gcp-project/);
+  // always light, whatever the theme
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(255, 255, 255)");
+  // back on the screen: the map again, no last line
+  await page.emulateMedia({ media: "screen" });
+  await expect(page.locator(".process-page")).not.toHaveClass(/\bprinting\b/);
+  await expect(page.locator(".block").first()).toBeVisible();
+  await expect(page.locator(".print-foot")).toHaveCount(0);
+});
+
+test("a standard prints every requirement, whatever level is chosen on the screen", async ({ page }) => {
+  await signIn(page, SAM);
+  await open(page, "/s/secure-logging/doc");
+  await expect(page.locator(".req").first()).toBeVisible();
+  const all = await page.locator(".req").count();
+  expect(all).toBeGreaterThan(1);
+  // only the "Should" ones on the screen
+  await page.locator(".req-bar").getByRole("button", { name: /^Should/ }).click();
+  await expect.poll(() => page.locator(".req").count()).toBeLessThan(all);
+  await page.emulateMedia({ media: "print" });
+  await expect(page.locator(".standard-page")).toHaveClass(/\bprinting\b/);
+  await expect(page.locator(".req")).toHaveCount(all);
+  await expect(page.locator(".req-bar")).toBeHidden();
+  await expect(page.locator(".standard-intro")).toBeVisible();
+  await expect(page.locator(".print-foot")).toHaveText(/^Secure logging · Version \d+ · content changed \d{4}-\d\d-\d\d · printed /);
+  await page.emulateMedia({ media: "screen" });
+  await expect.poll(() => page.locator(".req").count()).toBeLessThan(all);
+});
+
+test("from 1000 px wide the reader's buttons sit on the tab row, icons only below 1200; narrower they are in the head", async ({ page }) => {
+  await signIn(page, SAM);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await open(page, "/p/request-gcp-project/flow");
+  const onTabs = page.locator(".tabs-row .engage-actions");
+  await expect(onTabs.getByRole("button", { name: "Give feedback" })).toBeVisible();
+  await expect(onTabs.getByRole("button", { name: /^Upvote / })).toBeVisible();
+  await expect(onTabs.getByRole("button", { name: /^Bookmark / })).toBeVisible();
+  await expect(onTabs.getByRole("button", { name: "Share" })).toBeVisible();
+  await expect(onTabs.getByRole("button", { name: "Share" })).toContainText("Share");
+  // the numbers stay in the head, the buttons are not there twice
+  const head = page.getByRole("group", { name: "Use and feedback" });
+  await expect(head.locator(".engage-stats")).toBeVisible();
+  await expect(head.getByRole("button")).toHaveCount(0);
+  // the same row as the tabs
+  const tab = (await page.getByRole("tab", { name: "Map" }).boundingBox())!;
+  const share = (await onTabs.getByRole("button", { name: "Share" }).boundingBox())!;
+  expect(Math.abs((share.y + share.height / 2) - (tab.y + tab.height / 2)), "on the tab row").toBeLessThan(tab.height);
+  // a standard as well
+  await open(page, "/s/secure-logging/doc");
+  await expect(page.locator(".tabs-row .engage-actions").getByRole("button", { name: "Give feedback" })).toBeVisible();
+
+  // below 1200: the icons alone, the names still read out
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await open(page, "/p/request-gcp-project/flow");
+  const label = onTabs.getByRole("button", { name: "Share" }).locator(".engage-label");
+  await expect.poll(async () => (await label.boundingBox())?.width ?? 0, "the word is only read out").toBeLessThanOrEqual(1);
+
+  // below 1000: in the head's group "Use and feedback"
+  await page.setViewportSize({ width: 900, height: 900 });
+  await expect(page.locator(".tabs-row .engage-actions")).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Use and feedback" }).getByRole("button", { name: "Give feedback" })).toBeVisible();
+});
+
+test("on a phone a process opens on its Checklist, without a new entry in the history; the Map stays one tap away", async ({ page }) => {
+  await signIn(page, SAM);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page, "/processes");
+  await expect(page.locator("ol.cards > li").first()).toBeVisible();
+  await open(page, "/p/request-gcp-project/flow");
+  await expect(page).toHaveURL(/#\/p\/request-gcp-project\/list$/);
+  await expect(page.getByRole("tab", { name: /^Checklist/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".list-view .step").first()).toBeVisible();
+  // the address was replaced: Back goes to where the person came from
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/processes$/);
+  await page.goForward();
+  await expect(page).toHaveURL(/#\/p\/request-gcp-project\/list$/);
+  // the Map, chosen, stays the Map
+  await page.getByRole("tab", { name: "Map" }).click();
+  await expect(page).toHaveURL(/#\/p\/request-gcp-project\/flow$/);
+  await expect(page.locator(".block").first()).toBeVisible();
+  await expect(page).toHaveURL(/#\/p\/request-gcp-project\/flow$/);
+  // a link to a step on the map opens the map at that step
+  await open(page, "/p/request-gcp-project/flow/approve-budget");
+  await expect(page).toHaveURL(/#\/p\/request-gcp-project\/flow\/approve-budget$/);
+  // on a wider screen the map is where the address says
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await open(page, "/p/request-gcp-project/flow");
+  await expect(page.locator(".block").first()).toBeVisible();
+  await expect(page).toHaveURL(/#\/p\/request-gcp-project\/flow$/);
 });

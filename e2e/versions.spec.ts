@@ -160,21 +160,21 @@ test("“Save draft and leave” saves the changes as a draft and leaves; a save
   expect((await readWorkingDraft(page, "process", "leave-save-demo"))!.doc.steps[0].title).toBe("Kept in the draft");
   expect((await readProcess(page, "leave-save-demo"))!.steps[0].title).toBe("Request a registry namespace"); // readers: as it was
 
-  // a never-published draft with something to fix cannot be saved: leaving with saving keeps the person there
+  // a never-published draft with something to fix is saved all the same, as its draft: Save draft always works
   await copyOf(page, "leave-blank-demo", "Leave blank demo", "draft");
   try {
     await openEditor(page, "process", "leave-blank-demo").catch(async () => { await page.reload(); await expect(page.locator(".edit-bar")).toBeVisible(); });
-    await renameFirstStep(page, "x"); // too short: something to fix before it can be saved
+    await renameFirstStep(page, "x"); // too short: something to fix before it can be published
     await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
-    const ask = page.getByRole("dialog", { name: "Save your changes before you leave?" });
-    // only when everything can be saved is saving offered
-    if (await ask.getByRole("button", { name: "Save draft and leave" }).count()) {
-      await ask.getByRole("button", { name: "Save draft and leave" }).click();
-      await expect(refusal(page)).toContainText("This draft cannot be saved yet");
-    } else await answer(page, "Save your changes before you leave?", "Stay");
-    await expect(page).toHaveURL(/#\/p\/leave-blank-demo\/edit/);
-    await expect(firstBlock(page)).toContainText("x");
+    await answer(page, "Save your changes before you leave?", "Save draft and leave");
+    await expect(page).toHaveURL(/#\/p\/leave-blank-demo\/flow/);
+    // the stored process is as it was; the work is kept as its draft, and the page says so
     expect((await readProcess(page, "leave-blank-demo"))!.steps[0].title).toBe("Request a registry namespace");
+    expect((await readWorkingDraft(page, "process", "leave-blank-demo"))!.doc.steps[0].title).toBe("x");
+    await expect(page.locator(".draft-line.never")).toContainText("Readers do not see this process yet.");
+    await expect(page.locator(".draft-line.never")).toContainText(/There are newer changes on the editing screen, saved \d{4}-\d\d-\d\d \d\d:\d\d\./);
+    await page.locator(".draft-line").getByRole("link", { name: "Continue editing" }).click();
+    await expect(firstBlock(page)).toContainText("x");
   } finally {
     await page.request.delete("/api/processes/leave-blank-demo", { headers: CSRF });
     await page.request.delete("/api/processes/leave-save-demo", { headers: CSRF });

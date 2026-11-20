@@ -26,6 +26,13 @@ async function list(request: APIRequestContext): Promise<Req[]> {
 }
 
 const item = (page: Page, t: string) => page.locator("li.req-item", { has: page.getByRole("heading", { name: t, exact: true }) });
+/** Presses an action of a request that is under its quiet "More" button. */
+async function moreAction(page: Page, t: string, name: string) {
+  const more = item(page, t).getByRole("button", { name: "More" });
+  await more.click();
+  await expect(more).toHaveAttribute("aria-expanded", "true");
+  await item(page, t).getByRole("group", { name: "More actions" }).getByRole("button", { name, exact: true }).click();
+}
 
 test("Sam asks for a process: checked as he types, similar titles offered, then listed as his with no votes", async ({ page }) => {
   await signIn(page, SAM);
@@ -138,7 +145,15 @@ test("Jordan, owner of Google Cloud, manages the requests that name it, and only
 
   // plan the Google Cloud one, with a note
   const mine = item(page, gcp.title);
-  await expect(mine.locator(".req-actions").getByRole("button")).toHaveText(["Mark as planned", "Mark as done", "Decline request"]);
+  // one next action in view; the others under a quiet "More"
+  await expect(mine.locator(".req-actions > button, .req-actions .req-more > button")).toHaveText(["Mark as planned", "More"]);
+  const moreBtn = mine.getByRole("button", { name: "More" });
+  await expect(moreBtn).toHaveAttribute("aria-expanded", "false");
+  await moreBtn.click();
+  await expect(moreBtn).toHaveAttribute("aria-expanded", "true");
+  await expect(mine.getByRole("group", { name: "More actions" }).getByRole("button")).toHaveText(["Mark as done", "Decline request"]);
+  await page.keyboard.press("Escape");
+  await expect(mine.getByRole("group", { name: "More actions" })).toHaveCount(0);
   await mine.getByRole("button", { name: "Mark as planned" }).click();
   const plan = page.getByRole("dialog", { name: "Mark as planned" });
   await plan.getByLabel("Note").fill("In the next sprint.");
@@ -150,6 +165,11 @@ test("Jordan, owner of Google Cloud, manages the requests that name it, and only
   await expect(page).toHaveURL(/#\/requests\?state=planned$/);
   await expect(mine.locator(".req-outcome.planned")).toContainText("Planned by Jordan Platform");
   await expect(mine.locator(".req-outcome.planned")).toContainText("In the next sprint.");
+  // planned: "Mark as done" in view; declining and going back to open under More
+  await expect(mine.locator(".req-actions > button")).toHaveText(["Mark as done"]);
+  await mine.getByRole("button", { name: "More" }).click();
+  await expect(mine.getByRole("group", { name: "More actions" }).getByRole("button")).toHaveText(["Decline request", "Back to open"]);
+  await page.keyboard.press("Escape");
 
   // done needs an existing process, and links to it
   const noDoc = await setState(page.request, gcp.id, { state: "done", linkedId: "no-such-process" });
@@ -169,7 +189,7 @@ test("Jordan, owner of Google Cloud, manages the requests that name it, and only
 
   // declined needs a reason
   await page.getByRole("group", { name: "State" }).getByRole("button", { name: /^Open/ }).click();
-  await item(page, declined.title).getByRole("button", { name: "Decline request" }).click();
+  await moreAction(page, declined.title, "Decline request");
   const decline = page.getByRole("dialog", { name: "Decline request" });
   await expect(decline.getByRole("button", { name: "Decline request" })).toBeDisabled();
   expect((await setState(page.request, declined.id, { state: "declined" })).status()).toBe(400);
@@ -209,7 +229,7 @@ test("Alex, a process editor, manages process requests but not standard requests
   await expect(page.locator(".toast", { hasText: "Marked as planned." })).toBeVisible();
   // and back to open
   await open(page, "/requests?state=planned");
-  await item(page, process.title).getByRole("button", { name: "Back to open" }).click();
+  await moreAction(page, process.title, "Back to open");
   await expect(item(page, process.title)).toHaveCount(0);
   await open(page, "/requests");
   await expect(item(page, process.title)).toHaveClass(/state-open/);
@@ -303,10 +323,13 @@ test.describe("what answers a request", () => {
     await as(request, ALEX);
     const { processes } = await (await request.get("/api/processes")).json();
     const src = processes.find((p: { id: string }) => p.id === "request-github-repository");
-    for (const [id, t, status] of [[DRAFT, "Answer draft demo", "draft"], [RETIRED, "Answer retired demo", "deprecated"], [GONE, "Answer gone demo", "active"]]) {
+    for (const [id, t, status] of [[DRAFT, "Answer draft demo", "draft"], [RETIRED, "Answer retired demo", "active"], [GONE, "Answer gone demo", "active"]]) {
       const res = await request.put(`/api/processes/${id}?base=0`, { data: { ...src, id, title: `${t} ${run}`, status }, headers: CSRF });
       expect(res.ok(), `${id}: ${await res.text()}`).toBeTruthy();
     }
+    // only a published process can be retired
+    const res = await request.put(`/api/processes/${RETIRED}?base=1`, { data: { ...src, id: RETIRED, title: `Answer retired demo ${run}`, status: "deprecated" }, headers: CSRF });
+    expect(res.ok(), `${RETIRED}: ${await res.text()}`).toBeTruthy();
   });
   test.afterAll(async ({ request }) => {
     await as(request, ALEX);
@@ -324,7 +347,7 @@ test.describe("what answers a request", () => {
     expect((await draft.json()).error).toBe("Only a published process can answer a request. Publish it first.");
     // the dialog offers only active processes
     await open(page, "/requests");
-    await item(page, a.title).getByRole("button", { name: "Mark as done" }).click();
+    await moreAction(page, a.title, "Mark as done");
     const dialog = page.getByRole("dialog", { name: "Mark as done" });
     const offered = await dialog.getByLabel("The process that answers it").locator("option").allTextContents();
     expect(offered).toContain("Request a GCP project");
@@ -371,7 +394,7 @@ test("an admin removes a request for good", async ({ page, request }) => {
   await expect(item(page, r.title).getByRole("button", { name: "Remove" })).toHaveCount(0);
   await signIn(page, DANA);
   await open(page, "/requests?state=planned");
-  await item(page, r.title).getByRole("button", { name: "Remove", exact: true }).click();
+  await moreAction(page, r.title, "Remove");
   const confirm = page.getByRole("dialog", { name: "Remove this request?" });
   await expect(confirm).toContainText(r.title);
   await confirm.getByRole("button", { name: "Remove request" }).click();
@@ -381,9 +404,10 @@ test("an admin removes a request for good", async ({ page, request }) => {
   // the activity log says it in words
   await open(page, "/admin/activity");
   const log = page.locator(".activity li");
-  await expect(log.filter({ hasText: "removed" }).filter({ hasText: r.title }).first()).toBeVisible();
-  await expect(log.filter({ hasText: "asked for something new:" }).filter({ hasText: r.title }).first()).toBeVisible();
-  await expect(log.filter({ hasText: "changed the state of" }).filter({ hasText: r.title }).first()).toBeVisible();
+  // a request by its title
+  await expect(log.filter({ hasText: `removed the request “${r.title}”` }).first()).toBeVisible();
+  await expect(log.filter({ hasText: `asked for a new standard: “${r.title}”` }).first()).toBeVisible();
+  await expect(log.filter({ hasText: `changed the state of the request “${r.title}”` }).first()).toBeVisible();
   // nobody else may
   const other = await ask(request, RILEY, { kind: "standard", title: title("Something else nobody needs") });
   await as(request, ALEX);

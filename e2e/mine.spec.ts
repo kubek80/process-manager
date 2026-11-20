@@ -42,6 +42,11 @@ test("an owner sees what is theirs and what needs them, and handles it from one 
   const row = reviews.locator("li", { hasText: "Mine demo" });
   await expect(row).toContainText("Review overdue since 2025-07-01");
   await expect(row).toContainText("last reviewed 2025-01-01 by Somebody long ago");
+  await expect(row.getByRole("link", { name: "Open" })).toHaveAttribute("href", "#/p/mine-demo/flow");
+  // the count of reviews in the colour of its worst case, with how many are overdue and how many due
+  const stat = page.locator(".stat", { hasText: /reviews? due/ });
+  await expect(stat).toHaveClass(/\bbad\b/);
+  await expect(stat.locator(".stat-split")).toHaveText(/^(\d+ overdue · \d+ due|all overdue|it is overdue)$/);
   await row.getByRole("button", { name: "Still correct" }).click();
   await expect(page.getByText("“Mine demo” is recorded as reviewed today.")).toBeVisible();
   await expect(reviews.locator("li", { hasText: "Mine demo" })).toHaveCount(0);
@@ -59,6 +64,11 @@ test("an owner sees what is theirs and what needs them, and handles it from one 
   // every action confirms itself, and the new message replaces the one before
   await expect(page.locator(".toast", { hasText: /^Marked as fixed\. Sam Consumer is told\./ })).toBeVisible();
   await expect(page.locator(".toast", { hasText: "is recorded as reviewed today" })).toHaveCount(0);
+  await expect(waiting.locator("li", { hasText: "The form has a new name since last week." })).toHaveCount(0);
+  // Undo, from the message, opens it again
+  await page.locator(".toast", { hasText: /^Marked as fixed\./ }).getByRole("button", { name: "Undo" }).click();
+  await expect(waiting.locator("li", { hasText: "The form has a new name since last week." })).toBeVisible();
+  await waiting.locator("li", { hasText: "The form has a new name since last week." }).getByRole("button", { name: "Mark as fixed" }).click();
   await expect(waiting.locator("li", { hasText: "The form has a new name since last week." })).toHaveCount(0);
 
   // everything that is hers, with its version; nothing of other teams
@@ -119,13 +129,15 @@ test("an admin adds and removes the members of a team on the team itself", async
   await open(page, "/admin/lists");
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   const members = page.locator(".cat-members");
-  await expect(members.locator("li", { hasText: CASEY })).toContainText("Owner");
-  await expect(members.locator("li", { hasText: JORDAN })).toContainText("Owner");
+  // members by name, the address small, and a button to remove each (the role is the section's)
+  await expect(members.locator("li", { hasText: JORDAN })).toContainText("Jordan Platform");
+  await expect(members.getByRole("button", { name: `Remove ${CASEY} as Owner` })).toBeVisible();
+  await expect(members.getByRole("button", { name: `Remove ${JORDAN} as Owner` })).toBeVisible();
 
   // one more member: a team can have as many as it needs
   await members.getByLabel("Email of the new member").fill("Sam@Example.com ");
   await members.getByRole("button", { name: "Add member" }).click();
-  await expect(members.locator("li", { hasText: SAM })).toContainText("Owner");
+  await expect(members.getByRole("button", { name: `Remove ${SAM} as Owner` })).toBeVisible();
   await expect(members.locator("h3")).toContainText("3");
   await expect(members.getByLabel("Email of the new member")).toHaveValue("");
 
@@ -155,16 +167,16 @@ test("a practice has members, each with the one role it gives; a new team needs 
   await open(page, "/admin/lists");
   // the team Cyber Security: Riley is its Owner
   await page.locator(".cat-item", { hasText: "Cyber Security" }).click();
-  await expect(page.locator(".cat-members li", { hasText: RILEY })).toContainText("Owner");
+  await expect(page.locator(".cat-members").getByRole("button", { name: `Remove ${RILEY} as Owner` })).toBeVisible();
   // the practice Cyber security: Riley is its Practice owner; every group has one member role, nothing to choose
   await page.getByRole("tab", { name: /Practices/ }).click();
   await page.locator(".cat-item", { hasText: "Cyber security" }).click();
   const members = page.locator(".cat-members");
-  await expect(members.locator("li", { hasText: RILEY })).toContainText("Practice owner");
+  await expect(members.getByRole("button", { name: `Remove ${RILEY} as Practice owner` })).toBeVisible();
   await expect(members.getByLabel("As", { exact: true })).toHaveCount(0);
   await members.getByLabel("Email of the new member").fill("kim@example.com");
   await members.getByRole("button", { name: "Add member" }).click();
-  await expect(members.locator("li", { hasText: "kim@example.com" })).toContainText("Practice owner");
+  await expect(members.getByRole("button", { name: "Remove kim@example.com as Practice owner" })).toBeVisible();
   // something that is not an address cannot be added
   await members.getByLabel("Email of the new member").fill("not an address");
   await expect(members.getByRole("button", { name: "Add member" })).toBeDisabled();
@@ -193,8 +205,8 @@ test("who is a member is changed by admins only: somebody who only manages the l
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   const members = page.locator(".cat-members");
   await expect(members).toContainText("An admin adds and removes them");
-  await expect(members.locator("li", { hasText: CASEY })).toContainText("Owner");
-  await expect(members.locator("li", { hasText: JORDAN })).toContainText("Owner");
+  await expect(members.locator("li", { hasText: CASEY })).toBeVisible();
+  await expect(members.locator("li", { hasText: JORDAN })).toBeVisible();
   await expect(members.getByLabel("Email of the new member")).toHaveCount(0);
   await expect(members.getByRole("button", { name: /^Remove / })).toHaveCount(0);
   // and the server agrees

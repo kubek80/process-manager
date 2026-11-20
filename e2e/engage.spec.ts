@@ -101,7 +101,7 @@ test("while the numbers are not known, nothing pretends to know them", async ({ 
   await expect(stats(page).locator(".engage-unknown")).toHaveText("The numbers are not available right now.");
   await expect(stats(page).locator(".engage-handled")).toHaveCount(0);
   await expect(stats(page).locator(".engage-open")).toHaveCount(0); // the page knows its own feedback: none open, nothing said
-  const engage = page.getByRole("group", { name: "Use and feedback" });
+  const engage = page.locator(".engage-actions");
   const up = engage.getByRole("button", { name: `Upvote ${TITLE}`, exact: true });
   await expect(up).toHaveText("Upvote");
   await expect(up).not.toHaveAttribute("aria-pressed", /.*/);
@@ -120,7 +120,7 @@ test("a click made while the numbers are still loading is kept", async ({ page, 
   const held = new Promise<void>((r) => { release = r; });
   await page.route("**/api/engagement", async (route) => { await held; await route.continue(); });
   await open(page, `/p/${ID}/flow`);
-  const engage = page.getByRole("group", { name: "Use and feedback" });
+  const engage = page.locator(".engage-actions");
   await expect(stats(page).locator(".engage-unknown")).toBeVisible();
   const bookmark = engage.getByRole("button", { name: `Bookmark ${TITLE}`, exact: true });
   const put = page.waitForResponse((r) => r.url().includes(`/api/bookmarks/process/${ID}`) && r.request().method() === "PUT");
@@ -206,7 +206,7 @@ test("an upvote can be taken back from what the person no longer sees", async ({
 test("an upvote is one per person and can be taken back", async ({ page }) => {
   await signIn(page, SAM);
   await open(page, `/p/${ID}/flow`);
-  const engage = page.getByRole("group", { name: "Use and feedback" });
+  const engage = page.locator(".engage-actions");
   await engage.getByRole("button", { name: `Upvote ${TITLE} (0)` }).click();
   const mine = engage.getByRole("button", { name: `Take back your upvote of ${TITLE} (1)` });
   await expect(mine).toHaveAttribute("aria-pressed", "true");
@@ -236,10 +236,11 @@ test("an upvote is one per person and can be taken back", async ({ page }) => {
 test("a standard shows its numbers, upvote and bookmark too", async ({ page }) => {
   await signIn(page, SAM);
   await open(page, "/s/code-review/doc");
-  const engage = page.getByRole("group", { name: "Use and feedback" });
-  await expect(engage.locator(".engage-stats li").nth(0)).toHaveText(/^\d+ views? by \d+ (person|people)$/);
+  const engage = page.locator(".engage-actions");
+  const numbers = page.getByRole("group", { name: "Use and feedback" });
+  await expect(numbers.locator(".engage-stats li").nth(0)).toHaveText(/^\d+ views? by \d+ (person|people)$/);
   // downloads and feedback only when there are some
-  for (const li of await engage.locator(".engage-stats li").all()) await expect(li).toHaveText(/^(\d+ views? by \d+ (person|people)|\d+ skill downloads?|\d+ pieces? of feedback (open|handled))$/);
+  for (const li of await numbers.locator(".engage-stats li").all()) await expect(li).toHaveText(/^(\d+ views? by \d+ (person|people)|\d+ skill downloads?|\d+ pieces? of feedback (open|handled))$/);
   await expect(page.getByRole("button", { name: "Report a problem", exact: true })).toHaveCount(0);
   const up = engage.getByRole("button", { name: /^Upvote Code review \(\d+\)$/ });
   const n = Number((await up.getAttribute("aria-label"))!.match(/\((\d+)\)/)![1]);

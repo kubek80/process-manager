@@ -259,7 +259,7 @@ test("create a standard from a policy text with AI; it is a draft without skills
   const wrong = JSON.parse(JSON.stringify(example));
   wrong.requirements[0].level = "always";
   await modal.locator("textarea").nth(1).fill(JSON.stringify(wrong));
-  await expect(modal.locator(".issues")).toContainText("must be one of: must, should, may");
+  await expect(modal.locator(".issues")).toContainText("Requirement DEP-01 “Automated update pull requests” Choose the level from the list.");
   await expect(modal.getByRole("button", { name: "Create standard" })).toBeDisabled();
 
   await modal.locator("textarea").nth(1).fill("```json\n" + JSON.stringify(example, null, 2) + "\n```");
@@ -293,7 +293,7 @@ test("create a standard from a policy text with AI; it is a draft without skills
   await page.getByRole("tab", { name: "Skills" }).click();
   await expect(page.locator(".skill-picker").getByRole("tab")).toHaveCount(2); // a skill and a review agent
   await expect(page.locator(".skill-content")).toContainText("# Standard: Dependency updates");
-  await expect(page.locator(".skill-head code")).toHaveText(".claude/skills/standard-dependency-updates/SKILL.md");
+  await expect(page.locator(".skill-where code")).toHaveText(".claude/skills/standard-dependency-updates/SKILL.md");
 
   // retire it: the skills are withdrawn, the document stays for reference
   await page.getByRole("link", { name: "Edit", exact: true }).click();

@@ -34,7 +34,7 @@ test("report on the whole process from the feedback tab; send needs a sentence",
   await signIn(page, SAM);
   await open(page, `/p/${GCP}/flow`);
   await expect(page.getByRole("button", { name: "Report a problem", exact: true })).toHaveCount(0); // "Give feedback" replaced it
-  await page.locator(".doc-engage").getByRole("button", { name: "Give feedback" }).click();
+  await page.locator(".engage-actions").getByRole("button", { name: "Give feedback" }).click();
   await expect(page).toHaveURL(/#\/p\/request-gcp-project\/feedback/);
   await expect(page.getByPlaceholder(/What happened/)).toBeFocused();
   const send = page.getByRole("button", { name: "Send feedback" });

@@ -129,7 +129,7 @@ export function DocActions({ kind, id, title, summary, onFeedback }: {
 }) {
   const [sharing, setSharing] = useState(false);
   return (
-    <div className="engage-actions">
+    <div className="engage-actions" role="group" aria-label={`What you can do with this ${kind}`}>
       <button type="button" className="btn small give-feedback" onClick={onFeedback}><MessageSquarePlus size={15} />Give feedback</button>
       <UpvoteButton kind={kind} id={id} title={title} size="page" />
       <BookmarkButton kind={kind} id={id} title={title} size="page" />

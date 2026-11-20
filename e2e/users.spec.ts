@@ -27,7 +27,7 @@ test("Access lists people with their roles in words, and can be searched", async
   await expect(row("Jordan Platform").getByRole("list", { name: "Roles of Jordan Platform" }).locator("li")).toHaveText(["Platform owner for Google Cloud", "Practice owner for Engineering", "Owner for Cloud Platform team"]);
   await expect(row("Alex Editor").locator(".user-roles li")).toHaveText(["Lists manager", "Process editor"]);
   await expect(row("Dana Admin")).toContainText("you");
-  await expect(row("Dana Admin").locator(".user-fixed")).toHaveText("server settings");
+  await expect(row("Dana Admin").locator(".user-fixed")).toHaveText("set where the portal is installed");
   await expect(row("Jordan Platform")).toContainText(JORDAN);
 
   const search = page.getByRole("searchbox", { name: "Search people" });
@@ -98,7 +98,7 @@ test("Edit adds a second platform and takes a role away in one save; the summary
 
   // the activity log says it in words
   await open(page, "/admin/activity");
-  await expect(page.locator(".activity li").first()).toContainText("changed the roles of jordan@example.com");
+  await expect(page.locator(".activity li").first()).toContainText("changed the roles of Jordan Platform");
   await expect(page.locator(".activity li").first()).toContainText("added Platform owner for the platform Azure; removed Practice owner for the practice Engineering");
 });
 
@@ -156,7 +156,7 @@ test("the protections are said on the page, and the server keeps them too", asyn
   const dialog = page.getByRole("dialog", { name: "Roles of Dana Admin" });
   await expect(dialog.getByRole("switch", { name: /^Admin/ })).toBeDisabled();
   await expect(dialog.getByRole("switch", { name: /^Admin/ })).toBeChecked();
-  await expect(dialog).toContainText("Named in the server setting PM_ADMINS, where the server is deployed. It cannot be taken away here.");
+  await expect(dialog).toContainText("Named in the settings where the portal is installed. It cannot be taken away here.");
   await dialog.getByRole("button", { name: "Cancel" }).click();
 
   // the server: deleting yourself is refused; the admin from the settings stays admin whatever is sent
@@ -205,7 +205,7 @@ test("the Members section of a platform still adds and removes", async ({ page }
   const members = page.locator(".cat-members");
   await members.getByLabel("Email of the new member").fill(NEW);
   await members.getByRole("button", { name: "Add member" }).click();
-  await expect(members.locator("li", { hasText: NEW })).toContainText("Platform owner");
+  await expect(members.getByRole("button", { name: `Remove ${NEW} as Platform owner` })).toBeVisible();
   await open(page, "/admin/access");
   await expect(page.locator("li.user-row", { hasText: NEW }).locator(".user-roles li")).toHaveText(["Platform owner for Akamai"]);
   await open(page, "/admin/lists");

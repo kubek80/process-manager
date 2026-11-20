@@ -39,7 +39,7 @@ test("the hint shows how to use the map until the person opened a step", async (
   await signIn(page, SAM);
   await open(page, `/p/${GCP}/flow`);
   const hint = page.locator(".map-hint");
-  await expect(hint).toHaveText("Select a step on the map to see what to do, who does it and with which tool.");
+  await expect(hint).toHaveText("Select a step for what to do");
   // in the row of the tabs, above the map
   await expect(page.locator(".tabs-row .map-hint")).toBeVisible();
   // how to move and zoom the map is said above it, and stays
@@ -256,4 +256,33 @@ test("the legend and the zoom are above the map; Ctrl + scroll over the map zoom
   // and so does a click on a step
   await page.locator(".block-main", { hasText: "Approve the monthly budget" }).click();
   await expect(page.locator(".drawer h3")).toHaveText("Approve the monthly budget");
+});
+
+// ---------- the fifth round: the opening zoom, the keyboard keeps the focused step in view
+
+test("the map opens as large as fits, between 60% and 100%; the arrow keys bring each step fully into view", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await signIn(page, SAM);
+  await open(page, `/p/${GCP}/flow`);
+  const blocks = page.locator(".block-main");
+  await expect(blocks).toHaveCount(10);
+  const zoom = Number((await page.locator(".zoom-val").innerText()).replace("%", ""));
+  expect(zoom).toBeGreaterThanOrEqual(60);
+  expect(zoom).toBeLessThanOrEqual(100);
+  // as large as fits: at 100% unless it would not fit the width or the height, and never below 60%
+  const scroll = page.locator(".flow-scroll");
+  const fits = await scroll.evaluate((e) => ({ w: e.scrollWidth <= e.clientWidth + 2, h: e.scrollHeight <= e.clientHeight + 2 }));
+  if (zoom > 60 && zoom < 100) expect(fits.w || fits.h, `${zoom}%: it fits the width or the height`).toBe(true);
+  // with "Before you start" open the map starts low: the keyboard still keeps the step in sight
+  await blocks.first().focus();
+  const inView = async () => {
+    const focused = page.locator(".block-main:focus");
+    const [b, v] = [(await focused.boundingBox())!, (await scroll.boundingBox())!];
+    const vh = page.viewportSize()!.height;
+    return b.x >= v.x - 1 && b.x + b.width <= v.x + v.width + 1 && b.y >= Math.max(v.y, 0) - 1 && b.y + b.height <= Math.min(v.y + v.height, vh) + 1;
+  };
+  for (let i = 1; i < 10; i++) {
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(inView, { message: `step ${i + 1} fully in view` }).toBe(true);
+  }
 });

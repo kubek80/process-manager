@@ -140,7 +140,7 @@ test("one letter is marked only where it stands alone, never inside a word", asy
   }
 });
 
-test("words that find nothing: the closest by meaning; with filters, the filters are what to change", async ({ page, request }) => {
+test("words that find nothing: the closest by meaning, which the type tabs and the filters narrow", async ({ page, request }) => {
   await meaningReady(request);
   await signIn(page, SAM);
   await open(page, "/search?q=zebra");
@@ -148,30 +148,35 @@ test("words that find nothing: the closest by meaning; with filters, the filters
   await expect(page.locator("p.list-count")).toHaveText("No exact match for “zebra”. Closest by meaning:");
   await expect(page.locator(".search-closest-line")).toHaveCount(0);
   await expect(cards(page).first()).toBeVisible();
-  // nothing found: no filters, tabs, view switch, order or pages to offer
-  await expect(page.getByRole("complementary", { name: "Filters" })).toHaveCount(0);
-  await expect(page.getByRole("radiogroup", { name: "Show" })).toHaveCount(0);
-  await expect(page.getByRole("radiogroup", { name: "Show as" })).toHaveCount(0);
+  const closest = await cards(page).count();
+  // the type tabs, the filters and Cards / Rows stay; the closest have an order of their own: no Sort, Per page or pager
+  const tabs = page.getByRole("radiogroup", { name: "Show", exact: true });
+  await expect(tabs).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Filters" })).toBeVisible();
+  await expect(page.getByRole("radiogroup", { name: "Show as" })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Sort by" })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Items per page" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Pages of results" })).toHaveCount(0);
 
-  // with a filter chosen, nothing is guessed: it says that nothing matches with or without them
+  // a filter that keeps them: still the closest, now with the chip
   await open(page, "/search?q=zebra&platform=azure");
-  const empty = page.locator(".search-empty");
-  await expect(empty.getByRole("heading", { name: "Nothing found" })).toBeVisible();
-  await expect(empty).toContainText("Nothing matches “zebra”, with or without these filters.");
-  await expect(page.locator("p.list-count")).not.toContainText("Closest by meaning");
-  // no button per filter any more; the filters are not what hides it, so the empty state offers no Clear all filters
-  await expect(empty.getByRole("button", { name: /^Without / })).toHaveCount(0);
-  await expect(empty.getByRole("button", { name: "Clear all filters" })).toHaveCount(0);
-  await expect(empty.getByRole("button", { name: "Search by meaning instead" })).toBeVisible();
-  // the one "Clear all filters" is beside the chips
-  await expect(page.getByRole("button", { name: "Clear all filters" })).toHaveCount(1);
-  // the panel keeps only the chosen filter
-  const panel = page.getByRole("complementary", { name: "Filters" });
-  await expect(panel.getByRole("button", { name: /^Platform: Azure$/ })).toBeVisible();
-  await expect(panel.getByRole("button", { name: /^Category:/ })).toHaveCount(0);
+  await expect(page.locator("p.list-count")).toHaveText("No exact match for “zebra”. Closest by meaning:");
+  await expect(cards(page)).toHaveCount(closest);
   await expect(page.getByRole("button", { name: "Remove filter Platform: Azure" })).toBeVisible();
-  await page.getByRole("group", { name: "Chosen filters" }).getByRole("button", { name: "Clear all filters" }).click();
+
+  // a filter that leaves none of them: said, with the one way out
+  await open(page, "/search?q=zebra&platform=google-cloud");
+  const empty = page.locator(".search-closest .list-empty");
+  await expect(empty.getByRole("heading", { name: "Nothing found" })).toBeVisible();
+  await expect(empty).toContainText(`None of the ${closest} closest result${closest === 1 ? "" : "s"} by meaning matches these filters.`);
+  await empty.getByRole("button", { name: "Clear all filters" }).click();
+  await expect(page).toHaveURL(/#\/search\?q=zebra$/);
+  await expect(cards(page)).toHaveCount(closest);
+
+  // the kind that none of them is: said, with "Show all kinds"
+  await tabs.getByRole("radio", { name: /^Standards/ }).click();
+  await expect(empty).toContainText(`None of the closest by meaning is a standard. All kinds together give ${closest} result${closest === 1 ? "" : "s"}.`);
+  await empty.getByRole("button", { name: "Show all kinds" }).click();
   await expect(page).toHaveURL(/#\/search\?q=zebra$/);
   await expect(page.locator("p.list-count")).toHaveText("No exact match for “zebra”. Closest by meaning:");
 });
@@ -399,4 +404,110 @@ test("on a phone the search fields have short examples as placeholders", async (
   await page.setViewportSize({ width: 1280, height: 900 });
   await open(page, "/processes");
   await expect(page.getByRole("searchbox", { name: "Search processes", exact: true })).toHaveAttribute("placeholder", "Search processes: GCP, repository, Akamai…");
+});
+
+// ---------- the fifth round: the rows as one grid, filters from old links, "Rigour not stated"
+
+/** Shows the list as Rows (remembered per person). */
+async function asRows(page: Page) {
+  await page.getByRole("radiogroup", { name: "Show as" }).getByRole("radio", { name: "Rows" }).click();
+  await expect(page.locator("ol.cards.rows > li.card.row").first()).toBeVisible();
+}
+/** The left edges of one part of every row, rounded. */
+const lefts = (page: Page, part: string) => page.locator(`ol.cards.rows > li.card.row ${part}`).evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().left)));
+
+test("Rows are one grid: the kind as an icon where kinds are mixed, then name, rigour, lead time or requirements, owner, actions in columns", async ({ page }) => {
+  await signIn(page, SAM);
+  await page.addInitScript(() => { try { localStorage.setItem("pm:page-size", "48"); } catch { /* ignore */ } });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await open(page, "/search");
+  await asRows(page);
+  const rows = page.locator("ol.cards.rows > li.card.row");
+  // mixed kinds: the kind is an icon alone, the word its tooltip and read out
+  const gcp = page.locator('li.card.row[data-id="request-gcp-project"]');
+  const kind = gcp.locator(".kind-tag.icon");
+  await expect(kind).toHaveAttribute("title", "Process");
+  await expect(kind.locator(".card-kind")).toHaveText("Process");
+  await expect(kind.locator(".card-kind")).toHaveClass(/\bsr-only\b/);
+  // the name with its category under it; the full name as the link's tooltip
+  await expect(gcp.locator(".card-title a")).toHaveAttribute("title", "Request a GCP project");
+  await expect(gcp.locator(".row-main .row-cat")).toHaveText("Cloud");
+  // a process gives its lead time, a standard its number of requirements
+  await expect(gcp.locator(".row-fact")).toContainText("3-5 working days");
+  await expect(page.locator('li.card.row[data-id="secure-logging"] .row-fact')).toHaveText(/\b\d+ requirements$/);
+  await expect(gcp.locator(".row-owner")).toContainText("Cloud Platform team");
+  // every part starts at the same place in every row, whatever the row holds
+  for (const part of [".kind-tag", ".row-main", ".row-level", ".row-fact", ".row-owner"]) {
+    const xs = await lefts(page, part);
+    expect(xs.length, part).toBeGreaterThan(5);
+    expect(new Set(xs).size, `${part} at ${xs.join(", ")}`).toBe(1);
+  }
+  // the actions sit at the right end of every row
+  const ends = await rows.locator(".card-engage").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().right)));
+  expect(new Set(ends).size, `actions end at ${ends.join(", ")}`).toBe(1);
+
+  // one kind only: no kind column, the names start at the row's left
+  await open(page, "/processes");
+  await expect(rows.first()).toBeVisible();
+  await expect(rows.locator(".kind-tag")).toHaveCount(0);
+
+  // 1100 wide and below: the owner is left out of the rows
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await expect(rows.first().locator(".row-owner")).toBeHidden();
+  await expect(rows.first().locator(".row-fact")).toBeVisible();
+
+  // a phone: each row is two lines, the name over its facts
+  await page.setViewportSize({ width: 390, height: 844 });
+  const first = rows.first();
+  const title = (await first.locator(".card-title").boundingBox())!;
+  const level = (await first.locator(".row-level").boundingBox())!;
+  expect(level.y, "the rigour on the line under the name").toBeGreaterThanOrEqual(title.y + title.height - 1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), "nothing sideways").toBeLessThanOrEqual(0);
+});
+
+test("a filter in an old link that no longer exists is left out, the address corrected, and the page says so once", async ({ page }) => {
+  await signIn(page, SAM);
+  for (const [path, kept] of [
+    ["/processes?platform=mars&category=cloud", /#\/processes\?category=cloud$/],
+    ["/standards?practice=astrology", /#\/standards$/],
+    ["/search?q=gcp&owner=no-such-team&platform=google-cloud", /#\/search\?q=gcp&platform=google-cloud$/],
+  ] as const) {
+    await open(page, path);
+    await expect(page, path).toHaveURL(kept);
+    const notice = page.locator("p.list-notice");
+    await expect(notice).toHaveRole("status");
+    await expect(notice).toHaveText("A filter in this link no longer exists and was left out.");
+    // the address was replaced, not added to: Back leaves the list
+    await expect(page.locator("ol.cards > li").first()).toBeVisible();
+  }
+  // a filter chosen afterwards: the notice goes
+  await pickFilter(page, "Category", "Cloud");
+  await expect(page.locator("p.list-notice")).toHaveCount(0);
+  // an address with filters that exist says nothing
+  await open(page, "/processes?platform=google-cloud");
+  await expect(page.locator("ol.cards > li").first()).toBeVisible();
+  await expect(page).toHaveURL(/#\/processes\?platform=google-cloud$/);
+  await expect(page.locator("p.list-notice")).toHaveCount(0);
+});
+
+test("a process that states no rigour says “Rigour not stated” with three empty bars, on its card and in its row", async ({ page, request }) => {
+  const id = `${PREFIX}no-rigour`;
+  await as(request, ALEX);
+  const src = (await readProcess(request, "request-github-repository"))!;
+  const { rigour: _r, ...rest } = src;
+  await request.delete(`/api/processes/${id}`, { headers: CSRF });
+  const made = await request.put(`/api/processes/${id}?base=0`, { data: { ...rest, id, title: "Finding demo no rigour", status: "active" }, headers: CSRF });
+  expect(made.ok(), await made.text()).toBeTruthy();
+  await signIn(page, SAM);
+  await open(page, "/processes?q=Finding%20demo%20no%20rigour");
+  const card = page.locator(`li.card[data-id="${id}"]`);
+  const mark = card.locator('.level-mark[data-level="none"]');
+  await expect(mark).toHaveText("Rigour not stated");
+  await expect(mark.locator(".level-bars i")).toHaveCount(3);
+  await expect(mark.locator(".level-bars i.on")).toHaveCount(0);
+  // the same line as a card that states one: the facts start at the same height
+  const other = page.locator('li.card[data-id="request-github-repository"]');
+  if (await other.count()) await expect(other.locator(".level-mark")).not.toHaveAttribute("data-level", "none");
+  await asRows(page);
+  await expect(page.locator(`li.card.row[data-id="${id}"] .row-level`)).toHaveText("Rigour not stated");
 });

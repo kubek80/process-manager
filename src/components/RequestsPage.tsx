@@ -29,7 +29,8 @@ export function requestActions(r: { state: RequestState; canManage?: boolean; mi
   if (r.canManage) {
     if (r.state === "open") all.push("planned");
     if (r.state === "open" || r.state === "planned") all.push("done", "declined");
-    else all.push("open");
+    // a planned one can go back to open too, as a finished one can
+    if (r.state !== "open") all.push("open");
   }
   const withdrawable = !!r.mine && r.state === "open";
   if (withdrawable) all.push("withdraw");

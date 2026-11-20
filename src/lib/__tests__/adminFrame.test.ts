@@ -27,7 +27,7 @@ describe("a strip that scrolls sideways", () => {
 describe("the actions of a request", () => {
   it("shows the one next step and puts the others under More", () => {
     expect(requestActions({ state: "open", canManage: true }, false)).toEqual({ next: "planned", more: ["done", "declined"] });
-    expect(requestActions({ state: "planned", canManage: true }, false)).toEqual({ next: "done", more: ["declined"] });
+    expect(requestActions({ state: "planned", canManage: true }, false)).toEqual({ next: "done", more: ["declined", "open"] });
     expect(requestActions({ state: "done", canManage: true }, false)).toEqual({ next: "open", more: [] });
     expect(requestActions({ state: "declined", canManage: true }, true)).toEqual({ next: "open", more: ["remove"] });
   });

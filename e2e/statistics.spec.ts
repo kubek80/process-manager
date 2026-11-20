@@ -40,12 +40,16 @@ test.beforeAll(async ({ request }) => {
   await report(request, SAM, { targetId: ID, text: "The statistics demo has a problem." });
 
   await as(request, ALEX);
-  const docs: [string, string, string][] = [[FORMULA, " =1+1 Formula demo", "draft"], [RETIRED, "Retired statistics demo", "deprecated"], [GONE, "Gone statistics demo", "active"]];
+  const docs: [string, string, string][] = [[FORMULA, " =1+1 Formula demo", "draft"], [RETIRED, "Retired statistics demo", "active"], [GONE, "Gone statistics demo", "active"]];
   for (const [id, title, status] of docs) {
     await request.delete(`/api/processes/${id}`, { headers: CSRF });
     const res = await request.put(`/api/processes/${id}?base=0`, { data: { ...src, id, title, status }, headers: CSRF });
     expect(res.ok(), `${id}: ${await res.text()}`).toBeTruthy();
   }
+  // only a published process can be retired: published first, then retired
+  const meta = (await (await request.get("/api/processes")).json()).meta;
+  const retire = await request.put(`/api/processes/${RETIRED}?base=${meta[RETIRED].version}`, { data: { ...src, id: RETIRED, title: "Retired statistics demo", status: "deprecated" }, headers: CSRF });
+  expect(retire.ok(), `retire: ${await retire.text()}`).toBeTruthy();
   expect((await request.post(`/api/views/process/${GONE}`, { headers: CSRF })).status()).toBe(200);
   expect((await request.delete(`/api/processes/${GONE}`, { headers: CSRF })).ok()).toBeTruthy();
 });

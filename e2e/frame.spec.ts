@@ -240,3 +240,64 @@ test("dates in one form: Theming's last change and the Activity log as 2026-11-2
     await setLook(request, {});
   }
 });
+
+// ---------- the fifth round: the skip link, the main region, Admin › Lists' removal
+
+test("“Skip to the page” is the first Tab stop on every signed-in page and moves the keyboard into the page", async ({ page }) => {
+  await signIn(page, DANA);
+  // (Home puts the cursor in its search box at once; the link is first in its order all the same)
+  await open(page, "/");
+  await expect(page.getByRole("searchbox").first()).toBeVisible();
+  expect(await page.evaluate(() => document.querySelector("a[href], button, input, select, textarea, [tabindex]:not([tabindex='-1'])")?.textContent)).toBe("Skip to the page");
+  for (const path of ["/processes", "/p/request-gcp-project/flow", "/s/secure-logging/doc", "/requests", "/admin/access"]) {
+    await page.goto("about:blank"); // a fresh load: the keyboard starts at the top of the page
+    await open(page, path);
+    await expect(page.locator("#main h1").first()).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    // the page is the main region
+    await expect(page.locator("main#main.main-region"), path).toHaveCount(1);
+    await expect(page.locator(".admin-main").locator("xpath=self::main")).toHaveCount(0);
+    const skip = page.getByRole("link", { name: "Skip to the page" });
+    await expect(skip).not.toBeInViewport(); // out of sight until it has the focus
+    await page.keyboard.press("Tab");
+    await expect(skip, path).toBeFocused();
+    await expect(skip).toBeInViewport();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("main#main"), path).toBeFocused();
+    // the next Tab goes into the page, not to the top bar
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => (document.activeElement?.closest("#main") ? "in" : document.activeElement?.outerHTML.slice(0, 120))), `${path}: the next stop is in the page`).toBe("in");
+  }
+  // the editing screen: the link goes to its own main region, the middle
+  await page.goto("about:blank");
+  await open(page, "/p/request-gcp-project/edit");
+  await expect(page.locator(".edit-bar")).toBeVisible();
+  await expect(page.locator("div#main")).toHaveCount(1);
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Skip to the page" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("main.edit-middle")).toBeFocused();
+});
+
+test("Admin › Lists: removing an entry says so with Undo, which puts it back where it was; New is a secondary button", async ({ page }) => {
+  await signIn(page, DANA);
+  await open(page, "/admin/lists");
+  await page.locator(".cat-kinds").getByRole("tab", { name: /^Categories/ }).click();
+  const create = page.getByRole("button", { name: "New category" });
+  await expect(create).not.toHaveClass(/\bprimary\b/);
+  await create.click();
+  await page.locator(".cat-new").getByLabel("Name").fill("Undo demo category");
+  await page.keyboard.press("Enter");
+  const entry = page.locator(".cat-item", { hasText: "Undo demo category" });
+  await expect(entry).toBeVisible();
+  await page.getByRole("button", { name: "Remove this category" }).click();
+  await expect(entry).toHaveCount(0);
+  const toast = page.locator(".toast", { hasText: "Undo demo category removed" });
+  await expect(toast).toContainText("It is gone for everyone once the lists are saved.");
+  await toast.getByRole("button", { name: "Undo" }).click();
+  await expect(entry).toBeVisible();
+  await expect(entry).toHaveClass(/\bon\b/);
+  await expect(page.locator(".cat-detail h2")).toHaveText("Undo demo category");
+  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(entry).toHaveCount(0);
+});

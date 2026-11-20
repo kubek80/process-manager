@@ -247,7 +247,7 @@ test("Discard changes goes back to the saved draft and can be undone; Discard dr
   // and it is in the activity log, in words
   await signIn(page, DANA);
   await open(page, "/admin/activity");
-  await expect(page.locator(".activity li").filter({ hasText: "Editing demo discard" }).first()).toContainText("threw away the unpublished changes of the process");
+  await expect(page.locator(".activity li").filter({ hasText: "Editing demo discard" }).first()).toContainText("threw away the changes kept in the draft of the process");
 });
 
 test("a new process is a draft nobody else sees until it is published", async ({ page, browser }) => {
@@ -633,7 +633,7 @@ test.describe("more of the editing screen", () => {
     await other.close();
   });
 
-  test("a blank standard must have its example text replaced before it is published; Save draft says why it cannot save", async ({ page }) => {
+  test("a blank standard must have its example text replaced before it is published; Save draft always saves it", async ({ page }) => {
     await signIn(page, RILEY);
     await open(page, "/standards");
     await page.getByRole("button", { name: "New standard", exact: true }).click();
@@ -643,7 +643,7 @@ test.describe("more of the editing screen", () => {
     await expect(page).toHaveURL(/#\/s\/editing-demo-standard\/edit/);
     // only example text: amber, "N to fix"
     await expect(bar(page).locator(".eb-status.warn")).toHaveText(/^\d+ to fix$/);
-    await expect(await openChecker(page)).toContainText("is still the example: write your own before publishing.");
+    await expect(await openChecker(page)).toContainText("is still the example text: write your own.");
     await page.keyboard.press("Escape");
     const publishButton = bar(page).getByRole("button", { name: "Publish…" });
     await expect(publishButton).toHaveClass(/\bunavailable\b/);
@@ -651,15 +651,23 @@ test.describe("more of the editing screen", () => {
     await expect(page.getByRole("dialog", { name: "Publish this standard" })).toHaveCount(0);
     await expect(refusal(page)).toContainText(/^First replace the (example text|\d+ example texts) with your own words \(under “\d+ to fix”\)\.$/);
     await page.keyboard.press("Escape");
-    // a checker error that is not example text stops a never-published draft from being saved, with the reason
+    // a checker error that is not example text does not stop Save draft: the draft is kept with it
     await outline(page, "About");
     await fields(page).getByRole("textbox", { name: /^Name/ }).fill("");
     await outline(page, /^Requirements/);
-    await bar(page).getByRole("button", { name: "Save draft" }).click();
-    await expect(refusal(page)).toHaveText("This draft cannot be saved yet: a standard that was never published is only saved with nothing to fix.");
-    // and the first thing to fix is selected
-    await expect(page.getByRole("navigation", { name: "Outline of the standard" }).locator('[aria-current="true"]')).toHaveAccessibleName(/^About/);
-    await expect(bar(page).locator(".eb-saved")).toHaveText("Not saved yet");
+    await saveDraft(page);
+    await expect(bar(page).locator(".eb-saved")).toHaveText(/^Draft saved \d\d:\d\d$/);
+    await expect(page.getByRole("dialog", { name: "What is to fix" })).toHaveCount(0);
+    // the work is there after a reload
+    await page.reload();
+    await expect(bar(page)).toBeVisible();
+    await outline(page, "About");
+    await expect(fields(page).getByRole("textbox", { name: /^Name/ })).toHaveValue("");
+    // and Publish… refuses, with the list of what is to fix
+    await publishButton.click();
+    await expect(page.getByRole("dialog", { name: "Publish this standard" })).toHaveCount(0);
+    await expect(refusal(page)).toHaveText(/^First fix the \d+ things? listed under “\d+ to fix”\.$|^First replace/);
+    await expect(page.getByRole("dialog", { name: "What is to fix" })).toContainText("Write the name.");
     await page.keyboard.press("Escape");
     await fields(page).getByRole("textbox", { name: /^Name/ }).fill("Editing demo standard");
     await more(page, "Delete…");

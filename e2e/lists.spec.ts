@@ -106,7 +106,7 @@ test("an admin makes somebody a member of a platform and of a practice, and take
   await expect(members).toContainText("Nobody yet. Until somebody is added, only the editors can change what belongs to this platform.");
   await members.getByLabel("Email of the new member").fill(SAM);
   await members.getByRole("button", { name: "Add member" }).click();
-  await expect(members.locator("li", { hasText: SAM })).toContainText("Platform owner");
+  await expect(members.getByRole("button", { name: `Remove ${SAM} as Platform owner` })).toBeVisible();
 
   // Sam can now change what belongs to Azure, and only that
   await signIn(page, SAM);
@@ -126,7 +126,7 @@ test("an admin makes somebody a member of a platform and of a practice, and take
   await item(page, "Service management").click();
   await members.getByLabel("Email of the new member").fill(SAM);
   await members.getByRole("button", { name: "Add member" }).click();
-  await expect(members.locator("li", { hasText: SAM })).toContainText("Practice owner");
+  await expect(members.getByRole("button", { name: `Remove ${SAM} as Practice owner` })).toBeVisible();
   await signIn(page, SAM);
   await open(page, "/p/raise-servicenow-request/flow");
   await expect(page.getByRole("link", { name: "Edit", exact: true })).toBeVisible();
@@ -161,7 +161,8 @@ test("everyone sees who the members of a platform, a practice and a team are", a
     await item(page, name).click();
     await expect(page.locator(".cat-detail h2")).toHaveText(name);
     await expect(members.locator("li")).toHaveCount(people.length);
-    for (const [email, role] of people) await expect(members.locator("li", { hasText: email })).toContainText(role);
+    // the members' role is said once, by the heading and its sentence, not on every member
+    for (const [email] of people) await expect(members.locator("li", { hasText: email })).toHaveText(email.slice(0, 1).toUpperCase() + email);
   };
   await check("Platforms", "Google Cloud", [[JORDAN, "Platform owner"]]);
   await check("Practices", "Engineering", [[JORDAN, "Practice owner"]]);
