@@ -381,3 +381,13 @@ export function draftSaveBase(rev: number, startedFrom: number, continueFrom: nu
   if (rev === 0) return startedFrom || undefined;
   return continueFrom ?? undefined;
 }
+
+/** "14:02" when it was today, "on 2026-11-17" otherwise: when something was saved, for the editing bar. */
+export function clock(iso?: string, now = new Date()): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const day = (x: Date) => `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`;
+  return day(d) === day(now) ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : `on ${day(d)}`;
+}

@@ -1,17 +1,6 @@
 /* The lists of processes and standards and the search results: the filter panel on the left,
    the cards, the pages. Uses the tokens of styles.css, so both themes work. */
 
-:root, .look-light {
-  /* the two kinds: a process is teal with a round marker, a standard violet with a square one -
-     the default look; Admin > Theming can replace the colours (see the tokens in styles.css) */
-  --kind-process: var(--theme-light-kind-process, #0f766e); --kind-process-bg: var(--theme-light-kind-process-bg, #e2f3f0); --kind-process-line: var(--theme-light-kind-process-line, #9fd6cd);
-  --kind-standard: var(--theme-light-kind-standard, #6d28d9); --kind-standard-bg: var(--theme-light-kind-standard-bg, #f1ebfd); --kind-standard-line: var(--theme-light-kind-standard-line, #cdb9f5);
-}
-:root[data-theme="dark"], .look-dark {
-  --kind-process: var(--theme-dark-kind-process, #5eead4); --kind-process-bg: var(--theme-dark-kind-process-bg, #12302d); --kind-process-line: var(--theme-dark-kind-process-line, #1f5c54);
-  --kind-standard: var(--theme-dark-kind-standard, #c4b5fd); --kind-standard-bg: var(--theme-dark-kind-standard-bg, #271f40); --kind-standard-line: var(--theme-dark-kind-standard-line, #4c3d7a);
-}
-
 /* the shared parts (kind tag, level, fact, tabs, segments) are in controls.css */
 
 /* the panel on the left; above the results what is shown and chosen; on a phone that comes first */
@@ -214,6 +203,10 @@
 .pager.compact { justify-content: flex-end; gap: 4px; margin: 0; }
 .pager.compact .pager-num, .pager.compact .pager-step { min-width: 30px; height: 30px; padding: 0 8px; font-size: 12.5px; border-radius: 8px; }
 .pager.compact .pager-word { display: none; }
+
+/* with a nearly grey brand (Admin > Theming) links are underlined: the classed ones too */
+:root[data-link-lines] .ask-for-it a, :root[data-link-lines] .card-hits a, :root[data-link-lines] .row-hit,
+:root[data-link-lines] .card-hits-more, :root[data-link-lines] .filter-clear, :root[data-link-lines] .home-links-more { text-decoration: underline; text-underline-offset: 3px; }
 
 /* the way to ask for what is missing */
 .ask-for-it { margin-top: 14px; font-size: 13.5px; }

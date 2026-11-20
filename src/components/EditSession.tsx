@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { ArrowLeft, Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash2, TriangleAlert, Undo2 } from "lucide-react";
 import type { DocMeta, Issue, Process, Standard, TargetKind } from "../types";
 import { conflictOf, useDraft, type Conflict, type Draft } from "../lib/draft";
-import { author, baseBehindSentence, draftKindOf, draftSaveBase, saveCallOf, editState, exampleIssues, isExampleIssue, issueText, publishLines, statusChangeBlocked, type DraftKind } from "../lib/editing";
+import { author, baseBehindSentence, clock, draftKindOf, draftSaveBase, saveCallOf, editState, exampleIssues, isExampleIssue, issueText, publishLines, statusChangeBlocked, type DraftKind } from "../lib/editing";
 import { compare, type Change } from "../lib/diff";
 import { belongsRefused } from "../lib/rights";
 import { useMe, usePerms } from "../lib/session";
@@ -73,12 +73,6 @@ export interface Session<T extends Doc> {
     fixBefore: (i: Issue) => "saving" | "publishing";
   };
   dialogs: ReactNode;
-}
-
-/** "14:02" for today, "on 2026-11-17" for another day: when something was saved, short. */
-export function clock(iso?: string, now = new Date()): string {
-  const w = savedWhen(iso, now);
-  return w.startsWith("today at ") ? w.slice(9) : w.replace(/ at .*$/, "");
 }
 
 /** A line under the editing bar: why something did not happen, with the first problem to go to. */

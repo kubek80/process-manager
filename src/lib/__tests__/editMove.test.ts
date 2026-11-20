@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addActor, answerChanges, appendRequirement, appendStep, blankProcess, deleteStep, EXAMPLE, flowMoveBlocked, moveRequirementTo, moveStepInFlow, nudgeStep, setStepType } from "../edit";
-import { dropBefore, processOutline, standardOutline, withoutEarlySuggestions } from "../editing";
+import { clock, dropBefore, issueText, processOutline, standardOutline, withoutEarlySuggestions } from "../editing";
 import { validateProcess } from "../validate";
 import type { Process } from "../../types";
 import { base, baseStandard, readJson } from "./fixtures";
@@ -209,5 +209,21 @@ describe("suggestions about something new wait until it is left", () => {
     ];
     const shown = withoutEarlySuggestions("process", base(), issues, (id) => id === "ask");
     expect(shown.map((i) => i.path)).toEqual(["steps[0].title", "steps[1].instructions", "summary"]);
+  });
+});
+
+describe("when it was saved, on the bar", () => {
+  it("says the time for today and the day otherwise", () => {
+    const now = new Date(2026, 10, 20, 15, 0);
+    expect(clock(new Date(2026, 10, 20, 2, 9).toISOString(), now)).toBe("02:09");
+    expect(clock(new Date(2026, 10, 17, 9, 30).toISOString(), now)).toBe("on 2026-11-17");
+    expect(clock(undefined, now)).toBe("");
+  });
+});
+
+describe("problems in words", () => {
+  it("names a missing field by its label, and keeps whole sentences", () => {
+    expect(issueText({ level: "error", path: "requirements[0]", message: 'is missing the required field "statement"' })).toBe("Write the rule.");
+    expect(issueText({ level: "warning", path: "steps[0].instructions", message: "Say exactly what the reader does in this step." })).toBe("Say exactly what the reader does in this step.");
   });
 });
