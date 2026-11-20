@@ -294,3 +294,11 @@ describe("which steps are asked to say exactly what to do", () => {
     expect(validateProcess(p).some((i) => i.path === "steps[0].instructions")).toBe(false);
   });
 });
+
+describe("an empty text", () => {
+  it("is said to be empty, not too short", () => {
+    const p = { ...base(), prerequisites: [{ title: "" }, { title: "ab" }] };
+    const issues = validateProcess(p).filter((i) => i.path.startsWith("prerequisites"));
+    expect(issues.map((i) => [i.path, i.message])).toEqual([["prerequisites[0].title", "is empty"], ["prerequisites[1].title", "is too short (minimum 3 characters)"]]);
+  });
+});

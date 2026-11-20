@@ -342,7 +342,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
               const count = process.steps.filter((s) => s.actor === actor.id).length;
               const color = LANE_COLORS[lane.actorIndex % LANE_COLORS.length];
               const fits = laneLabel(lane.h * zoom, HEADW);
-              const lines = wrapWords(actor.name, laneFits(HEADW, fits.small, fits.avatar) ?? laneChars(HEADW, fits.small, fits.avatar), fits.lines);
+              const lines = wrapWords(actor.name, laneFits(HEADW, fits.small, fits.avatar, narrow) ?? laneChars(HEADW, fits.small, fits.avatar), fits.lines);
               return (
                 <div key={actor.id} className={`lane-label ${lane.actorIndex === 0 ? "me" : ""} ${k % 2 ? "even" : ""} ${fits.small ? "small" : ""}`}
                   style={{ top: lane.y * zoom, height: lane.h * zoom, "--lane": color, "--lines": fits.lines } as React.CSSProperties} title={`${actor.name}: ${count} ${count === 1 ? "step" : "steps"}`}>
@@ -501,16 +501,18 @@ function LegendButton({ types }: { types: StepType[] }) {
  * measures text without drawing). Undefined where nothing can measure: the characters are counted.
  */
 let measurer: CanvasRenderingContext2D | null | undefined;
-function laneFits(column: number, small: boolean, avatar: boolean): ((line: string) => boolean) | undefined {
+function laneFits(column: number, small: boolean, avatar: boolean, narrow = false): ((line: string) => boolean) | undefined {
   if (measurer === undefined) {
     try { measurer = typeof document !== "undefined" ? document.createElement("canvas").getContext("2d") : null; } catch { measurer = null; }
   }
   const ctx = measurer;
   if (!ctx || typeof getComputedStyle === "undefined") return undefined;
   const family = getComputedStyle(document.body).fontFamily || "sans-serif";
-  const room = column - (small ? 20 : 24) - (avatar ? 40 : 0) - 2;
+  // the padding and type of the lane names (smaller on a phone: see detail.css)
+  const room = column - (narrow ? 18 : small ? 20 : 24) - (avatar && !narrow ? 40 : 0) - 2;
+  const size = small ? 11.5 : narrow ? 12.5 : 13.5;
   return (line: string) => {
-    ctx.font = `650 ${small ? 11.5 : 13.5}px ${family}`;
+    ctx.font = `650 ${size}px ${family}`;
     return ctx.measureText(line).width <= room;
   };
 }

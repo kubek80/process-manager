@@ -14,6 +14,22 @@ export interface CheckContext { processIds?: Iterable<string>; standardIds?: Ite
 
 export { schema as processSchema, standardSchema };
 
+/** The value an error is about, by its JSON pointer ("/steps/0/title"). */
+function at(data: unknown, pointer: string): unknown {
+  let v: unknown = data;
+  for (const part of pointer.split("/").slice(1)) {
+    if (v === null || typeof v !== "object") return undefined;
+    v = (v as Record<string, unknown>)[part.replace(/~1/g, "/").replace(/~0/g, "~")];
+  }
+  return v;
+}
+
+/** A schema error in words; a text that is too short but has nothing in it yet "is empty". */
+function message(e: ErrorObject, data: unknown): string {
+  if (e.keyword === "minLength") { const v = at(data, e.instancePath); if (typeof v === "string" && !v.trim()) return "is empty"; }
+  return describe(e);
+}
+
 function prettyPath(p: string): string {
   if (!p) return "(root)";
   return p.slice(1).split("/").map((s, i) => (/^\d+$/.test(s) ? `[${s}]` : (i ? "." : "") + s)).join("");
@@ -67,7 +83,7 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
   if (!validateSchema(data)) {
     const seen = new Set<string>();
     for (const e of validateSchema.errors ?? []) {
-      const issue: Issue = { level: "error", path: prettyPath(e.instancePath), message: describe(e) };
+      const issue: Issue = { level: "error", path: prettyPath(e.instancePath), message: message(e, data) };
       const key = issue.path + issue.message;
       if (!seen.has(key)) { seen.add(key); issues.push(issue); }
     }
@@ -208,7 +224,7 @@ export function validateStandard(data: unknown, ctx: CheckContext = {}): Issue[]
   if (!validateStandardSchema(data)) {
     const seen = new Set<string>();
     for (const e of validateStandardSchema.errors ?? []) {
-      const issue: Issue = { level: "error", path: prettyPath(e.instancePath), message: describe(e) };
+      const issue: Issue = { level: "error", path: prettyPath(e.instancePath), message: message(e, data) };
       const key = issue.path + issue.message;
       if (!seen.has(key)) { seen.add(key); issues.push(issue); }
     }

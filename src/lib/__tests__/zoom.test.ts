@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterFit, laneChars, wrapWords, fitWhole, hiddenEdges, laneColumn, laneLabel, openingZoom, scrollToCentre, stepZoom, clampZoom, isZoomWheel, scrollForZoom, wheelZoom, zoomKey, ZOOM_FLOOR, ZOOM_MAX, ZOOM_MIN } from "../zoom";
+import { afterFit, panHint, laneChars, wrapWords, fitWhole, hiddenEdges, laneColumn, laneLabel, openingZoom, scrollToCentre, stepZoom, clampZoom, isZoomWheel, scrollForZoom, wheelZoom, zoomKey, ZOOM_FLOOR, ZOOM_MAX, ZOOM_MIN } from "../zoom";
 
 describe("Ctrl + scroll on the map", () => {
   it("scrolling up zooms in, down zooms out, by about a tenth per notch of a mouse wheel", () => {
@@ -54,6 +54,12 @@ describe("opening the map", () => {
     expect(openingZoom(0, 1600, 0.6)).toBe(1);
     // the lane column takes its share of the width
     expect(openingZoom(856, 1000, 0.6, laneColumn)).toBe(0.7);
+    // the height counts too: a long flow opens as large as fits the height, at most 100%
+    expect(openingZoom(700, 3300, 0.6, () => 0, { view: 545, content: 628 })).toBe(0.85);
+    expect(openingZoom(700, 3300, 0.6, () => 0, { view: 750, content: 628 })).toBe(1);
+    // never below the floor, and the width wins when it allows more
+    expect(openingZoom(700, 3300, 0.6, () => 0, { view: 200, content: 628 })).toBe(0.6);
+    expect(openingZoom(2000, 1000, 0.6, () => 0, { view: 100, content: 628 })).toBe(1);
   });
 });
 
@@ -191,5 +197,12 @@ describe("lane names", () => {
     expect(laneChars(120, false, false)).toBe(13);
     expect(laneChars(156, false, true)).toBe(12);
     expect(laneChars(80, true, false)).toBe(9);
+  });
+});
+
+describe("how to move the map, by the device", () => {
+  it("speaks of swiping and pinching on a touch screen, never of Ctrl", () => {
+    expect(panHint(true)).toEqual({ move: "Swipe to move", zoom: "pinch to zoom" });
+    expect(panHint(false, "Ctrl")).toEqual({ move: "Drag to move", zoom: "Ctrl + scroll to zoom" });
   });
 });

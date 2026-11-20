@@ -86,6 +86,9 @@ describe("comparing versions does not mislead", () => {
     ]);
   });
 
+  it("names a change of status in the words of the editing bar", () => {
+    expect(compareProcesses(base(), { ...base(), status: "deprecated" }).map(describeChange)).toEqual(["Status changed from “Published” to “Retired”"]);
+  });
   it("names each link: added, removed, changed, by its name", () => {
     const one = { ...base(), resources: [{ title: "Supplier form", url: "https://forms.example.com/s" }] };
     expect(compareProcesses(base(), one).map(describeChange)).toEqual(["Link “Supplier form” added"]);
@@ -93,6 +96,8 @@ describe("comparing versions does not mislead", () => {
     const moved = { ...one, resources: [{ title: "Supplier form", url: "https://forms.example.com/t" }] };
     expect(compareProcesses(one, moved).map(describeChange)).toEqual(["Link “Supplier form” changed: address"]);
     expect(compareProcesses(base(), { ...base(), resources: [{ title: "", url: "" }] }).map(describeChange)).toEqual(["Link 1 (no name yet) added"]);
+    // a link given another name is the same link, changed
+    expect(compareProcesses(one, { ...one, resources: [{ title: "Supplier forms", url: "https://forms.example.com/s" }] }).map(describeChange)).toEqual(["Link “Supplier forms” changed: name"]);
   });
   it("copes with two prerequisites of the same name, and reports a new order", () => {
     const twice = { ...base(), prerequisites: [{ title: "Access" }, { title: "Access", description: "To the second system." }, { title: "Budget" }] };

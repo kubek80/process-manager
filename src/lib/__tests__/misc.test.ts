@@ -242,3 +242,13 @@ describe("what uses an entry of the lists", () => {
     expect(removeHint("1 standard", 1, "practice")).toBe("Still used by 1 standard, and 1 person is still a member of this practice. Change those first and remove the members, then it can be removed.");
   });
 });
+
+describe("the fix request for the AI chat", () => {
+  it("says which value is wrong where", () => {
+    const answer = { steps: [{ id: "a", actor: "nobody" }] };
+    const text = fixPrompt([{ level: "error", path: "steps[0].actor", message: "Who does it is not one of the participants" }], undefined, answer);
+    expect(text).toContain('- [error] steps[0].actor (value now: "nobody"): Who does it is not one of the participants');
+    // a missing field has no value to show
+    expect(fixPrompt([{ level: "error", path: "steps[0]", message: 'is missing the required field "title"' }], undefined, answer)).not.toContain("value now");
+  });
+});

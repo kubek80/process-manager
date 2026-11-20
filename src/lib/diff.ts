@@ -143,18 +143,24 @@ function detailChanges(before: Doc, after: Doc, skip: string[], catalog?: Catalo
  */
 function compareNamed(what: string, before: Doc[], after: Doc[], changes: Change[], context: FieldContext | undefined, order: string) {
   const text = (v: unknown) => (typeof v === "string" ? v : "");
-  const left = [...before];
-  const pairs: [number, number][] = []; // [position before, position after]
   const at = (i: number) => `${what} ${i + 1}`;
+  // first by name; what is left is paired by its place (a renamed one is the same item, changed)
+  const pair = new Map<number, number>(); // position after -> position before
+  const free = new Set(before.map((_, i) => i));
   after.forEach((q, i) => {
-    const j = left.findIndex((o) => o.title === q.title);
-    if (j < 0) return void changes.push({ kind: "added", what, label: text(q.title), unnamed: at(i) });
-    const [prev] = left.splice(j, 1);
-    pairs.push([before.indexOf(prev), i]);
-    if (!same(prev, q)) changes.push({ kind: "changed", what, label: text(q.title), unnamed: at(i), details: changedFields(prev, q, ["title"], context) });
+    const j = [...free].find((k) => before[k].title === q.title);
+    if (j !== undefined) { pair.set(i, j); free.delete(j); }
   });
-  for (const q of left) changes.push({ kind: "removed", what, label: text(q.title), unnamed: at(before.indexOf(q)) });
-  if (pairs.some(([was], i) => i > 0 && was < pairs[i - 1][0])) changes.push({ kind: "changed", what: "Details", label: order });
+  after.forEach((_, i) => { if (!pair.has(i) && free.has(i)) { pair.set(i, i); free.delete(i); } });
+  after.forEach((q, i) => {
+    const j = pair.get(i);
+    if (j === undefined) return void changes.push({ kind: "added", what, label: text(q.title), unnamed: at(i) });
+    const prev = before[j];
+    if (!same(prev, q)) changes.push({ kind: "changed", what, label: text(q.title), unnamed: at(i), details: changedFields(prev, q, [], context) });
+  });
+  for (const k of free) changes.push({ kind: "removed", what, label: text(before[k].title), unnamed: at(k) });
+  const pairs = [...pair.entries()].sort((a, b) => a[0] - b[0]);
+  if (pairs.some(([, was], i) => i > 0 && was < pairs[i - 1][1])) changes.push({ kind: "changed", what: "Details", label: order });
 }
 
 export function compareProcesses(before: Process, after: Process, catalog?: Catalog): Change[] {
