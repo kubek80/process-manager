@@ -37,8 +37,6 @@ export const SURFACES = {
   light: { bg: "#f4f5f9", surface: "#ffffff", surface2: "#f8f9fc" },
   dark: { bg: "#0f1118", surface: "#181b25", surface2: "#1e222e" },
 } as const;
-/** The red that marks problems (`--bad`): not themable. */
-export const BAD = { light: "#be123c", dark: "#fb7185" } as const;
 /** The two inks a filled colour can carry. */
 const INK = { white: "#ffffff", black: "#11121c" } as const;
 
@@ -138,10 +136,22 @@ export function chroma(hex: string): number {
   const g = Math.round(v * 255);
   return distance(hex, rgbToHex([g, g, g]));
 }
-/** Below this chroma a colour counts as grey. */
-export const GREY = 12;
-/** How alike a colour may be to the red of problems before the section warns. */
-export const NEAR_RED = 25;
+/** Below this chroma a colour counts as nearly grey (a slate, a navy close to black). */
+export const GREY = 22;
+/** How alike two colours may be (CIELAB distance) before the section warns that they will be confused. */
+export const ALIKE = 25;
+/** A change smaller than this (CIELAB distance) cannot be seen: it is not reported as an adjustment. */
+export const VISIBLE = 4;
+
+/** The semantic colours (styles.css), not themable: what a chosen colour must not be mistaken for. */
+export const SEMANTIC = {
+  bad: { light: "#be123c", dark: "#fb7185" },
+  warn: { light: "#b45309", dark: "#fbbf24" },
+  good: { light: "#15803d", dark: "#4ade80" },
+} as const;
+export type Semantic = keyof typeof SEMANTIC;
+/** The default colours of the kinds in each theme (lists.css): what an unchosen kind looks like. */
+const KIND_DEFAULT = { process: { light: "#0f766e", dark: "#5eead4" }, standard: { light: "#6d28d9", dark: "#c4b5fd" } } as const;
 
 // ---------- the derived tokens
 
@@ -151,30 +161,39 @@ export interface ColorUse {
   chosen: string;
   /** The colour text, links and marks use in each theme. */
   used: Record<Mode, string>;
-  /** It had to be made lighter or darker to stay readable in that theme. */
+  /** The colour filled surfaces use in each theme (buttons, checked boxes, selected pills), with `ink` on top. */
+  fill: Record<Mode, string>;
+  /** It had to be made visibly lighter or darker to stay readable in that theme. */
   adjusted: Record<Mode, boolean>;
-  /** It looks like the red that marks problems. */
-  nearRed: boolean;
-  /** It is (nearly) grey: marks and links in it hardly stand out from ordinary text. */
+  /** The semantic colours it looks like, in either theme. */
+  like: Semantic[];
+  /** It is nearly grey: marks and links in it hardly stand out from ordinary text. */
   grey: boolean;
 }
 export interface Derived {
   /** Custom properties for each theme, without the `--theme-<mode>-` prefix: only for chosen colours. */
   tokens: Record<Mode, Record<string, string>>;
   colors: ColorUse[];
+  /** Processes and standards look alike in these themes. */
+  kindsAlike: Mode[];
 }
 
 /** How much of the colour goes into its soft tint and into its line, per theme. */
 const TINT = { accent: { light: 0.1, dark: 0.18 }, kind: { light: 0.12, dark: 0.16 }, line: { light: 0.4, dark: 0.32 } };
 /** Which custom properties a colour part sets. */
 export const TOKENS: Record<ColorPart, string[]> = {
-  brand: ["accent", "accent-ink", "accent-soft"],
-  process: ["kind-process", "kind-process-bg", "kind-process-line"],
-  standard: ["kind-standard", "kind-standard-bg", "kind-standard-line"],
+  brand: ["accent", "accent-fill", "accent-ink", "accent-soft"],
+  process: ["kind-process", "kind-process-fill", "kind-process-ink", "kind-process-bg", "kind-process-line"],
+  standard: ["kind-standard", "kind-standard-fill", "kind-standard-ink", "kind-standard-bg", "kind-standard-line"],
 };
 
-/** One colour in one theme: the readable variant, its tint, its line and the ink on it. */
-export function deriveColor(chosen: string, mode: Mode, tint: number): { text: string; soft: string; line: string; ink: string } {
+/**
+ * One colour in one theme: the readable variant for text, the fill for filled surfaces with the
+ * ink on it, the soft tint and the line. The fill keeps the chosen colour (a yellow button with
+ * black ink) unless it would vanish into the surface (a navy button on the dark surface), then it
+ * is the readable variant.
+ */
+export function deriveColor(chosen: string, mode: Mode, tint: number): { text: string; fill: string; ink: string; soft: string; line: string } {
   const s = SURFACES[mode];
   const base = [s.bg, s.surface, s.surface2];
   let text = readable(chosen, base);
@@ -186,31 +205,68 @@ export function deriveColor(chosen: string, mode: Mode, tint: number): { text: s
     text = readable(text, [...base, soft]);
     if (mode === "dark") soft = mix(text, s.surface, tint);
   }
-  return { text, soft, line: mix(text, s.surface, TINT.line[mode]), ink: inkOn(text) };
+  const fill = contrast(chosen, s.surface) >= FILL_MIN ? chosen.toLowerCase() : text;
+  return { text, fill, ink: inkOn(fill), soft, line: mix(text, s.surface, TINT.line[mode]) };
 }
+/** A fill must stand this far from the surface (contrast ratio) to be kept as chosen. */
+export const FILL_MIN = 1.4;
 
 /** Works out every colour of a look for light and for dark. */
 export function derive(look: Look): Derived {
   const tokens: Derived["tokens"] = { light: {}, dark: {} };
   const colors: ColorUse[] = [];
+  const kindUsed: Record<"process" | "standard", Record<Mode, string>> = { process: { ...KIND_DEFAULT.process }, standard: { ...KIND_DEFAULT.standard } };
   for (const part of ["brand", "process", "standard"] as const) {
     const chosen = look[part];
     if (!isHex(chosen)) continue;
     const c = chosen.toLowerCase();
-    const used = {} as Record<Mode, string>, adjusted = {} as Record<Mode, boolean>;
+    const used = {} as Record<Mode, string>, fill = {} as Record<Mode, string>, adjusted = {} as Record<Mode, boolean>;
     for (const mode of ["light", "dark"] as const) {
       const d = deriveColor(c, mode, part === "brand" ? TINT.accent[mode] : TINT.kind[mode]);
       used[mode] = d.text;
-      adjusted[mode] = d.text !== c;
-      const [main, second, third] = TOKENS[part];
-      Object.assign(tokens[mode], part === "brand"
-        ? { [main]: d.text, [second]: d.ink, [third]: d.soft }
-        : { [main]: d.text, [second]: d.soft, [third]: d.line });
+      fill[mode] = d.fill;
+      adjusted[mode] = distance(d.text, c) >= VISIBLE;
+      if (part === "brand") Object.assign(tokens[mode], { accent: d.text, "accent-fill": d.fill, "accent-ink": d.ink, "accent-soft": d.soft });
+      else {
+        Object.assign(tokens[mode], { [`kind-${part}`]: d.text, [`kind-${part}-fill`]: d.fill, [`kind-${part}-ink`]: d.ink, [`kind-${part}-bg`]: d.soft, [`kind-${part}-line`]: d.line });
+        kindUsed[part][mode] = d.text;
+      }
     }
-    const nearRed = distance(c, BAD.light) < NEAR_RED || distance(used.light, BAD.light) < NEAR_RED || distance(used.dark, BAD.dark) < NEAR_RED;
-    colors.push({ part, chosen: c, used, adjusted, nearRed, grey: chroma(c) < GREY });
+    const like = (Object.keys(SEMANTIC) as Semantic[]).filter((k) =>
+      distance(c, SEMANTIC[k].light) < ALIKE || (["light", "dark"] as const).some((m) => distance(used[m], SEMANTIC[k][m]) < ALIKE || distance(fill[m], SEMANTIC[k][m]) < ALIKE));
+    colors.push({ part, chosen: c, used, fill, adjusted, like, grey: chroma(c) < GREY });
   }
-  return { tokens, colors };
+  const kindsAlike = (["light", "dark"] as const).filter((m) => distance(kindUsed.process[m], kindUsed.standard[m]) < ALIKE);
+  return { tokens, colors, kindsAlike };
+}
+
+const SEMANTIC_NAME: Record<Semantic, string> = { bad: "the red that marks problems", warn: "the amber of warnings such as “Review due”", good: "the green of good news such as “Published”" };
+/** What a colour that looks like a semantic colour will be confused with, in plain words. */
+export function confusion(part: ColorPart, like: Semantic): string {
+  const what = part === "brand" ? "the brand colour" : `the colour of ${part === "process" ? "processes" : "standards"}`;
+  const effect: Record<ColorPart, Record<Semantic, string>> = {
+    brand: {
+      bad: "Buttons that save or approve will look like buttons that delete, and links like error messages.",
+      warn: "Buttons and links will look like warnings, and a warning will no longer stand out.",
+      good: "Buttons and links will look like confirmations, and “all is well” will no longer stand out.",
+    },
+    process: {
+      bad: "Every process will look as if something were wrong with it.",
+      warn: "Every process will look as if its review were due.",
+      good: "Processes will look like confirmations, and good news will no longer stand out.",
+    },
+    standard: {
+      bad: "Every standard will look as if something were wrong with it.",
+      warn: "Every standard will look as if its review were due.",
+      good: "Standards will look like confirmations, and good news will no longer stand out.",
+    },
+  };
+  return `This looks like ${SEMANTIC_NAME[like]}: ${effect[part][like]} You can still use ${what}.`;
+}
+/** The sentence for processes and standards that look alike. */
+export function kindsAlikeText(modes: Mode[]): string {
+  const where = modes.length === 2 ? "" : modes[0] === "light" ? " in the light look" : " in the dark look";
+  return `Processes and standards will be hard to tell apart${where}: their marks and tags have nearly the same colour. Choose colours further apart.`;
 }
 
 /** Every custom property the look may set on an element, chosen or not. */
@@ -228,6 +284,9 @@ export function lookProperties(look: Look): Record<string, string> {
   for (const mode of ["light", "dark"] as const) for (const [k, v] of Object.entries(tokens[mode])) out[`--theme-${mode}-${k}`] = v;
   return out;
 }
+
+/** Links are underlined when the brand colour is nearly grey: colour alone would not tell them from text. */
+export const underlineLinks = (look: Look) => isHex(look.brand) && chroma(look.brand) < GREY;
 
 // ---------- reading a look
 
@@ -285,10 +344,10 @@ export const nameOf = (l: Look) => l.name?.trim() || DEFAULT_NAME;
 /** Ready-made sets of colours to start from. The first is the default look. */
 export const PALETTES: { name: string; colors: Partial<Record<ColorPart, string>> }[] = [
   { name: "Default", colors: {} },
-  { name: "Ocean", colors: { brand: "#0369a1", process: "#047857", standard: "#7e22ce" } },
-  { name: "Evergreen", colors: { brand: "#166534", process: "#0e7490", standard: "#a21caf" } },
-  { name: "Graphite", colors: { brand: "#334155", process: "#0f766e", standard: "#4338ca" } },
-  { name: "Sunset", colors: { brand: "#c2410c", process: "#0f766e", standard: "#6d28d9" } },
+  { name: "Ocean", colors: { brand: "#0369a1", process: "#0f766e", standard: "#7e22ce" } },
+  { name: "Evergreen", colors: { brand: "#0f766e", process: "#1d4ed8", standard: "#a21caf" } },
+  { name: "Steel", colors: { brand: "#2b4c7e", process: "#0e7490", standard: "#6d28d9" } },
+  { name: "Plum", colors: { brand: "#7e22ce", process: "#0f766e", standard: "#1d4ed8" } },
 ];
 
 // ---------- light or dark
@@ -307,8 +366,9 @@ export function isDark(own: string | null, appearance: Appearance | undefined, d
 
 // ---------- the look of this page (browser only)
 
-interface State { look: Look; revision: number; own: string | null; deviceDark: boolean }
-let state: State = { look: {}, revision: 0, own: null, deviceDark: false };
+interface State { look: Look; revision: number; own: string | null; deviceDark: boolean; known: boolean }
+/** `known`: the look came from this browser's last visit or from the server (not merely the default). */
+let state: State = { look: {}, revision: 0, own: null, deviceDark: false, known: false };
 const listeners = new Set<() => void>();
 const set = (next: Partial<State>) => { state = { ...state, ...next }; apply(); listeners.forEach((l) => l()); };
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
@@ -324,6 +384,7 @@ function apply() {
   for (const p of ALL_PROPERTIES) root.style.removeProperty(p);
   for (const mode of ["light", "dark"] as const) for (const [k, v] of Object.entries(tokens[mode])) root.style.setProperty(`--theme-${mode}-${k}`, v);
   root.dataset.theme = isDark(state.own, state.look.appearance, state.deviceDark) ? "dark" : "light";
+  root.toggleAttribute("data-link-lines", underlineLinks(state.look));
 }
 
 let started = false;
@@ -338,24 +399,35 @@ export function startLook() {
   try { cached = JSON.parse(read(LOOK_KEY) ?? "null"); } catch { cached = null; }
   const media = window.matchMedia?.("(prefers-color-scheme: dark)");
   media?.addEventListener?.("change", (e) => set({ deviceDark: e.matches }));
-  set({ look: cleanLook(cached?.look), revision: typeof cached?.revision === "number" ? cached.revision : 0, own: read(OWN_KEY), deviceDark: !!media?.matches });
+  set({ look: cleanLook(cached?.look), revision: typeof cached?.revision === "number" ? cached.revision : 0, own: read(OWN_KEY), deviceDark: !!media?.matches, known: !!cached });
 }
 
 /** Takes a look the server sent (or an admin just saved) into use, and keeps it for the next visit. */
 export function takeLook(look: Look, revision: number) {
   const clean = cleanLook(look);
   write(LOOK_KEY, JSON.stringify({ look: clean, revision }));
-  set({ look: clean, revision });
+  set({ look: clean, revision, known: true });
 }
 
-/** Fetches the look from the server and takes it into use. Fails quietly: the last look stays. */
+/**
+ * Fetches the look from the server and takes it into use. Fails quietly: the last look stays.
+ * Either way the look counts as known afterwards, so that nothing waits for it any longer.
+ */
 export async function refreshLook(): Promise<void> {
   try {
     const res = await fetch("/api/theme", { cache: "no-cache" });
     if (!res.ok) return;
     const data = await res.json();
     if (data && typeof data.revision === "number") takeLook(data.look, data.revision);
-  } catch { /* offline or an older server: keep the last look */ }
+  } catch { /* offline or an older server: keep the last look */ } finally {
+    if (!state.known) set({ known: true });
+  }
+}
+
+/** Forgets the person's own choice of light or dark: they see what the look sets for new visitors. */
+export function forgetOwnChoice() {
+  try { localStorage.removeItem(OWN_KEY); } catch { /* private mode */ }
+  set({ own: null });
 }
 
 /** The person's own choice of light or dark, from the switch in the top bar. */
@@ -372,7 +444,8 @@ export const logoUrl = (l: Look) => (l.logo ? `/api/theme/logo?v=${l.logo.slice(
 
 const snapshot = () => state;
 /** The look in use, its revision, and whether the page is dark. */
-export function useLook(): { look: Look; revision: number; name: string; dark: boolean } {
+export function useLook(): { look: Look; revision: number; name: string; dark: boolean; own: "light" | "dark" | null; known: boolean } {
   const s = useSyncExternalStore(subscribe, snapshot, snapshot);
-  return { look: s.look, revision: s.revision, name: nameOf(s.look), dark: isDark(s.own, s.look.appearance, s.deviceDark) };
+  const own = s.own === "light" || s.own === "dark" ? s.own : null;
+  return { look: s.look, revision: s.revision, name: nameOf(s.look), dark: isDark(s.own, s.look.appearance, s.deviceDark), own, known: s.known };
 }

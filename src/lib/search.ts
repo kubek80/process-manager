@@ -362,9 +362,12 @@ export const rigourText = (r: Result) => rigourLine(r.kind, r.rigour);
 
 // ---------- showing the matches
 
+/** Words shorter than this are marked only as whole words. */
+const SHORT_WORD = 3;
 /**
  * Where the words are in a text, as [start, end) ranges of the original text, merged and in
- * order. Accents and case do not matter.
+ * order. Accents and case do not matter. A word of one or two letters ("a", "ci") is marked only
+ * where it is a word of its own: inside other words it would mark fragments everywhere.
  */
 export function matchRanges(text: string, words: string[]): [number, number][] {
   if (!text || !words.length) return [];
@@ -381,10 +384,13 @@ export function matchRanges(text: string, words: string[]): [number, number][] {
   }
   from.push(text.length);
   const ranges: [number, number][] = [];
+  const inWord = (i: number) => i >= 0 && i < norm.length && /[\p{L}\p{N}]/u.test(norm[i]);
   for (const w of words) {
     if (!w) continue;
     for (let at = norm.indexOf(w); at >= 0; at = norm.indexOf(w, at + w.length)) {
       const endNorm = at + w.length;
+      // a word of one or two letters is marked only where it stands alone, never inside another word
+      if (w.length < SHORT_WORD && (inWord(at - 1) || inWord(endNorm))) continue;
       // the end is the start of the next original character
       let end = from[endNorm];
       if (endNorm < norm.length && from[endNorm] === from[endNorm - 1]) end = from[endNorm] + 1;
@@ -435,3 +441,25 @@ export function appSummary(options: Partial<Record<ProfileKey, Option[]>>): stri
   const on = PROFILE_KEYS.flatMap((k) => (options[k] ?? []).filter((o) => o.chosen && o.value !== "").map((o) => o.label));
   return on.length ? on.join(" · ") : "Not chosen";
 }
+
+// ---------- the words of the levels
+
+/** A level as a process has it (mandatory, recommended, optional) or as a requirement has it (must, should, may). */
+export type AnyLevel = Rigour | Level;
+const LEVEL_WORD: Record<AnyLevel, string> = { mandatory: "Mandatory", recommended: "Recommended", optional: "Optional", must: "Must", should: "Should", may: "May" };
+/** The word of a level: "Mandatory" for a process, "Must" for a requirement. */
+export const levelWord = (l: AnyLevel): string => LEVEL_WORD[l] ?? String(l);
+/** The requirement level that counts as a rigour: mandatory is must, and so on. */
+export const RIGOUR_LEVEL: Record<Rigour, Level> = { mandatory: "must", recommended: "should", optional: "may" };
+
+/**
+ * The name of a rigour option in the filter, in the words of what is listed: "Mandatory" for
+ * processes, "Must" for standards, both where they are mixed ("Mandatory or must").
+ */
+export function rigourOptionLabel(r: Rigour, subject: TargetKind | "any"): string {
+  if (subject === "process") return RIGOUR_LABEL[r];
+  if (subject === "standard") return levelWord(RIGOUR_LEVEL[r]);
+  return `${RIGOUR_LABEL[r]} or ${levelWord(RIGOUR_LEVEL[r]).toLowerCase()}`;
+}
+/** The name of the rigour filter: "Level" on the standards, else "Rigour". */
+export const rigourFilterName = (subject: TargetKind | "any") => (subject === "standard" ? "Level" : "Rigour");

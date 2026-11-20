@@ -82,5 +82,5 @@
 .stat-bar.partial { fill: color-mix(in srgb, var(--accent) 40%, var(--surface)); stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 2; }
 .stat-partial-note { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
 .stat-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
-.stat-swatch.partial { background: color-mix(in srgb, var(--accent) 40%, var(--surface)); border: 1px dashed var(--accent); }
+.stat-swatch.partial { background: color-mix(in srgb, var(--accent-fill, var(--accent)) 40%, var(--surface)); border: 1px dashed var(--accent); }
 .req-gone { color: var(--text-2); }

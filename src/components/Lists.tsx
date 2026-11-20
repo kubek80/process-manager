@@ -1,11 +1,13 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { AppWindow, ChevronDown, ChevronLeft, ChevronRight, Lightbulb, Search, ShieldCheck, SlidersHorizontal, Workflow, X } from "lucide-react";
+import { AppWindow, ChevronDown, ChevronLeft, ChevronRight, LayoutGrid, Lightbulb, Rows3, Search, ShieldCheck, SlidersHorizontal, Workflow, X } from "lucide-react";
 import type { Rigour, TargetKind } from "../types";
 import { href } from "../lib/store";
 import type { Profile } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
-import { appSummary, countText, countWords, emptyFilterText, FILTER_LABEL, PROFILE_HINT, PROFILE_KEYS, PROFILE_LABEL, type FilterKey, type Option, type ProfileKey, type TypeTab } from "../lib/search";
+import { appSummary, countText, countWords, emptyFilterText, FILTER_LABEL, PROFILE_HINT, PROFILE_KEYS, PROFILE_LABEL, RIGOURS, rigourFilterName, rigourOptionLabel, type FilterKey, type Option, type ProfileKey, type TypeTab } from "../lib/search";
 import { useRemembered } from "../lib/profile";
+import { LevelBars } from "./marks";
+import type { ListView } from "../lib/paging";
 import { SORT_KEYS, sortLabel, sortOf, type SortKey } from "../lib/sorting";
 import { pageNumbers, PAGE_SIZES, showingText, storedPage, type Page, type StoredPage } from "../lib/paging";
 import "../lists.css";
@@ -54,15 +56,7 @@ export function SearchBox({ value, onChange, onSubmit, big, autoFocus, live, pla
   );
 }
 
-/** How binding: three marks, as many filled as it binds (mandatory 3, recommended 2, optional 1). */
-const PIPS: Record<Rigour, number> = { mandatory: 3, recommended: 2, optional: 1 };
-export function RigourPips({ rigour }: { rigour: Rigour }) {
-  return (
-    <span className="rigour-pips" data-rigour={rigour} aria-hidden="true">
-      {[0, 1, 2].map((i) => <i key={i} className={i < PIPS[rigour] ? "on" : ""} />)}
-    </span>
-  );
-}
+const isRigour = (v: string): v is Rigour => (RIGOURS as string[]).includes(v);
 
 /** Whether every option of a filter would give nothing (and none is chosen): it has nothing to offer. */
 export const nothingToChoose = (options: Option[]) => options.length > 0 && options.every((o) => o.count === 0 && !o.chosen);
@@ -130,7 +124,7 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast, single
               <label key={o.value} className={`filter-option ${o.chosen ? "on" : ""} ${off ? "off" : ""}`.trim()}>
                 <input type={single ? "radio" : "checkbox"} name={single ? id : undefined} checked={o.chosen} disabled={off} onChange={() => onToggle(o.value)}
                   aria-label={`${o.label}, ${countWords(o.count, atLeast)}`} />
-                <span className="filter-option-name">{name === "rigour" && o.value in PIPS && <RigourPips rigour={o.value as Rigour} />}{o.label}</span>
+                <span className="filter-option-name">{name === "rigour" && isRigour(o.value) && <LevelBars level={o.value} />}{o.label}</span>
                 <span className="filter-option-count" aria-hidden="true">{countText(o.count, atLeast)}</span>
               </label>
             );
@@ -168,10 +162,12 @@ export interface FilterPanelProps {
   done?: { label: string; onClick: () => void };
   /** The results are the closest of more that matched: the counts say "at least" ("12+"). */
   atLeast?: boolean;
+  /** On a narrow screen only, at the top of the open panel: the order and the page size. */
+  order?: ReactNode;
 }
 
 /** The filters on the left of a list: the yes/no ones, then one dropdown per filter, "My application" last. */
-export function FilterPanel({ id, open, keys, labels, options, onToggle, flags, profile, onProfile, profileOptions, subject, total, done, atLeast }: FilterPanelProps) {
+export function FilterPanel({ id, open, keys, labels, options, onToggle, flags, profile, onProfile, profileOptions, subject, total, done, atLeast, order }: FilterPanelProps) {
   const setProfile = (k: ProfileKey, v: string) => {
     const p = { ...profile };
     if (v) p[k] = v; else delete p[k];
@@ -181,13 +177,18 @@ export function FilterPanel({ id, open, keys, labels, options, onToggle, flags, 
   const appChosen = PROFILE_KEYS.some((k) => !!profile[k]);
   const [appOpen, setAppOpen] = useRemembered("pm:filters:application", appChosen);
   const appId = useId();
-  const shownKeys = keys.filter((k) => options[k].length > 0);
+  // with nothing found, a filter that has nothing to choose is left out (one that is chosen stays)
+  const shownKeys = keys.filter((k) => options[k].length > 0 && (total > 0 || options[k].some((o) => o.chosen)));
+  const shownFlags = flags.filter((f) => total > 0 || f.on);
+  // the level in the words of what is listed: Mandatory for processes, Must for standards
+  const named = (k: FilterKey): Option[] => (k === "rigour" ? options[k].map((o) => (isRigour(o.value) ? { ...o, label: rigourOptionLabel(o.value, subject) } : o)) : options[k]);
   return (
     <aside id={id} className={`filter-panel ${open ? "open" : ""}`.trim()} aria-label="Filters">
-      {flags.length > 0 && (
+      {order && <div className="filter-group filter-order">{order}</div>}
+      {shownFlags.length > 0 && (
         <div className="filter-group filter-flags" role="group" aria-labelledby={`${id}-show`}>
           <p className="filter-group-title" id={`${id}-show`}>Show only</p>
-          {flags.map((f) => (
+          {shownFlags.map((f) => (
             <label key={f.key} className={`filter-option flag ${f.on ? "on" : ""} ${f.unknown && !f.on ? "off" : ""}`.trim()} data-flag={f.key}>
               <input type="checkbox" checked={f.on} disabled={!!f.unknown && !f.on} onChange={(e) => f.onChange(e.target.checked)}
                 aria-label={f.unknown ? `${f.label}: ${f.unknown}` : `${f.label}, ${countWords(f.count, atLeast)}`} />
@@ -202,13 +203,13 @@ export function FilterPanel({ id, open, keys, labels, options, onToggle, flags, 
           <p className="filter-group-title" id={`${id}-narrow`}>Narrow down</p>
           <div className="filter-rows">
             {shownKeys.map((k) => (
-              <FilterDropdown key={k} name={k} label={labels?.[k]} options={options[k]} onToggle={(v) => onToggle(k, v)} atLeast={atLeast}
+              <FilterDropdown key={k} name={k} label={labels?.[k] ?? (k === "rigour" ? rigourFilterName(subject) : undefined)} options={named(k)} onToggle={(v) => onToggle(k, v)} atLeast={atLeast}
                 empty={emptyFilterText(k, subject, total)} />
             ))}
           </div>
         </div>
       )}
-      {hasApp && (
+      {hasApp && (total > 0 || appChosen) && (
         <div className={`filter-group filter-app ${appOpen ? "open" : ""} ${appChosen ? "chosen" : ""}`.trim()}>
           <button type="button" className="filter-app-toggle" aria-expanded={appOpen} aria-controls={appId} onClick={() => setAppOpen(!appOpen)}>
             <AppWindow size={15} aria-hidden="true" className="filter-app-icon" />

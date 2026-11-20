@@ -1,0 +1,49 @@
+/* The small parts shared by every page (src/components/marks.tsx): the kind tag, the level mark,
+   the fact line, underline tabs and the segmented control. Tokens only, so both themes and
+   Admin > Theming reach them. Filled surfaces use --accent-fill (with --accent-ink on top);
+   --accent stays the colour of text, links and outlines. */
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ---------- the kind: "PROCESS" round, "STANDARD" square ---------- */
+.kind-tag { display: inline-flex; align-items: center; gap: 5px; flex: none; height: 22px; padding: 0 9px 0 7px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; line-height: 1; white-space: nowrap; }
+.kind-tag svg { flex: none; }
+.kind-tag.process { border-radius: 999px; background: var(--kind-process-bg); color: var(--kind-process); }
+.kind-tag.standard { border-radius: 4px; background: var(--kind-standard-bg); color: var(--kind-standard); box-shadow: inset 0 0 0 1px var(--kind-standard-line); }
+.kind-tag.md { height: 26px; padding: 0 11px 0 9px; font-size: 11.5px; }
+
+/* ---------- the level: three bars as a lead-in, the word always written ---------- */
+.level-mark { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--text); font-weight: 600; }
+.level-mark[data-strength="mid"] { color: var(--text); }
+.level-mark[data-strength="light"] { color: var(--text-2); }
+.level-bars { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.level-bars i { width: 4px; height: 11px; border-radius: 2px; background: var(--line-strong); }
+.level-bars i.on { background: var(--text); }
+.level-bars[data-strength="mid"] i.on { background: var(--text-2); }
+.level-bars[data-strength="light"] i.on { background: var(--text-3); }
+
+/* ---------- one fact: a grey icon and the text, on one line ---------- */
+.fact { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; color: var(--text-2); }
+.fact.strong { color: var(--text); font-weight: 550; }
+.fact-icon { flex: none; color: var(--text-3); }
+.fact-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- underline tabs: switch views ---------- */
+.tabs { display: flex; gap: 4px; margin: 0; padding: 0; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { position: relative; display: inline-flex; align-items: center; gap: 7px; flex: none; height: 40px; padding: 0 12px; color: var(--text-2); font-size: 14px; font-weight: 600; white-space: nowrap; border-radius: 8px 8px 0 0; }
+.tab:hover { color: var(--text); background: var(--surface-2); }
+.tab:focus-visible { outline-offset: -2px; }
+.tab::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: transparent; }
+.tab.on { color: var(--text); }
+.tab.on::after { background: var(--accent); }
+.tab-count { min-width: 22px; height: 20px; padding: 0 7px; display: grid; place-items: center; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2); font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tab.on .tab-count { background: var(--accent-fill, var(--accent)); border-color: transparent; color: var(--accent-ink); }
+
+/* ---------- the segmented control: one of a few, the chosen one in the brand colour ---------- */
+.seg { display: inline-flex; flex: none; padding: 3px; gap: 2px; border-radius: 10px; background: color-mix(in srgb, var(--line) 70%, transparent); }
+.seg-item { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 7px; font-size: 13px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
+.seg-item svg { flex: none; }
+.seg-item:hover:not(.on) { color: var(--text); background: color-mix(in srgb, var(--surface) 50%, transparent); }
+.seg-item.on { background: var(--accent-fill, var(--accent)); color: var(--accent-ink); box-shadow: var(--shadow-1); }
+.seg-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

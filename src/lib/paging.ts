@@ -90,3 +90,29 @@ export function usePageSize(): [number, (n: number) => void] {
   }, []);
   return [size, change];
 }
+
+// ---------- how a list is shown: cards, or one row each
+
+export type ListView = "cards" | "rows";
+export const viewOf = (v: unknown): ListView => (v === "rows" ? "rows" : "cards");
+const viewKey = (email?: string) => `pm:view:${email ?? ""}`;
+const VIEW_CHANGED = "pm:view-changed";
+const readView = (email?: string) => { try { return viewOf(localStorage.getItem(viewKey(email))); } catch { return "cards" as ListView; } };
+
+/** Cards or rows: one choice per person for every list, kept in this browser. */
+export function useListView(email?: string): [ListView, (v: ListView) => void] {
+  const [state, setState] = useState<{ email?: string; view: ListView }>(() => ({ email, view: readView(email) }));
+  const view = state.email === email ? state.view : readView(email);
+  if (state.email !== email) setState({ email, view });
+  useEffect(() => {
+    const on = () => setState({ email, view: readView(email) });
+    window.addEventListener(VIEW_CHANGED, on);
+    return () => window.removeEventListener(VIEW_CHANGED, on);
+  }, [email]);
+  const change = useCallback((v: ListView) => {
+    setState({ email, view: v });
+    try { localStorage.setItem(viewKey(email), v); } catch { /* private mode: it lasts for this page */ }
+    window.dispatchEvent(new Event(VIEW_CHANGED));
+  }, [email]);
+  return [view, change];
+}

@@ -1,16 +1,18 @@
 import { Fragment } from "react";
-import { CircleAlert, Clock3, Code2, Compass, CornerDownRight, Layers, ListChecks, MessageSquare, MessageSquarePlus, PencilLine, Server, ShieldCheck, UserCheck, Users, Workflow, type LucideIcon } from "lucide-react";
+import { CircleAlert, Clock3, Code2, Compass, CornerDownRight, Layers, ListChecks, MessageSquare, MessageSquarePlus, PencilLine, Server, UserCheck, Users } from "lucide-react";
 import type { DocMeta, Process, Rigour, Standard, TargetKind } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { cardGroups, cardLines, rigourParts, shortFact, tiersText, type CardLine } from "../lib/cardLines";
 import { statusOf } from "../lib/lifecycle";
 import { author } from "../lib/editing";
-import { matchRanges, NO_CATEGORY_LABEL, RIGOUR_LABEL, type Hit } from "../lib/search";
+import { matchRanges, NO_CATEGORY_LABEL, RIGOUR_LEVEL, type Hit } from "../lib/search";
 import { href } from "../lib/store";
+import type { ListView } from "../lib/paging";
 import { BookmarkButton, UpvoteButton } from "./Engage";
 import { EntryIcon } from "./EntryIcon";
 import { useEngagement } from "../lib/engagement";
-import { engagementKnown, RigourPips } from "./Lists";
+import { engagementKnown } from "./Lists";
+import { Fact, KindIcon, KindTag, kindWord, LevelMark } from "./marks";
 import "../lists.css";
 
 /** The text with the searched words marked; built as elements, never as HTML. */
@@ -28,16 +30,19 @@ export function Marked({ text, words }: { text: string; words: string[] }) {
   return <>{out}</>;
 }
 
-export const KIND: Record<TargetKind, { word: string; Icon: typeof Workflow }> = {
-  process: { word: "Process", Icon: Workflow },
-  standard: { word: "Standard", Icon: ShieldCheck },
+/** The word and icon of each kind (the tag itself is `KindTag` in marks.tsx). */
+export const KIND: Record<TargetKind, { word: string; Icon: (p: { size?: number }) => React.ReactElement }> = {
+  process: { word: kindWord("process"), Icon: ({ size }) => <KindIcon kind="process" size={size} /> },
+  standard: { word: kindWord("standard"), Icon: ({ size }) => <KindIcon kind="standard" size={size} /> },
 };
 const HIT_WORD: Record<Hit["where"], string> = { step: "Step", requirement: "Requirement", prerequisite: "Before you start", scope: "Scope", summary: "Summary" };
 /** Where a result was found, when it was searched for both ways: the heading of the place where it was found. */
 const FOUND_BY: Record<string, string> = { words: "Found by words", meaning: "Found by meaning", "meaning,words": "Found by words and by meaning" };
+/** How many places inside a card shows; the rest are counted ("2 more places"). */
+const SHOWN_HITS = 2;
 
 /** The icon of each fact on the card; the name of the fact is its tooltip and is read out. */
-const FACT_ICON: Record<string, LucideIcon> = {
+const FACT_ICON: Record<string, typeof Users> = {
   owner: Users, platform: Layers, practice: Compass, environments: Server, languages: Code2,
   lead: Clock3, steps: UserCheck, rules: ListChecks, usedBy: CornerDownRight,
 };
@@ -52,6 +57,9 @@ function hitHref(kind: TargetKind, id: string, h: Hit): string {
   if (kind === "process") return href({ page: "process", id, tab: "flow", ...(h.where === "step" && h.item ? { item: h.item } : {}) });
   return href({ page: "standard", id, tab: "doc", ...(h.where === "requirement" && h.item ? { item: h.item } : {}) });
 }
+
+/** The places worth showing: one that says only "Summary" or "Scope", with nothing of its text, tells nothing. */
+export const placesOf = (hits: Hit[]) => hits.filter((h) => (h.where !== "summary" && h.where !== "scope") || h.snippet);
 
 export interface DocCardProps {
   kind: TargetKind;
@@ -75,134 +83,174 @@ export interface DocCardProps {
   level?: 2 | 3;
   /** Searched both ways: which of them found it. */
   foundBy?: ("words" | "meaning")[];
+  /** The kind tag: where kinds are mixed (search, Home); a list of one kind leaves it out. */
+  showKind?: boolean;
+  /** A card, or one row (for scanning many). */
+  view?: ListView;
+}
+
+/** How binding it is, in its own words: "Mandatory" for a process, "4 must · 1 should" for a standard. */
+function Levels({ kind, rigour }: { kind: TargetKind; rigour: Partial<Record<Rigour, number>> }) {
+  const parts = rigourParts(rigour);
+  if (kind === "process") return <>{parts.map((p) => <LevelMark key={p.rigour} level={p.rigour} />)}</>;
+  return <>{parts.map((p, i) => <Fragment key={p.rigour}>{i > 0 && <span className="level-sep" aria-hidden="true"> · </span>}<LevelMark level={RIGOUR_LEVEL[p.rigour]} count={p.n} /></Fragment>)}</>;
 }
 
 /**
- * One process or standard in a list: what it is (the kind mark, the category, the tiers), what
- * needs attention (marks), the title and summary, then two rows of facts - first what to compare
- * (how binding, how long, how much is yours), then who looks after it and where it applies - and,
- * after a search, where inside it was found. The title is the link; it covers the whole card for
- * the mouse, while the links and buttons inside stay separate and reachable with the keyboard.
+ * One process or standard in a list. As a card: the kind (where kinds are mixed), the category and
+ * the tiers; what needs attention (marks); the title and two lines of summary; one line of facts to
+ * compare (how binding, how long, how much is yours) and one of who looks after it; after a search,
+ * up to two places inside where it was found; a compact foot. As a row: one line of the same,
+ * for scanning many. The title is the link; it covers the whole card for the mouse, while the links
+ * and buttons inside stay separate and reachable with the keyboard.
  */
-export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openFeedback, mayEdit, manages, meta, broken, usedBy, level = 2, foundBy }: DocCardProps) {
+export function DocCard(props: DocCardProps) {
+  const { kind, doc, rigour, rules, hits = [], words = [], openFeedback, mayEdit, manages, meta, broken, usedBy, level = 2, foundBy, showKind = true, view = "cards" } = props;
   const { catalog } = useCatalog();
   const known = engagementKnown(useEngagement());
   const status = statusOf(doc);
   const fix = !!broken && mayEdit;
   const groups = cardGroups(cardLines({ kind, doc, catalog, rigour, rules, mayEdit: mayEdit || !!manages, usedBy }));
   const changes = !!meta?.draft && status !== "draft";
-  const { word, Icon } = KIND[kind];
   const title = typeof doc.title === "string" && doc.title ? doc.title : doc.id;
   const category = doc.category ? catalog.categories.find((c) => c.id === doc.category)?.name ?? doc.category : NO_CATEGORY_LABEL;
   const tiers = tiersText(doc, catalog);
   const H = level === 2 ? "h2" : "h3";
   const feedbackHref = kind === "process" ? href({ page: "process", id: doc.id, tab: "feedback" }) : href({ page: "standard", id: doc.id, tab: "feedback" });
   const by = foundBy && foundBy.length > 0 ? [...foundBy].sort() : [];
-  // a place that says only "Summary" or "Scope", with nothing of its text, tells nothing: left out
-  const places = hits.filter((h) => (h.where !== "summary" && h.where !== "scope") || h.snippet);
+  const places = placesOf(hits);
+  const shown = places.slice(0, SHOWN_HITS);
+  const more = places.length - shown.length;
+  // standards: the number of requirements before how binding they are
+  const key = kind === "standard" ? [...groups.key].sort((a, b) => Number(b.key === "rules") - Number(a.key === "rules")) : groups.key;
+
+  const marks = (status !== "active" || fix || changes || groups.attention.length > 0) && (
+    <div className="card-marks">
+      {status === "draft" && <span className="card-mark draft">Draft</span>}
+      {status === "deprecated" && <span className="card-mark retired">Retired</span>}
+      {changes && <span className="card-mark changes" title={`Saved by ${author(meta!.draft).name}, not yet published`}><PencilLine size={12} aria-hidden="true" />Unpublished changes</span>}
+      {fix && <span className="card-mark bad"><CircleAlert size={12} aria-hidden="true" />Needs fixing</span>}
+      {groups.attention.map((l) => (
+        <span key={l.key} className={`card-mark ${l.key === "review" && l.value.startsWith("Overdue") ? "bad" : "warn"}`} data-line={l.key}>
+          <span className="sr-only">{l.name}: </span>{l.key === "review" ? `Review ${l.value.charAt(0).toLowerCase()}${l.value.slice(1)}` : l.value}
+        </span>
+      ))}
+    </div>
+  );
+  const engage = (
+    <span className={`card-engage ${known ? "" : "pending"}`.trim()}>
+      <UpvoteButton kind={kind} id={doc.id} title={title} />
+      <BookmarkButton kind={kind} id={doc.id} title={title} />
+    </span>
+  );
+
+  if (view === "rows") {
+    const best = places[0];
+    const owner = groups.who.find((l) => l.key === "owner");
+    return (
+      <li className={`card row ${status === "deprecated" ? "retired" : ""} ${status === "draft" ? "draft" : ""}`.trim()} data-kind={kind} data-id={doc.id}>
+        {showKind && <KindTag kind={kind} />}
+        <div className="row-main">
+          <H className="card-title"><a className="card-link" href={docHref(kind, doc.id, fix)}><Marked text={title} words={words} /></a></H>
+          {best ? (
+            <a className="row-hit" href={hitHref(kind, doc.id, best)}>
+              <span className="card-hit-where">{HIT_WORD[best.where]}</span>{" "}
+              {best.where !== "scope" && best.where !== "summary" ? <Marked text={best.label} words={words} /> : <Marked text={best.snippet ?? ""} words={words} />}
+            </a>
+          ) : <span className="row-cat">{category}</span>}
+        </div>
+        {marks}
+        <span className="row-level"><Levels kind={kind} rigour={rigour} /></span>
+        <span className="row-owner">{owner && <Fact icon={Users} label="Owner">{owner.value}</Fact>}</span>
+        {engage}
+      </li>
+    );
+  }
+
   return (
     <li className={`card ${status === "deprecated" ? "retired" : ""} ${status === "draft" ? "draft" : ""}`.trim()} data-kind={kind} data-id={doc.id}>
       <div className="card-top">
         <span className="card-eyebrow">
-          <span className={`kind-tag ${kind}`}><Icon size={13} aria-hidden="true" /><span className="card-kind">{word}</span></span>
+          {showKind && <KindTag kind={kind} />}
           <span className="card-cat">{category}</span>
         </span>
-        <span className={`card-tiers ${doc.tiers?.length ? "some" : ""}`} title="Application tiers it applies to">
+        <span className="card-tiers" title="Application tiers it applies to">
           <span className="sr-only">Applies to: </span>{tiers}
         </span>
       </div>
-      {(status !== "active" || fix || changes || groups.attention.length > 0) && (
-        <div className="card-marks">
-          {status === "draft" && <span className="card-mark draft">Draft</span>}
-          {status === "deprecated" && <span className="card-mark retired">Retired</span>}
-          {changes && <span className="card-mark changes" title={`Saved by ${author(meta!.draft).name}, not yet published`}><PencilLine size={12} aria-hidden="true" />Unpublished changes</span>}
-          {fix && <span className="card-mark bad"><CircleAlert size={12} aria-hidden="true" />Needs fixing</span>}
-          {groups.attention.map((l) => (
-            <span key={l.key} className="card-mark warn" data-line={l.key}><span className="sr-only">{l.name}: </span>{l.key === "review" ? `Review ${l.value.charAt(0).toLowerCase()}${l.value.slice(1)}` : l.value}</span>
-          ))}
-        </div>
-      )}
+      {marks}
       <H className="card-title"><a className="card-link" href={docHref(kind, doc.id, fix)}><Marked text={title} words={words} /></a></H>
       {doc.summary && <p className="card-summary"><Marked text={doc.summary} words={words} /></p>}
-      {groups.key.length > 0 && (
-        <dl className="card-lines card-key">
-          {(kind === "standard" ? [...groups.key].sort((a, b) => Number(b.key === "rules") - Number(a.key === "rules")) : groups.key)
-            .map((l) => <Fact key={l.key} line={l} kind={kind} rigour={rigour} />)}
-        </dl>
-      )}
-      {groups.who.length > 0 && (
-        <dl className="card-lines card-who">
-          {groups.who.map((l) => <Fact key={l.key} line={l} kind={kind} rigour={rigour} />)}
-        </dl>
-      )}
-      {(places.length > 0 || by.length > 0) && (
-        <div className="card-found">
-          {by.length > 0 && (
-            <p className={`card-found-by ${by.length > 1 ? "both" : by[0]}`}>{FOUND_BY[by.join(",")]}</p>
+      {(key.length > 0 || groups.who.length > 0) && (
+        <div className="card-facts">
+          {key.length > 0 && (
+            <dl className="card-lines card-key">
+              {key.map((l) => <FactLine key={l.key} line={l} kind={kind} rigour={rigour} strong />)}
+            </dl>
           )}
-          {places.length > 0 && (
+          {groups.who.length > 0 && (
+            <dl className="card-lines card-who">
+              {groups.who.map((l) => <FactLine key={l.key} line={l} kind={kind} rigour={rigour} />)}
+            </dl>
+          )}
+        </div>
+      )}
+      {(shown.length > 0 || by.length > 0) && (
+        <div className="card-found">
+          {by.length > 0 && <p className={`card-found-by ${by.length > 1 ? "both" : by[0]}`}>{FOUND_BY[by.join(",")]}</p>}
+          {shown.length > 0 && (
             <ul className="card-hits" aria-label={`Found in ${title}`}>
-              {places.map((h, i) => (
+              {shown.map((h, i) => (
                 <li key={`${h.where}:${h.item ?? i}`}>
                   <a href={hitHref(kind, doc.id, h)}>
-                    <span className="card-hit-where">{HIT_WORD[h.where]}{h.where === "requirement" && h.item ? ` ${h.item}` : ""}</span>
+                    <span className="card-hit-where">{HIT_WORD[h.where]}{h.where === "requirement" && h.item ? ` ${h.item}` : ""}</span>{" "}
                     {h.where !== "scope" && h.where !== "summary" && <span className="card-hit-label"><Marked text={h.label} words={words} /></span>}
                   </a>
-                  {h.snippet && <span className="card-hit-snippet"><Marked text={h.snippet} words={words} /></span>}
+                  {h.snippet && <span className="card-hit-snippet"> <Marked text={h.snippet} words={words} /></span>}
                 </li>
               ))}
             </ul>
           )}
+          {more > 0 && <a className="card-hits-more" href={docHref(kind, doc.id)}>{more === 1 ? "1 more place" : `${more} more places`}</a>}
         </div>
       )}
-      {openFeedback > 0 && <p className="card-feedback"><MessageSquare size={14} aria-hidden="true" />{openFeedback} open feedback</p>}
       <div className="card-foot">
-        <a className="card-give" href={feedbackHref} aria-label={`Give feedback on ${title}`}><MessageSquarePlus size={14} aria-hidden="true" />Give feedback</a>
+        {openFeedback > 0
+          ? <a className="card-feedback" href={feedbackHref}><MessageSquare size={14} aria-hidden="true" />{openFeedback} open feedback</a>
+          : <span />}
+        <a className="card-give" href={feedbackHref} aria-label={`Give feedback on ${title}`} title="Give feedback"><MessageSquarePlus size={15} aria-hidden="true" /></a>
         {/* until the upvotes and bookmarks are known, a 0 would look like a fact: kept in place, not shown */}
-        <span className={`card-engage ${known ? "" : "pending"}`.trim()}>
-          <UpvoteButton kind={kind} id={doc.id} title={title} />
-          <BookmarkButton kind={kind} id={doc.id} title={title} />
-        </span>
+        {engage}
       </div>
     </li>
   );
 }
 
 /**
- * One fact of the card: its icon (or, for the rigour, its marks) and the value. The name of the
- * fact is read out before the value and shows as a tooltip; it is not printed, so that the card is
- * not a table of labels.
+ * One fact of the card in its definition list: the name is read out before the value (and is the
+ * tooltip); what shows is the icon (or, for the level, its bars) and the value.
  */
-function Fact({ line: l, kind, rigour }: { line: CardLine; kind: TargetKind; rigour: Partial<Record<Rigour, number>> }) {
+function FactLine({ line: l, kind, rigour, strong }: { line: CardLine; kind: TargetKind; rigour: Partial<Record<Rigour, number>>; strong?: boolean }) {
   if (l.key === "rigour") {
-    const parts = rigourParts(rigour);
     return (
-      <div className="card-line card-fact rigour" data-line="rigour" title={`Rigour: ${l.value}`}>
+      <div className="card-line rigour" data-line="rigour" title={`${kind === "standard" ? "Requirements" : "Rigour"}: ${l.value}`}>
         <dt className="sr-only">{l.name}:</dt>
-        <dd>
-          {parts.map((p, i) => (
-            <span key={p.rigour} className="rigour-part">
-              <RigourPips rigour={p.rigour} />
-              {kind === "process" ? RIGOUR_LABEL[p.rigour]
-                : <>{p.n}<span className="sr-only">{` ${RIGOUR_LABEL[p.rigour].toLowerCase()}${i < parts.length - 1 ? "," : ""}`}</span></>}
-            </span>
-          )).flatMap((el, i) => (i ? [" ", el] : [el]))}
-        </dd>
+        <dd><Levels kind={kind} rigour={rigour} /></dd>
       </div>
     );
   }
-  const Icon = FACT_ICON[l.key];
   const items = l.items?.some((x) => x.icon) ? l.items : undefined;
   return (
-    <div className={`card-line card-fact ${l.warn ? "warn" : ""}`.trim()} data-line={l.key} title={`${l.name}: ${l.value}`}>
+    <div className={`card-line ${l.warn ? "warn" : ""}`.trim()} data-line={l.key}>
       <dt className="sr-only">{l.name}:</dt>
       <dd>
-        {!items && Icon && <Icon size={14} aria-hidden="true" className="card-fact-icon" />}
-        {items ? items.map((x, i) => (
-          <Fragment key={i}>
-            <span className="card-entry"><EntryIcon icon={x.icon} size={14} fallback={<Code2 size={14} aria-hidden="true" className="card-fact-icon" />} />{x.name}{i < items.length - 1 && ","}</span>{" "}
-          </Fragment>
-        )) : shortFact(l, kind)}
+        {items ? (
+          <span className="fact" title={`${l.name}: ${l.value}`}>
+            {items.map((x, i) => (
+              <span key={i} className="card-entry"><EntryIcon icon={x.icon} size={14} fallback={<Code2 size={14} aria-hidden="true" className="fact-icon" />} />{x.name}{i < items.length - 1 && ","}</span>
+            ))}
+          </span>
+        ) : <Fact icon={FACT_ICON[l.key]} strong={strong} title={`${l.name}: ${l.value}`}>{shortFact(l, kind)}</Fact>}
       </dd>
     </div>
   );
