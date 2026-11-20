@@ -5,6 +5,7 @@ import { GROUP, looksLikeEmail, MEMBER_ROLE, membersOf, type GroupKind } from ".
 import { usePerms } from "../lib/session";
 import { grantAccess, loadAccess, revokeAccess, type Access } from "../lib/store";
 import { confirmDialog, LoadError, Loading, notify } from "./ui";
+import { formatDate } from "../lib/dates";
 
 /** What the members of a team, platform or practice do, in one sentence. */
 const MEMBERS_DO: Record<GroupKind, string> = {
@@ -112,7 +113,7 @@ export function GroupMembers({ kind, id, name, saved, manage, members, membersEr
             {list.map((m) => (
               <li key={m.email}>
                 <span className="avatar">{m.email.slice(0, 1).toUpperCase()}</span>
-                <span className="person"><strong>{m.email}</strong><em>since {m.grantedAt.slice(0, 10)}, added by {m.grantedBy}</em></span>
+                <span className="person"><strong>{m.email}</strong><em>since {formatDate(m.grantedAt)}, added by {m.grantedBy}</em></span>
                 <span className="role-chips">
                   <span className="role-chip">
                     {GROUP[kind].member}

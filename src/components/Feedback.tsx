@@ -3,6 +3,7 @@ import { Check, CircleCheck, Flag, History, RotateCcw, ThumbsUp, Trash2 } from "
 import type { Feedback, FeedbackKind, Process, Standard, TargetKind } from "../types";
 import { useFeedbackActions } from "../lib/session";
 import { confirmDialog } from "./ui";
+import { formatDate } from "../lib/dates";
 
 export const FEEDBACK_KINDS: Record<FeedbackKind, { label: string; hint: string }> = {
   broken: { label: "Doesn’t work", hint: "I followed it and it failed" },
@@ -102,11 +103,11 @@ export function FeedbackItem({ item, target, onSelect, hideItem }: {
           : <span className="muted">a {target.part} that was removed</span>)}
         {!hideItem && !item.itemId && <span className="muted">{target.whole.replace("The whole", "Whole")}</span>}
         <span className="spacer" />
-        <span className="muted">{item.mine ? "You" : item.author.name} · {item.createdAt.slice(0, 10)}</span>
+        <span className="muted">{item.mine ? "You" : item.author.name} · {formatDate(item.createdAt)}</span>
       </div>
       <p>{item.text}</p>
       {item.stale && <p className="fb-stale"><History size={13} />This {target.part} was changed after the feedback was written. It may already be fixed.</p>}
-      {item.resolved && <p className="fb-fixed"><Check size={13} />Marked as fixed{item.resolvedBy ? ` by ${item.resolvedBy}` : ""}{item.resolvedAt ? ` on ${item.resolvedAt.slice(0, 10)}` : ""}</p>}
+      {item.resolved && <p className="fb-fixed"><Check size={13} />Marked as fixed{item.resolvedBy ? ` by ${item.resolvedBy}` : ""}{item.resolvedAt ? ` on ${formatDate(item.resolvedAt)}` : ""}</p>}
       <div className="fb-actions">
         {!item.mine && !item.resolved && (
           <button className={`btn small ${item.alsoHitByMe ? "on" : "ghost"}`} aria-pressed={item.alsoHitByMe} onClick={() => actions.alsoHit(item, !item.alsoHitByMe)}>

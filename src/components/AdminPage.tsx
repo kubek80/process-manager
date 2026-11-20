@@ -14,6 +14,7 @@ import { SKILL_KIND, SkillPanel } from "./SkillPanel";
 import { StatisticsSection } from "./StatisticsPage";
 import { ThemeSection } from "./ThemeSection";
 import { LoadError, Loading } from "./ui";
+import { formatDate, formatDateTime } from "../lib/dates";
 
 export { ROLES } from "../lib/users";
 
@@ -63,7 +64,7 @@ function SkillsSection() {
                 <li key={s.id}>
                   <button className={`cat-item ${current?.id === s.id ? "on" : ""} ${s.active ? "" : "withdrawn"}`} onClick={() => setOpen(s.id)}>
                     <span className={`skill-icon small ${s.kind}`}><K.icon size={15} /></span>
-                    <span className="cat-item-text"><strong>{s.title}</strong><em>{s.active ? `from the ${s.sourceKind} · ${s.updatedAt.slice(0, 10)}` : "withdrawn"}</em></span>
+                    <span className="cat-item-text"><strong>{s.title}</strong><em>{s.active ? `from the ${s.sourceKind} · ${formatDate(s.updatedAt)}` : "withdrawn"}</em></span>
                     <span className="cat-uses" title="Version">v{s.version}</span>
                   </button>
                 </li>
@@ -161,7 +162,7 @@ function ActivitySection({ processes, standards }: { processes: Process[]; stand
             const t = d.target;
             return (
               <li key={e.id}>
-                <time dateTime={e.at}>{e.at.slice(0, 16).replace("T", " ")}</time>
+                <time dateTime={e.at}>{formatDateTime(e.at)}</time>
                 <span>{d.person ? <b title={e.email}>{d.who}</b> : <span className="activity-portal">{d.who}</span>} {d.words}
                   {t && <> {t.code ? <code>{t.text}</code> : <span className={t.quoted ? "activity-doc" : ""} title={t.hint}>{t.text}</span>}</>}
                   {d.detail && <em> · {d.detail}</em>}</span>

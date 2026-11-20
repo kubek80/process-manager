@@ -18,7 +18,7 @@ export function Login({ me, onSignedIn }: { me: Me; onSignedIn: () => void }) {
     <main className="login">
       <div className="login-card">
         <BrandLogo look={look} big />
-        <h1>{name}</h1>
+        <h1 className={name.length > 24 ? "long" : undefined}>{name}</h1>
         <p className="lead">How to get things done on the platform, step by step.</p>
         {error && <div className="check bad"><CircleAlert size={16} /><span>Sign-in did not work: {error}</span></div>}
 

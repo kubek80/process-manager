@@ -13,3 +13,6 @@
 /* dates and review dates never break inside ("2026-11-\n20") */
 .mine .nowrap { white-space: nowrap; }
 .mine-table td.mine-when { white-space: nowrap; }
+
+/* on a phone every group stays in sight: the control wraps instead of scrolling sideways */
+@media (max-width: 600px) { .seg.mine-groups { display: flex; flex-wrap: wrap; width: 100%; } .seg.mine-groups .seg-item { flex: 1 1 auto; } }

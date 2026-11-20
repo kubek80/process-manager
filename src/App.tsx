@@ -9,7 +9,7 @@ import {
 } from "./lib/store";
 import { CatalogContext, EMPTY_CATALOG, useCatalog } from "./lib/catalog";
 import { EngagementProvider } from "./lib/engagement";
-import { canOpenAdmin, FeedbackContext, MeContext, roleLabel, usePerms, type FeedbackActions } from "./lib/session";
+import { canOpenAdmin, FeedbackContext, MeContext, usePerms, type FeedbackActions } from "./lib/session";
 import { belongsRefused, canEdit, editsAll } from "./lib/rights";
 import { blankProcess, blankStandard, slugify, tidy, tidyStandard, today, uniqueId, type BelongsTo } from "./lib/edit";
 import { CatalogPage } from "./components/CatalogPage";
@@ -19,7 +19,7 @@ import { ProcessPage, processAiSpec } from "./components/ProcessPage";
 import { StandardPage, standardAiSpec } from "./components/StandardPage";
 import { StandardsLibrary } from "./components/StandardsLibrary";
 import { MinePage } from "./components/MinePage";
-import { myGroups, responsibilities, urgent } from "./lib/responsibilities";
+import { accountRoles, myGroups, responsibilities, urgent } from "./lib/responsibilities";
 import { platformName, practiceName } from "./lib/catalog";
 import { chooseDialog, confirmDialog, ErrorBoundary, Field, LoadError, Loading, Modal, Notices, notify, useLayer } from "./components/ui";
 import { BrandLogo } from "./components/Brand";
@@ -72,6 +72,7 @@ export default function App() {
 function UserMenu({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const [open, setOpen] = useState(false);
   const perms = usePerms();
+  const { catalog } = useCatalog();
   const box = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   // closes on a click or a focus move anywhere else, and on Escape (see AccountPop)
@@ -91,7 +92,7 @@ function UserMenu({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         <AccountPop onClose={() => { setOpen(false); button.current?.focus(); }}>
           <strong>{me.user!.name}</strong>
           <span className="muted">{me.user!.email}</span>
-          <span className="user-role">{roleLabel(perms)}</span>
+          <ul className="account-roles" aria-label="Your roles">{accountRoles(perms, { team: catalog.teams, platform: catalog.platforms, practice: catalog.practices }).map((r) => <li key={r}>{r}</li>)}</ul>
           <button className="btn small" onClick={async () => {
             if (!await mayLeave(unsavedWork(), unsavedSaver())) return;
             await logout().catch(() => {});
@@ -138,8 +139,9 @@ function MenuButton({ places, on, current }: { places: Place[]; on: (...pages: s
       <button ref={button} className="menu-btn" aria-expanded={open} aria-controls="main-menu" onClick={() => setOpen(!open)}
         aria-label={waiting ? `Menu, ${waiting} waiting` : "Menu"} title="All places of the portal">
         {open ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}<span className="menu-word">Menu</span>
-        {here && <span className="menu-here" aria-hidden="true">{here.label}</span>}
+        {/* the count belongs to the menu (what waits inside it), not to the place the person is at */}
         {waiting > 0 && <b className="nav-count" aria-hidden="true">{waiting}</b>}
+        {here && <span className="menu-here" aria-hidden="true">{here.label}</span>}
       </button>
       {open && <MenuSheet onClose={() => setOpen(false)} returnFocus={() => button.current}>
         {places.map((p) => <PlaceLink key={p.key} place={p} on={on(...p.pages)} current={current(...p.pages)} onGo={() => setOpen(false)} />)}

@@ -3,6 +3,7 @@ import { Bot, Check, Download, FileText, Pencil, Sparkles } from "lucide-react";
 import type { Skill, SkillDetail, TargetKind } from "../types";
 import { loadSkill, loadSkills, loadSkillVersion, putSkillExtra } from "../lib/store";
 import { CopyButton, LoadError, Loading, notify } from "./ui";
+import { formatDate } from "../lib/dates";
 
 export const SKILL_KIND = { skill: { label: "Skill", icon: Sparkles }, "review-agent": { label: "Review agent", icon: Bot } } as const;
 
@@ -56,7 +57,7 @@ export function SkillPanel({ id, onChanged }: { id: string; onChanged?: () => vo
         <label className="skill-version">Version
           <select value={version} onChange={(e) => show(Number(e.target.value))}>
             <option value={0}>{skill.version} (latest)</option>
-            {versions.slice(1).map((v) => <option key={v.version} value={v.version}>{v.version} · {v.createdAt.slice(0, 10)}</option>)}
+            {versions.slice(1).map((v) => <option key={v.version} value={v.version}>{v.version} · {formatDate(v.createdAt)}</option>)}
           </select>
         </label>
         {/* which version of the process or standard this text was made from */}

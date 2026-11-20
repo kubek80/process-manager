@@ -1,6 +1,7 @@
 import type { Feedback, FeedbackByTarget, Perms, Process, Standard, TargetKind } from "../types";
 import { reviewOf, statusOf, type Dates, type ReviewInfo } from "./lifecycle";
 import type { GroupKind } from "./members";
+import { roleLine, type Groups, type UserRole } from "./users";
 
 /** A team, platform or practice somebody belongs to. */
 export interface Group { kind: GroupKind; id: string }
@@ -113,4 +114,21 @@ export function changedBy(email: string | undefined, names: Record<string, strin
   if (email === "import") return "Imported";
   if (email === "system") return "Updated by the portal";
   return names[email.toLowerCase()] || email;
+}
+
+/**
+ * The person's roles for the account menu, in the words of Admin > Access and saying of what:
+ * "Platform owner for Google Cloud", "Owner for Cloud Platform team". "Reader" when there are none.
+ */
+export function accountRoles(p: Perms, groups: Groups): string[] {
+  const roles: UserRole[] = [
+    ...(p.admin ? [{ role: "admin" as const, scope: "" }] : []),
+    ...(p.catalog && !p.admin ? [{ role: "catalog-manager" as const, scope: "" }] : []),
+    ...(p.processes && !p.admin ? [{ role: "process-editor" as const, scope: "" }] : []),
+    ...(p.standards && !p.admin ? [{ role: "standards-editor" as const, scope: "" }] : []),
+    ...(p.platforms ?? []).map((scope) => ({ role: "platform-owner" as const, scope })),
+    ...(p.practices ?? []).map((scope) => ({ role: "practice-owner" as const, scope })),
+    ...(p.owns ?? []).map((scope) => ({ role: "owner" as const, scope })),
+  ];
+  return roles.length ? roles.map((r) => roleLine(r, groups)) : ["Reader"];
 }

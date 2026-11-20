@@ -306,6 +306,7 @@
   .view-switch .seg-word { display: none; }
   .pager-pages, .pager-word { display: none; }
   .pager-of { display: inline; padding: 0 6px; }
+  .type-tabs { margin-bottom: 12px; }
   .type-tabs .tab { padding: 0 10px; font-size: 13.5px; }
   .type-tab-mark { display: none; }
   .hero.list-hero h1 { font-size: 26px; }
@@ -313,6 +314,8 @@
   .card.row:not(:has(> .kind-tag)) { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main act" "level act"; }
   .card.row > .kind-tag { display: none; }
   .row-main { flex-direction: column; gap: 2px; align-items: stretch; }
+  /* in a column a basis of 0 would fold the line away: where it was found (or the category) stays readable */
+  .row-hit, .row-cat { flex: none; }
   .card.row .card-marks { display: none; }
 }
 

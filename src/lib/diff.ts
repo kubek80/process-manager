@@ -9,8 +9,12 @@ export interface Change {
   kind: "added" | "removed" | "changed";
   /** What it is about, e.g. "Step", "Requirement", "Details". */
   what: string;
-  /** The thing itself: a step title, a requirement id and title, a field name. */
+  /** The thing itself: a step title, a requirement id and title, a field name. Empty: an item without a name yet. */
   label: string;
+  /** For a step, participant or requirement: its id. */
+  id?: string;
+  /** How an item without a name is called by its place, e.g. "Step 3", "Prerequisite 2", "Requirement SEC-01". */
+  unnamed?: string;
   /** For changes: which parts are different. */
   details?: string[];
   /** For a detail that holds one value (category, practice, platform, rigour): what it was and what it is now, by name. Empty: not set. */
@@ -27,28 +31,52 @@ const blank = (v: unknown) => v === undefined || v === null || v === "" || (Arra
 const same = (a: unknown, b: unknown) => (blank(a) && blank(b)) || JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const isObject = (v: unknown): v is Doc => !!v && typeof v === "object" && !Array.isArray(v);
 
-/** Names for the fields of a document, a step and a requirement. */
+/** What a field belongs to: its name depends on it ("name" of a process, "short name" of a requirement). */
+export type FieldContext = "process" | "standard" | "step" | "requirement" | "participant" | "prerequisite";
+
+/** Names for the fields, as the labels on the editing screen call them. */
 const FIELD: Record<string, string> = {
-  title: "title", summary: "summary", category: "category", practice: "practice", platform: "platform", rigour: "rigour", owner: "owner", tiers: "tiers", languages: "languages", environments: "environments",
-  estimatedDuration: "typical duration", tags: "tags", status: "status", replacedBy: "replaced by", review: "review", resources: "links",
-  standards: "standards", actors: "participants", scope: "scope", exceptionProcessId: "exception process",
-  actor: "who does it", type: "kind", description: "description", instructions: "instructions", tool: "tool", url: "link", urlLabel: "link text",
-  duration: "duration", outcome: "result", subProcessId: "sub-process", next: "what comes next",
-  level: "level", statement: "statement", rationale: "reason", guidance: "how to comply", examples: "examples", verification: "how it is checked",
-  processId: "helpful process",
+  title: "name", summary: "summary", category: "category", practice: "practice", platform: "platform", rigour: "rigour", owner: "owning team", tiers: "application tiers", languages: "languages", environments: "environments",
+  estimatedDuration: "typical lead time", tags: "tags", status: "status", replacedBy: "use instead", review: "review", resources: "links",
+  standards: "standards it helps to meet", actors: "who takes part", prerequisites: "before you start", scope: "scope", exceptionProcessId: "how to ask for an exception",
+  actor: "who does it", type: "kind of step", description: "description", instructions: "what to do", tool: "tool", url: "link", urlLabel: "link text",
+  duration: "typical time", outcome: "result", subProcessId: "sub-process", next: "what comes next",
+  level: "level", statement: "the rule", rationale: "why", guidance: "steps to comply", examples: "examples", verification: "how it is checked",
+  processId: "process that helps", id: "id", name: "name", teamId: "team", lookFor: "signs of a violation", paths: "files", label: "name of the answer", to: "goes to",
 };
-const name = (key: string) => FIELD[key] ?? key;
-/** A field of a document, a step or a requirement in words, e.g. "who does it" for `actor`. */
+/** Where a field is called otherwise in one place. */
+const IN: Partial<Record<FieldContext, Record<string, string>>> = {
+  process: { resources: "links and resources" },
+  standard: { owner: "issued by", resources: "background" },
+  step: { title: "what happens", description: "context", resources: "skills and links", processId: "process" },
+  requirement: { title: "short name", review: "signs of a violation", processId: "process that helps to comply" },
+  participant: { description: "how to reach them" },
+  prerequisite: { description: "why it is needed", processId: "process that provides it" },
+};
+const name = (key: string, context?: FieldContext) => (context && IN[context]?.[key]) ?? FIELD[key] ?? key;
+/** A field of a document, a step or a requirement in words, e.g. "who does it" for `actor`; `context` says whose field it is. */
 export const fieldName = name;
 
+/**
+ * A step, prerequisite, participant or requirement in a sentence: `Step “Approve”`, or for one
+ * without a name yet (just added, or its name cleared) by its place: `Step 3 (no name yet)`.
+ */
+export function itemWords(c: Pick<Change, "what" | "label" | "unnamed">): string {
+  const label = typeof c.label === "string" ? c.label.trim() : "";
+  if (label) return `${c.what} “${label}”`;
+  return `${c.unnamed || c.what} (no name yet)`;
+}
+
 /** Which of the given fields differ between two objects, by their readable names. */
-function changedFields(a: Doc, b: Doc, skip: string[]): string[] {
+function changedFields(a: Doc, b: Doc, skip: string[], context?: FieldContext): string[] {
   const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => !skip.includes(k));
-  return keys.filter((k) => !same(a[k], b[k])).map(name);
+  return keys.filter((k) => !same(a[k], b[k])).map((k) => name(k, context));
 }
 
 /** Added, removed and changed items of a list whose items have an id. */
-function compareItems<T extends { id: string }>(what: string, before: T[], after: T[], label: (t: T) => string, changes: Change[]) {
+function compareItems<T extends { id: string }>(what: string, before: T[], after: T[], label: (t: T) => string, changes: Change[], context?: FieldContext, place: (t: T, i: number) => string = (_, i) => `${what} ${i + 1}`) {
+  // a name is always a text, also in a version that is broken
+  const named = (x: T) => { const l = label(x); return typeof l === "string" ? l : ""; };
   const old = new Map(before.map((x) => [x.id, x]));
   const now = new Map(after.map((x) => [x.id, x]));
   // An item that only got another id (a new step is renamed from "new-step" when it is given
@@ -68,13 +96,14 @@ function compareItems<T extends { id: string }>(what: string, before: T[], after
   };
   for (const x of after) {
     const prev = old.get(oldIdOf(x.id));
-    if (!prev) changes.push({ kind: "added", what, label: label(x) });
+    const at = { id: x.id, unnamed: place(x, after.indexOf(x)) };
+    if (!prev) changes.push({ kind: "added", what, label: named(x), ...at });
     else {
-      const details = changedFields(prev as unknown as Doc, follow(x), ["id"]);
-      if (details.length) changes.push({ kind: "changed", what, label: label(x), details });
+      const details = changedFields(prev as unknown as Doc, follow(x), ["id"], context);
+      if (details.length) changes.push({ kind: "changed", what, label: named(x), details, ...at });
     }
   }
-  for (const x of gone) if (![...renamed.values()].includes(x.id)) changes.push({ kind: "removed", what, label: label(x) });
+  for (const x of gone) if (![...renamed.values()].includes(x.id)) changes.push({ kind: "removed", what, label: named(x), id: x.id, unnamed: place(x, before.indexOf(x)) });
   for (const [, id] of renamed) now.set(id, old.get(id)!); // for the order below, a renamed item is still there
   // the same items in another order
   const kept = (list: T[], other: Map<string, T>, id: (x: T) => string) => list.map(id).filter((i) => other.has(i)).join("\n");
@@ -88,17 +117,17 @@ const list = <T,>(v: T[] | undefined): T[] => (Array.isArray(v) ? v.filter((x) =
 const VALUED = ["category", "practice", "platform", "rigour", "owner"] as const;
 
 /** The changed details of a whole document; those in VALUED say from what to what, by name where the lists are known. */
-function detailChanges(before: Doc, after: Doc, skip: string[], catalog?: Catalog): Change[] {
+function detailChanges(before: Doc, after: Doc, skip: string[], catalog?: Catalog, context?: FieldContext): Change[] {
   const nameIn = (list: { id: string; name: string }[] | undefined, v: unknown) => (typeof v === "string" && v ? list?.find((x) => x.id === v)?.name ?? v : "");
   const valueName = (field: (typeof VALUED)[number], v: unknown): string => {
     if (field === "rigour") return typeof v === "string" ? RIGOUR_NAME[v as Rigour] ?? v : "";
     const list = field === "category" ? catalog?.categories : field === "practice" ? catalog?.practices : field === "owner" ? catalog?.teams : catalog?.platforms;
     return nameIn(list, v);
   };
-  const changes: Change[] = changedFields(before, after, [...skip, ...VALUED]).map((label) => ({ kind: "changed", what: "Details", label }));
+  const changes: Change[] = changedFields(before, after, [...skip, ...VALUED], context).map((label) => ({ kind: "changed", what: "Details", label }));
   for (const field of VALUED) {
     if (same(before[field], after[field])) continue;
-    changes.push({ kind: "changed", what: "Details", label: name(field), from: valueName(field, before[field]), to: valueName(field, after[field]) });
+    changes.push({ kind: "changed", what: "Details", label: name(field, context), from: valueName(field, before[field]), to: valueName(field, after[field]) });
   }
   return changes;
 }
@@ -106,28 +135,33 @@ function detailChanges(before: Doc, after: Doc, skip: string[], catalog?: Catalo
 export function compareProcesses(before: Process, after: Process, catalog?: Catalog): Change[] {
   if (!isObject(before) || !isObject(after)) return [];
   // updatedAt changes with every save and says nothing; steps and prerequisites are listed on their own
-  const changes = detailChanges(before as unknown as Doc, after as unknown as Doc, ["steps", "prerequisites", "updatedAt", "$schema", "schemaVersion", "id"], catalog);
+  const changes = detailChanges(before as unknown as Doc, after as unknown as Doc, ["steps", "prerequisites", "actors", "updatedAt", "$schema", "schemaVersion", "id"], catalog, "process");
   // prerequisites have no id: they are matched by title, and two with the same title in the order they come
   const oldPre = list(before.prerequisites), newPre = list(after.prerequisites);
+  const text = (v: unknown) => (typeof v === "string" ? v : "");
   const left = [...oldPre];
   const pairs: [number, number][] = []; // [position before, position after]
+  const pre = (at: number) => `Prerequisite ${at + 1}`;
   newPre.forEach((q, at) => {
     const i = left.findIndex((o) => o.title === q.title);
-    if (i < 0) return void changes.push({ kind: "added", what: "Before you start", label: q.title });
+    if (i < 0) return void changes.push({ kind: "added", what: "Before you start", label: text(q.title), unnamed: pre(at) });
     const [prev] = left.splice(i, 1);
     pairs.push([oldPre.indexOf(prev), at]);
-    if (!same(prev, q)) changes.push({ kind: "changed", what: "Before you start", label: q.title });
+    if (!same(prev, q)) changes.push({ kind: "changed", what: "Before you start", label: text(q.title), unnamed: pre(at), details: changedFields(prev as unknown as Doc, q as unknown as Doc, ["title"], "prerequisite") });
   });
-  for (const q of left) changes.push({ kind: "removed", what: "Before you start", label: q.title });
+  for (const q of left) changes.push({ kind: "removed", what: "Before you start", label: text(q.title), unnamed: pre(oldPre.indexOf(q)) });
   if (pairs.some(([was], i) => i > 0 && was < pairs[i - 1][0])) changes.push({ kind: "changed", what: "Details", label: "order of what is needed before you start" });
-  compareItems<Step>("Step", list(before.steps), list(after.steps), (s) => s.title, changes);
+  compareItems("Participant", list(before.actors), list(after.actors), (a) => a.name, changes, "participant");
+  compareItems<Step>("Step", list(before.steps), list(after.steps), (s) => s.title, changes, "step");
   return changes;
 }
 
 export function compareStandards(before: Standard, after: Standard, catalog?: Catalog): Change[] {
   if (!isObject(before) || !isObject(after)) return [];
-  const changes = detailChanges(before as unknown as Doc, after as unknown as Doc, ["requirements", "updatedAt", "$schema", "schemaVersion", "id"], catalog);
-  compareItems<Requirement>("Requirement", list(before.requirements), list(after.requirements), (r) => `${r.id} ${r.title}`, changes);
+  const changes = detailChanges(before as unknown as Doc, after as unknown as Doc, ["requirements", "updatedAt", "$schema", "schemaVersion", "id"], catalog, "standard");
+  // a requirement is named by its id and name; without a name yet, by its id
+  compareItems<Requirement>("Requirement", list(before.requirements), list(after.requirements), (r) => (typeof r.title === "string" && r.title.trim() ? `${r.id} ${r.title}` : ""), changes, "requirement",
+    (r) => `Requirement ${r.id}`);
   return changes;
 }
 
@@ -142,8 +176,8 @@ export function compare(kind: "process" | "standard", before: unknown, after: un
  */
 export function describeChange(c: Change): string {
   // a step, prerequisite or requirement can have no name yet (just added, or its name cleared)
-  const label = c.label.trim() || "An item without a name";
-  const Label = `${label[0].toUpperCase()}${label.slice(1)}`;
+  const label = (typeof c.label === "string" ? c.label.trim() : "") || "An item without a name";
+  const Label = cap(label);
   if (c.what === "Details" && (c.from !== undefined || c.to !== undefined)) {
     if (c.from && c.to) return `${Label} changed from “${c.from}” to “${c.to}”`;
     if (c.to) return `${Label} set to “${c.to}”`;
@@ -151,8 +185,11 @@ export function describeChange(c: Change): string {
   }
   if (c.what === "Details") return `${Label} changed`;
   const verb = c.kind === "added" ? "added" : c.kind === "removed" ? "removed" : "changed";
-  return `${c.what} “${c.label}” ${verb}${c.details?.length ? `: ${c.details.join(", ")}` : ""}`;
+  return `${itemWords(c)} ${verb}${c.details?.length ? `: ${c.details.join(", ")}` : ""}`;
 }
+
+/** A text with its first letter in upper case; "" stays "". */
+export const cap = (t: string) => (t ? `${t.charAt(0).toUpperCase()}${t.slice(1)}` : "");
 
 /** A short summary, e.g. "2 steps added, 1 changed, details changed". */
 export function summarize(changes: Change[]): string {

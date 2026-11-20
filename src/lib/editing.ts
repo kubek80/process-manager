@@ -1,5 +1,5 @@
 import type { Catalog, Issue, Level, Process, Standard, Status, StepType, TargetKind } from "../types";
-import { compare, describeChange, fieldName, type Change } from "./diff";
+import { cap, compare, describeChange, fieldName, itemWords, type Change, type FieldContext } from "./diff";
 import { EXAMPLE } from "./edit";
 
 /**
@@ -255,29 +255,45 @@ export function withoutEarlySuggestions(kind: TargetKind, doc: Process | Standar
   });
 }
 
+/** Whose field a checker path is about: "steps[2].title" is a step's, "requirements[0].title" a requirement's. */
+export function pathContext(path: string, kind?: TargetKind): FieldContext | undefined {
+  const first = path.match(/^[A-Za-z$]+/)?.[0];
+  if (first === "steps") return /^steps\[\d+\]\./.test(path) ? "step" : kind;
+  if (first === "requirements") return /^requirements\[\d+\]\./.test(path) ? "requirement" : kind;
+  if (first === "actors" && /^actors\[\d+\]\./.test(path)) return "participant";
+  if (first === "prerequisites" && /^prerequisites\[\d+\]\./.test(path)) return "prerequisite";
+  return kind;
+}
+
 /**
- * A problem in words: the field it is about, then what is wrong with it, e.g. "Who does it must
- * be one of: me, boss". The place (which step) is shown by where the problem is listed.
+ * A problem in words: the field it is about, by the label the person sees, then what is wrong
+ * with it, e.g. "Who does it must be one of: me, boss". The place (which step) is shown by where
+ * the problem is listed. `kind`: a process or a standard (their fields are not all called alike).
  */
-export function issueText(issue: Issue): string {
+export function issueText(issue: Issue, kind?: TargetKind): string {
+  const message = typeof issue.message === "string" ? issue.message : "";
   // a whole sentence already ("Say exactly what the reader does in this step.")
-  if (/^[A-Z]/.test(issue.message)) return issue.message;
-  const missing = issue.message.match(/^is missing the required field "(\w+)"$/);
-  if (missing) return REQUIRED[missing[1]] ?? `Fill in ${fieldName(missing[1]).toLowerCase()}.`;
-  const keys = issue.path.match(/[A-Za-z$]+/g) ?? [];
+  if (/^[A-Z]/.test(message)) return message;
+  const context = pathContext(issue.path ?? "", kind);
+  const missing = message.match(/^is missing the required field "(\w+)"$/);
+  if (missing) return requiredText(missing[1], context);
+  const keys = (issue.path ?? "").match(/[A-Za-z$]+/g) ?? [];
   // the last named part of the path, unless that is the list a step or requirement sits in
   const key = keys.length > 1 || !["steps", "requirements"].includes(keys[0] ?? "") ? keys[keys.length - 1] : undefined;
-  if (!key || issue.path === "(root)") return `${issue.message[0]?.toUpperCase() ?? ""}${issue.message.slice(1)}`;
-  const words = key === "title" ? "name" : key === "to" ? "goes to" : key === "next" ? "what comes next" : key === "lookFor" ? "signs of a violation" : fieldName(key);
-  return `${words[0].toUpperCase()}${words.slice(1)} ${issue.message}`;
+  if (!key || issue.path === "(root)") return cap(message);
+  return `${cap(fieldName(key, context))} ${message}`;
 }
 
 /** A field that must be there, by what the editing screen calls it. */
 const REQUIRED: Record<string, string> = {
-  title: "Write the name.", summary: "Write the summary.", statement: "Write the rule.", owner: "Choose the team that issues it.",
+  summary: "Write the summary.", statement: "Write the rule.", owner: "Choose the team that issues it.",
   actor: "Choose who does it.", type: "Choose the kind of step.", level: "Choose the level.", verification: "Say how it is checked.",
   name: "Write the name.", id: "Give it an id.", steps: "Add a step.", requirements: "Add a requirement.", actors: "Add who takes part.",
 };
+function requiredText(key: string, context?: FieldContext): string {
+  if (key === "title") return context === "step" ? "Say what happens in this step." : context === "requirement" ? "Write the short name." : "Write the name.";
+  return REQUIRED[key] ?? `Fill in ${fieldName(key, context)}.`;
+}
 
 // ---------- example texts
 
@@ -325,12 +341,10 @@ export function withoutReviewDates<T extends Process | Standard>(doc: T): T {
 const shortValue = (v: unknown): v is string | number | undefined | null =>
   v === undefined || v === null || typeof v === "number" || (typeof v === "string" && v.length <= 70 && !v.includes("\n"));
 const quoted = (v: unknown) => (v === undefined || v === null || v === "" ? "nothing" : `“${v}”`);
-const keyFor = (label: string, ...objects: unknown[]) => {
+const keyFor = (label: string, context: FieldContext | undefined, ...objects: unknown[]) => {
   const keys = new Set(objects.flatMap((o) => (o && typeof o === "object" ? Object.keys(o) : [])));
-  return [...keys].find((k) => fieldName(k) === label);
+  return [...keys].find((k) => fieldName(k, context) === label);
 };
-const words = (key: string) => (key === "title" ? "name" : fieldName(key));
-const cap = (t: string) => `${t[0]?.toUpperCase() ?? ""}${t.slice(1)}`;
 
 /**
  * A value as a reader knows it: a participant, team, tool, category, platform, practice, tier,
@@ -353,41 +367,52 @@ export function valueByName(key: string, v: unknown, catalog?: Catalog, actors: 
   return name(v);
 }
 
+/** Where the items of a kind of change are in a document, and whose fields they have. */
+const ITEMS: Record<string, { list: string; context: FieldContext }> = {
+  Step: { list: "steps", context: "step" }, Requirement: { list: "requirements", context: "requirement" }, Participant: { list: "actors", context: "participant" },
+};
+
 /**
- * What readers will see differently once the draft is published, in lines of plain words: a
- * short field as before and after ("Name: “A” → “B”"), a long one by what and where it is
- * ("Step “Approve the budget” changed: instructions"). Compared with the version readers see
- * now; the review dates are left out.
+ * One line of the Publish list: what readers will see differently, in plain words - a short
+ * field as before and after ("Name: “A” → “B”"), a long one by what and where it is ("Step
+ * “Approve the budget” changed: what to do"). `before` is the version readers see now.
+ */
+function publishLine(kind: TargetKind, c: Change, before: Record<string, unknown>, after: Record<string, unknown>, catalog?: Catalog): string {
+  // values that are ids are shown by their names: a participant, a team, a tool, a tier…
+  const actors = (o: Record<string, unknown>) => (Array.isArray(o.actors) ? (o.actors as unknown[]).filter((a): a is { id: string; name: string } => !!a && typeof a === "object") : []);
+  const shown = (key: string, v: unknown, o: Record<string, unknown>, other: Record<string, unknown>) => valueByName(key, v, catalog, [...actors(o), ...actors(other)]);
+  if (c.what === "Details" && c.from === undefined && c.to === undefined) {
+    const key = keyFor(c.label, kind, before, after);
+    const was = key ? shown(key, before[key], before, after) : undefined, now = key ? shown(key, after[key], after, before) : undefined;
+    if (key && shortValue(was) && shortValue(now)) return `${cap(fieldName(key, kind))}: ${quoted(was)} → ${quoted(now)}`;
+    // a long text that became short is shown as it is now
+    if (key && typeof now === "string" && shortValue(now)) return `${cap(fieldName(key, kind))} changed, now ${quoted(now)}`;
+    return describeChange(c);
+  }
+  const where = ITEMS[c.what];
+  if (c.kind === "changed" && where && c.details?.length) {
+    const items = (o: Record<string, unknown>) => (Array.isArray(o[where.list]) ? (o[where.list] as unknown[]).filter((x): x is Record<string, unknown> => !!x && typeof x === "object") : []);
+    const now = items(after).find((x) => x.id === c.id);
+    const was = now ? items(before).find((x) => x.id === c.id) : undefined;
+    const parts = c.details.map((d) => {
+      const key = keyFor(d, where.context, was, now);
+      const a = key && was ? shown(key, was[key], before, after) : undefined, b = key && now ? shown(key, now[key], after, before) : undefined;
+      if (key && was && now && shortValue(a) && shortValue(b)) return `${d} ${quoted(a)} → ${quoted(b)}`;
+      return d;
+    });
+    return `${itemWords(c)} changed: ${parts.join(", ")}`;
+  }
+  return describeChange(c);
+}
+
+/**
+ * What readers will see differently once the draft is published, a line each (see publishLine).
+ * Compared with the version readers see now; the review dates are left out.
  */
 export function publishLines(kind: TargetKind, published: Process | Standard, draft: Process | Standard, catalog?: Catalog): string[] {
   const before = withoutReviewDates(published) as unknown as Record<string, unknown>;
   const after = withoutReviewDates(draft) as unknown as Record<string, unknown>;
-  const items = (o: Record<string, unknown>) => (Array.isArray(o[kind === "process" ? "steps" : "requirements"]) ? o[kind === "process" ? "steps" : "requirements"] as Record<string, unknown>[] : []);
-  // values that are ids are shown by their names: a participant, a team, a tool, a tier…
-  const actors = (o: Record<string, unknown>) => (Array.isArray(o.actors) ? o.actors as { id: string; name: string }[] : []);
-  const shown = (key: string, v: unknown, o: Record<string, unknown>, other: Record<string, unknown>) => valueByName(key, v, catalog, [...actors(o), ...actors(other)]);
-  return compare(kind, before, after, catalog).map((c) => {
-    if (c.what === "Details" && c.from === undefined && c.to === undefined) {
-      const key = keyFor(c.label, before, after);
-      const was = key ? shown(key, before[key], before, after) : undefined, now = key ? shown(key, after[key], after, before) : undefined;
-      if (key && shortValue(was) && shortValue(now)) return `${cap(words(key))}: ${quoted(was)} → ${quoted(now)}`;
-      // a long text that became short is shown as it is now
-      if (key && typeof now === "string" && shortValue(now)) return `${cap(words(key))} changed, now ${quoted(now)}`;
-      return describeChange(c);
-    }
-    if (c.kind === "changed" && c.what !== "Details" && c.details?.length) {
-      const now = items(after).find((x) => (kind === "process" ? x.title : `${x.id} ${x.title}`) === c.label);
-      const was = now ? items(before).find((x) => x.id === now.id) : undefined;
-      const parts = c.details.map((d) => {
-        const key = keyFor(d, was, now);
-        const a = key && was ? shown(key, was[key], before, after) : undefined, b = key && now ? shown(key, now[key], after, before) : undefined;
-        if (key && was && now && shortValue(a) && shortValue(b)) return `${words(key)} ${quoted(a)} → ${quoted(b)}`;
-        return key ? words(key) : d;
-      });
-      return `${c.what} “${c.label}” changed: ${parts.join(", ")}`;
-    }
-    return describeChange(c);
-  });
+  return compare(kind, before, after, catalog).map((c) => publishLine(kind, c, before, after, catalog));
 }
 
 /**
@@ -466,12 +491,12 @@ export function clock(iso?: string, now = new Date()): string {
  */
 export function steppedMessage(dir: "undo" | "redo", change?: Change): string {
   if (!change) return dir === "undo" ? "Undone." : "Done again.";
-  const Label = cap(change.label);
+  const Label = cap(typeof change.label === "string" ? change.label.trim() : "") || "It";
   if (change.what === "Details") {
     if (change.from !== undefined || change.to !== undefined) return change.to ? `${Label} is “${change.to}” again.` : `${Label} is empty again.`;
     return dir === "undo" ? `${Label} is as it was.` : `${Label} is changed again.`;
   }
-  const thing = `${change.what} “${change.label}”`;
+  const thing = itemWords(change);
   if (change.kind === "added") return dir === "undo" ? `${thing} is back.` : `${thing} is added again.`;
   if (change.kind === "removed") return dir === "undo" ? `${thing} is removed again.` : `${thing} is deleted again.`;
   const parts = change.details?.length ? `: ${change.details.join(", ")}` : "";

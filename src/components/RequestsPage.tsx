@@ -11,9 +11,10 @@ import { usePerms } from "../lib/session";
 import { confirmDialog, Field, LoadError, Loading, Modal, notify } from "./ui";
 import { KindTag } from "./marks";
 import "../requests.css";
+import { formatDate } from "../lib/dates";
 
 const NOUN: Record<TargetKind, string> = { process: "process", standard: "standard" };
-const day = (iso?: string) => (iso ? iso.slice(0, 10) : "");
+const day = formatDate;
 const docHref = (kind: TargetKind, id: string) => href(kind === "process" ? { page: "process", id, tab: "flow" } : { page: "standard", id, tab: "doc" });
 const KindIcon = ({ kind, size = 14 }: { kind: TargetKind; size?: number }) => (kind === "process" ? <Workflow size={size} aria-hidden="true" /> : <ShieldCheck size={size} aria-hidden="true" />);
 

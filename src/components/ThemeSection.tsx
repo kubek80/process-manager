@@ -17,6 +17,7 @@ import "../icons.css";
 import "../lists.css";
 import "../controls.css";
 import "../theme.css";
+import { formatDateTime } from "../lib/dates";
 
 /** Admin › Theming: the name, the logo, the colours and the appearance of the portal, with a live preview. */
 export function ThemeSection({ processes, standards }: { processes: Process[]; standards: Standard[] }) {
@@ -41,7 +42,7 @@ const APPEARANCES: { id: Appearance; label: string; icon?: typeof Sun }[] = [
 ];
 
 const same = (a: Look, b: Look) => JSON.stringify(tidyLook(a)) === JSON.stringify(tidyLook(b));
-const when = (iso?: string) => (iso ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
+const when = formatDateTime;
 
 function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLook; onSaved: (s: SavedLook) => void; processes: Process[]; standards: Standard[] }) {
   const { own } = useLook();

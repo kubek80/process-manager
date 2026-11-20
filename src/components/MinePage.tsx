@@ -9,8 +9,9 @@ import { href, type MetaById } from "../lib/store";
 import { FEEDBACK_KINDS } from "./Feedback";
 import { KindTag } from "./marks";
 import "../mine.css";
+import { formatDate } from "../lib/dates";
 
-const day = (iso?: string) => (iso ? iso.slice(0, 10) : "");
+const day = formatDate;
 const pageOf = (o: Owned, feedback = false) => href(o.kind === "process"
   ? { page: "process", id: o.doc.id, tab: feedback ? "feedback" : "flow" }
   : { page: "standard", id: o.doc.id, tab: feedback ? "feedback" : "doc" });
