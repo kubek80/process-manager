@@ -8,7 +8,7 @@ import {
 } from "../lib/statistics";
 import { href, loadStatistics } from "../lib/store";
 import { LoadError, Loading } from "./ui";
-import { KindTag } from "./marks";
+import { KindIcon, kindWord } from "./marks";
 import "../requests.css";
 
 const PERIOD_KEY = "pm:statistics-period";
@@ -111,18 +111,25 @@ export function StatisticsSection() {
               <table className="stat-table">
                 <thead><tr>
                   <SortHead k="title" label="Name" />
-                  <th>Kind</th><th>Owner</th><th>Platform</th><th>Practice</th>
+                  <th>Belongs to</th>
                   {COLUMNS.map((c) => <SortHead key={c.key} k={c.key} label={c.label} hint={c.hint} num />)}
                 </tr></thead>
                 <tbody>
-                  {rows.map((r) => (
+                  {rows.map((r) => {
+                    const belongs = [r.platform && platformName(catalog, r.platform), r.practice && practiceName(catalog, r.practice)].filter(Boolean).join(" · ");
+                    return (
                     <tr key={r.kind + r.id}>
-                      <td className="stat-name"><a href={href(r.kind === "process" ? { page: "process", id: r.id, tab: "flow" } : { page: "standard", id: r.id, tab: "doc" })}>{r.title}</a>
-                        {r.status && r.status !== "active" && <span className={`tier-tag status-${r.status}`}>{r.status === "draft" ? "Draft" : "Retired"}</span>}</td>
-                      <td><KindTag kind={r.kind} /></td>
-                      <td>{r.owner ? teamName(catalog, r.owner) : <span className="muted">—</span>}</td>
-                      <td>{r.platform ? platformName(catalog, r.platform) : <span className="muted">—</span>}</td>
-                      <td>{r.practice ? practiceName(catalog, r.practice) : <span className="muted">—</span>}</td>
+                      <td className="stat-name">
+                        <span className={`stat-kind ${r.kind}`} title={kindWord(r.kind)}><KindIcon kind={r.kind} size={12} /><span className="stat-sr-only">{kindWord(r.kind)}: </span></span>
+                        <span className="stat-title">
+                          <a href={href(r.kind === "process" ? { page: "process", id: r.id, tab: "flow" } : { page: "standard", id: r.id, tab: "doc" })} title={r.title}>{r.title}</a>
+                          {r.status && r.status !== "active" && <span className={`tier-tag status-${r.status}`}>{r.status === "draft" ? "Draft" : "Retired"}</span>}
+                        </span>
+                      </td>
+                      <td className="stat-belongs">
+                        {r.owner ? <span className="stat-owner">{teamName(catalog, r.owner)}</span> : <span className="muted">No owning team</span>}
+                        {belongs && <span className="stat-scope">{belongs}</span>}
+                      </td>
                       <td className="num">{n(r.views)}</td>
                       <td className="num">{n(r.people)}</td>
                       <td className="num">{n(r.downloads)}</td>
@@ -130,7 +137,8 @@ export function StatisticsSection() {
                       <td className="num">{r.feedbackOpen ? <a className="tier-tag flagged" href={href(r.kind === "process" ? { page: "process", id: r.id, tab: "feedback" } : { page: "standard", id: r.id, tab: "feedback" })}>{n(r.feedbackOpen)}</a> : 0}</td>
                       <td className="num">{n(r.feedbackHandled)}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -500,7 +500,21 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .guide-toc button { padding: 6px 12px; border-left: 2px solid var(--line); font-size: 13px; font-weight: 500; color: var(--text-3); }
 .guide-toc button:hover { color: var(--text); }
 .guide-toc button.on { border-left-color: var(--accent); color: var(--text); font-weight: 650; }
-@media (max-width: 900px) { .guide { grid-template-columns: 1fr; gap: 0; } .guide-toc { display: none; } }
+.guide-toc button[aria-current] { color: var(--text); }
+/* below 900 px the contents are a sticky button that opens the same list as a sheet, and each section ends with "Back to top" */
+.guide-contents-bar, .guide-top { display: none; }
+@media (max-width: 900px) {
+  .guide { grid-template-columns: 1fr; gap: 0; }
+  .guide > .guide-toc { display: none; }
+  .guide-contents-bar { display: block; position: sticky; top: 56px; z-index: 5; margin: -8px 0 12px; padding: 8px 0; background: var(--bg); }
+  .guide-contents-btn { width: 100%; height: 44px; justify-content: flex-start; min-width: 0; }
+  .guide-contents-btn > svg { flex: none; color: var(--text-2); }
+  .guide-contents-here { min-width: 0; margin-left: 2px; padding-left: 10px; border-left: 1px solid var(--line); color: var(--text-3); font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+  .guide-top { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 13.5px; font-weight: 550; }
+  .guide-section { scroll-margin-top: 124px; }
+}
+.guide-toc-sheet { display: flex; flex-direction: column; gap: 18px; position: static; max-height: none; overflow: visible; }
+.guide-toc-sheet button { min-height: 44px; display: flex; align-items: center; font-size: 15px; }
 /* one column that never grows wider than the page: wide things inside (charts, code) scroll on their own */
 .guide-body { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 56px; }
 .guide-code { overflow-x: auto; }
@@ -533,7 +547,8 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .guide-dl { margin: 0; display: grid; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
 .guide-dl > div { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 16px; padding: 13px 18px; }
 .guide-dl > div + div { border-top: 1px solid var(--line); }
-.guide-dl dt { font-weight: 650; display: flex; align-items: center; gap: 6px; }
+.guide-dl dt { font-weight: 650; display: flex; align-items: flex-start; gap: 6px; }
+.guide-dl dt > svg { flex: none; margin-top: 3px; }
 .guide-dl dd { margin: 0; color: var(--text-2); max-width: 68ch; }
 @media (max-width: 640px) { .guide-dl > div { grid-template-columns: 1fr; gap: 2px; } }
 .guide-fig { margin: 4px 0; display: grid; gap: 8px; min-width: 0; }

@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bookmark, Bot, Boxes, CalendarCheck, ChartColumn, Check, Compass, Eye, Flag, Hand, History, KeyRound, LayoutGrid, Lightbulb, List, Palette, Search, Share2, ShieldCheck, GripVertical, Layers, ListChecks, MousePointerClick, Pencil, Plus, Sparkles, Tag, ThumbsUp, Users, Workflow } from "lucide-react";
+import { ArrowUp, Bookmark, Bot, Boxes, CalendarCheck, ChartColumn, Check, Compass, Eye, Flag, Hand, History, KeyRound, LayoutGrid, Lightbulb, List, Palette, Search, Share2, ShieldCheck, GripVertical, Layers, ListChecks, MousePointerClick, Pencil, Plus, Sparkles, Tag, ThumbsUp, Users, Workflow } from "lucide-react";
 import type { Process } from "../types";
 import { STEP_META, STEP_TYPES } from "../lib/stepMeta";
 import { aiFlow, automationFlow, changeFlow, feedbackFlow, followFlow, meaningFlow, requestFlow, reviewFlow, rightsFlow, signInFlow, standardFlow, themeFlow, versionFlow } from "../guide/flows";
 import { FlowView } from "./FlowView";
-import { scrollBehavior, TypeIcon } from "./ui";
+import { Modal, scrollBehavior, TypeIcon } from "./ui";
 
 const GROUPS: { title: string; items: [string, string][] }[] = [
   { title: "Using it", items: [
@@ -63,7 +63,25 @@ function Chart({ process, caption }: { process: Process; caption: string }) {
 }
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
-  return <section id={`guide-${id}`} className="guide-section"><h2>{title}</h2>{children}</section>;
+  return (
+    <section id={`guide-${id}`} className="guide-section">
+      <h2>{title}</h2>
+      {children}
+      <button type="button" className="guide-top link-btn" onClick={() => window.scrollTo({ top: 0, behavior: scrollBehavior() })}><ArrowUp size={14} /> Back to top</button>
+    </section>
+  );
+}
+
+/** The list of sections, beside the guide on a wide screen and in the Contents sheet on a narrow one. */
+function Contents({ active, onPick }: { active: string; onPick: (id: string) => void }) {
+  return GROUPS.map((g) => (
+    <div key={g.title} className="guide-toc-group">
+      <span className="eyebrow">{g.title}</span>
+      {g.items.map(([id, title]) => (
+        <button key={id} className={active === id ? "on" : ""} aria-current={active === id ? "location" : undefined} onClick={() => onPick(id)}>{title}</button>
+      ))}
+    </div>
+  ));
 }
 
 export function GuidePage() {
@@ -80,20 +98,27 @@ export function GuidePage() {
     window.addEventListener("scroll", on, { passive: true });
     return () => window.removeEventListener("scroll", on);
   }, []);
+  const [sheet, setSheet] = useState(false);
   const jump = (id: string) => document.getElementById(`guide-${id}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+  const activeTitle = SECTIONS.find(([id]) => id === active)?.[1] ?? "";
 
   return (
     <div className="page guide">
-      <aside className="guide-toc">
-        {GROUPS.map((g) => (
-          <div key={g.title} className="guide-toc-group">
-            <span className="eyebrow">{g.title}</span>
-            {g.items.map(([id, title]) => (
-              <button key={id} className={active === id ? "on" : ""} onClick={() => jump(id)}>{title}</button>
-            ))}
-          </div>
-        ))}
-      </aside>
+      <nav className="guide-toc" aria-label="Contents">
+        <Contents active={active} onPick={jump} />
+      </nav>
+      <div className="guide-contents-bar">
+        <button type="button" className="btn guide-contents-btn" aria-haspopup="dialog" onClick={() => setSheet(true)}>
+          <List size={16} /> Contents<span className="guide-contents-here">{activeTitle}</span>
+        </button>
+      </div>
+      {sheet && (
+        <Modal title="Contents" onClose={() => setSheet(false)}>
+          <nav className="guide-toc guide-toc-sheet" aria-label="Contents">
+            <Contents active={active} onPick={(id) => { setSheet(false); requestAnimationFrame(() => jump(id)); }} />
+          </nav>
+        </Modal>
+      )}
 
       <article className="guide-body">
         <header className="guide-hero">
