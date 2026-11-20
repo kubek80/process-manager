@@ -257,18 +257,26 @@ function changedAnswers(before: Process, after: Process): { step: Step; answer: 
 export const shortName = (t: string, max = 36) => (t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t);
 
 /**
- * The message after a delete or a move, at most two short lines: what was done (or, for a move,
- * the first answer that now leads elsewhere), and one line about the answers of decisions that
- * now lead elsewhere. Where exactly each leads is in the fields of the decision. Null: nothing to say.
+ * The message after a delete or a move, at most two short lines: what was done, and one line about
+ * the answers of decisions that now lead elsewhere (where exactly each leads is in the fields of
+ * the decision). A move that changed one answer says where it now leads. Null: nothing to say.
  */
 export function restructureNotice(before: Process, after: Process, done?: string): { title: string; detail?: string } | null {
-  const changed = changedAnswers(before, after).map((c) => ({ decision: c.step.title, answer: c.answer.label ?? "" }));
+  const all = changedAnswers(before, after);
+  const changed = all.map((c) => ({ decision: c.step.id, answer: c.answer.label ?? "" }));
   if (!done && !changed.length) return null;
+  // a move that changed one answer says where it now leads, in one sentence
+  if (!done && all.length === 1) {
+    const { step, answer } = all[0];
+    const to = after.steps.find((x) => x.id === answer.to)?.title ?? answer.to;
+    return { title: `“${shortName(answer.label ?? "", 16)}” of “${shortName(step.title, 40)}” now leads to “${shortName(to, 40)}”.` };
+  }
+  const titleOf = (id: string) => after.steps.find((x) => x.id === id)?.title ?? id;
   const decisions = [...new Set(changed.map((c) => c.decision))];
   const answers = changed.map((c) => `“${shortName(c.answer, 16)}”`);
   const line = !changed.length ? undefined
     : decisions.length > 1 ? `Answers of ${decisions.length} decisions now lead elsewhere.`
-    : `${answers.length === 1 ? answers[0] : answers.length === 2 ? answers.join(" and ") : `${answers.length} answers`} of “${shortName(decisions[0], 28)}” now ${answers.length === 1 ? "leads" : "lead"} elsewhere.`;
+    : `${answers.length === 1 ? answers[0] : answers.length === 2 ? answers.join(" and ") : `${answers.length} answers`} of “${shortName(titleOf(decisions[0]), 28)}” now ${answers.length === 1 ? "leads" : "lead"} elsewhere.`;
   if (done) return { title: done, ...(line ? { detail: line } : {}) };
   return { title: line! };
 }

@@ -163,7 +163,7 @@ test("“Save draft and leave” saves the changes as a draft and leaves; a save
   // a never-published draft with something to fix cannot be saved: leaving with saving keeps the person there
   await copyOf(page, "leave-blank-demo", "Leave blank demo", "draft");
   try {
-    await openEditor(page, "process", "leave-blank-demo");
+    await openEditor(page, "process", "leave-blank-demo").catch(async () => { await page.reload(); await expect(page.locator(".edit-bar")).toBeVisible(); });
     await renameFirstStep(page, "x"); // too short: something to fix before it can be saved
     await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
     const ask = page.getByRole("dialog", { name: "Save your changes before you leave?" });

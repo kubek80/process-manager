@@ -288,8 +288,8 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
   const firstError = issues.find((i) => i.level === "error");
   const onlyExamples = errors > 0 && issues.filter((i) => i.level === "error").every(isExampleIssue);
   const problemsBlock = !errors ? "" : onlyExamples
-    ? `Publishing waits until ${errors === 1 ? "the example text is" : `the ${errors} example texts are`} replaced with your own words.`
-    : `Publishing waits until ${errors === 1 ? "1 thing is" : `${errors} things are`} fixed.`;
+    ? `First replace ${errors === 1 ? "the example text" : `the ${errors} example texts`} with your own words (under “${errors} to fix”).`
+    : `First fix ${errors === 1 ? "the 1 thing" : `the ${errors} things`} listed under “${errors} to fix”.`;
   const saveBlocked = !d.dirty && !jsonPending ? "Nothing to save: all changes are saved." : undefined;
   const publishBlocked = rightsBlock || jsonBlock || problemsBlock
     || (!unpublished && !working && !d.dirty ? "There are no changes to publish." : "") || undefined;

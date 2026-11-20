@@ -85,7 +85,7 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
       <div className="step-core form">
         <Field label="What happens" hint={step.type === "decision" ? "Ask the question the step decides, e.g. “Is it a standard model?”" : "Start with a verb, as the reader would say it"}>
           <input className="step-title" value={step.title} maxLength={70} onChange={(e) => onChange({ title: e.target.value })} onBlur={onTitleBlur}
-            placeholder={step.type === "decision" ? "Is it a standard model?" : "Fill in the ServiceNow request"}
+            placeholder={step.type === "decision" ? "e.g. Is it a standard model?" : "e.g. Fill in the ServiceNow request"}
             data-autofocus={step.title === EXAMPLE.newStep ? "" : undefined} onFocus={selectExample(EXAMPLE.newStep, EXAMPLE.firstStep)} />
         </Field>
         <WhoField process={process} step={step} onChange={onChange} setProcess={setProcess} />
@@ -264,7 +264,7 @@ function PathsField({ process, step, onChange }: { process: Process; step: Step;
             return (
               <li className={`row path-row ${back ? "back" : ""}`} key={i}>
                 {named
-                  ? <input className="next-label" value={p.label ?? ""} maxLength={30} placeholder={decision ? (i === 0 ? "Yes" : "No") : "name (optional)"} aria-label={`Name of path ${i + 1}`}
+                  ? <input className="next-label" value={p.label ?? ""} maxLength={30} placeholder={decision ? (i === 0 ? "e.g. Yes" : "e.g. No") : "Name (optional)"} aria-label={`Name of path ${i + 1}`}
                       onChange={(e) => onChange(step.next.map((x, j) => (j === i ? { ...x, label: e.target.value || undefined } : x)))} />
                   : <span className="path-then" aria-hidden="true">→</span>}
                 <select value={p.to} aria-label={`Path ${i + 1} goes to`} onChange={(e) => onChange(step.next.map((x, j) => (j === i ? { ...x, to: e.target.value } : x)))}>
@@ -300,15 +300,15 @@ function DetailField({ d, process, all, step, onChange, autoFocus }: {
     );
     case "tool": return <ToolField step={step} onChange={onChange} autoFocus={autoFocus} />;
     case "duration": return (
-      <Field label="Typical time"><input value={step.duration ?? ""} maxLength={40} placeholder="10 min" autoFocus={autoFocus} onChange={(e) => onChange({ duration: e.target.value })} /></Field>
+      <Field label="Typical time"><input value={step.duration ?? ""} maxLength={40} placeholder="e.g. 10 min" autoFocus={autoFocus} onChange={(e) => onChange({ duration: e.target.value })} /></Field>
     );
     case "outcome": return (
-      <Field label="Result of this step" hint="What the reader has in hand afterwards"><input value={step.outcome ?? ""} maxLength={200} placeholder="Request number" autoFocus={autoFocus} onChange={(e) => onChange({ outcome: e.target.value })} /></Field>
+      <Field label="Result of this step" hint="What the reader has in hand afterwards"><input value={step.outcome ?? ""} maxLength={200} placeholder="e.g. Request number" autoFocus={autoFocus} onChange={(e) => onChange({ outcome: e.target.value })} /></Field>
     );
     case "url": return (
       <div className="grid2">
         <Field label="Link"><input value={step.url ?? ""} placeholder="https://…" autoFocus={autoFocus} onChange={(e) => onChange({ url: e.target.value })} /></Field>
-        <Field label="Link text"><input value={step.urlLabel ?? ""} maxLength={60} placeholder="Open the form" onChange={(e) => onChange({ urlLabel: e.target.value })} /></Field>
+        <Field label="Link text"><input value={step.urlLabel ?? ""} maxLength={60} placeholder="e.g. Open the form" onChange={(e) => onChange({ urlLabel: e.target.value })} /></Field>
       </div>
     );
     case "resources": return (
@@ -372,7 +372,7 @@ function ToolField({ step, onChange, autoFocus }: { step: Step; onChange: (p: Pa
         <div className="field">
           <span className="field-label">Name of the new tool<em>it is added to the list of tools for everyone</em></span>
           <div className="new-tool">
-            <input autoFocus value={newTool} maxLength={40} placeholder="ServiceNow" aria-label="Name of the new tool" onChange={(e) => setNewTool(e.target.value)}
+            <input autoFocus value={newTool} maxLength={40} placeholder="e.g. ServiceNow" aria-label="Name of the new tool" onChange={(e) => setNewTool(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") { e.preventDefault(); addTool(); }
                 if (e.key === "Escape") { e.preventDefault(); setNewTool(null); } // closes this field, not the whole panel

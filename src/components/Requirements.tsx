@@ -207,7 +207,7 @@ export function RequirementFields({ r, standard, processes, feedback, issues, on
         <IdField id={r.id} taken={standard.requirements.filter((x) => x !== r).map((x) => x.id)} onRename={onRename} />
       </div>
       <EditSection title="How to comply">
-        <Rows label="Steps to comply" hint="One action per item" items={r.guidance ?? []} onChange={(guidance) => onChange({ guidance })} placeholder="Use the logging library's redaction list." />
+        <Rows label="Steps to comply" hint="One action per item" items={r.guidance ?? []} onChange={(guidance) => onChange({ guidance })} placeholder="e.g. Use the logging library's redaction list." />
         <Field label="Process that helps to comply">
           <select value={r.processId ?? ""} onChange={(e) => onChange({ processId: e.target.value || undefined })}>
             <option value="">None</option>
@@ -217,8 +217,8 @@ export function RequirementFields({ r, standard, processes, feedback, issues, on
       </EditSection>
       <EditSection title="Good and bad examples" folded={!has("examples")}
         summary={good || bad ? `${good} good, ${bad} bad` : none}>
-        <Rows label="Good examples" items={r.examples?.good ?? []} onChange={(g) => onChange({ examples: { ...r.examples, good: g } })} placeholder="code or text that complies" code />
-        <Rows label="Bad examples" items={r.examples?.bad ?? []} onChange={(b) => onChange({ examples: { ...r.examples, bad: b } })} placeholder="code or text that violates the rule" code />
+        <Rows label="Good examples" items={r.examples?.good ?? []} onChange={(g) => onChange({ examples: { ...r.examples, good: g } })} placeholder="Code or text that complies" code />
+        <Rows label="Bad examples" items={r.examples?.bad ?? []} onChange={(b) => onChange({ examples: { ...r.examples, bad: b } })} placeholder="Code or text that breaks the rule" code />
       </EditSection>
       <EditSection title="How it is checked" folded={!has("verification")}
         summary={<>{METHOD[r.verification.method]}{r.verification.description ? ` · ${r.verification.description}` : ""}</>}>
@@ -230,15 +230,15 @@ export function RequirementFields({ r, standard, processes, feedback, issues, on
             ))}
           </div>
         </div>
-        <Field label="By what"><input value={r.verification.description ?? ""} maxLength={300} placeholder="Secret scanner in the build pipeline" onChange={(e) => onChange({ verification: { ...r.verification, description: e.target.value } })} /></Field>
+        <Field label="By what"><input value={r.verification.description ?? ""} maxLength={300} placeholder="e.g. Secret scanner in the build pipeline" onChange={(e) => onChange({ verification: { ...r.verification, description: e.target.value } })} /></Field>
       </EditSection>
       <EditSection title="For reviewers" hint="Feeds the review agent that checks pull requests against this standard." folded={!has("review")}
         summary={review.lookFor.length
           ? `${review.lookFor.length} sign${review.lookFor.length === 1 ? "" : "s"} of a violation · ${review.paths?.length ? `${review.paths.length} file pattern${review.paths.length === 1 ? "" : "s"}` : "any file"} · ${review.severity ?? defaultSeverity(r.level)}`
           : <span className="muted">Not checked in pull requests</span>}>
         <Rows label="Signs of a violation in a pull request" hint="Leave empty if it cannot be seen in a change" items={review.lookFor} onChange={(lookFor) => setReview({ lookFor })}
-          placeholder="A variable named like password or token passed to a log call" />
-        <Rows line max={10} label="Files" hint="One pattern per row; leave empty for all files" items={review.paths ?? []} onChange={(paths) => setReview({ paths })} placeholder="**/*.{ts,tsx}" />
+          placeholder="e.g. A variable named like password or token passed to a log call" />
+        <Rows line max={10} label="Files" hint="One pattern per row; leave empty for all files" items={review.paths ?? []} onChange={(paths) => setReview({ paths })} placeholder="e.g. **/*.{ts,tsx}" />
         <Field label="Report as">
           <select value={review.severity ?? ""} onChange={(e) => setReview({ severity: (e.target.value || undefined) as Severity | undefined })}>
             <option value="">Default for the level ({defaultSeverity(r.level)})</option>

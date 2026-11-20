@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupsOf, myGroups, responsibilities, urgent } from "../responsibilities";
+import { changedBy, groupsOf, myGroups, responsibilities, urgent } from "../responsibilities";
 import type { Feedback, FeedbackByTarget, Perms } from "../../types";
 import { base, baseStandard } from "./fixtures";
 
@@ -94,5 +94,17 @@ describe("the order of what needs doing", () => {
   it("survives a review date that is not a date", () => {
     const r = responsibilities(owner, null, [p("broken", "2026-13-45")], [], { process: {}, standard: {} }, TODAY);
     expect(r.tasks.map((t) => `${t.kind}:${t.item.review.label}`)).toEqual(["review-overdue:Review date cannot be read"]);
+  });
+});
+
+describe("who made the last change", () => {
+  it("names the person where the page knows them, else their email", () => {
+    expect(changedBy("Jordan@example.com", { "jordan@example.com": "Jordan Platform" })).toBe("Jordan Platform");
+    expect(changedBy("riley@example.com", {})).toBe("riley@example.com");
+  });
+  it("has plain words for changes no person made", () => {
+    expect(changedBy("import")).toBe("Imported");
+    expect(changedBy("system")).toBe("Updated by the portal");
+    expect(changedBy(undefined)).toBe("");
   });
 });

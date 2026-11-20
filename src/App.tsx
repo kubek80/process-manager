@@ -42,7 +42,7 @@ const AiDialog = lazy(() => import("./components/AiDialog").then((m) => ({ defau
 /** An editing screen for something that is not there (deleted, or never existed). */
 function NotFound({ noun, id }: { noun: "process" | "standard"; id: string }) {
   return (
-    <div className="page"><h1>{noun === "process" ? "Process" : "Standard"} not found</h1>
+    <div className="page not-found"><h1>{noun === "process" ? "Process" : "Standard"} not found</h1>
       <p className="muted">There is no {noun} “{id}”, or you may not see it.</p>
       <a className="btn" href={href({ page: noun === "process" ? "library" : "standards" })}>Back to all {noun === "process" ? "processes" : "standards"}</a></div>
   );
@@ -387,8 +387,13 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     return {
       add: (spec) => wrote(createFeedback(spec)).then((item) => { put(item); return true; }, (e) => { notify.error("Your feedback could not be sent.", e); return false; }),
       alsoHit: (item, on) => { wrote(setAlsoHit(item.id, on)).then(put, (e) => notify.error("That could not be recorded.", e)); },
-      resolve: (item, resolved) => { wrote(setResolved(item.id, resolved)).then(put, (e) => notify.error("The feedback could not be changed.", e)); },
-      remove: (item) => { wrote(deleteFeedback(item.id)).then(() => change(item, (list) => list.filter((x) => x.id !== item.id)), (e) => notify.error("The feedback could not be deleted.", e)); },
+      resolve: (item, resolved) => {
+        wrote(setResolved(item.id, resolved)).then((saved) => {
+          put(saved);
+          notify.info(resolved ? `Marked as fixed. ${item.author.name || "The person who reported it"} is told.` : "The feedback is open again.");
+        }, (e) => notify.error("The feedback could not be changed.", e));
+      },
+      remove: (item) => { wrote(deleteFeedback(item.id)).then(() => { change(item, (list) => list.filter((x) => x.id !== item.id)); notify.info("The feedback was deleted."); }, (e) => notify.error("The feedback could not be deleted.", e)); },
     };
   }, []);
 
@@ -431,7 +436,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       const meta = { version: r.version, updatedAt: r.updatedAt, updatedBy: r.updatedBy };
       if (kind === "process") { setProcesses((list) => list && byId(list, r.document as Process)); setMeta(setProcessMeta, id, meta, r.document as Process); }
       else { setStandards((list) => byId(list, r.document as Standard)); setMeta(setStandardMeta, id, meta, r.document as Standard); }
-      notify.info("Recorded as reviewed today.");
+      notify.info(r.document?.title ? `“${r.document.title}” is recorded as reviewed today.` : "Recorded as reviewed today.");
       return true;
     } catch (e) {
       notify.error("The review could not be recorded.", whyNot(e, kind));
@@ -585,15 +590,15 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       {processes && route.page === "guide" && <GuidePage />}
       {processes && route.page === "admin" && (canOpenAdmin(perms)
         ? <AdminPage section={route.section} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }} />
-        : <div className="page"><h1>Admin</h1><p className="muted">You do not have access to the Admin panel. An admin can give it to you.</p></div>)}
+        : <div className="page not-found"><h1>Admin</h1><p className="muted">You do not have access to the Admin panel. An admin can give it to you.</p></div>)}
       {processes && route.page === "process" && (process
         ? <ProcessPage key={process.id} process={process} meta={processMeta[process.id]} all={all} standards={standards} tab={route.tab} item={route.item}
           onReviewed={(base) => reviewed("process", process.id, base)} feedback={feedback.process[process.id] ?? []} />
-        : <div className="page"><h1>Process not found</h1><p className="muted">There is no process “{route.id}”.</p><a className="btn" href={href({ page: "library" })}>Back to all processes</a></div>)}
+        : <div className="page not-found"><h1>Process not found</h1><p className="muted">There is no process “{route.id}”. It may have been renamed or deleted.</p><a className="btn" href={href({ page: "library" })}>Back to all processes</a></div>)}
       {processes && route.page === "standard" && (standard
         ? <StandardPage key={standard.id} standard={standard} meta={standardMeta[standard.id]} all={standards} processes={all} tab={route.tab} item={route.item}
           onReviewed={(base) => reviewed("standard", standard.id, base)} feedback={feedback.standard[standard.id] ?? []} />
-        : <div className="page"><h1>Standard not found</h1><p className="muted">There is no standard “{route.id}”.</p><a className="btn" href="#/standards">Back to all standards</a></div>)}
+        : <div className="page not-found"><h1>Standard not found</h1><p className="muted">There is no standard “{route.id}”. It may have been renamed or deleted.</p><a className="btn" href="#/standards">Back to all standards</a></div>)}
       {processes && route.page === "edit-process" && (process
         ? <EditProcessPage key={process.id} process={process} meta={processMeta[process.id]} all={all} standards={standards} item={route.item}
           feedback={feedback.process[process.id] ?? []} onSave={saveProcess} onReload={() => reloadProcess(process.id)} onRefresh={refreshAll}

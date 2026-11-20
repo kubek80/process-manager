@@ -119,7 +119,7 @@ export function GroupMembers({ kind, id, name, saved, manage, members, membersEr
           </ul>
           <form className="member-add" onSubmit={(e) => { e.preventDefault(); add(); }}>
             <UserPlus size={15} aria-hidden="true" />
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" aria-label="Email of the new member" />
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. name@company.com" aria-label="Email of the new member" />
             <button className="btn small primary" disabled={!looksLikeEmail(email) || busy}><Plus size={14} />Add member</button>
           </form>
         </>

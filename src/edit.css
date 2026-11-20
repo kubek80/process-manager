@@ -191,7 +191,8 @@
 @media (max-width: 1279px) { .outline-head { display: none; } }
 
 /* the middle: what readers will see, always editable */
-.edit-preview { max-width: 1100px; margin: 0 auto; display: grid; gap: 10px; }
+/* never wider than its column: a long line inside wraps or is cut, the column never scrolls sideways */
+.edit-preview { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
 .preview-label { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); }
 .preview-head { display: grid; gap: 3px; padding: 8px 12px; border-radius: 12px; border: 1px dashed transparent; width: 100%; text-align: left; }
 .preview-head h2 { font-size: 20px; letter-spacing: -.015em; line-height: 1.2; }
@@ -220,9 +221,10 @@
 .process-preview > .flow-wrap { flex: 0 1 auto; display: flex; flex-direction: column; min-height: 220px; }
 .process-preview .flow-viewport { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: row; }
 .process-preview .flow-viewport > .flow-scroll { flex: 1 1 auto; min-height: 0; max-height: none; }
-.flow-tip { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.flow-tip .kbd { flex: none; }
-.flow-tip-loop { display: inline-flex; align-items: center; gap: 5px; }
+/* one line that ends in "…" where the map is narrow (the whole of it is the tooltip) */
+.flow-tip { flex: 1 1 auto; min-width: 0; display: block; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flow-tip .kbd { display: inline-grid; margin-right: 4px; vertical-align: middle; }
+.flow-tip-loop svg { margin-right: 5px; vertical-align: middle; }
 .edit-middle .reqs { margin: 0; }
 .req.selectable { cursor: pointer; }
 .req.selectable:hover:not(.selected) { border-color: var(--line-strong); }
@@ -275,8 +277,10 @@
 .kind-pick[aria-expanded="true"] { border-color: var(--c); box-shadow: 0 0 0 1px var(--c); }
 .kind-pick > svg { color: var(--text-3); }
 .kind-pop { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 6px); padding: 10px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-3); }
-.kind-pop .type-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
-.kind-pop .type-opt { padding: 5px 6px; }
+/* two columns: every kind's name on one line */
+.kind-pop .type-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.kind-pop .type-opt { padding: 5px 8px; white-space: nowrap; min-width: 0; }
+.kind-pop .type-opt span { overflow: hidden; text-overflow: ellipsis; }
 .kind-hint { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--text-2); min-height: 3.6em; }
 .kind-hint b { color: var(--text); font-weight: 600; }
 /* somebody new for a step: the name gets the whole width, the buttons a row under it */
@@ -296,7 +300,7 @@
 .add-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
 .add-chip svg { flex: none; }
 .ins-rows { list-style: none; margin: 0; padding: 0; justify-items: stretch; }
-.ins-rows textarea { field-sizing: content; min-height: 38px; resize: none; }
+.ins-rows textarea, .edit-fields textarea.grow { field-sizing: content; min-height: 38px; resize: none; }
 .add-row { justify-self: start; margin-top: 6px; }
 .path-rows { list-style: none; margin: 0; padding: 0; justify-items: stretch; }
 .path-then { flex: none; width: 22px; text-align: center; color: var(--text-3); font-weight: 700; }
@@ -309,7 +313,7 @@
 .move-select { width: auto; height: 32px; padding: 0 26px 0 10px; font-size: 13px; font-weight: 550; width: 104px; }
 /* text boxes grow with what is written in them, up to a point, so nothing is hidden */
 .edit-fields textarea { field-sizing: content; min-height: 64px; max-height: 50vh; }
-.edit-fields .ins-rows textarea { min-height: 38px; }
+.edit-fields .ins-rows textarea, .edit-fields textarea.grow { min-height: 38px; }
 .edit-section-hint { margin-top: 4px; font-size: 13px; color: var(--text-3); }
 .edit-section-body { margin-top: 12px; }
 /* in the fields the help text sits under the label, not beside it */
@@ -364,6 +368,8 @@
 }
 /* a narrow laptop or tablet: fewer words on the bar */
 .eb-short { display: none; }
+/* a laptop: "Back" leaves the room to the name of what is edited */
+@media (max-width: 1439px) { .eb-back .eb-long { display: none; } .eb-back .eb-short { display: inline; } }
 @media (max-width: 1100px) {
   /* short words while they fit; icons only on a phone */
   .eb-long { display: none; }
@@ -427,3 +433,7 @@
 /* the editing map's head is one line: Legend, the tip (cut short when there is no room), zoom */
 .process-preview .flow-head { flex-wrap: nowrap; }
 .process-preview .flow-head .map-tools { flex: none; }
+/* a placeholder is an example, never a value: the quiet colour and slanted type of a hint */
+.edit-screen input::placeholder, .edit-screen textarea::placeholder { color: var(--text-3); font-style: italic; opacity: 1; }
+/* on the editing screen the messages (a delete with Undo) get the width for two short lines */
+body:has(.edit-screen) .toasts { width: min(480px, calc(100vw - 32px)); }

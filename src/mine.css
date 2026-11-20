@@ -9,3 +9,7 @@
 .mine-table .mine-name a { font-weight: 600; color: var(--text); }
 .mine-table .mine-name a:hover { color: var(--accent); }
 .mine-groups { justify-self: start; }
+
+/* dates and review dates never break inside ("2026-11-\n20") */
+.mine .nowrap { white-space: nowrap; }
+.mine-table td.mine-when { white-space: nowrap; }

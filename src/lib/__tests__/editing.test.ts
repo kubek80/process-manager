@@ -4,7 +4,8 @@ import {
   standardIssueTarget, standardOutline, statusChangeBlocked,
 } from "../editing";
 import { validateProcess } from "../validate";
-import { author, outlineCollapsed, outlineKey, savedByText, unpublishedLine, baseBehindSentence, draftSaveBase, exampleIssues, publishLines, withoutReviewDates } from "../editing";
+import { author, deleteReady, DELETE_PAUSE, outlineCollapsed, outlineKey, savedByText, steppedMessage, unpublishedLine, baseBehindSentence, draftSaveBase, exampleIssues, publishLines, valueByName, withoutReviewDates } from "../editing";
+import { compare } from "../diff";
 import { blankProcess, blankStandard, addRequirement, addStepAfter, EXAMPLE } from "../edit";
 
 import { base, baseStandard, catalog } from "./fixtures";
@@ -168,6 +169,26 @@ describe("what the Publish dialog lists", () => {
     b.review = { intervalMonths: 12 };
     expect(publishLines("process", a, b)).toEqual(["Review changed"]);
   });
+  it("shows participants, teams, tools, tiers and the like by their names, never by their ids", () => {
+    const a = base(), b = base();
+    b.steps[0] = { ...b.steps[0], actor: "boss", tool: "azure-portal" };
+    b.owner = "security";
+    b.tiers = ["tier-0", "tier-1"];
+    const lines = publishLines("process", a, b, catalog);
+    expect(lines).toContain("Step “Ask for it” changed: who does it “You” → “Line manager”, tool nothing → “Azure portal”");
+    const team = (id: string) => catalog.teams.find((t) => t.id === id)!.name;
+    expect(lines).toContain(`Owner changed from “${team("cloud-platform-team")}” to “${team("security")}”`);
+    expect(lines).toContain("Tiers: nothing → “Tier 0, Tier 1”");
+    expect(lines.join(" ")).not.toMatch(/“(me|boss|security|tier-0|azure-portal)”/);
+  });
+  it("names a value by its list, and keeps one it does not know", () => {
+    expect(valueByName("actor", "me", catalog, [])).toBe("You");
+    expect(valueByName("actor", "boss", catalog, [{ id: "boss", name: "Line manager" }])).toBe("Line manager");
+    expect(valueByName("tool", "azure-portal", catalog)).toBe("Azure portal");
+    expect(valueByName("tool", "gone-tool", catalog)).toBe("gone-tool");
+    expect(valueByName("languages", [], catalog)).toBeUndefined();
+    expect(valueByName("title", "Approve", catalog)).toBe("Approve");
+  });
   it("of a standard names the requirement", () => {
     const a = baseStandard(), b = baseStandard();
     b.requirements[0] = { ...b.requirements[0], level: "should" };
@@ -263,5 +284,44 @@ describe("the outline as a narrow rail", () => {
   it("is remembered per person", () => {
     expect(outlineKey("alex@example.com")).toBe("pm:outline:alex@example.com");
     expect(outlineKey("alex@example.com")).not.toBe(outlineKey("sam@example.com"));
+  });
+});
+
+describe("what Undo and Redo say", () => {
+  const p = base();
+  const without = { ...p, steps: p.steps.filter((s) => s.id !== "fix") };
+  const main = (a: typeof p, b: typeof p) => { const c = compare("process", a, b, catalog); return c.find((x) => x.kind !== "changed") ?? c[0]; };
+  it("says what is true now, not what was undone", () => {
+    // a step was deleted; Undo brings it back
+    expect(steppedMessage("undo", main(without, p))).toBe("Step “Fix the request” is back.");
+    // Redo deletes it again
+    expect(steppedMessage("redo", main(p, without))).toBe("Step “Fix the request” is deleted again.");
+    // a step was added; Undo takes it out, Redo puts it back
+    expect(steppedMessage("undo", main(p, without))).toBe("Step “Fix the request” is removed again.");
+    expect(steppedMessage("redo", main(without, p))).toBe("Step “Fix the request” is added again.");
+  });
+  it("for a changed step, a detail and a value", () => {
+    const renamed = { ...p, steps: p.steps.map((s) => (s.id === "ask" ? { ...s, instructions: ["Another line."] } : s)) };
+    expect(steppedMessage("undo", main(renamed, p))).toBe("Step “Ask for it” is as it was: instructions.");
+    expect(steppedMessage("redo", main(p, renamed))).toBe("Step “Ask for it” is changed again: instructions.");
+    const platform = { ...p, platform: "gcp" };
+    const name = catalog.platforms.find((x) => x.id === "gcp")?.name ?? "gcp";
+    expect(steppedMessage("redo", main(p, platform))).toBe(`Platform is “${name}” again.`);
+    expect(steppedMessage("undo", main(platform, p))).toBe("Platform is empty again.");
+    expect(steppedMessage("undo", main(p, { ...p, summary: "Other." }))).toBe("Summary is as it was.");
+  });
+  it("without a difference, plainly", () => {
+    expect(steppedMessage("undo")).toBe("Undone.");
+    expect(steppedMessage("redo")).toBe("Done again.");
+  });
+});
+
+describe("the delete button after the selection changed", () => {
+  it("ignores presses for a moment, so that a second click does not delete the next item too", () => {
+    expect(DELETE_PAUSE).toBe(700);
+    expect(deleteReady(1000, 1000)).toBe(false);
+    expect(deleteReady(1000, 1699)).toBe(false);
+    expect(deleteReady(1000, 1700)).toBe(true);
+    expect(deleteReady(1000, 5000)).toBe(true);
   });
 });

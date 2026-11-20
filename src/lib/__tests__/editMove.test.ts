@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addActor, answerChanges, appendRequirement, appendStep, blankProcess, deleteStep, EXAMPLE, flowMoveBlocked, moveRequirementTo, moveStepInFlow, nudgeStep, setStepType } from "../edit";
+import { addActor, answerChanges, restructureNotice, shortName, appendRequirement, appendStep, blankProcess, deleteStep, EXAMPLE, flowMoveBlocked, moveRequirementTo, moveStepInFlow, nudgeStep, setStepType } from "../edit";
 import { clock, dropBefore, issueText, processOutline, standardOutline, withoutEarlySuggestions } from "../editing";
 import { validateProcess } from "../validate";
 import type { Process } from "../../types";
@@ -225,5 +225,35 @@ describe("problems in words", () => {
   it("names a missing field by its label, and keeps whole sentences", () => {
     expect(issueText({ level: "error", path: "requirements[0]", message: 'is missing the required field "statement"' })).toBe("Write the rule.");
     expect(issueText({ level: "warning", path: "steps[0].instructions", message: "Say exactly what the reader does in this step." })).toBe("Say exactly what the reader does in this step.");
+  });
+});
+
+describe("the message after a delete or a move", () => {
+  it("is at most two lines: what was done, and one line about answers that now lead elsewhere", () => {
+    const p = base();
+    // deleting "fix": the "No" of "Approved?" now leads to what followed it
+    const next = deleteStep(p, "fix");
+    expect(restructureNotice(p, next, "Step “Fix the request” deleted.")).toEqual({
+      title: "Step “Fix the request” deleted.", detail: "“No” of “Approved?” now leads elsewhere.",
+    });
+    // nothing about answers: one line
+    expect(restructureNotice(p, deleteStep(p, "done"), "Step “Check the result” deleted.")?.detail).toBeUndefined();
+  });
+  it("after a move that changed one answer, says where it now leads", () => {
+    const p = base();
+    const moved = moveStepInFlow(p, "ok", "approve");
+    expect(restructureNotice(p, moved)).toEqual({ title: "“Yes” of “Approved?” now leads to “Approve it”." });
+  });
+  it("names two answers, counts more, and counts decisions", () => {
+    const p = base();
+    const both = { ...p, steps: p.steps.map((s) => (s.id === "ok" ? { ...s, next: [{ to: "ask", label: "Yes" }, { to: "ask", label: "No" }] } : s)) };
+    expect(restructureNotice(p, both)?.title).toBe("“Yes” and “No” of “Approved?” now lead elsewhere.");
+  });
+  it("cuts long names", () => {
+    expect(shortName("Start the production deployment of the service")).toBe("Start the production deployment of…");
+    expect(shortName("Short")).toBe("Short");
+  });
+  it("says nothing when nothing was done and no answer changed", () => {
+    expect(restructureNotice(base(), base())).toBeNull();
   });
 });

@@ -160,6 +160,16 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   // below where a step's name can be read (60%); "Fit" shows the whole flow, whatever zoom that takes.
   const opening = openMin ?? 0.6;
   const drawW = layout.width - L.HEADER;
+  // the lanes reach the right edge of the map also when the drawing is narrower than it
+  const [scrollerW, setScrollerW] = useState(0);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setScrollerW(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const stageW = Math.max(drawW * zoom, scrollerW);
   const viewWidth = () => scroller.current?.parentElement?.clientWidth ?? 0;
   const wrapBox = useRef<HTMLDivElement>(null);
   const fit = () => {
@@ -186,7 +196,8 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   useLayoutEffect(() => {
     if (opened.current === process.id || (opened.current !== null && editable)) return;
     opened.current = process.id;
-    const z = openingZoom(viewWidth(), drawW, opening, column);
+    // a picture in the guide never scrolls: it gets as small as its column needs
+    const z = openingZoom(viewWidth(), drawW, bare ? 0.3 : opening, column);
     setZoom(z);
     scroller.current?.scrollTo({ left: 0, top: 0 });
   }, [process.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -286,9 +297,9 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
           </div>
         </div>
       <div className={`flow-scroll ${bare ? "" : "pannable"} ${panning ? "panning" : ""}`} ref={scroller}>
-        <div className="flow-stage" style={{ width: drawW * zoom, height: height * zoom }}>
-          <div className="flow-draw" style={{ width: drawW * zoom, height: height * zoom }}>
-        <div className={`flow-canvas ${drag ? "dragging" : ""}`} style={{ width: layout.width, height, zoom, marginLeft: -L.HEADER, "--z": zoom } as React.CSSProperties} onMouseDown={() => setAdding(null)}>
+        <div className="flow-stage" style={{ width: stageW, height: height * zoom }}>
+          <div className="flow-draw" style={{ width: stageW, height: height * zoom }}>
+        <div className={`flow-canvas ${drag ? "dragging" : ""}`} style={{ width: Math.ceil(stageW / zoom) + L.HEADER, height, zoom, marginLeft: -L.HEADER, "--z": zoom } as React.CSSProperties} onMouseDown={() => setAdding(null)}>
           {layout.lanes.map((lane) => {
             const actor = process.actors[lane.actorIndex];
             const color = LANE_COLORS[lane.actorIndex % LANE_COLORS.length];

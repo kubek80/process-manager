@@ -149,7 +149,7 @@ function RolesDialog({ user, users, groups, me, onClose, onSaved }: {
       <div className="roles-dialog">
         {!user && (
           <Field label="Email">
-            <input type="email" autoFocus value={email} placeholder="name@company.com" aria-invalid={tried && problems.some((p) => p.includes("email") || p.includes("already"))}
+            <input type="email" autoFocus value={email} placeholder="e.g. name@company.com" aria-invalid={tried && problems.some((p) => p.includes("email") || p.includes("already"))}
               onChange={(e) => { setEmail(e.target.value); setRefused(""); }} />
           </Field>
         )}

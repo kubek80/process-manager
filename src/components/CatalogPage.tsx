@@ -24,7 +24,7 @@ const KINDS: Record<Key, {
     title: "Teams", noun: "team", icon: Users,
     blurb: "Maintain processes and standards, and take part in them.",
     fields: [
-      { field: "contact", label: "How to reach them", placeholder: "Slack #cloud-platform, a mailbox or a queue" },
+      { field: "contact", label: "How to reach them", placeholder: "e.g. Slack #cloud-platform, a mailbox or a queue" },
       { field: "description", label: "What they do", placeholder: "One sentence on what this team is responsible for", long: true },
     ],
   },
@@ -32,7 +32,7 @@ const KINDS: Record<Key, {
     title: "Practices", noun: "practice", icon: Compass,
     blurb: "Ways of working, such as cyber security or engineering.",
     fields: [
-      { field: "contact", label: "How to reach them", placeholder: "Slack #engineering-practice or a mailbox" },
+      { field: "contact", label: "How to reach them", placeholder: "e.g. Slack #engineering-practice or a mailbox" },
       { field: "description", label: "What it covers", placeholder: "One sentence on what this practice agrees on", long: true },
     ],
   },
@@ -40,7 +40,7 @@ const KINDS: Record<Key, {
     title: "Platforms", noun: "platform", icon: Boxes,
     blurb: "Systems and services people get access to or build on.",
     fields: [
-      { field: "contact", label: "How to reach its owners", placeholder: "Slack #cloud-platform or a mailbox" },
+      { field: "contact", label: "How to reach its owners", placeholder: "e.g. Slack #cloud-platform or a mailbox" },
       { field: "description", label: "What it is", placeholder: "One sentence on what this platform is for", long: true },
     ],
   },
@@ -228,7 +228,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
               <h2>New {kind.noun}</h2>
               <p className="muted">Give it the name people already use. You can add the details afterwards.</p>
               <Field label="Name">
-                <input autoFocus value={newName} maxLength={40} placeholder={key === "teams" ? "Cloud Platform team" : key === "practices" ? "Cyber security" : key === "platforms" ? "Google Cloud" : key === "categories" ? "Cloud" : key === "tools" ? "ServiceNow" : key === "tiers" ? "Tier 4" : key === "environments" ? "Pre-production" : "Rust"}
+                <input autoFocus value={newName} maxLength={40} placeholder={`e.g. ${key === "teams" ? "Cloud Platform team" : key === "practices" ? "Cyber security" : key === "platforms" ? "Google Cloud" : key === "categories" ? "Cloud" : key === "tools" ? "ServiceNow" : key === "tiers" ? "Tier 4" : key === "environments" ? "Pre-production" : "Rust"}`}
                   onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
               </Field>
               <p className="muted small">Id: <code>{slugify(newName) ? newId : "…"}</code>. It is made from the name and never changes, even if you rename.</p>

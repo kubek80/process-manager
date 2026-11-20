@@ -85,14 +85,14 @@ function compareItems<T extends { id: string }>(what: string, before: T[], after
 const list = <T,>(v: T[] | undefined): T[] => (Array.isArray(v) ? v.filter((x) => isObject(x)) : []);
 
 /** The details that hold one value from a list: said with what they were and what they are now. */
-const VALUED = ["category", "practice", "platform", "rigour"] as const;
+const VALUED = ["category", "practice", "platform", "rigour", "owner"] as const;
 
 /** The changed details of a whole document; those in VALUED say from what to what, by name where the lists are known. */
 function detailChanges(before: Doc, after: Doc, skip: string[], catalog?: Catalog): Change[] {
   const nameIn = (list: { id: string; name: string }[] | undefined, v: unknown) => (typeof v === "string" && v ? list?.find((x) => x.id === v)?.name ?? v : "");
   const valueName = (field: (typeof VALUED)[number], v: unknown): string => {
     if (field === "rigour") return typeof v === "string" ? RIGOUR_NAME[v as Rigour] ?? v : "";
-    const list = field === "category" ? catalog?.categories : field === "practice" ? catalog?.practices : catalog?.platforms;
+    const list = field === "category" ? catalog?.categories : field === "practice" ? catalog?.practices : field === "owner" ? catalog?.teams : catalog?.platforms;
     return nameIn(list, v);
   };
   const changes: Change[] = changedFields(before, after, [...skip, ...VALUED]).map((label) => ({ kind: "changed", what: "Details", label }));

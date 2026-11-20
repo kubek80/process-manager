@@ -150,10 +150,10 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
         // no question: it is deleted at once, and the message offers Undo
         const at = draft.steps.indexOf(step);
         const next = deleteStep(draft, step.id);
-        restructure(next, `Step “${shortName(step.title || "(no name yet)")}” deleted.`);
+        restructure(next, `Step “${shortName(step.title || "(no name yet)", 30)}” deleted.`);
         const neighbour = next.steps[Math.min(at, next.steps.length - 1)];
         if (neighbour) selectStep(neighbour.id); else { selectStep(null); setSection("steps"); }
-        focusSelectedInOutline();
+        focusSelectedInOutline(neighbour?.title);
       }}
       onMove={(before) => restructure(moveStepInFlow(draft, step.id, before))}
       onAddAfter={(name) => { const r = insertStep(draft, { afterId: step.id }, { title: name, type: "task", actor: step.actor }); setDraft(r.process); selectStep(r.id); }} />;

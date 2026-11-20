@@ -163,7 +163,10 @@ function push(n: Omit<Notice, "id">): number {
   const same = ui.notices.find((x) => x.kind === n.kind && x.title === n.title && x.detail === n.detail && !x.action && !n.action);
   if (same) return same.id; // the same message is not stacked
   const id = nextId++;
-  setUi({ notices: [...ui.notices, { ...n, id }].slice(-MAX_NOTICES) });
+  // a confirmation replaces the confirmation before it: each action confirms itself, and an old
+  // "done" never stands beside a newer one (errors and messages with a button stay)
+  const kept = n.kind === "info" && !n.action ? ui.notices.filter((x) => x.kind !== "info" || !!x.action) : ui.notices;
+  setUi({ notices: [...kept, { ...n, id }].slice(-MAX_NOTICES) });
   // what went wrong stays until it is closed; the rest goes away by itself
   if (n.kind === "info") setTimeout(() => dismiss(id), n.action ? 8000 : 4500);
   return id;

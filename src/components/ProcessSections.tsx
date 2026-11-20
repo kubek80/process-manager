@@ -86,7 +86,7 @@ export function ProcessAbout({ process, saved, all, set, issues }: { process: Pr
               {process.owner && !catalog.teams.some((t) => t.id === process.owner) && <option value={process.owner}>{process.owner} (not in the list)</option>}
             </select>
           </Field>
-          <Field label="Typical lead time" hint="From the first step to the result"><input value={process.estimatedDuration ?? ""} maxLength={40} placeholder="3-5 working days" onChange={(e) => set({ estimatedDuration: e.target.value })} /></Field>
+          <Field label="Typical lead time" hint="From the first step to the result"><input value={process.estimatedDuration ?? ""} maxLength={40} placeholder="e.g. 3-5 working days" onChange={(e) => set({ estimatedDuration: e.target.value })} /></Field>
         </div>
       </EditSection>
       <GovernedSections kind="process" doc={process} saved={saved} others={all} set={set} issues={issues} />
@@ -97,7 +97,7 @@ export function ProcessAbout({ process, saved, all, set, issues }: { process: Pr
 /** What must be in place before step 1. Enter adds the next one, Backspace in an empty one removes it. */
 export function ProcessBefore({ process, all, set }: { process: Process; all: Process[]; set: Set }) {
   const pre = process.prerequisites;
-  const refs = useRef<(HTMLInputElement | null)[]>([]);
+  const refs = useRef<(HTMLTextAreaElement | null)[]>([]);
   return (
     <EditSection title="Before you start" hint="What the reader must have before step 1, such as an approved cost centre. Readers tick each one off.">
       {pre.length === 0 && <p className="empty-hint">Nothing is needed yet. Add what a reader must have in place, so nobody gets stuck halfway.</p>}
@@ -108,7 +108,7 @@ export function ProcessBefore({ process, all, set }: { process: Process; all: Pr
             <div className="prereq-edit" key={i}>
               <div className="row">
                 <span className="row-n">{i + 1}</span>
-                <input ref={(el) => { refs.current[i] = el; }} value={q.title} maxLength={120} placeholder="Approved cost centre" aria-label={`Prerequisite ${i + 1}`} autoFocus={q.title === ""}
+                <textarea rows={1} className="grow" ref={(el) => { refs.current[i] = el; }} value={q.title} maxLength={120} placeholder="e.g. Approved cost centre" aria-label={`Prerequisite ${i + 1}`} autoFocus={q.title === ""}
                   onChange={(e) => upd({ title: e.target.value })}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") { e.preventDefault(); set({ prerequisites: [...pre.slice(0, i + 1), { title: "" }, ...pre.slice(i + 1)] }); }
@@ -120,7 +120,7 @@ export function ProcessBefore({ process, all, set }: { process: Process; all: Pr
                 <button className="icon-btn" onClick={() => set({ prerequisites: pre.filter((_, j) => j !== i) })} aria-label={`Remove prerequisite ${i + 1}`}><X size={15} /></button>
               </div>
               <div className="row indent">
-                <input value={q.description ?? ""} maxLength={400} placeholder="Why it is needed, how to check" aria-label={`About prerequisite ${i + 1}`} onChange={(e) => upd({ description: e.target.value })} />
+                <textarea rows={1} className="grow" value={q.description ?? ""} maxLength={400} placeholder="Why it is needed, how to check" aria-label={`About prerequisite ${i + 1}`} onChange={(e) => upd({ description: e.target.value })} />
               </div>
               <div className="row indent">
                 <select value={q.processId ?? ""} aria-label={`Process that provides prerequisite ${i + 1}`} onChange={(e) => upd({ processId: e.target.value || undefined })}>

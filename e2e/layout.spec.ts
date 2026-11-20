@@ -150,6 +150,10 @@ for (const theme of ["light", "dark"] as const) {
         await expect(page.locator(".search-page ol.cards > li.card").first()).toBeVisible();
         const modes = page.getByRole("radiogroup", { name: "Search by" });
         for (const name of ["Words", "Meaning", "Both"]) await expect(modes.getByRole("radio", { name, exact: true }), `${name} at ${width}px`).toBeInViewport({ ratio: 1 });
+        // the help is hidden until "How this works" is pressed; opened, every line fits
+        const more = page.getByRole("button", { name: "How this works" });
+        if ((await more.getAttribute("aria-expanded")) !== "true") await more.click();
+        await expect(page.locator("#search-mode-help")).toBeVisible();
         for (const line of await page.locator("#search-mode-help li").all()) {
           const rect = (await line.boundingBox())!;
           expect(rect.x + rect.width, `${await line.innerText()} at ${width}px`).toBeLessThanOrEqual(width);
@@ -189,9 +193,20 @@ for (const theme of ["light", "dark"] as const) {
         await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
         await expect(page.locator(".topbar"), at).toHaveCount(0); // a screen of its own: the editing bar takes the place of the top bar
         // every control of the editing bar is within reach
-        for (const control of [bar.getByRole("button", { name: /^Back to reading/ }), bar.getByRole("button", { name: "Undo" }), bar.getByRole("button", { name: "Redo" }),
+        const phone = width <= 760;
+        // on a phone Undo and Redo are in More, to keep the bar to two rows
+        for (const control of [bar.getByRole("button", { name: /^Back to reading/ }), ...(phone ? [] : [bar.getByRole("button", { name: "Undo" }), bar.getByRole("button", { name: "Redo" })]),
           bar.locator(".eb-status"), bar.getByRole("button", { name: /^More/ }), bar.getByRole("button", { name: "Save draft" }), bar.getByRole("button", { name: "Publish…" }), bar.locator(".eb-state")]) {
           await expect(control, at).toBeInViewport({ ratio: 1 });
+        }
+        if (phone) {
+          await expect(bar.getByRole("button", { name: "Undo" }), at).toHaveCount(0);
+          // two rows: the state and the actions below Back and the title
+          const [back, save] = [(await bar.getByRole("button", { name: /^Back to reading/ }).boundingBox())!, (await bar.getByRole("button", { name: "Save draft" }).boundingBox())!];
+          expect(save.y, at).toBeGreaterThan(back.y + back.height - 2);
+          // touch targets of at least 44 px
+          for (const b of [bar.getByRole("button", { name: "Save draft" }), bar.getByRole("button", { name: "Publish…" }), bar.getByRole("button", { name: /^More/ })])
+            expect((await b.boundingBox())!.height, at).toBeGreaterThanOrEqual(44);
         }
         expect(await sideways(page), at).toBe(0);
         const outline = page.locator(".edit-outline");
@@ -227,7 +242,7 @@ for (const theme of ["light", "dark"] as const) {
         await expect(fields(page).locator(".fields-head h2"), at).toBeInViewport();
         expect(await sideways(page), `${at}, fields open`).toBe(0);
         if (width <= 760) {
-          await page.getByRole("button", { name: "Close the fields" }).click();
+          await page.getByRole("button", { name: hash.startsWith("/p/") ? "Back to the map" : "Back to the requirements" }).click();
           await expect(fields(page).locator(".fields-head h2"), at).toBeHidden();
         }
         // the More menu fits too
@@ -293,3 +308,129 @@ for (const theme of ["light", "dark"] as const) {
     }
   });
 }
+
+// ---------- every width, light and dark: nothing sideways, nothing on top of something else
+
+const WIDTHS = [[1440, 900], [1366, 768], [1024, 768], [768, 1024], [390, 844], [360, 740]] as const;
+
+/**
+ * Pairs of visible controls (buttons, links, fields) inside `scope` whose boxes overlap by more
+ * than 2 px, leaving out one inside the other. Empty when nothing is drawn over anything else.
+ */
+async function overlapping(page: import("@playwright/test").Page, scope: string): Promise<string[]> {
+  return page.evaluate((sel) => {
+    const out: string[] = [];
+    for (const root of document.querySelectorAll(sel)) {
+      const els = [...root.querySelectorAll<HTMLElement>("button, a[href], input, select, textarea, [role=tab], [role=radio], h1, h2")].filter((e) => {
+        const r = e.getBoundingClientRect();
+        const s = getComputedStyle(e);
+        return r.width > 1 && r.height > 1 && s.visibility !== "hidden" && !e.closest("[inert], .theme-preview, [hidden], .sr-only, .search-sr");
+      });
+      const name = (e: HTMLElement) => `${e.tagName.toLowerCase()}${e.className && typeof e.className === "string" ? "." + e.className.trim().split(/\s+/).join(".") : ""}“${(e.getAttribute("aria-label") ?? e.textContent ?? "").trim().slice(0, 30)}”`;
+      for (let i = 0; i < els.length; i++) for (let j = i + 1; j < els.length; j++) {
+        const [a, b] = [els[i], els[j]];
+        if (a.contains(b) || b.contains(a)) continue;
+        const [r, q] = [a.getBoundingClientRect(), b.getBoundingClientRect()];
+        const w = Math.min(r.right, q.right) - Math.max(r.left, q.left);
+        const h = Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top);
+        if (w > 2 && h > 2) out.push(`${name(a)} × ${name(b)}`);
+      }
+    }
+    return out;
+  }, scope);
+}
+
+for (const theme of ["light", "dark"] as const) {
+  test(`the redesigned screens fit every width without overlaps in the ${theme} theme`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await signIn(page, DANA);
+    await page.addInitScript((t) => { try { localStorage.setItem("pm:theme", t); } catch { /* ignore */ } }, theme);
+    for (const [width, height] of WIDTHS) {
+      await page.setViewportSize({ width, height });
+      const at = (what: string) => `${what} at ${width}x${height}, ${theme}`;
+      // Home, the search in cards and in rows, a process page, a standard page, Theming
+      for (const [hash, ready] of [
+        ["/", ".home-page h1"], ["/search?q=gcp", "ol.cards > li.card"], ["/p/request-gcp-project/flow", "header.doc-head h1"],
+        ["/s/secure-logging/doc", "header.doc-head h1"], ["/admin/theming", ".theme-section"],
+      ] as const) {
+        await open(page, hash);
+        await expect(page.locator(ready).first(), at(hash)).toBeVisible();
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        expect(await sideways(page), at(hash)).toBe(0);
+        expect(await overlapping(page, ".topbar:not(.theme-preview *)"), at(`${hash}, the top bar`)).toEqual([]);
+        for (const part of ["header.doc-head", ".search-head", ".results-bar", ".home-search", ".theme-settings"])
+          expect(await overlapping(page, part), at(`${hash}, ${part}`)).toEqual([]);
+      }
+      // the results as rows
+      await open(page, "/search?q=gcp");
+      const view = page.getByRole("radiogroup", { name: "Show as" });
+      await view.getByRole("radio", { name: "Rows" }).click();
+      await expect(page.locator("ol.cards.rows > li.card.row").first()).toBeVisible();
+      expect(await sideways(page), at("rows")).toBe(0);
+      expect(await overlapping(page, "ol.cards.rows > li.card.row"), at("rows")).toEqual([]);
+      await view.getByRole("radio", { name: "Cards" }).click();
+      expect(await overlapping(page, "ol.cards > li.card"), at("cards")).toEqual([]);
+
+      // the editing screen, with the outline open and as a rail where there is one
+      await open(page, "/p/request-gcp-project/edit/details-ok");
+      await expect(page.locator(".edit-bar")).toBeVisible();
+      for (const rail of [false, true]) {
+        const toggle = page.locator("button.outline-toggle");
+        if (width >= 1280 && (await toggle.isVisible())) {
+          if (((await toggle.getAttribute("aria-expanded")) === "false") !== rail) await toggle.click();
+        } else if (rail) continue;
+        const where = at(`the editing screen${rail ? ", outline narrowed" : ""}`);
+        expect(await sideways(page), where).toBe(0);
+        expect(await overlapping(page, ".edit-bar"), `${where}, the bar`).toEqual([]);
+        expect(await overlapping(page, ".edit-fields"), `${where}, the fields`).toEqual([]);
+        expect(await page.locator(".edit-middle").evaluate((e) => e.scrollWidth - e.clientWidth), `${where}: the middle does not scroll sideways`).toBeLessThanOrEqual(1);
+      }
+      // the standard's editing screen
+      await open(page, "/s/secure-logging/edit/SEC-LOG-02");
+      await expect(page.locator(".edit-bar")).toBeVisible();
+      expect(await sideways(page), at("the standard's editing screen")).toBe(0);
+      expect(await page.locator(".edit-middle").evaluate((e) => e.scrollWidth - e.clientWidth), at("the standard's middle")).toBeLessThanOrEqual(1);
+      expect(await overlapping(page, ".edit-bar"), at("the standard's bar")).toEqual([]);
+    }
+    // the outline back as it was for the next tests
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await open(page, "/p/request-gcp-project/edit");
+    const toggle = page.locator("button.outline-toggle");
+    if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+  });
+}
+
+test("a long portal name never pushes the top bar over its edge", async ({ page, request }) => {
+  const name = "Acme Ways of Working for Every Department"; // 40 characters
+  await request.post("/auth/dev/login", { data: { email: DANA }, headers: CSRF });
+  const { revision } = await (await request.get("/api/admin/theme")).json();
+  expect((await request.put(`/api/admin/theme?rev=${revision}`, { data: { name }, headers: CSRF })).ok()).toBeTruthy();
+  try {
+    await signIn(page, DANA); // an admin: the most links in the top bar
+    for (const width of [1440, 1200, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await open(page, "/processes");
+      await expect(page.locator(".card").first()).toBeVisible();
+      const at = `${width}px`;
+      expect(await sideways(page), at).toBe(0);
+      const bar = page.locator(".topbar");
+      const brand = bar.locator(".brand");
+      await expect(brand, at).toHaveAccessibleName(name);
+      // everything in the bar stays inside the screen and nothing is drawn over anything else
+      for (const el of await bar.locator("a[href], button").filter({ visible: true }).all()) {
+        const b = (await el.boundingBox())!;
+        expect(b.x, at).toBeGreaterThanOrEqual(0);
+        expect(b.x + b.width, at).toBeLessThanOrEqual(width + 0.5);
+      }
+      expect(await overlapping(page, ".topbar"), at).toEqual([]);
+      const shown = bar.locator(".brand-name");
+      if (width >= 1200) {
+        await expect(shown, at).toBeVisible();
+        await expect(brand, at).toHaveAttribute("title", name); // cut with "…", the whole name as tooltip
+      } else await expect(shown, at).toBeHidden();
+    }
+  } finally {
+    const { revision: now } = await (await request.get("/api/admin/theme")).json();
+    await request.put(`/api/admin/theme?rev=${now}`, { data: {}, headers: CSRF });
+  }
+});

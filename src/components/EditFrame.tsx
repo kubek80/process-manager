@@ -65,14 +65,19 @@ export function DeleteButton({ label, disabled, onDelete }: { label: string; dis
 }
 
 /**
- * After a delete: the keyboard goes to the item now selected in the outline (not left on the
- * delete button of the next one). Nothing happens while the outline is not on screen.
+ * After a delete: the keyboard goes to the item now selected in the outline (`name`: its name),
+ * not left on the delete button of the next one. Nothing happens while the outline is not on screen.
  */
-export function focusSelectedInOutline() {
-  requestAnimationFrame(() => requestAnimationFrame(() => {
+export function focusSelectedInOutline(name?: string) {
+  // the selection reaches the outline a moment later (through the address): wait for it, briefly
+  let tries = 30;
+  const attempt = () => {
     const item = document.querySelector<HTMLElement>('.edit-outline .outline-item[aria-current="true"]');
-    if (item && item.offsetParent !== null && item.getClientRects().length) item.focus({ preventScroll: false });
-  }));
+    const ready = item && (!name || item.textContent?.includes(name));
+    if (ready && item.getClientRects().length) return item.focus();
+    if (tries-- > 0) requestAnimationFrame(attempt);
+  };
+  requestAnimationFrame(attempt);
 }
 
 /** The heading of the fields panel: what is selected, and what can be done with it as a whole. */
@@ -648,7 +653,7 @@ export function PublishDialog({ noun, first, changes, version, blocked, onPublis
             </>}
         <label className="field">
           <span className="field-label">Note for the list of versions<em>Optional. Tells others what changed and why.</em></span>
-          <input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder={first ? "For example: first version" : "For example: added the security review"} data-autofocus=""
+          <input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder={first ? "e.g. First version" : "e.g. Added the security review"} data-autofocus=""
             onKeyDown={(e) => { if (e.key === "Enter") go(); }} />
         </label>
         {blocked

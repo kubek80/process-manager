@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { ImageUp, Info, LayoutGrid, Loader2, Moon, RotateCcw, Save, Search, Sun, TriangleAlert, Trash2 } from "lucide-react";
+import { Eye, ImageUp, Info, LayoutGrid, Loader2, Moon, Redo2, RotateCcw, Save, Search, Sun, TriangleAlert, Trash2, Undo2 } from "lucide-react";
 import type { Process, Standard } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { search } from "../lib/search";
@@ -87,9 +87,14 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
                 ? <>Last changed by <b>{saved.updatedByName || saved.updatedBy || "an admin"}</b> on {when(saved.updatedAt)}.</>
                 : <>This is the default look: nobody has changed it yet.</>}
             </p>
-            <button type="button" className="btn small" disabled={(isDefault && !d.dirty) || d.saving} onClick={backToDefault}>
-              <RotateCcw size={14} aria-hidden="true" />Back to the default look
-            </button>
+            <div className="btn-row">
+              <button type="button" className="btn small" disabled={(isDefault && !d.dirty) || d.saving} onClick={backToDefault}>
+                <RotateCcw size={14} aria-hidden="true" />Back to the default look
+              </button>
+              <span className="spacer" />
+              <button type="button" className="btn small ghost" disabled={!d.canUndo} onClick={d.undo} title="Undo the last change here (Ctrl+Z)"><Undo2 size={14} aria-hidden="true" />Undo</button>
+              <button type="button" className="btn small ghost" disabled={!d.canRedo} onClick={d.redo} title="Redo (Ctrl+Shift+Z)"><Redo2 size={14} aria-hidden="true" />Redo</button>
+            </div>
           </div>
 
           <section className="theme-group" aria-labelledby="theme-name">
@@ -177,7 +182,7 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
             <button className="btn primary" onClick={() => { void d.keepMine(); }}>Save mine over theirs</button>
           </>}>
           <p>{d.conflict.updatedByName || d.conflict.updatedBy || "Another admin"} saved a look{d.conflict.updatedAt ? ` on ${when(d.conflict.updatedAt)}` : ""} while you were making yours. Your changes are still here and not saved.</p>
-          <p className="muted small">“Show theirs” puts their look on screen; Undo brings yours back.</p>
+          <p className="muted small">“Show theirs” puts their look on screen; Undo, at the top of the settings, brings yours back.</p>
         </Modal>
       )}
     </div>
@@ -192,13 +197,13 @@ function NameField({ value, onChange }: { value: string; onChange: (v: string) =
     <div className="field">
       <label className="field-label" htmlFor={id}>Name of the portal<em>In the top bar, the browser tab, the sign-in page and shared links</em></label>
       <div className="theme-name">
-        <input id={id} value={value} placeholder={DEFAULT_NAME} onChange={(e) => onChange(e.target.value)}
-          aria-invalid={over > 0 || undefined} aria-describedby={`${id}-n${over > 0 ? ` ${id}-e` : ""}`} className={over > 0 ? "invalid" : ""} />
-        <span id={`${id}-n`} className={`theme-count ${over > 0 ? "over" : ""}`}>{n}/{MAX_NAME}</span>
+        <input id={id} value={value} placeholder={`${DEFAULT_NAME} (the default)`} onChange={(e) => onChange(e.target.value)}
+          aria-invalid={over > 0 || undefined} aria-describedby={n > 0 ? `${id}-n${over > 0 ? ` ${id}-e` : ""}` : `${id}-d`} className={over > 0 ? "invalid" : ""} />
+        {n > 0 && <span id={`${id}-n`} className={`theme-count ${over > 0 ? "over" : ""}`}>{n}/{MAX_NAME}</span>}
       </div>
       {over > 0
         ? <span className="field-error" id={`${id}-e`} role="alert">The name can have at most {MAX_NAME} characters: remove {over === 1 ? "one" : over}.</span>
-        : !value.trim() && <span className="muted small">Empty: “{DEFAULT_NAME}”.</span>}
+        : !value.trim() && <span className="muted small" id={`${id}-d`}>Left empty, the portal is called “{DEFAULT_NAME}”. At most {MAX_NAME} characters.</span>}
     </div>
   );
 }
@@ -346,7 +351,9 @@ function LookPreview({ look, processes, standards }: { look: Look; processes: Pr
       </div>
       <div className="preview-panes">
         {(["light", "dark"] as const).map((mode) => (
-          <div key={mode} className={`preview-pane look-${mode} ${underlineLinks(look) ? "pv-lines" : ""}`} style={style} aria-label={`Preview, ${mode}`} role="group" {...{ inert: true }}>
+          <figure key={mode} className="preview-frame">
+          <figcaption className="pv-caption"><Eye size={14} aria-hidden="true" />Preview, {mode}: a sample, nothing in it can be pressed</figcaption>
+          <div className={`preview-pane look-${mode} ${underlineLinks(look) ? "pv-lines" : ""}`} style={style} aria-label={`Preview, ${mode}`} role="group" {...{ inert: true }}>
             <header className="topbar pv-topbar">
               <span className="brand" title={name}>
                 <BrandLogo look={look} src={look.logo ? iconUrl(look.logo) : undefined} />
@@ -361,18 +368,18 @@ function LookPreview({ look, processes, standards }: { look: Look; processes: Pr
             </header>
             <div className="pv-body">
               <div className="pv-row">
-                <button type="button" className="btn small primary">Save changes</button>
-                <button type="button" className="btn small">Cancel</button>
-                <a className="pv-link" href="#/guide">Read the guide</a>
+                <span className="btn small primary">Main button</span>
+                <span className="btn small">Other button</span>
+                <span className="pv-link">A link</span>
               </div>
-              <label className="field pv-field">
-                <span className="field-label">Search</span>
-                <input className="pv-focused" defaultValue="GCP project" readOnly tabIndex={-1} />
-              </label>
-              <div className="seg" role="radiogroup" aria-label="Search by">
-                <button type="button" className="seg-item on" role="radio" aria-checked>Words</button>
-                <button type="button" className="seg-item" role="radio" aria-checked={false}>Meaning</button>
-                <button type="button" className="seg-item" role="radio" aria-checked={false}>Both</button>
+              <div className="field pv-field">
+                <span className="field-label">A field, selected</span>
+                <span className="pv-input pv-focused">Text someone typed</span>
+              </div>
+              <div className="seg" aria-hidden="true">
+                <span className="seg-item on">Chosen</span>
+                <span className="seg-item">Other</span>
+                <span className="seg-item">Other</span>
               </div>
               <div className="pv-cards">
                 {sample.map((r) => (
@@ -380,8 +387,8 @@ function LookPreview({ look, processes, standards }: { look: Look; processes: Pr
                 ))}
               </div>
             </div>
-            <span className="pv-mode-label">{mode === "light" ? "Light" : "Dark"}</span>
           </div>
+          </figure>
         ))}
       </div>
     </section>

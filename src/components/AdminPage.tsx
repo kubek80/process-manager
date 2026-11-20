@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, CalendarCheck, ChartColumn, Flag, KeyRound, List, Palette, Search, Server, ShieldCheck, Sparkles, Workflow } from "lucide-react";
 import type { AuditEntry, FeedbackByTarget, Process, Skill, Standard, TargetKind } from "../types";
 import { teamName, useCatalog } from "../lib/catalog";
@@ -6,7 +6,7 @@ import { reviewOf, statusOf } from "../lib/lifecycle";
 import { usePerms } from "../lib/session";
 import { go, href, loadAudit, loadSkills, loadSystem, type AdminSection, type MetaById, type SystemInfo } from "../lib/store";
 import { KindTag } from "./marks";
-import { shownTarget } from "../lib/activity";
+import { describeEntry } from "../lib/activity";
 import { CatalogPage } from "./CatalogPage";
 import { UsersSection } from "./UsersSection";
 import { openCount } from "./Feedback";
@@ -133,19 +133,7 @@ function HealthSection({ processes, standards, feedback, meta }: { processes: Pr
   );
 }
 
-const ACTION: Record<string, string> = {
-  "process.save": "saved the process", "process.delete": "deleted the process", "standard.save": "saved the standard", "standard.delete": "deleted the standard",
-  "lists.save": "changed the lists", "access.grant": "gave a role to", "access.revoke": "removed a role from", "access.change": "changed the roles of", "access.remove": "removed every role of", "icon.upload": "added an icon",
-  "process.discard": "threw away the unpublished changes of the process", "standard.discard": "threw away the unpublished changes of the standard",
-  "process.publish": "published the process", "standard.publish": "published the standard", "skill.guidance": "changed the extra guidance of",
-  "content.import": "imported", "process.review": "confirmed the review of the process", "standard.review": "confirmed the review of the standard", "feedback.fixed": "marked feedback as fixed on the", "feedback.reopen": "reopened feedback on the",
-  "feedback.delete": "deleted feedback on the",
-  "content.convert": "brought stored content up to date for this version:",
-  "request.create": "asked for something new:", "request.state": "changed the state of", "request.delete": "removed",
-  "theme.change": "changed the look of the portal",
-};
-
-function ActivitySection() {
+function ActivitySection({ processes, standards }: { processes: Process[]; standards: Standard[] }) {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
   const [more, setMore] = useState(false);
   const [error, setError] = useState("");
@@ -158,6 +146,9 @@ function ActivitySection() {
     }, (e) => setError(e.message));
   }, []);
   useEffect(() => load(), [load]);
+  const titles = useMemo(() => ({
+    process: Object.fromEntries(processes.map((p) => [p.id, p.title])), standard: Object.fromEntries(standards.map((x) => [x.id, x.title])),
+  }), [processes, standards]);
   return (
     <div className="admin-section">
       <p className="lead small">Every change to content, lists, roles and skills, newest first.</p>
@@ -165,12 +156,18 @@ function ActivitySection() {
       {!entries && !error && <Loading />}
       {entries && <section className="admin-card">
         <ul className="activity">
-          {entries.map((e) => (
-            <li key={e.id}>
-              <time>{e.at.slice(0, 16).replace("T", " ")}</time>
-              <span><b>{e.name}</b> {ACTION[e.action] ?? e.action}{shownTarget(e.action, e.target) && <> <code>{e.target}</code></>}{e.detail && <em> · {e.detail}</em>}</span>
-            </li>
-          ))}
+          {entries.map((e) => {
+            const d = describeEntry(e, titles);
+            const t = d.target;
+            return (
+              <li key={e.id}>
+                <time dateTime={e.at}>{e.at.slice(0, 16).replace("T", " ")}</time>
+                <span>{d.person ? <b title={e.email}>{d.who}</b> : <span className="activity-portal">{d.who}</span>} {d.words}
+                  {t && <> {t.code ? <code>{t.text}</code> : <span className={t.quoted ? "activity-doc" : ""} title={t.hint}>{t.text}</span>}</>}
+                  {d.detail && <em> · {d.detail}</em>}</span>
+              </li>
+            );
+          })}
           {entries.length === 0 && <li className="muted">Nothing has been changed yet.</li>}
         </ul>
         {more && <button className="btn small" onClick={() => load(entries[entries.length - 1].id)}>Show older</button>}
@@ -217,12 +214,19 @@ export function AdminPage({ section, processes, standards, feedback, meta }: {
   const perms = usePerms();
   const allowed = SECTIONS.filter((s) => (s.admin ? perms.admin : s.id === "lists" ? perms.catalog : true));
   const current = allowed.find((s) => s.id === section) ?? allowed[0];
+  // on a phone the sections are one row that scrolls sideways: the current one is brought into it
+  const nav = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const box = nav.current, on = box?.querySelector<HTMLElement>("a.on");
+    if (!box || !on || box.scrollWidth <= box.clientWidth) return;
+    box.scrollLeft = Math.max(0, on.offsetLeft - box.offsetLeft - (box.clientWidth - on.offsetWidth) / 2);
+  }, [current.id]);
   return (
     <div className="page admin">
-      <aside className="admin-nav" aria-label="Admin">
+      <aside ref={nav} className="admin-nav" aria-label="Admin">
         <p className="admin-nav-title">Admin</p>
         {allowed.map((s) => (
-          <a key={s.id} className={current.id === s.id ? "on" : ""} href={href({ page: "admin", section: s.id })} title={s.hint}><s.icon size={16} />{s.label}</a>
+          <a key={s.id} className={current.id === s.id ? "on" : ""} aria-current={current.id === s.id ? "page" : undefined} href={href({ page: "admin", section: s.id })} title={s.hint}><s.icon size={16} />{s.label}</a>
         ))}
       </aside>
       <main className="admin-main">
@@ -231,7 +235,7 @@ export function AdminPage({ section, processes, standards, feedback, meta }: {
         {current.id === "lists" && <CatalogPage processes={processes} standards={standards} editable />}
         {current.id === "skills" && <SkillsSection />}
         {current.id === "health" && <HealthSection processes={processes} standards={standards} feedback={feedback} meta={meta} />}
-        {current.id === "activity" && <ActivitySection />}
+        {current.id === "activity" && <ActivitySection processes={processes} standards={standards} />}
         {current.id === "statistics" && <StatisticsSection />}
         {current.id === "theming" && <ThemeSection processes={processes} standards={standards} />}
         {current.id === "system" && <SystemSection />}

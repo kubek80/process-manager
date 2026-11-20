@@ -333,6 +333,27 @@ const words = (key: string) => (key === "title" ? "name" : fieldName(key));
 const cap = (t: string) => `${t[0]?.toUpperCase() ?? ""}${t.slice(1)}`;
 
 /**
+ * A value as a reader knows it: a participant, team, tool, category, platform, practice, tier,
+ * environment or language by its name instead of its id ("me" is "You"), a list of them joined
+ * ("Tier 0, Tier 1"). Anything else as it is; an id not found in its list as it is.
+ */
+export function valueByName(key: string, v: unknown, catalog?: Catalog, actors: { id: string; name: string }[] = []): unknown {
+  const LISTS: Record<string, keyof Catalog> = {
+    owner: "teams", teamId: "teams", tool: "tools", category: "categories", practice: "practices", platform: "platforms",
+    tiers: "tiers", environments: "environments", languages: "languages",
+  };
+  const name = (id: unknown): unknown => {
+    if (typeof id !== "string" || !id) return id;
+    if (key === "actor") return actors.find((a) => a.id === id)?.name ?? (id === "me" ? "You" : id);
+    const list = LISTS[key] ? (catalog?.[LISTS[key]] as { id: string; name: string }[] | undefined) : undefined;
+    return list?.find((x) => x.id === id)?.name ?? id;
+  };
+  if (key !== "actor" && !LISTS[key]) return v;
+  if (Array.isArray(v)) return v.length ? v.map(name).join(", ") : undefined;
+  return name(v);
+}
+
+/**
  * What readers will see differently once the draft is published, in lines of plain words: a
  * short field as before and after ("Name: “A” → “B”"), a long one by what and where it is
  * ("Step “Approve the budget” changed: instructions"). Compared with the version readers see
@@ -342,12 +363,16 @@ export function publishLines(kind: TargetKind, published: Process | Standard, dr
   const before = withoutReviewDates(published) as unknown as Record<string, unknown>;
   const after = withoutReviewDates(draft) as unknown as Record<string, unknown>;
   const items = (o: Record<string, unknown>) => (Array.isArray(o[kind === "process" ? "steps" : "requirements"]) ? o[kind === "process" ? "steps" : "requirements"] as Record<string, unknown>[] : []);
+  // values that are ids are shown by their names: a participant, a team, a tool, a tier…
+  const actors = (o: Record<string, unknown>) => (Array.isArray(o.actors) ? o.actors as { id: string; name: string }[] : []);
+  const shown = (key: string, v: unknown, o: Record<string, unknown>, other: Record<string, unknown>) => valueByName(key, v, catalog, [...actors(o), ...actors(other)]);
   return compare(kind, before, after, catalog).map((c) => {
     if (c.what === "Details" && c.from === undefined && c.to === undefined) {
       const key = keyFor(c.label, before, after);
-      if (key && shortValue(before[key]) && shortValue(after[key])) return `${cap(words(key))}: ${quoted(before[key])} → ${quoted(after[key])}`;
+      const was = key ? shown(key, before[key], before, after) : undefined, now = key ? shown(key, after[key], after, before) : undefined;
+      if (key && shortValue(was) && shortValue(now)) return `${cap(words(key))}: ${quoted(was)} → ${quoted(now)}`;
       // a long text that became short is shown as it is now
-      if (key && typeof after[key] === "string" && shortValue(after[key])) return `${cap(words(key))} changed, now ${quoted(after[key])}`;
+      if (key && typeof now === "string" && shortValue(now)) return `${cap(words(key))} changed, now ${quoted(now)}`;
       return describeChange(c);
     }
     if (c.kind === "changed" && c.what !== "Details" && c.details?.length) {
@@ -355,7 +380,8 @@ export function publishLines(kind: TargetKind, published: Process | Standard, dr
       const was = now ? items(before).find((x) => x.id === now.id) : undefined;
       const parts = c.details.map((d) => {
         const key = keyFor(d, was, now);
-        if (key && was && now && shortValue(was[key]) && shortValue(now[key])) return `${words(key)} ${quoted(was[key])} → ${quoted(now[key])}`;
+        const a = key && was ? shown(key, was[key], before, after) : undefined, b = key && now ? shown(key, now[key], after, before) : undefined;
+        if (key && was && now && shortValue(a) && shortValue(b)) return `${words(key)} ${quoted(a)} → ${quoted(b)}`;
         return key ? words(key) : d;
       });
       return `${c.what} “${c.label}” changed: ${parts.join(", ")}`;

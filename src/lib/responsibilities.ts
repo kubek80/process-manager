@@ -102,3 +102,15 @@ export function responsibilities(perms: Perms, only: string | null, processes: P
 
 /** How many things need doing now: what the badge in the top bar shows. Reviews that are only due soon do not count. */
 export const urgent = (tasks: Task[]) => tasks.filter((t) => t.kind === "review-overdue" || t.kind === "feedback").length;
+
+/**
+ * Who made the last change, in words: the person's name where the page knows it (from `names`,
+ * by email, e.g. the people who gave feedback and the signed-in person), else their email; and a
+ * plain word for a change no person made.
+ */
+export function changedBy(email: string | undefined, names: Record<string, string> = {}): string {
+  if (!email) return "";
+  if (email === "import") return "Imported";
+  if (email === "system") return "Updated by the portal";
+  return names[email.toLowerCase()] || email;
+}

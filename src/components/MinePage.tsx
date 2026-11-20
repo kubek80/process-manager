@@ -3,8 +3,8 @@ import { ArrowUpRight, Boxes, CalendarCheck, Check, CircleCheck, Compass, Flag, 
 import type { DocMeta, FeedbackByTarget, Process, Standard, TargetKind } from "../types";
 import { groupName, useCatalog } from "../lib/catalog";
 import { STATUS_LABEL } from "../lib/lifecycle";
-import { groupKey, myGroups, responsibilities, type Group, type Owned, type Task } from "../lib/responsibilities";
-import { useFeedbackActions, usePerms } from "../lib/session";
+import { changedBy, groupKey, myGroups, responsibilities, type Group, type Owned, type Task } from "../lib/responsibilities";
+import { useFeedbackActions, useMe, usePerms } from "../lib/session";
 import { href, type MetaById } from "../lib/store";
 import { FEEDBACK_KINDS } from "./Feedback";
 import { KindTag } from "./marks";
@@ -62,6 +62,15 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
     try { await onReviewed(o.kind, o.doc.id); } finally { setBusy(null); }
   };
   const Icon = ({ o }: { o: Owned }) => <KindTag kind={o.kind} />;
+  // names the page knows, by email: the signed-in person, whoever gave feedback, whoever saved unpublished changes
+  const me = useMe();
+  const names = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const list of [...Object.values(feedback.process), ...Object.values(feedback.standard)]) for (const f of list) if (f.author.email && f.author.name) out[f.author.email.toLowerCase()] = f.author.name;
+    for (const k of ["process", "standard"] as const) for (const m of Object.values(meta[k])) if (m.draft?.updatedByName) out[m.draft.updatedBy.toLowerCase()] = m.draft.updatedByName;
+    if (me.user) out[me.user.email.toLowerCase()] = me.user.name;
+    return out;
+  }, [feedback, meta, me.user]);
 
   if (groups.length === 0) {
     return (
@@ -113,10 +122,10 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
             {[...overdue, ...soon].map(({ item: o }) => (
               <li key={o.kind + o.doc.id}>
                 <Icon o={o} />
-                <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a><em>{via(o)}{o.doc.review?.lastReviewedAt ? ` · last reviewed ${o.doc.review.lastReviewedAt}${o.doc.review.reviewedBy ? ` by ${o.doc.review.reviewedBy}` : ""}` : o.review.first ? " · not reviewed since it was first published" : " · never reviewed"}</em></span>
+                <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a><em>{via(o)}{o.doc.review?.lastReviewedAt ? ` · last reviewed ${o.doc.review.lastReviewedAt}${o.doc.review.reviewedBy ? ` by ${o.doc.review.reviewedBy}` : ""}` : o.review.first ? " · not reviewed since it was first published" : " · not reviewed yet"}</em></span>
                 <span className={`tier-tag review-${o.review.state}`}>{o.review.label}</span>
                 <a className="btn small" href={pageOf(o)}>Read it<ArrowUpRight size={13} /></a>
-                <button className="btn small primary" disabled={busy === o.kind + o.doc.id} onClick={() => review(o)} title={`Records today and your name as the review of this ${noun(o.kind)}`}><Check size={14} />Still correct</button>
+                <button className="btn small" disabled={busy === o.kind + o.doc.id} onClick={() => review(o)} title={`Records today and your name as the review of this ${noun(o.kind)}`}><Check size={14} />Still correct</button>
               </li>
             ))}
           </ul>
@@ -139,7 +148,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
                 </span>
                 {f.stale && <span className="tier-tag review-soon" title="The step or requirement was changed after this was written">May already be fixed</span>}
                 <a className="btn small" href={pageOf(o, true)}>Open<ArrowUpRight size={13} /></a>
-                {f.canManage && <button className="btn small primary" onClick={() => actions.resolve(f, true)}><Check size={14} />Mark as fixed</button>}
+                {f.canManage && <button className="btn small" onClick={() => actions.resolve(f, true)}><Check size={14} />Mark as fixed</button>}
               </li>
             ))}
           </ul>
@@ -156,7 +165,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
                 <li key={"changes" + o.kind + o.doc.id} className="mine-changes">
                   <Icon o={o} />
                   <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a>
-                    <em>Changed by {d.updatedBy} on {day(d.updatedAt)}. Readers still see version {meta[o.kind][o.doc.id]?.version}.</em></span>
+                    <em>Changed by {d.updatedByName || changedBy(d.updatedBy, names)} on <span className="nowrap">{day(d.updatedAt)}</span>. Readers still see version {meta[o.kind][o.doc.id]?.version}.</em></span>
                   <span className="tier-tag unpublished">Unpublished changes</span>
                   <a className="btn small" href={editPage(o)}>Continue editing<ArrowUpRight size={13} /></a>
                 </li>
@@ -189,10 +198,10 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
                     <tr key={o.kind + o.doc.id}>
                       <td><span className="mine-name"><Icon o={o} /><a href={pageOf(o)}>{o.doc.title}</a></span></td>
                       <td>{via(o)}</td>
-                      <td>{o.status === "active" ? "In use" : <span className={`tier-tag status-${o.status}`}>{STATUS_LABEL[o.status]}</span>}{workingDraft(o) && <> <span className="tier-tag unpublished" title={`Changed by ${workingDraft(o)!.updatedBy} on ${day(workingDraft(o)!.updatedAt)}`}>Unpublished changes</span></>}</td>
-                      <td>{o.review.state === "ok" ? o.review.label : o.review.state === "none" ? <span className="muted">—</span> : <span className={`tier-tag review-${o.review.state}`}>{o.review.label}</span>}</td>
+                      <td>{o.status === "active" ? "In use" : <span className={`tier-tag status-${o.status}`}>{STATUS_LABEL[o.status]}</span>}{workingDraft(o) && <> <span className="tier-tag unpublished" title={`Changed by ${workingDraft(o)!.updatedByName || changedBy(workingDraft(o)!.updatedBy, names)} on ${day(workingDraft(o)!.updatedAt)}`}>Unpublished changes</span></>}</td>
+                      <td className="nowrap">{o.review.state === "ok" ? o.review.label : o.review.state === "none" ? <span className="muted">—</span> : <span className={`tier-tag review-${o.review.state}`}>{o.review.label}</span>}</td>
                       <td>{o.open.length ? <a href={pageOf(o, true)} className="tier-tag flagged">{o.open.length} open</a> : <span className="muted">none</span>}</td>
-                      <td>{m ? <>Version {m.version} · {day(m.updatedAt)}<br /><span className="muted">{m.updatedBy}</span></> : <span className="muted">—</span>}</td>
+                      <td className="mine-when">{m ? <><span className="nowrap">Version {m.version} · {day(m.updatedAt)}</span><br /><span className="muted" title={m.updatedBy}>{changedBy(m.updatedBy, names)}</span></> : <span className="muted">—</span>}</td>
                     </tr>
                   );
                 })}
