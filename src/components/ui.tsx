@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import type { Issue, StepType } from "../types";
 import { STEP_META } from "../lib/stepMeta";
-import { copyText } from "../lib/store";
+import { copyText, isLoadFailure } from "../lib/store";
 
 export const STEP_ICON: Record<StepType, LucideIcon> = {
   form: ClipboardList, code: GitPullRequest, approval: Stamp, review: Eye, wait: Hourglass,
@@ -264,13 +264,21 @@ export class ErrorBoundary extends Component<{ children: ReactNode; resetKey?: u
     if (!this.state.error) return this.props.children;
     return (
       <div className="page crash" role="alert">
-        <h1>Something went wrong on this page</h1>
-        <p className="lead">The page could not be shown. Nothing you saved is lost. Reload the page, or go back to the start and try again.</p>
+        {isLoadFailure(this.state.error.message) ? <>
+          <h1>This page could not be loaded</h1>
+          <p className="lead">Could not reach the portal. Check your connection, then reload the page. Nothing you saved is lost.</p>
+        </> : <>
+          <h1>Something went wrong on this page</h1>
+          <p className="lead">The page could not be shown. Nothing you saved is lost. Reload the page, or go back to the start and try again.</p>
+        </>}
         <div className="btn-row">
           <button className="btn primary" onClick={() => window.location.reload()}><RotateCcw size={16} />Reload</button>
           <button className="btn" onClick={() => { window.location.hash = "#/"; this.setState({ error: null }); }}>Back to the start</button>
         </div>
-        <p className="muted small crash-detail">Details for support: {this.state.error.message}</p>
+        <details className="crash-detail">
+          <summary>Details</summary>
+          <p className="muted small">For support: {this.state.error.message}</p>
+        </details>
       </div>
     );
   }

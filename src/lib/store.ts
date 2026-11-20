@@ -22,6 +22,14 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return (await request<T>(method, path, body)).data;
 }
 
+/** What to say when the portal could not be reached at all; for a change, that nothing was saved. */
+export const unreachableMessage = (method: string) =>
+  `Could not reach the portal.${method === "GET" ? "" : " Nothing was saved."} Check your connection and try again.`;
+
+/** True when a part of the app itself could not be fetched (the portal was out of reach, or replaced by a newer version). */
+export const isLoadFailure = (message: string) =>
+  /Unable to preload CSS|Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i.test(message);
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<{ data: T; headers: Headers }> {
   let res: Response;
   try {
@@ -31,7 +39,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
-    throw new ApiError(0, "The server cannot be reached. Is it running?");
+    throw new ApiError(0, unreachableMessage(method));
   }
   if (res.status === 204) return { data: undefined as T, headers: res.headers };
   const data = await res.json().catch(() => null);
@@ -562,7 +570,7 @@ export async function uploadIcon(file: Blob): Promise<{ id: string; contentType:
   try {
     res = await fetch("/api/icons", { method: "POST", headers: { "Content-Type": file.type || "application/octet-stream", "X-Requested-With": "process-manager" }, body: file });
   } catch {
-    throw new ApiError(0, "The server cannot be reached. Is it running?");
+    throw new ApiError(0, unreachableMessage("POST"));
   }
   const data = await res.json().catch(() => null);
   if (res.status === 401) { window.dispatchEvent(new Event(SIGNED_OUT)); throw new ApiError(401, "You are signed out. Sign in again, then repeat what you were doing."); }

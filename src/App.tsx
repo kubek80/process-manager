@@ -40,10 +40,10 @@ const EditStandardPage = lazy(() => import("./components/EditStandardPage").then
 const AiDialog = lazy(() => import("./components/AiDialog").then((m) => ({ default: m.AiDialog }))) as typeof import("./components/AiDialog").AiDialog;
 
 /** An editing screen for something that is not there (deleted, or never existed). */
-function NotFound({ noun, id }: { noun: "process" | "standard"; id: string }) {
+function NotFound({ noun }: { noun: "process" | "standard" }) {
   return (
     <div className="page not-found"><h1>{noun === "process" ? "Process" : "Standard"} not found</h1>
-      <p className="muted">There is no {noun} “{id}”, or you may not see it.</p>
+      <p className="muted">This {noun} does not exist (any more). It may have been renamed or deleted.</p>
       <a className="btn" href={href({ page: noun === "process" ? "library" : "standards" })}>Back to all {noun === "process" ? "processes" : "standards"}</a></div>
   );
 }
@@ -594,21 +594,21 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       {processes && route.page === "process" && (process
         ? <ProcessPage key={process.id} process={process} meta={processMeta[process.id]} all={all} standards={standards} tab={route.tab} item={route.item}
           onReviewed={(base) => reviewed("process", process.id, base)} feedback={feedback.process[process.id] ?? []} />
-        : <div className="page not-found"><h1>Process not found</h1><p className="muted">There is no process “{route.id}”. It may have been renamed or deleted.</p><a className="btn" href={href({ page: "library" })}>Back to all processes</a></div>)}
+        : <NotFound noun="process" />)}
       {processes && route.page === "standard" && (standard
         ? <StandardPage key={standard.id} standard={standard} meta={standardMeta[standard.id]} all={standards} processes={all} tab={route.tab} item={route.item}
           onReviewed={(base) => reviewed("standard", standard.id, base)} feedback={feedback.standard[standard.id] ?? []} />
-        : <div className="page not-found"><h1>Standard not found</h1><p className="muted">There is no standard “{route.id}”. It may have been renamed or deleted.</p><a className="btn" href="#/standards">Back to all standards</a></div>)}
+        : <NotFound noun="standard" />)}
       {processes && route.page === "edit-process" && (process
         ? <EditProcessPage key={process.id} process={process} meta={processMeta[process.id]} all={all} standards={standards} item={route.item}
           feedback={feedback.process[process.id] ?? []} onSave={saveProcess} onReload={() => reloadProcess(process.id)} onRefresh={refreshAll}
           onDelete={(base) => deleteProcess(process.id, base)} onDraftMeta={(d) => setDraftMeta(setProcessMeta, process.id, d)} />
-        : <NotFound noun="process" id={route.id} />)}
+        : <NotFound noun="process" />)}
       {processes && route.page === "edit-standard" && (standard
         ? <EditStandardPage key={standard.id} standard={standard} meta={standardMeta[standard.id]} all={standards} processes={all} item={route.item}
           feedback={feedback.standard[standard.id] ?? []} onSave={saveStandard} onReload={() => reloadStandard(standard.id)} onRefresh={refreshAll}
           onDelete={(base) => deleteStandard(standard.id, base)} onDraftMeta={(d) => setDraftMeta(setStandardMeta, standard.id, d)} />
-        : <NotFound noun="standard" id={route.id} />)}
+        : <NotFound noun="standard" />)}
       </Suspense>
       </ErrorBoundary>
       <Suspense fallback={null}>
