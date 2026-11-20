@@ -166,7 +166,7 @@ export function RequirementFields({ r, standard, processes, feedback, issues, on
           {standard.requirements.length > 1 && (
             <select className="move-select" value="" aria-label="Move this requirement" title="Put this requirement somewhere else in the list"
               onChange={(e) => { const v = e.target.value; if (v) onMove(v === "__end" ? null : v); }}>
-              <option value="">Move to…</option>
+              <option value="">Move…</option>
               {standard.requirements.map((x, i) => (x.id === r.id || standard.requirements[i - 1]?.id === r.id ? null
                 : <option key={x.id} value={x.id}>Before {x.id} {x.title}</option>))}
               {index !== standard.requirements.length - 1 && <option value="__end">To the end</option>}

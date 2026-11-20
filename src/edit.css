@@ -250,7 +250,7 @@
 .detail-offers { display: flex; flex-wrap: wrap; gap: 6px; }
 .detail-offers .chip { height: 30px; padding: 0 11px; }
 .fields-move { display: flex; align-items: center; gap: 4px; margin-left: auto; }
-.move-select { width: auto; height: 32px; padding: 0 26px 0 10px; font-size: 13px; font-weight: 550; width: 112px; }
+.move-select { width: auto; height: 32px; padding: 0 26px 0 10px; font-size: 13px; font-weight: 550; width: 104px; }
 /* text boxes grow with what is written in them, up to a point, so nothing is hidden */
 .edit-fields textarea { field-sizing: content; min-height: 64px; max-height: 50vh; }
 .edit-fields .ins-rows textarea { min-height: 38px; }

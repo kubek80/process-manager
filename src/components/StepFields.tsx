@@ -68,7 +68,7 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
           {process.steps.length > 1 && (
             <select className="move-select" value="" aria-label="Move this step" title={moveBlocked || "Put this step somewhere else in the flow"} disabled={!!moveBlocked}
               onChange={(e) => { const v = e.target.value; if (v) onMove(v === "__end" ? null : v); }}>
-              <option value="">Move to…</option>
+              <option value="">Move…</option>
               {process.steps.map((s, i) => (s.id === step.id || process.steps[i - 1]?.id === step.id ? null
                 : <option key={s.id} value={s.id}>Before {i + 1}. {s.title}</option>))}
               {index !== process.steps.length - 1 && <option value="__end">To the end</option>}
