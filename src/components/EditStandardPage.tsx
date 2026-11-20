@@ -116,7 +116,7 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
         const at = draft.requirements.indexOf(current);
         const next = deleteRequirement(draft, current.id);
         setDraft(next);
-        notify.info(`Requirement ${current.id} “${shortName(current.title)}” deleted.`, { label: "Undo", run: () => d.undo() });
+        notify.info(current.title?.trim() ? `Requirement ${current.id} “${shortName(current.title)}” deleted.` : `Requirement ${current.id} (no name yet) deleted.`, { label: "Undo", run: () => d.undo() });
         const neighbour = next.requirements[Math.min(at, next.requirements.length - 1)];
         if (neighbour) selectReq(neighbour.id); else { selectReq(null); setSection("requirements"); }
         focusSelectedInOutline(neighbour?.title);
