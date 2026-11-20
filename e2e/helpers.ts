@@ -91,7 +91,7 @@ export async function openEditor(page: Page, kind: "process" | "standard", id: s
   await expect(page.locator(".edit-bar")).toBeVisible();
 }
 
-/** The state on the editing bar: its aria-label, e.g. "Unpublished changes. Readers still see version 1." */
+/** The state on the editing bar: its aria-label, e.g. "Unpublished changes. Readers still see version 1. Draft saved 14:02." */
 export const editState = (page: Page) => page.locator(".edit-bar .eb-state");
 
 /** Selects an entry of the outline on the left of the editing screen ("About", "3 Approve it"). */
@@ -107,10 +107,11 @@ export async function outline(page: Page, name: string | RegExp) {
 /** The fields panel on the right of the editing screen. */
 export const fields = (page: Page) => page.locator(".edit-fields");
 
-/** "Save draft" and wait until it is saved (the state on the editing bar no longer says "not saved yet"). */
+/** "Save draft" and wait until it is saved (the state on the editing bar no longer says "Not saved yet"). */
 export async function saveDraft(page: Page) {
   await page.locator(".edit-bar").getByRole("button", { name: "Save draft" }).click();
-  await expect(editState(page)).not.toHaveAttribute("aria-label", /not saved yet/);
+  await expect(editState(page)).not.toHaveAttribute("aria-label", /Not saved yet/i);
+  await expect(page.locator(".edit-bar .eb-saved")).toHaveText(/^(Draft saved \d\d:\d\d|Saved( \d\d:\d\d)?)$/);
   await expect(page.locator(".edit-bar").getByRole("button", { name: "Save draft" })).toBeDisabled();
 }
 
@@ -122,6 +123,69 @@ export async function publish(page: Page, note = "") {
   await dialog.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(editState(page)).toHaveAttribute("aria-label", /^(Published|Retired)\./);
+}
+
+/**
+ * Why Save draft or Publish… did not happen: the reason at the top of the checker's list ("What
+ * is to fix"), which opens by itself when one of them is refused.
+ */
+export const refusal = (page: Page) => page.getByRole("dialog", { name: "What is to fix" }).locator(".checker-reason");
+
+/** Opens a folded group of fields ("Where it applies", "Review", "How it is checked"…) when it is folded. */
+export async function unfold(page: Page, title: string) {
+  const head = fields(page).getByRole("button", { name: title, exact: true });
+  if ((await head.getAttribute("aria-expanded")) === "false") await head.click();
+  await expect(head).toHaveAttribute("aria-expanded", "true");
+}
+
+/** The checker's chip on the editing bar: "3 to fix", "2 suggestions", "Nothing to fix". */
+export const checkerChip = (page: Page) => page.locator(".edit-bar .eb-status");
+
+/** Opens the checker's list ("What is to fix") from its chip on the editing bar. */
+export async function openChecker(page: Page) {
+  const pop = page.getByRole("dialog", { name: "What is to fix" });
+  if (!(await pop.isVisible())) await checkerChip(page).click();
+  await expect(pop).toBeVisible();
+  return pop;
+}
+
+/** Chooses the kind of the selected step ("Decision", "Meeting"…) in the pop-up behind "Kind of step". */
+export async function pickKind(page: Page, kind: string) {
+  await fields(page).locator("button.kind-pick").click();
+  const pop = fields(page).getByRole("group", { name: "Kind of step" });
+  await pop.locator(".type-opt", { hasText: new RegExp(`^${esc(kind)}$`) }).click();
+  await expect(pop).toHaveCount(0);
+}
+
+/** The outline on the left of the editing screen. */
+export const outlineNav = (page: Page) => page.getByRole("navigation", { name: /^Outline of the/ });
+
+/** The names of the items (steps or requirements) in the outline, in their order. */
+export const outlineTitles = async (page: Page) =>
+  (await outlineNav(page).locator(".outline-row.depth-1 .outline-label").allTextContents()).map((t) => t.replace(/^\d+(\.\d+)*/, "").trim());
+
+/**
+ * Adds steps (or requirements) by typing their names into the line at the end of the outline
+ * ("Add a step" / "Add a requirement"): a name, Enter, the next one.
+ */
+export async function addInOutline(page: Page, ...names: string[]) {
+  const nav = outlineNav(page);
+  const open = nav.getByRole("button", { name: /^Add a (step|requirement)$/ });
+  const field = nav.getByRole("textbox", { name: /^Add a (step|requirement)$/ });
+  if (!(await field.isVisible())) await open.click();
+  for (const name of names) {
+    await field.fill(name);
+    await field.press("Enter");
+    await expect(field).toHaveValue("");
+  }
+}
+
+/** Puts the selected step or requirement somewhere else with "Move…" in its fields ("Before 3. Approve it", "To the end"). */
+export async function moveTo(page: Page, option: string | RegExp) {
+  const select = fields(page).getByRole("combobox", { name: /^Move this (step|requirement)$/ });
+  const label = typeof option === "string" ? option : (await select.locator("option").allTextContents()).find((t) => option.test(t));
+  expect(label, `an option ${option} in Move…`).toBeTruthy();
+  await select.selectOption({ label: label! });
 }
 
 /** An item of the "More" menu on the editing bar ("Versions", "Retire…", "JSON"). */
@@ -187,6 +251,15 @@ export async function putDoc(from: Page | APIRequestContext, kind: "process" | "
 }
 
 /**
+ * Opens "My application" (Tier, Environment, Language) in the filter panel when it is folded.
+ * It opens by itself when something in it is chosen, and stays as it was left for the session.
+ */
+export async function openApplication(page: Page) {
+  const toggle = page.getByRole("complementary", { name: "Filters" }).locator("button.filter-app-toggle");
+  if ((await toggle.count()) && (await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+}
+
+/**
  * Choose (or un-choose) a value in a dropdown of the filter panel on the left of a list
  * ("Category", "Platform", "Owner", and the single-choice "Tier", "Environment", "Language")
  * and close the dropdown again.
@@ -194,6 +267,7 @@ export async function putDoc(from: Page | APIRequestContext, kind: "process" | "
 export async function pickFilter(page: Page, filter: string, option: string | RegExp) {
   const panel = page.getByRole("complementary", { name: "Filters" });
   const button = panel.getByRole("button", { name: new RegExp(`^${filter}:`) });
+  await openApplication(page);
   if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
   const name = typeof option === "string" ? new RegExp(`^${esc(option)}, \\d+ results?$`) : option;
   const list = button.locator("xpath=..").locator(".filter-dd-list");

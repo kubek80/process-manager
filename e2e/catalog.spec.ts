@@ -72,7 +72,15 @@ test("a new environment can be chosen in a process; the lists of groups are sepa
   await open(page, "/admin/lists");
   await expect(page.locator(".admin-nav a")).toHaveText(["Lists", "Skills", "Health"]); // no Access, Activity or System for a lists manager
   // teams, practices and platforms are three lists: a team is just a group of people, of no kind
-  await expect(page.locator(".cat-tabs [role=tab] strong")).toHaveText(["Teams", "Practices", "Platforms", "Categories", "Tools", "Application tiers", "Environments", "Languages"]);
+  const tabs = page.getByRole("tablist", { name: "Lists" }).getByRole("tab");
+  const names = ["Teams", "Practices", "Platforms", "Categories", "Tools", "Application tiers", "Environments", "Languages"];
+  await expect(tabs).toHaveText(names.map((n) => new RegExp(`^${n}\\s*\\d+$`)));
+  // each tab counts its entries; the one chosen is marked, and says what the list is for under the tabs
+  const lists = await readCatalog(page);
+  await expect(tabs.first().locator(".tab-count")).toHaveText(String(lists.teams.length));
+  await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
+  await expect(tabs.first()).toHaveClass(/\bon\b/);
+  await expect(page.locator("p.cat-blurb")).toHaveText((await tabs.first().getAttribute("title"))!);
   await page.locator(".cat-item", { hasText: "DNS team" }).click();
   await expect(page.locator(".cat-detail .eyebrow")).toHaveText("team");
   await expect(page.locator(".cat-detail").getByRole("button", { name: "Platform owner" })).toHaveCount(0);

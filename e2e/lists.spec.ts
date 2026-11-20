@@ -29,7 +29,7 @@ test.afterEach(async ({ request }) => {
   for (const a of assignments.filter((x: { email: string }) => x.email === SAM)) await request.delete("/api/admin/access", { data: { email: a.email, role: a.role, scope: a.scope }, headers: CSRF });
 });
 
-const tab = (page: Page, name: string) => page.locator(".cat-tabs").getByRole("tab", { name: new RegExp(`^${name}`) });
+const tab = (page: Page, name: string) => page.locator(".cat-kinds").getByRole("tab", { name: new RegExp(`^${name}`) });
 const item = (page: Page, name: string) => page.locator(".cat-item", { hasText: name });
 
 test("an admin adds a platform, a practice and a category, uses them, and can remove them only when nothing uses them", async ({ page }) => {
@@ -254,8 +254,8 @@ test("About: an editor says what a process belongs to and its rigour; readers se
     // a reader sees names, never ids: on the page and in the library
     await signIn(page, SAM);
     await open(page, "/p/details-demo/flow");
-    await expect(page.locator(".eyebrow").first()).toHaveText("Network · owned by Cloud Platform team");
-    const facts = page.locator(".facts");
+    await expect(page.locator("header.doc-head .doc-owner")).toHaveText("Network · Owned by Cloud Platform team");
+    const facts = page.locator("header.doc-head");
     for (const name of ["Mandatory", "Azure", "Service management"]) await expect(facts).toContainText(name);
     await expect(facts).not.toContainText("service-management");
     await open(page, "/processes");

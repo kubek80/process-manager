@@ -15,7 +15,7 @@ test("a consumer finds standards by the team that issues them and by what applie
   await expect(page.getByRole("heading", { name: "What must I meet?" })).toBeVisible();
   const cards = page.locator(".card");
   await expect(cards.filter({ hasText: "Secure logging" }).locator('[data-line="owner"] dd')).toHaveText("Cyber Security");
-  await expect(cards.filter({ hasText: "Secure logging" }).locator('[data-line="rigour"] dd')).toContainText("4 mandatory");
+  await expect(cards.filter({ hasText: "Secure logging" }).locator('[data-line="rigour"] dd')).toContainText("4 must");
   await expect(page.getByRole("button", { name: /Blank standard/ })).toHaveCount(0);
 
   await page.getByPlaceholder(/Search/).fill("IAC-03"); // requirement ids are searchable
@@ -32,7 +32,7 @@ test("a consumer finds standards by the team that issues them and by what applie
 
   // for a development environment one of the four mandatory logging rules falls away
   await pickFilter(page, "Environment", "Development");
-  await expect(cards.filter({ hasText: "Secure logging" }).locator('[data-line="rigour"] dd')).toContainText("3 mandatory");
+  await expect(cards.filter({ hasText: "Secure logging" }).locator('[data-line="rigour"] dd')).toContainText("3 must");
   expect(errors).toEqual([]);
 });
 
@@ -40,13 +40,13 @@ test("a standard reads as a document: rule, reason, how to comply, examples, how
   await signIn(page, SAM);
   await open(page, `/s/${LOGGING}/doc`);
   await expect(page.getByRole("heading", { name: "Secure logging", exact: true })).toBeVisible();
-  await expect(page.locator(".eyebrow").first()).toContainText("issued by Cyber Security");
+  await expect(page.locator("header.doc-head .doc-owner")).toContainText("Issued by Cyber Security");
   await expect(page.locator(".standard-intro")).toContainText("All services and jobs");
   const reqs = page.locator(".req");
   await expect(reqs).toHaveCount(5);
 
   const first = page.locator("#req-SEC-LOG-01");
-  await expect(first.locator(".level")).toHaveText("Must");
+  await expect(first.locator(".req-level")).toHaveText("Must");
   await expect(first).toContainText("never written to logs");
   await expect(first).toContainText("Logs are read by many people");
   await expect(first).toContainText("Log the name of a credential, never its value.");

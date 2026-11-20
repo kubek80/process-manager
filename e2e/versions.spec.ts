@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { ALEX, DANA, SAM, answer, editState, fields, meaningReady, more, open, openEditor, outline, publish, readProcess, readWorkingDraft, saveDraft, signIn, watchErrors } from "./helpers";
+import { ALEX, answer, DANA, editState, fields, meaningReady, more, open, openEditor, outline, publish, readProcess, readWorkingDraft, refusal, SAM, saveDraft, signIn, watchErrors } from "./helpers";
 
 const CSRF = { "X-Requested-With": "process-manager" };
 
@@ -35,7 +35,7 @@ test("every publish is a version with a note, and everyone can see what changed"
   await page.getByRole("link", { name: "Edit", exact: true }).click();
   await renameFirstStep(page, "Ask for a namespace");
   await publish(page, "Plainer wording for the first step");
-  await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 2.");
+  await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 2. Saved.");
   await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
   await expect(page.getByRole("button", { name: "Version 2" })).toBeVisible();
 
@@ -57,7 +57,7 @@ test("every publish is a version with a note, and everyone can see what changed"
   await page.getByRole("dialog", { name: /Versions of/ }).getByRole("button", { name: "Restore" }).click();
   await expect(firstBlock(page)).toContainText("Request a registry namespace");
   await publish(page, "Back to the old wording");
-  await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 3.");
+  await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 3. Saved.");
 
   // a reader sees the versions and the notes, but cannot restore
   await signIn(page, SAM);
@@ -96,7 +96,7 @@ test("a draft that was never published: when somebody else saved first, nothing 
   await otherPersonRenames(other, DANA, "conflict-demo", "Renamed by Dana again");
   await page.locator(".edit-bar").getByRole("button", { name: "Save draft" }).click();
   await page.getByRole("dialog", { name: "Somebody else saved first" }).getByRole("button", { name: "Save mine over theirs" }).click();
-  await expect(editState(page)).toHaveAttribute("aria-label", /^Draft\. Readers do not see this yet\.$/);
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Draft\. Readers do not see this yet\. Saved( \d\d:\d\d)?\.$/);
   const now = (await readProcess(page, "conflict-demo"))!;
   expect(now.steps[0].title).toBe("My wording");
   expect(now.status).toBe("draft");
@@ -151,9 +151,12 @@ test("changes can be undone step by step, including a deleted step and Discard c
   const all = await blocks.count();
   const bar = page.locator(".edit-bar");
   await outline(page, /^1 /);
+  const first = (await fields(page).locator(".fields-head h2").textContent())!;
   await fields(page).getByRole("button", { name: "Delete step" }).click();
-  await answer(page, "Delete this step?", "Delete step");
+  // no question first: it can be undone, and the message says so
+  await expect(page.getByRole("dialog", { name: "Delete this step?" })).toHaveCount(0);
   await expect(blocks).toHaveCount(all - 1);
+  await expect(page.locator(".toast", { hasText: `Step “${first}” deleted.` }).getByRole("button", { name: "Undo" })).toBeVisible();
 
   await bar.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(blocks).toHaveCount(all);
@@ -174,7 +177,7 @@ test("changes can be undone step by step, including a deleted step and Discard c
   await expect(blocks).toHaveCount(all - 1);
   // and Ctrl+S saves the draft, here as unpublished changes
   await page.keyboard.press("Control+s");
-  await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\. Readers still see version 1\.$/);
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\. Readers still see version 1\. Draft saved \d\d:\d\d\.$/);
   expect((await readWorkingDraft(page, "process", "undo-demo"))!.doc.steps).toHaveLength(all - 1);
   expect((await readProcess(page, "undo-demo"))!.steps).toHaveLength(all);
 });
@@ -410,7 +413,7 @@ for (const status of ["draft", "active"] as const) {
     await expect(dialog).toContainText(status === "active" ? "It comes back as a draft: readers see it again when you publish." : "readers see it when you publish.");
     await expect(editState(page)).toHaveAttribute("aria-label", /^Deleted\. Readers no longer see it\. Saving brings it back as a draft/);
     await dialog.getByRole("button", { name: "Save mine and bring it back" }).click();
-    await expect(editState(page)).toHaveAttribute("aria-label", "Draft. Readers do not see this yet.");
+    await expect(editState(page)).toHaveAttribute("aria-label", /^Draft\. Readers do not see this yet\. Saved( \d\d:\d\d)?\.$/);
     expect((await readProcess(page, id))!).toMatchObject({ status: "draft" });
     expect((await readProcess(page, id))!.steps[0].title).toBe("Hours of careful work");
     await more(page, "Versions");
@@ -436,16 +439,17 @@ test("a deleted process is not brought back while the checker finds a problem: t
 
   await page.locator(".edit-bar").getByRole("button", { name: "Save draft" }).click();
   await page.getByRole("dialog", { name: "This process was deleted" }).getByRole("button", { name: "Save mine and bring it back" }).click();
-  const notice = page.locator("#edit-notice.bad");
-  await expect(notice).toContainText("This process cannot be brought back yet: it comes back as a draft, which is only saved when the checker finds no problems. Your changes are still here. The problem: ");
+  await expect(refusal(page)).toHaveText("This process cannot be brought back yet: it comes back as a draft, which is only saved with nothing to fix. Your changes are still here.");
   expect(await readProcess(page, id)).toBeUndefined();
   await expect(firstBlock(page)).toContainText("x");
-  await notice.getByRole("button", { name: "Show it" }).click();
+  // the first thing to fix is selected, with its fields
+  await page.keyboard.press("Escape");
+  await expect(fields(page).locator(".fields-head h2")).toHaveText("x");
   await fields(page).getByLabel(/^What happens/).fill("A name that is long enough");
   await page.locator(".edit-bar").getByRole("button", { name: "Save draft" }).click();
   const again = page.getByRole("dialog", { name: "This process was deleted" });
   if (await again.isVisible().catch(() => false)) await again.getByRole("button", { name: "Save mine and bring it back" }).click();
-  await expect(editState(page)).toHaveAttribute("aria-label", "Draft. Readers do not see this yet.");
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Draft\. Readers do not see this yet\. Saved( \d\d:\d\d)?\.$/);
   expect((await readProcess(page, id))!).toMatchObject({ status: "draft" });
   expect((await readProcess(page, id))!.steps[0].title).toBe("A name that is long enough");
   await page.request.delete(`/api/processes/${id}`, { headers: CSRF });

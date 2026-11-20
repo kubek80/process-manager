@@ -122,10 +122,10 @@ test("on the search page the page and its size are in the address, and Back goes
   // a new filter starts again at page 1
   await bottom.getByRole("button", { name: "Next page" }).click();
   await expect(page).toHaveURL(/[?&]page=2(&|$)/);
-  await page.getByRole("button", { name: /^Type:/ }).click();
-  await page.getByRole("checkbox", { name: /^Processes, \d+ results$/ }).check();
+  await page.getByRole("radiogroup", { name: "Show" }).getByRole("radio", { name: /^Processes, \d+ results$/ }).click();
   await expect(page).not.toHaveURL(/page=/);
-  await expect(count(page)).toHaveText(`Showing 1–12 of ${TOTAL} results with 1 filter`);
+  await expect(page).toHaveURL(/type=process/);
+  await expect(count(page)).toHaveText(`Showing 1–12 of ${TOTAL} results`);
 });
 
 test("on a phone the pages read “Page 2 of 3” and nothing scrolls sideways", async ({ page }) => {

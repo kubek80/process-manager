@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test";
 import {
-  ALEX, CSRF, DANA, RILEY, SAM, answer, discardWorkingDraft, editState, fields, meaningReady, more, open, openEditor, outline, publish, readProcess,
-  readSkill, readWorkingDraft, saveDraft, signIn,
+  ALEX, CSRF, DANA, RILEY, SAM, answer, checkerChip, discardWorkingDraft, editState, fields, meaningReady, more, open, openChecker, openEditor, outline, pickKind,
+  publish, readProcess, readSkill, readWorkingDraft, refusal, saveDraft, signIn,
 } from "./helpers";
 
 // The editing screen and its drafts, through the real app and server. Changes to a published
@@ -77,18 +77,18 @@ test("unpublished changes: saved as a draft only editors see, published with a n
   await page.getByRole("link", { name: "Edit", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`#/p/${id}/edit`));
   await expect(page.locator(".topbar")).toHaveCount(0); // a screen of its own
-  await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 1.");
+  await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 1. Saved.");
   await expect(bar(page).locator(".state-pill")).toHaveText("Published");
   await expect(bar(page).getByRole("button", { name: "Save draft" })).toBeDisabled();
   await expect(bar(page).getByRole("button", { name: "Save draft" })).toHaveAttribute("title", "Nothing to save: all changes are saved.");
 
   await outline(page, /^1 /);
   await fields(page).getByLabel(/^What happens/).fill("Ask for the quokka repository");
-  await expect(editState(page)).toHaveAttribute("aria-label", "Unpublished changes. Readers still see version 1. Changes not saved yet.");
+  await expect(editState(page)).toHaveAttribute("aria-label", "Unpublished changes. Readers still see version 1. Not saved yet.");
   await expect(bar(page).locator(".state-pill")).toHaveText("Unpublished changes");
   await expect(bar(page).locator(".eb-sentence")).toContainText("Readers still see version 1");
   await saveDraft(page);
-  await expect(editState(page)).toHaveAttribute("aria-label", "Unpublished changes. Readers still see version 1.");
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\. Readers still see version 1\. Draft saved \d\d:\d\d\.$/);
   // the draft is kept for the editors, beside the published version
   const w = (await readWorkingDraft(page, "process", id))!;
   expect(w).toMatchObject({ base: 1, revision: 1 });
@@ -100,10 +100,11 @@ test("unpublished changes: saved as a draft only editors see, published with a n
   // the reader's page shows the published version, and the editor a calm line about the draft
   await expect(page.locator(".block").first()).not.toContainText("quokka");
   const line = page.locator(".draft-line");
-  await expect(line).toContainText(/There are unpublished changes by (Alex Editor|alex@example\.com) from today at \d\d:\d\d\. Readers see the published version\./);
+  // to the person who saved them, in their own words
+  await expect(line).toContainText(/^You have unpublished changes \(saved \d\d:\d\d\)\. Readers see the published version\./);
   await line.getByRole("link", { name: "Continue editing" }).click();
   await expect(firstBlock(page)).toContainText("Ask for the quokka repository");
-  await expect(editState(page)).toHaveAttribute("aria-label", "Unpublished changes. Readers still see version 1.");
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\. Readers still see version 1\. Draft saved \d\d:\d\d\.$/);
   // the list marks it for its editors
   await open(page, "/processes");
   await expect(page.locator(`li.card[data-id="${id}"] .card-mark.changes`)).toHaveText("Unpublished changes");
@@ -141,7 +142,7 @@ test("unpublished changes: saved as a draft only editors see, published with a n
   await dialog.getByLabel(/^Note for the list of versions/).fill("A clearer first step");
   await dialog.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 2.");
+  await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 2. Saved.");
   await expect(page.locator(".toast", { hasText: "Readers now see version 2" })).toBeVisible();
   expect(await readWorkingDraft(page, "process", id)).toBeUndefined();
 
@@ -169,29 +170,34 @@ test("an unfinished draft can be saved, but not published: the reason is given a
   await signIn(page, ALEX);
   await openEditor(page, "process", id);
   await outline(page, /^2 /);
-  await fields(page).locator(".type-opt", { hasText: "Decision" }).click(); // a decision needs two labelled paths
-  await expect(bar(page).locator(".eb-status.bad")).toHaveText(/^\d+ problems?$/);
+  await pickKind(page, "Decision"); // it gets "Yes" and "No" (back to the step before); with one of them gone it is unfinished
+  await expect(fields(page).getByRole("textbox", { name: "Name of path 2" })).toHaveValue("No");
+  await expect(checkerChip(page)).not.toHaveClass(/\bbad\b/);
+  await fields(page).getByRole("button", { name: "Remove path 2" }).click();
+  await expect(checkerChip(page)).toHaveClass(/\bbad\b/);
+  await expect(checkerChip(page)).toHaveText(/^\d+ to fix$/);
   const nav = page.getByRole("navigation", { name: "Outline of the process" });
-  await expect(nav.getByRole("button", { name: /^2 .*, \d+ problems?/ }).locator(".outline-mark.bad")).toBeVisible();
+  await expect(nav.getByRole("button", { name: /^2 .*, \d+ to fix/ }).locator(".outline-mark.bad")).toBeVisible();
   await expect(nav.getByRole("button", { name: /^Steps/ }).locator(".outline-mark.bad")).toBeVisible();
   // saving the unfinished work is possible: it is a draft
   await saveDraft(page);
   expect((await readWorkingDraft(page, "process", id))!.doc.steps[1].type).toBe("decision");
   expect((await readProcess(page, id))!.steps[1].type).not.toBe("decision");
-  // publishing is not: it looks unavailable, the line under the bar says why, and pressing it says so again
+  // publishing is not: it looks unavailable, its tooltip says why, and pressing it gives the reason at the top of the list
   const publishButton = bar(page).getByRole("button", { name: "Publish…" });
   await expect(publishButton).toHaveClass(/\bunavailable\b/);
-  await expect(page.locator("#edit-notice.warn")).toContainText(/^Publishing waits until the (problem is|\d+ problems are) fixed\. First: /);
+  await expect(publishButton).toHaveAttribute("title", /^Publishing waits until (1 thing is|\d+ things are) fixed\.$/);
   await outline(page, "About");
   await publishButton.click();
   await expect(page.getByRole("dialog", { name: "Publish your changes" })).toHaveCount(0);
-  const alert = page.locator("#edit-notice.bad");
-  await expect(alert).toHaveAttribute("role", "alert");
-  await expect(alert).toContainText("Publishing waits until");
-  // and the first problem is selected
+  const reason = refusal(page);
+  await expect(reason).toHaveAttribute("role", "alert");
+  await expect(reason).toContainText("Publishing waits until");
+  // the list itself is there below it, and the first problem is selected
+  await expect(page.getByRole("dialog", { name: "What is to fix" }).getByRole("heading", { name: /^To fix/ })).toBeVisible();
   await expect(nav.locator('[aria-current="true"]')).toContainText((await readProcess(page, id))!.steps[1].title);
-  await alert.getByRole("button", { name: "Close this message" }).click();
-  await expect(page.locator("#edit-notice.warn")).toBeVisible(); // the reason stays in view
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "What is to fix" })).toHaveCount(0);
   // the server refuses it as well
   const w = (await readWorkingDraft(page, "process", id))!;
   const refused = await page.request.post(`/api/processes/${id}/publish?rev=${w.revision}`, { headers: CSRF });
@@ -199,8 +205,8 @@ test("an unfinished draft can be saved, but not published: the reason is given a
   expect((await readProcess(page, id))!.steps[1].type).not.toBe("decision");
   // the checker's list leads to the place, and says what must be fixed before publishing
   await outline(page, "About");
-  await bar(page).locator(".eb-status.bad").click();
-  const found = page.getByRole("dialog", { name: "What the checker found" });
+  const found = await openChecker(page);
+  await expect(found.locator(".checker-reason")).toHaveCount(0); // opened by hand: no refusal at the top
   await found.getByRole("button").first().click();
   await expect(nav.locator('[aria-current="true"]')).toContainText((await readProcess(page, id))!.steps[1].title);
   await expect(fields(page).locator(".item-issues.bad")).toContainText(/to fix before publishing/);
@@ -220,7 +226,7 @@ test("Discard changes goes back to the saved draft and can be undone; Discard dr
   await expect(bar(page).getByRole("button", { name: "Discard draft…" })).toHaveCount(0);
   await bar(page).getByRole("button", { name: "Discard changes" }).click();
   await expect(name).toHaveValue("Saved in the draft");
-  await expect(editState(page)).toHaveAttribute("aria-label", "Unpublished changes. Readers still see version 1.");
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\. Readers still see version 1\. Draft saved \d\d:\d\d\.$/);
   await bar(page).getByRole("button", { name: "Undo", exact: true }).click();
   await expect(name).toHaveValue("Typed and not saved");
   await bar(page).getByRole("button", { name: "Discard changes" }).click();
@@ -233,7 +239,7 @@ test("Discard changes goes back to the saved draft and can be undone; Discard dr
   expect(await readWorkingDraft(page, "process", id)).toBeDefined();
   await bar(page).getByRole("button", { name: "Discard draft…" }).click();
   await answer(page, "Discard the unpublished changes?", "Discard draft");
-  await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 1.");
+  await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 1. Saved.");
   await expect(name).toHaveValue(before);
   expect(await readWorkingDraft(page, "process", id)).toBeUndefined();
   const { meta } = await (await page.request.get("/api/processes")).json();
@@ -261,7 +267,7 @@ test("a new process is a draft nobody else sees until it is published", async ({
   await fields(page).getByLabel(/^Summary/).fill("A demo of a process that starts as a draft.");
   await outline(page, /^1 /);
   await fields(page).getByLabel(/^What happens/).fill("Do the one thing");
-  await fields(page).getByLabel("Action a", { exact: true }).fill("Do it carefully.");
+  await fields(page).getByLabel("Action 1", { exact: true }).fill("Do it carefully.");
   await saveDraft(page);
   expect((await readProcess(page, id))!).toMatchObject({ status: "draft", summary: "A demo of a process that starts as a draft." });
 
@@ -309,14 +315,14 @@ test("Retire… with a replacement, Bring back into use…, Unpublish… and Del
   await expect(retire.getByLabel(/^Use instead/).locator("option", { hasText: "Request a GCP project" })).toHaveCount(1);
   await retire.getByLabel(/^Use instead/).selectOption({ label: "Request a GCP project" });
   await retire.getByRole("button", { name: "Retire" }).click();
-  await expect(editState(page)).toHaveAttribute("aria-label", "Retired. Readers see version 2, marked as retired.");
+  await expect(editState(page)).toHaveAttribute("aria-label", "Retired. Readers see version 2, marked as retired. Saved.");
   await expect(bar(page).locator(".state-pill.retired")).toHaveText("Retired");
   await readerSees();
   await expect(r.locator(".banner", { hasText: "This process is retired." }).getByRole("link", { name: "Request a GCP project" })).toBeVisible();
 
   await more(page, "Bring back into use…");
   await answer(page, "Bring it back into use?", "Bring back into use");
-  await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 3.");
+  await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 3. Saved.");
   await readerSees();
   await expect(r.locator(".block").first()).toBeVisible();
   await expect(r.locator(".banner", { hasText: "retired" })).toHaveCount(0);
@@ -446,7 +452,7 @@ test.describe("two people", () => {
     await saveDraft(d);
     await bar(page).getByRole("button", { name: "Save draft" }).click();
     await page.getByRole("dialog", { name: "Somebody else saved the draft first" }).getByRole("button", { name: "Save mine over theirs" }).click();
-    await expect(editState(page)).toHaveAttribute("aria-label", "Unpublished changes. Readers still see version 1.");
+    await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\. Readers still see version 1\. Draft saved \d\d:\d\d\.$/);
     expect(stepTitle((await readWorkingDraft(page, "process", id))!.doc)).toBe("Alex's wording");
     expect((await readProcess(page, id))!.version ?? 1).toBe(1);
     await dana.close();
@@ -468,13 +474,13 @@ test.describe("two people", () => {
 
     await bar(d).getByRole("button", { name: "Discard draft…" }).click();
     await answer(d, "Discard the unpublished changes?", "Discard draft");
-    await expect(editState(d)).toHaveAttribute("aria-label", "Published. Version 1.");
+    await expect(editState(d)).toHaveAttribute("aria-label", "Published. Version 1. Saved.");
 
     await bar(page).getByRole("button", { name: "Save draft" }).click();
     const gone = page.getByRole("dialog", { name: "The unpublished changes are gone" });
     await expect(gone).toContainText("Your changes are still here and not saved.");
     await gone.getByRole("button", { name: "Save mine as a new draft" }).click();
-    await expect(editState(page)).toHaveAttribute("aria-label", "Unpublished changes. Readers still see version 1.");
+    await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\. Readers still see version 1\. Draft saved \d\d:\d\d\.$/);
     const w = (await readWorkingDraft(page, "process", id))!;
     expect(stepTitle(w.doc)).toBe("Alex continues the draft");
     expect(w.base).toBe(1);
@@ -514,7 +520,7 @@ test.describe("two people", () => {
     // continue from theirs: their version on screen, not saved yet; Undo brings his own back, Redo theirs
     await conflict.getByRole("button", { name: "Continue from theirs" }).click();
     await expect(page.locator(".edit-preview .preview-head p")).toHaveText("Dana's published summary.");
-    await expect(editState(page)).toHaveAttribute("aria-label", /Changes not saved yet\.$/);
+    await expect(editState(page)).toHaveAttribute("aria-label", /\. Not saved yet\.$/);
     await bar(page).getByRole("button", { name: "Undo", exact: true }).click();
     await expect(fields(page).getByLabel(/^What happens/)).toHaveValue("Alex's wording");
     await bar(page).getByRole("button", { name: "Redo" }).click();
@@ -587,7 +593,7 @@ test.describe("more of the editing screen", () => {
 
     await bar(page).getByRole("button", { name: "Save draft" }).click();
     await page.getByRole("dialog", { name: "The unpublished changes are gone" }).getByRole("button", { name: "Save mine as a new draft" }).click();
-    await expect(editState(page)).toHaveAttribute("aria-label", "Unpublished changes. Readers still see version 2.");
+    await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\. Readers still see version 2\. Draft saved \d\d:\d\d\.$/);
     // the new draft is on the version his work came from, and the screen says so truthfully
     expect((await readWorkingDraft(page, "process", id))!.base).toBe(1);
     await expect(page.locator(".banner", { hasText: "Version 2 was published after these changes were started from version 1." })).toBeVisible();
@@ -625,22 +631,26 @@ test.describe("more of the editing screen", () => {
     await named.getByLabel("Name of the standard").fill("Editing demo standard");
     await named.getByRole("button", { name: "Create standard" }).click();
     await expect(page).toHaveURL(/#\/s\/editing-demo-standard\/edit/);
-    await expect(bar(page).locator(".eb-status.warn")).toHaveText(/^\d+ to fill in$/);
-    await page.locator(".eb-status.warn").click();
-    await expect(page.getByRole("dialog", { name: "What the checker found" })).toContainText("example text");
+    // only example text: amber, "N to fix"
+    await expect(bar(page).locator(".eb-status.warn")).toHaveText(/^\d+ to fix$/);
+    await expect(await openChecker(page)).toContainText("is still the example: write your own before publishing.");
     await page.keyboard.press("Escape");
     const publishButton = bar(page).getByRole("button", { name: "Publish…" });
     await expect(publishButton).toHaveClass(/\bunavailable\b/);
     await publishButton.click();
     await expect(page.getByRole("dialog", { name: "Publish this standard" })).toHaveCount(0);
-    await expect(page.locator("#edit-notice.bad")).toContainText(/Publishing waits until the \d+ example texts? (is|are) replaced/);
+    await expect(refusal(page)).toContainText(/^Publishing waits until (the example text is|the \d+ example texts are) replaced with your own words\.$/);
+    await page.keyboard.press("Escape");
     // a checker error that is not example text stops a never-published draft from being saved, with the reason
     await outline(page, "About");
     await fields(page).getByRole("textbox", { name: /^Name/ }).fill("");
+    await outline(page, /^Requirements/);
     await bar(page).getByRole("button", { name: "Save draft" }).click();
-    const notice = page.locator("#edit-notice.bad");
-    await expect(notice).toContainText("This draft cannot be saved yet: a standard that was never published is only saved when the checker finds no problems.");
-    await notice.getByRole("button", { name: "Show it" }).click();
+    await expect(refusal(page)).toHaveText("This draft cannot be saved yet: a standard that was never published is only saved with nothing to fix.");
+    // and the first thing to fix is selected
+    await expect(page.getByRole("navigation", { name: "Outline of the standard" }).locator('[aria-current="true"]')).toHaveAccessibleName(/^About/);
+    await expect(bar(page).locator(".eb-saved")).toHaveText("Not saved yet");
+    await page.keyboard.press("Escape");
     await fields(page).getByRole("textbox", { name: /^Name/ }).fill("Editing demo standard");
     await more(page, "Delete…");
     await answer(page, "Delete this standard?", "Delete standard");
@@ -659,14 +669,14 @@ test.describe("more of the editing screen", () => {
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.insertText("{ not json");
     await expect(page.locator(".json-side .check.bad")).toBeVisible();
-    await expect(editState(page)).toHaveAttribute("aria-label", /Changes not saved yet\.$/);
+    await expect(editState(page)).toHaveAttribute("aria-label", /\. Not saved yet\.$/);
     await page.getByRole("button", { name: "Back to the editor" }).first().click();
     await answer(page, "Leave the JSON without its changes?", "Stay");
     await expect(editor).toContainText("{ not json");
     await page.getByRole("button", { name: "Back to the editor" }).first().click();
     await answer(page, "Leave the JSON without its changes?", "Leave without them");
     await expect(page.locator(".edit-preview .block").first()).toBeVisible();
-    await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 1.");
+    await expect(editState(page)).toHaveAttribute("aria-label", "Published. Version 1. Saved.");
   });
 
   test("a step selected in the outline is brought into view on the map", async ({ page }) => {

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { answer, CASEY, CSRF, editState, fields, JORDAN, more, open, openEditor, outline, publish, publishChange, putDoc, putWorkingDraft, readProcess, readStandard, readWorkingDraft, RILEY, SAM, serverToday, signIn, versionOf } from "./helpers";
+import { answer, CASEY, CSRF, editState, fields, JORDAN, more, open, openEditor, outline, publish, publishChange, putDoc, putWorkingDraft, readProcess, readStandard, readWorkingDraft, refusal, RILEY, SAM, serverToday, signIn, versionOf } from "./helpers";
 
 // Jordan is an ordinary reader who is Platform owner of Google Cloud and Practice owner of
 // Engineering: he may change what belongs to them, and nothing else. Where the app hides a
@@ -96,9 +96,11 @@ test("moving a document away from his platform is warned about, blocked, and ref
   // both buttons say why when pressed, and nothing is sent
   await expect(bar.getByRole("button", { name: "Publish…" })).toHaveClass(/\bunavailable\b/);
   await bar.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.locator("#edit-notice.bad")).toHaveText(/This draft cannot be saved yet\. Keep it with a platform or practice of yours \(under About\)\./);
+  await expect(refusal(page)).toHaveText(/This draft cannot be saved yet\. Keep it with a platform or practice of yours \(under About\)\./);
+  await page.keyboard.press("Escape");
   await bar.getByRole("button", { name: "Publish…" }).click();
-  await expect(page.locator("#edit-notice.bad")).toHaveText(/This cannot be published yet\. Keep it with a platform or practice of yours \(under About\)\./);
+  await expect(refusal(page)).toHaveText(/This cannot be published yet\. Keep it with a platform or practice of yours \(under About\)\./);
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Publish your changes" })).toHaveCount(0);
   await bar.getByRole("button", { name: "Discard changes" }).click();
   await expect(editState(page)).toHaveAttribute("aria-label", /^Published\./);

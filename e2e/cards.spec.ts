@@ -34,10 +34,19 @@ for (const [hash, panelId] of [["/processes", "process-filters"], ["/standards",
     await expect(results.locator("li.card").first()).toBeVisible();
     const [p, r] = [(await panel.boundingBox())!, (await results.boundingBox())!];
     expect(p.x + p.width).toBeLessThanOrEqual(r.x + 1); // the panel ends where the results begin
-    for (const name of ["Category", "Platform", "Practice", "Rigour", "Owner"]) await expect(panel.getByRole("button", { name: new RegExp(`^${name}: Any$`) })).toBeVisible();
+    const level = hash === "/standards" ? "Level" : "Rigour";
+    for (const name of ["Category", "Platform", "Practice", level, "Owner"]) await expect(panel.getByRole("button", { name: new RegExp(`^${name}: Any$`) })).toBeVisible();
     await expect(panel.getByRole("checkbox", { name: /^Only my bookmarks, \d+ results?$/ })).toBeVisible();
-    // the application's tier, environment and language are dropdowns like the others, not a section of their own
+    // in groups with headings: what to show only, what narrows down, and the reader's application
+    await expect(panel.locator(".filter-group-title")).toHaveText(["Show only", "Narrow down", "My application"]);
+    // the application's tier, environment and language are dropdowns like the others, folded under "My application"
+    const app = panel.locator("button.filter-app-toggle");
+    await expect(app).toHaveAttribute("aria-expanded", "false");
+    await expect(app).toContainText("Not chosen");
+    await app.click();
     for (const name of ["Tier", "Environment", "Language"]) await expect(panel.getByRole("button", { name: new RegExp(`^${name}: Any$`) })).toBeVisible();
+    await app.click();
+    await expect(panel.getByRole("button", { name: /^Tier: / })).toHaveCount(0);
     await expect(panel.locator("fieldset.profile-filter")).toHaveCount(0);
     await expect(page.locator(".filter-toggle")).toBeHidden(); // on a wide screen nothing to fold away
   });
@@ -87,11 +96,12 @@ test("a filter dropdown works with the keyboard: two values, a name that says th
   await expect(page.locator("p.list-count")).toHaveText("7 processes");
 });
 
-test("a card: owner, tiers top right, one fact per line, no step icons and no chips", async ({ page }) => {
+test("a card: category and tiers on top, a line of facts to compare and one of who looks after it, no chips", async ({ page }) => {
   await signIn(page, SAM);
   await open(page, "/processes");
   const akamai = card(page, AKAMAI);
-  await expect(akamai.locator(".card-kind")).toHaveText("Process");
+  await expect(akamai.locator(".card-cat")).not.toBeEmpty();
+  await expect(akamai.locator(".kind-tag")).toHaveCount(0); // a list of processes only: no kind tag
   await expect(akamai.locator(".card-tiers")).toHaveText("Applies to: Tier 0, Tier 1");
   // the tiers sit in the top right corner
   const [c, t, title] = [(await akamai.boundingBox())!, (await akamai.locator(".card-tiers").boundingBox())!, (await akamai.locator(".card-title").boundingBox())!];
@@ -100,19 +110,24 @@ test("a card: owner, tiers top right, one fact per line, no step icons and no ch
   expect(t.y).toBeLessThan(title.y);
   await expect(card(page, GCP).locator(".card-tiers")).toHaveText("Applies to: All tiers");
 
-  // one "name: value" per line, the owner first
-  const lines = akamai.locator("dl.card-lines > .card-line");
-  await expect(lines.first()).toHaveAttribute("data-line", "owner");
-  await expect(lines.first().locator("dt")).toHaveText("Owner:");
-  await expect(lines.first().locator("dd")).not.toBeEmpty();
-  expect(await lines.count()).toBeGreaterThanOrEqual(3);
-  for (const line of await lines.all()) {
+  // the facts to compare first (how binding, how long), then who looks after it, the owner first
+  const key = akamai.locator("dl.card-lines.card-key > .card-line");
+  await expect(key.first()).toHaveAttribute("data-line", "rigour");
+  await expect(key.first().locator("dd")).toHaveText(/^(Mandatory|Recommended|Optional)$/);
+  const who = akamai.locator("dl.card-lines.card-who > .card-line");
+  await expect(who.first()).toHaveAttribute("data-line", "owner");
+  await expect(who.first().locator("dt")).toHaveText("Owner:");
+  await expect(who.first().locator("dt")).toHaveClass(/\bsr-only\b/); // read out, not shown: the icon says it
+  await expect(who.first().locator("dd")).not.toBeEmpty();
+  expect(await akamai.locator("dl.card-lines > .card-line").count()).toBeGreaterThanOrEqual(3);
+  for (const line of await akamai.locator("dl.card-lines > .card-line").all()) {
     await expect(line.locator("dt")).toHaveCount(1);
     await expect(line.locator("dd")).toHaveCount(1);
   }
   await expect(akamai.locator('[data-line="environments"] dd')).toHaveText("Staging, Production");
-  // nothing of the old card: no row of step icons, no tags, no chips
-  for (const old of [".card-strip", ".card-tags", ".tier-tag", ".type-icon", ".chip"]) await expect(page.locator(`li.card ${old}`), old).toHaveCount(0);
+  // nothing of the old card: no row of step icons, no tags, no chips, no stripe
+  for (const old of [".card-strip", ".card-tags", ".tier-tag", ".type-icon", ".chip", ".rigour-pips", ".card-fact"]) await expect(page.locator(`li.card ${old}`), old).toHaveCount(0);
+  expect(await akamai.evaluate((e) => getComputedStyle(e).borderLeftWidth)).toBe(await akamai.evaluate((e) => getComputedStyle(e).borderRightWidth));
 });
 
 test("open feedback is a line of its own, only when there is some; Give feedback leads to the form", async ({ page, request }) => {
@@ -123,8 +138,10 @@ test("open feedback is a line of its own, only when there is some; Give feedback
     await report(request, ALEX, { targetId: REPO, text: "The branch rules are different now." });
     await signIn(page, SAM);
     await open(page, "/processes");
-    await expect(card(page, REPO).locator("p.card-feedback")).toHaveText("2 open feedback");
-    await expect(card(page, GCP).locator("p.card-feedback")).toHaveCount(0);
+    const fb = card(page, REPO).locator("a.card-feedback");
+    await expect(fb).toHaveText("2 open feedback");
+    await expect(fb).toHaveAttribute("href", `#/p/${REPO}/feedback`);
+    await expect(card(page, GCP).locator(".card-feedback")).toHaveCount(0);
 
     const give = card(page, GCP).getByRole("link", { name: "Give feedback on Request a GCP project" });
     await give.click();

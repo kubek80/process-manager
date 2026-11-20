@@ -129,11 +129,22 @@ export const changeFlow = flow("guide-change", "The life of a change", "From pre
     s("save", "Save draft", "me", "task", ["ready"], "only editors see it"),
     s("ready", "Ready for readers?", "me", "decision", [["publish", "Yes"], ["edit", "Not yet"], ["discard", "Drop it"]]),
     s("discard", "Discard draft", "me", "task", [], "readers keep theirs"),
-    s("publish", "Publish, with a note", "me", "form", ["newer"], "blocked by problems"),
+    s("publish", "Publish, with a note", "me", "form", ["newer"], "once nothing is left to fix"),
     s("newer", "Somebody published meanwhile?", "app", "decision", [["live", "No"], ["choose", "Yes"]]),
     s("choose", "Whose version?", "me", "decision", [["live", "Mine"], ["edit", "Theirs"]]),
     s("live", "See the new version", "readers", "task", [], "skills and search follow"),
   ], "Editor");
+
+export const themeFlow = flow("guide-theme", "Change the look of the portal", "How an admin gives the portal its name, logo and colours.",
+  [["app", "Process Manager"], ["everyone", "Everyone"]],
+  [
+    s("choose", "Choose name, logo and colours", "me", "form", ["adjust"], "Admin › Theming"),
+    s("adjust", "Keep the colours readable", "app", "automation", ["look"], "and warn in plain words"),
+    s("look", "Look at the preview", "me", "review", ["save"], "light and dark side by side"),
+    s("save", "Save for everyone", "me", "task", ["store"]),
+    s("store", "Check it and store it", "app", "verify", ["see"], "not over another admin's save"),
+    s("see", "See the new look", "everyone", "task", [], "at their next page"),
+  ], "Admin");
 
 export const rightsFlow = flow("guide-rights", "Who may change a process or standard", "How the app decides what you may do with one process or standard.",
   [["app", "Process Manager"]],

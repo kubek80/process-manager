@@ -200,7 +200,7 @@ test("nobody but an admin gets the people with their roles, or changes them", as
 test("the Members section of a platform still adds and removes", async ({ page }) => {
   await signIn(page, DANA);
   await open(page, "/admin/lists");
-  await page.locator(".cat-tabs").getByRole("tab", { name: /^Platforms/ }).click();
+  await page.locator(".cat-kinds").getByRole("tab", { name: /^Platforms/ }).click();
   await page.locator(".cat-item", { hasText: "Akamai" }).click();
   const members = page.locator(".cat-members");
   await members.getByLabel("Email of the new member").fill(NEW);
@@ -209,7 +209,7 @@ test("the Members section of a platform still adds and removes", async ({ page }
   await open(page, "/admin/access");
   await expect(page.locator("li.user-row", { hasText: NEW }).locator(".user-roles li")).toHaveText(["Platform owner for Akamai"]);
   await open(page, "/admin/lists");
-  await page.locator(".cat-tabs").getByRole("tab", { name: /^Platforms/ }).click();
+  await page.locator(".cat-kinds").getByRole("tab", { name: /^Platforms/ }).click();
   await page.locator(".cat-item", { hasText: "Akamai" }).click();
   await members.getByRole("button", { name: `Remove ${NEW} as Platform owner` }).click();
   await page.getByRole("dialog", { name: "Remove this member?" }).getByRole("button", { name: "Remove", exact: true }).click();

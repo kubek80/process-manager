@@ -14,15 +14,20 @@ test("the Admin panel is for admins and for people who manage the lists", async 
   await open(page, "/");
   await page.locator(".nav").getByRole("link", { name: "Admin" }).click();
   await expect(page.locator(".admin-nav a")).toHaveText(["Lists", "Skills", "Health"]);
-  await expect(page.locator(".admin-main > header h2")).toHaveText("Lists");
+  // the section's name is the heading of the page
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Lists");
+  await expect(page.locator(".admin-main > header.admin-head h1")).toHaveText("Lists");
+  await expect(page.getByRole("complementary", { name: "Admin" }).locator(".admin-nav-title")).toHaveText("Admin");
   await open(page, "/admin/access"); // asking for a section that is not yours shows one that is
-  await expect(page.locator(".admin-main > header h2")).toHaveText("Lists");
+  await expect(page.locator(".admin-main > header.admin-head h1")).toHaveText("Lists");
   expect((await page.request.get("/api/admin/access")).status()).toBe(403);
 
   await signIn(page, DANA);
   await open(page, "/");
   await page.locator(".nav").getByRole("link", { name: "Admin" }).click();
-  await expect(page.locator(".admin-nav a")).toHaveText(["Access", "Lists", "Skills", "Health", "Activity", "Statistics", "System"]);
+  await expect(page.locator(".admin-nav a")).toHaveText(["Access", "Lists", "Skills", "Health", "Activity", "Statistics", "Theming", "System"]);
+  await page.locator(".admin-nav").getByRole("link", { name: "Theming" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Theming");
 });
 
 test("an admin gives someone a role and it takes effect at once", async ({ page, browser }) => {

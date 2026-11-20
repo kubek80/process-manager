@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { ALEX, answer, editState, fields, more, open, openEditor, outline, publish, readProcess, readWorkingDraft, serverToday, signIn, watchErrors } from "./helpers";
+import {
+  ALEX, answer, checkerChip, editState, fields, more, open, openChecker, openEditor, outline, outlineNav, outlineTitles, pickKind, publish, readProcess, readWorkingDraft,
+  refusal, serverToday, signIn, unfold, watchErrors,
+} from "./helpers";
 
 // Changing a process on its editing screen: the map in the middle is always editable, the
 // outline on the left selects, the fields on the right change what is selected.
@@ -61,26 +64,30 @@ test("drag a block to another lane to change who does it", async ({ page }) => {
   expect((await readProcess(page, LIB))!.steps.find((s: { id: string }) => s.id === "tag-version").actor).toBe("pipeline");
 });
 
-test("add a step after another from its fields, and move it in the outline", async ({ page }) => {
+test("add a step after another from its fields, and move it in the outline with Alt + arrows", async ({ page }) => {
   await openEditor(page, "process", LIB);
   await outline(page, /^\d+ Build and publish the version/);
   await fields(page).getByRole("button", { name: "Add step after" }).click();
-  const name = fields(page).getByLabel(/^What happens/);
-  await expect(name).toHaveValue("New step");
-  await name.fill("Announce the release");
-  await name.blur(); // a new step gets its address from its name
-  await expect(page).toHaveURL(/\/edit\/announce-the-release$/);
-  const nav = page.getByRole("navigation", { name: "Outline of the process" });
-  const items = nav.locator(".outline-row.depth-1");
-  const titles = async () => (await items.locator(".outline-label").allTextContents());
+  // the name is asked for right there: Enter adds it
+  const named = fields(page).getByRole("textbox", { name: "Name of the step after this one" });
+  await expect(named).toBeFocused();
+  await named.fill("Announce the release");
+  await named.press("Enter");
+  await expect(fields(page).getByLabel(/^What happens/)).toHaveValue("Announce the release");
+  await expect(page).toHaveURL(/\/edit\/announce-the-release$/); // a new step gets its address from its name
+  const nav = outlineNav(page);
+  const titles = () => outlineTitles(page);
   const at = (await titles()).indexOf("Announce the release");
   expect((await titles())[at - 1]).toBe("Build and publish the version");
   expect((await titles())[at + 1]).toBe("Install the library from another project");
-  // moved one later and back again from the outline
-  await nav.getByRole("button", { name: "Move Announce the release later" }).click();
-  expect((await titles())[at + 1]).toBe("Announce the release");
-  await nav.getByRole("button", { name: "Move Announce the release earlier" }).click();
-  expect((await titles())[at]).toBe("Announce the release");
+  // moved one later and back again with the keyboard, in the flow: the map's arrows follow
+  const item = nav.getByRole("button", { name: /^\d+ Announce the release, by Release pipeline/ });
+  await item.focus();
+  await page.keyboard.press("Alt+ArrowDown");
+  await expect.poll(async () => (await titles()).slice(at)).toEqual(["Install the library from another project", "Announce the release"]);
+  await expect(nav.getByRole("button", { name: /^\d+ Announce the release, / })).toBeFocused();
+  await page.keyboard.press("Alt+ArrowUp");
+  await expect.poll(async () => (await titles()).slice(at)).toEqual(["Announce the release", "Install the library from another project"]);
   await publish(page);
 
   const steps = (await readProcess(page, LIB))!.steps;
@@ -96,29 +103,37 @@ test("edit a step in its fields; the checker blocks publishing until it is right
   const panel = fields(page);
   await expect(panel.locator(".fields-head h2")).toHaveText("Install the library from another project");
 
-  // a decision needs two labelled paths: this one has none
-  await panel.locator(".type-opt", { hasText: "Decision" }).click();
-  await expect(page.locator(".eb-status.bad")).toContainText("1 problem");
-  await expect(panel.locator(".item-issues.bad")).toContainText("to fix before publishing");
+  // a decision needs two answers: this one is the last step and has none
+  await pickKind(page, "Decision");
+  await expect(checkerChip(page)).toHaveText("1 to fix");
+  await expect(checkerChip(page)).toHaveClass(/\bbad\b/);
+  await expect(panel.locator(".item-issues.bad")).toContainText("1 to fix before publishing");
   // the outline marks the step the problem belongs to
-  const item = page.getByRole("navigation", { name: "Outline of the process" }).getByRole("button", { name: /Install the library from another project, 1 problem/ });
+  const item = outlineNav(page).getByRole("button", { name: /Install the library from another project, by You, 1 to fix/ });
   await expect(item.locator(".outline-mark.bad")).toHaveText("1");
-  await page.locator(".eb-status.bad").click();
-  await expect(page.getByRole("dialog", { name: "What the checker found" })).toContainText("a decision needs at least two outgoing paths");
+  await expect(item.locator(".outline-mark.bad")).toHaveAttribute("title", "1 to fix");
+  await expect(await openChecker(page)).toContainText("This decision needs at least two answers that lead somewhere.");
   await page.keyboard.press("Escape");
   // Publish… says why it cannot publish, instead of opening
   await expect(page.locator(".edit-bar").getByRole("button", { name: "Publish…" })).toHaveClass(/\bunavailable\b/);
   await page.locator(".edit-bar").getByRole("button", { name: "Publish…" }).click();
   await expect(page.getByRole("dialog", { name: "Publish your changes" })).toHaveCount(0);
-  await expect(page.locator("#edit-notice.bad")).toContainText("Publishing waits until the problem is fixed. First: ");
+  await expect(refusal(page)).toHaveText("Publishing waits until 1 thing is fixed.");
+  await page.keyboard.press("Escape");
 
-  await panel.locator(".type-opt", { hasText: "Check the result" }).click();
+  await pickKind(page, "Check the result");
   await expect(page.locator(".eb-status.bad")).toHaveCount(0);
   await expect(item.locator(".outline-mark.bad")).toHaveCount(0);
   await panel.getByRole("button", { name: "Add action" }).click();
   await panel.getByPlaceholder("Describe one action").last().fill("Tell the team in the channel.");
+  // the less used fields are offered as "+ Tool", "+ Typical time"…
+  const offers = panel.getByRole("group", { name: "Add to this step" });
+  await offers.getByRole("button", { name: "Tool", exact: true }).click();
   await panel.getByRole("combobox", { name: "Tool", exact: true }).selectOption({ label: "GitHub" });
+  await offers.getByRole("button", { name: "Typical time", exact: true }).click();
+  await expect(panel.getByLabel("Typical time")).toBeFocused();
   await panel.getByLabel("Typical time").fill("15 min");
+  await expect(offers.getByRole("button", { name: "Typical time", exact: true })).toHaveCount(0);
   await expect(page.locator(".edit-preview .block", { hasText: "Install the library from another project" })).toContainText("15 min");
   await publish(page);
 
@@ -132,10 +147,10 @@ test("Discard changes goes back to what is saved, and no draft is left behind", 
   await outline(page, /^1 /);
   await fields(page).getByLabel(/^What happens/).fill("Something else entirely");
   await expect(page.locator(".edit-preview .block", { hasText: "Something else entirely" })).toBeVisible();
-  await expect(editState(page)).toHaveAttribute("aria-label", /Changes not saved yet/);
+  await expect(editState(page)).toHaveAttribute("aria-label", /Not saved yet/);
   await page.locator(".edit-bar").getByRole("button", { name: "Discard changes" }).click();
   await expect(page.locator(".edit-preview .block", { hasText: "Something else entirely" })).toHaveCount(0);
-  await expect(editState(page)).toHaveAttribute("aria-label", /^Published\. Version \d+\.$/);
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Published\. Version \d+\. Saved\.$/);
   expect(await readWorkingDraft(page, "process", AZURE)).toBeUndefined();
   expect((await readProcess(page, AZURE))!.steps[0].title).toBe("Complete the landing zone questionnaire");
 });
@@ -144,6 +159,7 @@ test("About: restrict to tiers, an environment and a language; retire with a rep
   await openEditor(page, "process", AZURE);
   await outline(page, "About");
   const about = fields(page);
+  await unfold(page, "Where it applies"); // folded, with a summary of what is set
   await about.getByRole("button", { name: "Tier 0", exact: true }).click();
   await about.getByRole("button", { name: "Tier 1", exact: true }).click();
   await about.getByRole("button", { name: "Python" }).click();
@@ -159,9 +175,9 @@ test("About: restrict to tiers, an environment and a language; retire with a rep
   expect((await readProcess(page, AZURE))!).toMatchObject({ status: "deprecated", replacedBy: "request-gcp-project" });
 
   await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
-  await expect(page.locator(".facts")).toContainText("Tier 0, Tier 1");
-  await expect(page.locator(".facts")).toContainText("Python");
-  await expect(page.locator(".facts")).toContainText("Production");
+  await expect(page.locator("header.doc-head")).toContainText("Tier 0, Tier 1");
+  await expect(page.locator("header.doc-head")).toContainText("Python");
+  await expect(page.locator("header.doc-head")).toContainText("Production");
   await expect(page.locator(".banner", { hasText: "This process is retired." }).getByRole("link", { name: "Request a GCP project" })).toBeVisible();
 
   // put it back in use for the tests that follow
@@ -180,14 +196,15 @@ test("reviews: the library shows what is due, and one click confirms a process",
   await due.check();
   await expect(page.locator(".filter-chosen").getByRole("button", { name: "Remove filter Review: due or overdue" })).toBeVisible();
   const akamai = page.locator(".card", { hasText: "Onboard a site to Akamai" });
-  await expect(akamai.locator('[data-line="review"]')).toContainText("Overdue since 2026-09-02");
+  await expect(akamai.locator('[data-line="review"]')).toContainText("Review overdue since 2026-09-02");
+  await expect(akamai.locator('[data-line="review"]')).toHaveClass(/\bbad\b/); // overdue: the problem colour
   await expect(page.locator(".card", { hasText: "Request a GCP project" })).toHaveCount(0);
 
   await akamai.locator(".card-link").click();
   await expect(page.locator(".banner", { hasText: "Review overdue since 2026-09-02" })).toBeVisible();
   await page.getByRole("button", { name: "Mark as reviewed" }).click();
   await expect(page.locator(".banner", { hasText: "Review overdue" })).toHaveCount(0);
-  await expect(page.locator(".facts")).toContainText(`Reviewed ${serverToday()}`); // dated by the server, not by this browser's clock
+  await expect(page.locator("header.doc-head")).toContainText(`Reviewed ${serverToday()}`); // dated by the server, not by this browser's clock
   await expect.poll(async () => (await readProcess(page, "onboard-site-to-akamai"))!.review).toEqual({ intervalMonths: 6, lastReviewedAt: serverToday(), reviewedBy: "Alex Editor" });
 
   // back in the list the filter is still on, and the process confirmed just now has left it
@@ -225,7 +242,7 @@ test("the JSON editor marks problems on the line and applies valid edits", async
   expect((await readProcess(page, AZURE))!.estimatedDuration).toBe("about a month");
   await expect(page.locator(".edit-preview .block").first()).toBeVisible(); // after publishing, the screen starts afresh on the map
   await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
-  await expect(page.locator(".facts")).toContainText("about a month");
+  await expect(page.locator("header.doc-head")).toContainText("about a month");
 });
 
 test("every publish is a version; an old one is restored into the draft, not for readers", async ({ page }) => {
@@ -239,9 +256,10 @@ test("every publish is a version; an old one is restored into the draft, not for
   const versions = page.getByRole("dialog", { name: /Versions of/ });
   const rows = versions.locator(".history > li");
   await expect(rows.first()).toContainText("current");
-  await expect(rows.first()).toContainText("alex@example.com");
+  await expect(rows.first()).toContainText("Alex Editor"); // the name, not the address
+  await expect(rows.first()).not.toContainText("alex@example.com");
   await expect(rows.first()).toContainText("A summary to take back");
-  await expect(rows.last()).toContainText("import"); // where it all started
+  await expect(rows.last()).toContainText("Imported"); // where it all started
   await rows.nth(1).getByRole("button", { name: "Restore" }).click();
   await expect(versions).toHaveCount(0);
   await expect(page.locator(".edit-preview .preview-head p")).toHaveText(before);

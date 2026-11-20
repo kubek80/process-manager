@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { ALEX, CASEY, CSRF, SAM, open, pickFilter, publishChange, putWorkingDraft, signIn } from "./helpers";
+import { ALEX, CASEY, CSRF, SAM, open, openApplication, pickFilter, publishChange, putWorkingDraft, signIn } from "./helpers";
 
 // Home, the two lists and the search results: how processes and standards look different, where
 // the browse column is, the filters for "my application", a filter with nothing to choose, the
@@ -63,11 +63,15 @@ test("processes and standards look different: on Home, on the cards of the lists
   await expect(s.locator(".kind-tag svg")).toHaveClass(/lucide-shield-check/);
   // and their shapes differ (round and square marks), whatever the colours
   expect(await s.locator(".kind-tag").evaluate((e) => getComputedStyle(e).borderTopLeftRadius)).not.toBe(pRadius);
+  // on the search, where kinds are mixed, every card says its kind
+  await open(page, "/search");
+  await expect(cards(page).first()).toBeVisible();
+  expect(await cards(page).locator(".kind-tag").count()).toBe(await cards(page).count());
+  // a list of one kind has no use for the tag
   for (const hash of ["/processes", "/standards"]) {
     await open(page, hash);
-    const kind = hash === "/processes" ? "process" : "standard";
-    await expect(cards(page).first().locator(`.kind-tag.${kind}`)).toBeVisible();
-    expect(await cards(page).locator(`.kind-tag:not(.${kind})`).count()).toBe(0);
+    await expect(cards(page).first()).toBeVisible();
+    await expect(cards(page).locator(".kind-tag")).toHaveCount(0);
   }
 });
 
@@ -100,7 +104,14 @@ test("Tier, environment and language are single-choice dropdowns with counts, re
   await signIn(page, SAM);
   await open(page, "/standards");
   const panel = page.getByRole("complementary", { name: "Filters" });
+  // folded under "My application" until it is opened or something in it is chosen
+  const app = panel.locator("button.filter-app-toggle");
+  await expect(app).toHaveAccessibleName(/^My application/);
+  await expect(app).toContainText("Not chosen");
   const tier = panel.getByRole("button", { name: /^Tier: / });
+  await expect(tier).toHaveCount(0);
+  await app.click();
+  await expect(app).toHaveAttribute("aria-expanded", "true");
   await tier.click();
   const group = panel.getByRole("radiogroup", { name: "Tier" });
   await expect(group.getByRole("radio").first()).toHaveAccessibleName(/^Any tier, \d+ results?$/);
@@ -114,6 +125,13 @@ test("Tier, environment and language are single-choice dropdowns with counts, re
   await expect(panel.getByRole("button", { name: "Tier: Tier 2", exact: true })).toBeVisible();
   await pickFilter(page, "Tier", "Tier 3");
   await expect(panel.locator("p.filter-profile-note")).toContainText("here and on every process and standard");
+  // folded, it says what is chosen; another visit opens it by itself, because something is chosen
+  await app.click();
+  await expect(app).toHaveAttribute("aria-expanded", "false");
+  await expect(app).toContainText("Tier 3");
+  await page.evaluate(() => sessionStorage.clear());
+  await page.reload();
+  await expect(panel.locator("button.filter-app-toggle")).toHaveAttribute("aria-expanded", "true");
 
   // the standard's page knows it
   await open(page, "/s/secure-logging/doc");
@@ -129,6 +147,7 @@ test("an application option with no results is offered, can be chosen, and gives
   await open(page, "/search?q=akamai");
   await expect(cards(page).first()).toBeVisible(); // only the Akamai process, for tiers 0 and 1
   const panel = page.getByRole("complementary", { name: "Filters" });
+  await openApplication(page);
   await panel.getByRole("button", { name: /^Tier: / }).click();
   const tier3 = panel.getByRole("radiogroup", { name: "Tier" }).getByRole("radio", { name: "Tier 3, 0 results" });
   await expect(tier3).toBeEnabled();
@@ -149,7 +168,7 @@ test("a filter with nothing to choose says why instead of offering dead options"
   const panel = page.getByRole("complementary", { name: "Filters" });
   const rigour = panel.getByRole("button", { name: "Rigour: Nothing to choose", exact: true });
   await expect(rigour).toBeVisible();
-  await expect(panel.locator('.filter-dd[data-filter="rigour"]')).toHaveClass(/\bempty\b/);
+  await expect(panel.locator('.filter-dd[data-filter="rigour"]')).toHaveClass(/\bnothing\b/);
   await rigour.click();
   await expect(panel.locator('.filter-dd[data-filter="rigour"] .filter-none')).toHaveText(/says how binding it is\.$/);
   await expect(panel.locator('.filter-dd[data-filter="rigour"]').getByRole("checkbox")).toHaveCount(0);

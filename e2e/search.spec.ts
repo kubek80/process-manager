@@ -69,7 +69,8 @@ test("results mix processes and standards, with what they belong to and where th
   await expect(gcp.locator('[data-line="owner"] dd')).toHaveText("Cloud Platform team");
   const iac = page.locator('li.card[data-kind="standard"][data-id="infrastructure-as-code"]');
   await expect(iac.locator(".card-kind")).toHaveText("Standard");
-  await expect(iac.locator('[data-line="rigour"] dd')).toHaveText("4 mandatory, 1 recommended"); // the rigour of a standard comes from its requirements
+  await expect(iac.locator('[data-line="rigour"] dd')).toHaveText("4 must · 1 should"); // the level of a standard comes from its requirements
+  await expect(iac.locator('[data-line="rules"] dd')).toHaveText("5 requirements");
   await expect(iac.locator('[data-line="practice"] dd')).toHaveText("Engineering");
   // the apigee process only mentions it inside: the place is named
   await expect(page.locator('li.card[data-id="onboard-api-to-apigee"] ul.card-hits')).toBeVisible();
@@ -78,7 +79,23 @@ test("results mix processes and standards, with what they belong to and where th
 test("each filter narrows the results, and the number next to an option is what it gives", async ({ page }) => {
   await open(page, "/search");
   await expect(count(page)).toHaveText("10 results");
-  for (const key of ["type", "rigour", "category", "practice", "platform", "owner"]) {
+  // the kind is chosen with the tabs above the results, each with what it gives; the address says it
+  const tabs = page.getByRole("radiogroup", { name: "Show" });
+  await expect(tabs.getByRole("radio")).toHaveAccessibleName(["All, 10 results", "Processes, 7 results", "Standards, 3 results"]);
+  await expect(tabs.getByRole("radio", { name: /^All,/ })).toHaveAttribute("aria-checked", "true");
+  await tabs.getByRole("radio", { name: /^Standards,/ }).click();
+  await expect(results(page)).toHaveCount(3);
+  await expect(page).toHaveURL(/[?&]type=standard(&|$)/);
+  await expect(tabs.locator(".type-tab.on")).toHaveAttribute("data-type", "standard");
+  await expect(count(page)).toHaveText("3 results");
+  await tabs.getByRole("radio", { name: /^Standards,/ }).press("ArrowLeft"); // the arrow keys move the choice
+  await expect(tabs.getByRole("radio", { name: /^Processes,/ })).toBeFocused();
+  await expect(results(page)).toHaveCount(7);
+  await expect(page).toHaveURL(/[?&]type=process(&|$)/);
+  await tabs.getByRole("radio", { name: /^All,/ }).click();
+  await expect(page).not.toHaveURL(/type=/);
+  await expect(count(page)).toHaveText("10 results");
+  for (const key of ["rigour", "category", "practice", "platform", "owner"]) {
     await openGroup(page, key);
     const options = group(page, key).locator("label.filter-option:not(.off)");
     const n = await options.count();
@@ -111,13 +128,14 @@ test("two values of one filter mean either; two filters mean both", async ({ pag
   await expect(results(page)).toHaveCount(3); // Google Cloud or Azure
   await expect(page).toHaveURL(/platform=google-cloud,azure/);
 
-  // the counts of the other filters follow what is chosen
-  await openGroup(page, "type");
-  await expect(group(page, "type").getByRole("checkbox", { name: "Standards, 1 result" })).toBeVisible();
-  await group(page, "type").getByRole("checkbox", { name: "Standards, 1 result" }).check();
+  // the counts of the other filters, and of the tabs, follow what is chosen
+  const tabs = page.getByRole("radiogroup", { name: "Show" });
+  await expect(tabs.getByRole("radio", { name: "Standards, 1 result" })).toBeVisible();
+  await tabs.getByRole("radio", { name: "Standards, 1 result" }).click();
   await expect(results(page)).toHaveCount(1); // a standard and on one of the two platforms
   await expect(results(page).first()).toHaveAttribute("data-id", "infrastructure-as-code");
-  await expect(count(page)).toHaveText("1 result with 3 filters");
+  await expect(page).toHaveURL(/[?&]type=standard(&|$)/);
+  await expect(count(page)).toHaveText("1 result with 2 filters");
   await expect(page.locator(".filter-toggle")).toBeHidden(); // on a wide screen the filters are always shown
   await expect(page.getByRole("button", { name: /^Platform: (Google Cloud, Azure|Azure, Google Cloud)$/ })).toBeVisible();
 
@@ -130,13 +148,14 @@ test("two values of one filter mean either; two filters mean both", async ({ pag
   const other = await page.context().newPage();
   await other.goto(address);
   await expect(other.locator(".search-page ol.cards > li.card")).toHaveCount(1);
-  await expect(other.locator("p.list-count")).toHaveText("1 result with 3 filters");
+  await expect(other.locator("p.list-count")).toHaveText("1 result with 2 filters");
+  await expect(other.getByRole("radiogroup", { name: "Show" }).getByRole("radio", { name: /^Standards,/ })).toHaveAttribute("aria-checked", "true");
   await other.close();
 
   // a chosen filter is removed on its own, or all at once
   const chosen = page.locator(".filter-chosen");
-  await expect(chosen.locator("button.filter-chip")).toHaveCount(3);
-  await chosen.getByRole("button", { name: "Remove filter Type: Standards" }).click();
+  await expect(chosen.locator("button.filter-chip")).toHaveCount(2); // the kind is a tab, not a filter chip
+  await tabs.getByRole("radio", { name: /^All,/ }).click();
   await expect(results(page)).toHaveCount(3);
   await expect(page).not.toHaveURL(/type=/);
   await chosen.getByRole("button", { name: "Clear all filters" }).click();
@@ -284,8 +303,8 @@ test("search works with the keyboard alone", async ({ page }) => {
   // the page size, then the filters of the panel, come before the first result
   const at = (name: string) => reached.findIndex((r) => r.startsWith(name));
   expect(at("Items per page"), reached.join(" | ")).toBeGreaterThanOrEqual(0);
-  expect(at("Items per page")).toBeLessThan(at("Type:"));
-  expect(at("Type:")).toBeLessThan(at("Category:"));
+  expect(at("Items per page")).toBeLessThan(at("Category:"));
+  expect(at("Only my bookmarks")).toBeLessThan(at("Category:"));
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Onboard a site to Akamai" })).toBeVisible();
 });
