@@ -50,7 +50,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       window.dispatchEvent(new Event(SIGNED_OUT));
       throw new ApiError(401, "You are signed out. Sign in again, then repeat what you were doing.");
     }
-    const err = new ApiError(res.status, data?.error ?? `The server answered ${res.status}.`);
+    const err = new ApiError(res.status, data?.error ?? `The portal could not do that (answer ${res.status}). Try again in a moment.`);
     if (res.status === 409 && data?.conflict) err.conflict = data.conflict as Conflict;
     throw err;
   }
@@ -574,7 +574,7 @@ export async function uploadIcon(file: Blob): Promise<{ id: string; contentType:
   }
   const data = await res.json().catch(() => null);
   if (res.status === 401) { window.dispatchEvent(new Event(SIGNED_OUT)); throw new ApiError(401, "You are signed out. Sign in again, then repeat what you were doing."); }
-  if (!res.ok) throw new ApiError(res.status, data?.error ?? `The server answered ${res.status}.`);
+  if (!res.ok) throw new ApiError(res.status, data?.error ?? `The portal could not do that (answer ${res.status}). Try again in a moment.`);
   return data;
 }
 

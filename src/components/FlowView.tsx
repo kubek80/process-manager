@@ -422,7 +422,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                   {!decision && <TypeIcon type={s.type} size={bare ? 30 : 34} />}
                   <span className="block-text">
                     <span className="block-type">{meta.label}</span>
-                    <span className="block-title">{s.title}</span>
+                    <span className={`block-title ${s.title?.trim() ? "" : "unnamed"}`.trim()}>{s.title?.trim() ? s.title : "(no name yet)"}</span>
                     <span className="block-meta">
                       {s.tool && <span>{toolIcon(s.tool) ? <EntryIcon icon={toolIcon(s.tool)} size={12} /> : <Wrench size={11} />}{toolName(catalog, s.tool)}</span>}
                       {s.duration && <span><Clock size={11} />{s.duration}</span>}

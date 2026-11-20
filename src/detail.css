@@ -215,3 +215,4 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
 
 /* on touch screens the small ticks of "Before you start" answer to a 44 px area */
 @media (pointer: coarse) { .prereq button.tick { position: relative; } .prereq button.tick::after { content: ""; position: absolute; inset: -11px; } }
+.block-title.unnamed { color: var(--text-3); font-style: italic; font-weight: 500; }
