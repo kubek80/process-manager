@@ -14,9 +14,9 @@ export const shownTarget = (action: string, target: string): string => (NO_TARGE
  */
 export const ACTION: Record<string, string> = {
   "process.save": "saved the process", "process.publish": "published the process", "process.review": "confirmed the review of the process",
-  "process.discard": "threw away the unpublished changes of the process", "process.delete": "deleted the process",
+  "process.discard": "threw away the changes kept in the draft of the process", "process.delete": "deleted the process",
   "standard.save": "saved the standard", "standard.publish": "published the standard", "standard.review": "confirmed the review of the standard",
-  "standard.discard": "threw away the unpublished changes of the standard", "standard.delete": "deleted the standard",
+  "standard.discard": "threw away the changes kept in the draft of the standard", "standard.delete": "deleted the standard",
   "lists.save": "changed the lists",
   "access.grant": "gave a role to", "access.revoke": "took a role from", "access.change": "changed the roles of", "access.remove": "took every role from",
   "feedback.fixed": "marked feedback as fixed on the", "feedback.reopen": "reopened feedback on the", "feedback.delete": "deleted feedback on the",

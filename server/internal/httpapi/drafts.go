@@ -56,6 +56,13 @@ func nameOf(s session) string {
 // draft first. The shape is that of a version conflict, with "draft": true; "version" is the
 // revision of the draft.
 func draftConflict(w http.ResponseWriter, c *docs.DraftConflict) {
+	if c.Current == nil && c.Discarded {
+		writeJSON(w, 409, map[string]any{
+			"error":    "The newer changes kept in this draft were discarded by someone else while you were working on them.",
+			"conflict": map[string]any{"exists": false, "draft": true},
+		})
+		return
+	}
 	if c.Current == nil {
 		writeJSON(w, 409, map[string]any{
 			"error":    "These unpublished changes were published or discarded by someone else while you were working on them.",
@@ -242,15 +249,20 @@ func (a *api) deleteDraft(kind string) http.HandlerFunc {
 			return
 		}
 		s := who(r)
+		var stored docs.Doc
 		err := a.Docs.DiscardDraft(r.Context(), kind, id, rev,
 			func(current docs.Doc) error {
 				if !s.CanEdit(kind, belongsOf(current.Body)) {
 					return errHidden
 				}
+				stored = current
 				return nil
 			},
 			func(ctx context.Context, tx pgx.Tx, d docs.WorkingDraft) error {
 				detail := fmt.Sprintf("unpublished changes last saved by %s; readers keep version %d", d.UpdatedBy, d.Base)
+				if !docs.Published(stored.Body) {
+					detail = fmt.Sprintf("changes kept in its draft, last saved by %s; the %s stays as stored in version %d, which readers do not see", d.UpdatedBy, noun[kind], stored.Version)
+				}
 				return audit.AddIn(ctx, tx, s.Email, s.Name, noun[kind]+".discard", id, detail)
 			})
 		var dc *docs.DraftConflict

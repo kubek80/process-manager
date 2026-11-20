@@ -582,6 +582,22 @@ export function goneDraftSentence(latest: Latest | undefined, startedFrom: numbe
 }
 
 /**
+ * The revision of the shared working draft a save is made from: the revision of the draft the
+ * changes on screen were made from (`editedFrom`, 0 when they were made from the document
+ * itself) - never a newer draft somebody else saved meanwhile, which the server then reports as a
+ * conflict instead of being overwritten. After "Save mine over theirs" (`over`, a conflict about
+ * the draft): theirs, or 0 when it is gone.
+ */
+export function draftRevisionToSend(editedFrom: number, over?: { draft?: boolean; exists: boolean; version?: number }): number {
+  if (over?.draft) return over.exists ? over.version ?? 0 : 0;
+  return editedFrom;
+}
+
+/** Somebody else saved the shared draft after the unsaved changes on screen were started from another revision. */
+export const draftMovedOn = (o: { dirty: boolean; editedFrom: number; working?: { revision: number } | null }): boolean =>
+  o.dirty && !!o.working && o.working.revision !== o.editedFrom;
+
+/**
  * Said when a save of the working draft finds that somebody else retired, unpublished, published
  * or brought back the document meanwhile ("" when nothing like that happened, or it was the
  * person themselves). `was`: the status the screen knew.

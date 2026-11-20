@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { ArrowLeft, Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash2, TriangleAlert, Undo2 } from "lucide-react";
 import type { DocMeta, Issue, Process, Standard, TargetKind } from "../types";
 import { conflictOf, useDraft, type Conflict, type Draft } from "../lib/draft";
-import { author, baseBehindSentence, clock, draftKindOf, draftSaveBase, saveCallOf, statusChangedSentence, editState, exampleIssues, isExampleIssue, issueText, statusChangeBlocked, steppedMessage, movedItem, movedMessage, moveOf, publishList, savedByText, type DraftKind } from "../lib/editing";
+import { author, baseBehindSentence, clock, draftKindOf, draftMovedOn, draftRevisionToSend, draftSaveBase, saveCallOf, statusChangedSentence, editState, exampleIssues, isExampleIssue, issueText, statusChangeBlocked, steppedMessage, movedItem, movedMessage, moveOf, publishList, savedByText, type DraftKind } from "../lib/editing";
 import { compare, describeChange, type Change } from "../lib/diff";
 import { belongsRefused } from "../lib/rights";
 import { useMe, usePerms } from "../lib/session";
@@ -139,7 +139,15 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
   const [working, setWorkingState] = useState<WorkingDraft<T> | null>(initial);
   // the working draft as the last call left it: a publish right after a save needs its revision
   const workingNow = useRef(working);
-  const setWorking = (w: WorkingDraft<T> | null) => { workingNow.current = w; setWorkingState(w); };
+  // which revision of the working draft each document on screen came from: a save is made from
+  // the revision the person's changes were started from, never from a newer one loaded meanwhile
+  const revOfDoc = useRef(new WeakMap<object, number>(initial ? [[initial.doc as object, initial.revision]] : []));
+  const setWorking = (w: WorkingDraft<T> | null) => { if (w) revOfDoc.current.set(w.doc as object, w.revision); workingNow.current = w; setWorkingState(w); };
+  const savedNow = useRef<T | null>(null);
+  const editedFrom = () => (savedNow.current ? revOfDoc.current.get(savedNow.current as object) ?? 0 : 0);
+  // why the server would not store a never-published document as itself at the last save (it
+  // was kept as the working draft): to fix before publishing
+  const [refusal, setRefusal] = useState<string | null>(null);
   const opts = useRef(o);
   opts.current = o;
   // The published version the changes on screen were made from. A draft that has to be created
@@ -168,7 +176,8 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
   const saveWorking = async (doc: T, rev: number, docBase: number): Promise<number> => {
     let r;
     try {
-      r = await putWorkingDraft(kind, id, doc, rev, unpublished ? (rev === 0 ? docBase || undefined : undefined) : draftSaveBase(rev, startBase.current, rebaseTo.current));
+      r = await putWorkingDraft(kind, id, doc, rev, unpublished ? (rev === 0 ? docBase || undefined : undefined) : draftSaveBase(rev, startBase.current, rebaseTo.current),
+        unpublished ? docBase : opts.current.meta?.version);
     } catch (e) {
       // the draft calls answer "does not exist" for something that was deleted: say it like a save does
       if (e instanceof ApiError && e.status === 404) {
@@ -195,6 +204,12 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
   // an ordinary save that the server refuses as not finished: kept as the working draft instead,
   // so that "Save draft" of a never-published document always works (never a publish)
   const notFinished = (e: unknown, doc: T) => unpublished && e instanceof ApiError && e.status === 400 && doc.status === "draft";
+  // ... and says why at once; the reason stays to fix until a save stores it as itself
+  const keptAsDraft = (e: unknown) => {
+    const why = e instanceof Error ? e.message : String(e);
+    setRefusal(why);
+    notify.error(`Saved as a draft, not yet as the ${noun} itself.`, `${why} Fix this before publishing.`);
+  };
   // the version the changes on screen were made from, for a save made from a conflict dialog
   const baseNow = useRef<number>(0);
   const d: Draft<T> = useDraft<T>({
@@ -205,22 +220,26 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
     version: unpublished ? working?.base ?? o.meta?.version ?? 0 : working?.revision ?? 0,
     save: async (doc, base, note, over): Promise<number> => {
       // after "Save mine over theirs" of the shared draft, `base` is the revision of theirs
-      const rev = over?.draft ? (over.exists ? over.version ?? 0 : 0) : unpublished ? workingNow.current?.revision ?? 0 : base;
+      const rev = unpublished ? draftRevisionToSend(editedFrom(), over) : base;
       const docBase: number = over?.draft ? baseNow.current : base;
       const toFix = unpublished && opts.current.check(doc).some((i) => i.level === "error");
       const call = saveCallOf(draftKind, gone.current, { toFix, working: rev > 0 });
       if (call === "recreate-as-draft") return recreate(doc, note);
       if (call === "save-version") {
-        try { return await opts.current.onSave(doc, docBase, note); } catch (e) { if (notFinished(e, doc)) return saveWorking(doc, 0, docBase); throw e; }
+        try { const v = await opts.current.onSave(doc, docBase, note); setRefusal(null); return v; } catch (e) {
+          if (notFinished(e, doc)) { const v = await saveWorking(doc, 0, docBase); keptAsDraft(e); return v; }
+          throw e;
+        }
       }
       if (call === "replace-working-draft") {
         let saved;
         try { saved = await putDocReplacingDraft(kind, doc, docBase, note, rev); } catch (e) {
-          if (notFinished(e, doc)) return saveWorking(doc, rev, docBase);
+          if (notFinished(e, doc)) { const v = await saveWorking(doc, rev, docBase); keptAsDraft(e); return v; }
           if (conflictOf(e) && !conflictOf(e)?.exists && !conflictOf(e)?.draft) markGone();
           throw e;
         }
         // stored as the document itself: the working draft is gone, and the lists follow
+        setRefusal(null);
         setWorking(null);
         opts.current.onDraftMeta(null);
         await opts.current.onRefresh().catch(() => {});
@@ -247,6 +266,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
   });
 
   baseNow.current = d.base;
+  savedNow.current = d.saved;
 
   // somebody published the never-published document, or unpublished the published one: start
   // afresh as the other kind of draft - once nothing would be lost by it
@@ -283,7 +303,10 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
   const drawable = useMemo(() => o.drawable(d.draft), [d.draft, o.drawable]); // eslint-disable-line react-hooks/exhaustive-deps
   // the checker's findings, and the example texts of something new (to fix before publishing only)
   const checked = useMemo(() => o.check(d.clean), [d.clean, o.check]); // eslint-disable-line react-hooks/exhaustive-deps
-  const issues = useMemo(() => (drawable ? [...checked, ...exampleIssues(kind, d.clean)] : checked), [checked, drawable, kind, d.clean]);
+  const issues = useMemo(() => [
+    ...(drawable ? [...checked, ...exampleIssues(kind, d.clean)] : checked),
+    ...(refusal ? [{ level: "error" as const, path: "", message: `At the last save it could not be stored as the ${noun} itself: ${refusal}` }] : []),
+  ], [checked, drawable, kind, d.clean, refusal, noun]);
   const errors = issues.filter((i) => i.level === "error").length;
   // something deleted comes back as a never-published document of its own, which the checker must
   // pass; everything else can always be saved (a never-published document as its working draft)
@@ -466,7 +489,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
     const yes = await confirmDialog({
       title: unpublished ? "Discard the newer changes?" : "Discard the unpublished changes?",
       body: unpublished
-        ? <>The changes to “{stored.title}” that are kept in its draft{by}, are thrown away for everybody who edits it. It goes back to how it was last saved with nothing to fix. This cannot be undone.</>
+        ? <>The changes to “{stored.title}” that are kept in its draft{by}, are thrown away for everybody who edits it. It goes back to how it was last stored as the {noun} itself. This cannot be undone.</>
         : <>All unpublished changes to “{stored.title}”{by}, are thrown away for everybody who edits it. Readers keep seeing version {version}. This cannot be undone.</>,
       confirmLabel: "Discard draft", cancelLabel: "Keep the draft", danger: true,
     });
@@ -475,7 +498,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
     try {
       await deleteWorkingDraft(kind, id, w.revision);
       opts.current.onDraftMeta(null);
-      notify.info(unpublished ? "The newer changes were discarded. The draft is back to how it was last saved." : `The unpublished changes were discarded. Readers see version ${version}.`);
+      notify.info(unpublished ? `The newer changes were discarded. The draft is back to how it was last stored as the ${noun} itself.` : `The unpublished changes were discarded. Readers see version ${version}.`);
       restart();
     } catch (e) {
       notify.error("The draft could not be discarded.", conflictOf(e) ? "Somebody else saved the draft in the meantime. Look at their changes first." : e);
@@ -526,7 +549,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
     ...(version ? [{ label: "Versions", icon: <History size={16} />, hint: "See and restore earlier versions", run: () => setDialog("versions") }] : []),
     { label: "Change with AI", icon: <Sparkles size={16} />, hint: "Describe a change in plain words", run: () => setDialog("ai"), blocked: drawable ? undefined : "Repair the JSON first." },
     { label: json ? "Back to the editor" : "JSON", icon: <Braces size={16} />, hint: json ? undefined : "The text of the whole document", run: () => (jsonWanted ? void leaveJson() : setJsonWanted(true)), blocked: !drawable ? "It cannot be shown otherwise until the JSON is repaired." : undefined },
-    ...(working ? [{ label: "Discard draft…", icon: <Undo2 size={16} />, hint: unpublished ? "Back to how it was last saved" : `Readers keep version ${version}`, run: discardDraft, divider: true, danger: true }] : []),
+    ...(working ? [{ label: "Discard draft…", icon: <Undo2 size={16} />, hint: unpublished ? `Back to how it was last stored as the ${noun} itself` : `Readers keep version ${version}`, run: discardDraft, divider: true, danger: true }] : []),
     ...(!unpublished && status === "active" ? [{ label: "Retire…", icon: <Archive size={16} />, hint: "Keep it for reference, marked as retired", run: () => setDialog("retire"), blocked: statusBlock, divider: !working }] : []),
     ...(!unpublished && status === "deprecated" ? [{ label: "Bring back into use…", icon: <RotateCcw size={16} />, run: bringBack, blocked: statusBlock, divider: !working }] : []),
     ...(!unpublished ? [{ label: "Unpublish…", icon: <EyeOff size={16} />, hint: "Hide it from readers again", run: unpublish, blocked: statusBlock }] : []),
@@ -537,14 +560,16 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
     ? { label: "Discard changes", run: () => d.discard() }
     : working ? { label: "Discard draft…", run: discardDraft, busy } : undefined;
 
+  // somebody else saved the never-published document's working draft after these changes were started
+  const draftMoved = unpublished && draftMovedOn({ dirty: d.dirty, editedFrom: revOfDoc.current.get(d.saved as object) ?? 0, working });
   // what somebody else did meanwhile, while it is still so
   const saidMeanwhile = meanwhile && meanwhile.status === (stored.status ?? "active") ? meanwhile.text : "";
   const banners = (
     <>
       {unpublished && <BehindBanner d={d} meta={o.meta} noun={`this ${noun}`} />}
-      {!unpublished && d.behind && d.dirty && !d.conflict && working && (
+      {(unpublished ? draftMoved : d.behind && d.dirty) && !d.conflict && working && (
         <div className="check warn banner">
-          <TriangleAlert size={16} /><span><b>{author(working, me).name} saved the unpublished changes</b> {savedWhen(working.updatedAt)} while you were editing. Your changes are still here.</span>
+          <TriangleAlert size={16} /><span><b>{author(working, me).name} saved {unpublished ? "newer changes to the draft" : "the unpublished changes"}</b> {savedWhen(working.updatedAt)} while you were editing. Your changes are still here.</span>
           <span className="spacer" />
           <button className="btn small" onClick={() => d.raiseConflict({ exists: true, version: working.revision, updatedBy: working.updatedBy, updatedByName: working.updatedByName, updatedAt: working.updatedAt })}>Compare and decide</button>
         </div>
@@ -558,7 +583,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
       {losing && <div className="check warn banner" role="alert"><TriangleAlert size={16} /><span>{losing}</span></div>}
     </>
   );
-  const hasBanners = !!saidMeanwhile || (unpublished && d.behind && d.dirty && !d.conflict) || (!unpublished && d.behind && d.dirty && !!working) || (!isGone && !!working && !rebaseTo.current && !!baseBehindSentence(working.base, version)) || !!losing;
+  const hasBanners = !!saidMeanwhile || (unpublished && d.behind && d.dirty && !d.conflict) || (unpublished ? draftMoved : d.behind && d.dirty) && !!working || (!isGone && !!working && !rebaseTo.current && !!baseBehindSentence(working.base, version)) || !!losing;
 
   const replaceable = o.others.filter((x) => x.id !== id && x.status !== "draft" && x.status !== "deprecated");
   const dialogs = (

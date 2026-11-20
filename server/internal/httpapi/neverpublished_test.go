@@ -171,7 +171,7 @@ func TestWhoDeletedOrRetiredItIsSaid(t *testing.T) {
 	mine := e.body(docs.Process, repoP, "Request a repository", "Request a repo")
 	status, body = d.do("DELETE", fmt.Sprintf("%s?base=%d", path, v+1), nil)
 	wantStatus(t, status, 200, body)
-	for _, call := range []string{fmt.Sprintf("%s/draft?rev=1", path), fmt.Sprintf("%s?base=%d", path, v+1)} {
+	for _, call := range []string{fmt.Sprintf("%s/draft?rev=1&known=%d", path, v+1), fmt.Sprintf("%s?base=%d", path, v+1)} {
 		status, body = a.do("PUT", call, mine)
 		wantError(t, status, body, 409, "Dana Admin deleted this process while you were working on it.")
 		if c := body["conflict"].(map[string]any); c["exists"] != false || c["deletedBy"] != dana || c["deletedByName"] != "Dana Admin" || c["deletedAt"] == nil {

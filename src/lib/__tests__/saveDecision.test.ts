@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newerChangesLine, saveCallOf, statusChangedSentence } from "../editing";
+import { draftMovedOn, draftRevisionToSend, newerChangesLine, saveCallOf, statusChangedSentence } from "../editing";
 
 describe("Save draft always works", () => {
   it("saves a never-published document as itself while nothing is to fix", () => {
@@ -47,5 +47,25 @@ describe("the reader's page of a never-published document with newer changes", (
     expect(newerChangesLine({ updatedAt: "", updatedBy: "alex@example.com" }, "alex@example.com")).toBe("There are newer changes on the editing screen.");
     expect(newerChangesLine({ updatedAt: "", updatedBy: "dana@example.com", updatedByName: "Dana Admin" }, "alex@example.com"))
       .toBe("There are newer changes on the editing screen by Dana Admin.");
+  });
+});
+
+describe("a save of the shared draft is made from the revision the changes came from", () => {
+  it("sends the revision the changes were started from, not a newer one loaded meanwhile", () => {
+    expect(draftRevisionToSend(3)).toBe(3);
+    expect(draftRevisionToSend(0)).toBe(0);
+    // a plain version conflict does not change which draft the changes came from
+    expect(draftRevisionToSend(3, { exists: true, version: 9 })).toBe(3);
+  });
+  it("goes over theirs only after the question", () => {
+    expect(draftRevisionToSend(3, { draft: true, exists: true, version: 5 })).toBe(5);
+    expect(draftRevisionToSend(3, { draft: true, exists: false })).toBe(0);
+  });
+  it("marks the screen behind when somebody else saved the draft after the changes were started", () => {
+    expect(draftMovedOn({ dirty: true, editedFrom: 1, working: { revision: 2 } })).toBe(true);
+    expect(draftMovedOn({ dirty: true, editedFrom: 0, working: { revision: 1 } })).toBe(true);
+    expect(draftMovedOn({ dirty: true, editedFrom: 2, working: { revision: 2 } })).toBe(false);
+    expect(draftMovedOn({ dirty: false, editedFrom: 1, working: { revision: 2 } })).toBe(false);
+    expect(draftMovedOn({ dirty: true, editedFrom: 0, working: null })).toBe(false);
   });
 });

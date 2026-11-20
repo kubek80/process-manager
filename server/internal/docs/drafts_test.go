@@ -269,25 +269,42 @@ func TestWorkingDraftsInTheStore(t *testing.T) {
 	if _, err := s.SaveDraft(ctx, docs.DraftChange{Kind: docs.Standard, ID: "secure-logging", Body: []byte(draft), By: "a"}); err != nil {
 		t.Fatal(err)
 	}
+	had, _ := s.Get(ctx, docs.Standard, "secure-logging")
 	if err := s.Delete(ctx, docs.Standard, "secure-logging", "a"); err != nil {
 		t.Fatal(err)
 	}
 	if all, _ := s.Drafts(ctx, docs.Standard); len(all) != 0 {
 		t.Fatalf("left behind: %+v", all)
 	}
-	// who deleted it, when, and what it was
-	del, err := s.LastDeleted(ctx, docs.Standard, "secure-logging")
+	// who deleted it, when, and what it was: for somebody who names a version of it
+	del, err := s.LastDeleted(ctx, docs.Standard, "secure-logging", had.Version)
 	if err != nil || del.By != "a" || del.At.IsZero() || !strings.Contains(string(del.Last), "Secure logging") {
 		t.Fatalf("last deleted: %+v %v", del, err)
 	}
-	if _, err := s.LastDeleted(ctx, docs.Process, "request-vpn"); !errors.Is(err, docs.ErrNotFound) {
+	for _, seen := range []int{0, -1, had.Version + 1, had.Version + 5} {
+		if _, err := s.LastDeleted(ctx, docs.Standard, "secure-logging", seen); !errors.Is(err, docs.ErrNotFound) {
+			t.Fatalf("seen %d: %v", seen, err)
+		}
+	}
+	if _, err := s.LastDeleted(ctx, docs.Process, "request-vpn", 1); !errors.Is(err, docs.ErrNotFound) {
 		t.Fatalf("never deleted: %v", err)
 	}
 	if _, _, err := s.Put(ctx, docs.Standard, "secure-logging", []byte(logging), "a"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.LastDeleted(ctx, docs.Standard, "secure-logging"); !errors.Is(err, docs.ErrNotFound) {
+	if _, err := s.LastDeleted(ctx, docs.Standard, "secure-logging", had.Version); !errors.Is(err, docs.ErrNotFound) {
 		t.Fatalf("exists again: %v", err)
+	}
+	// deleted again: a version from before the earlier deletion is not one of what was deleted
+	again, _ := s.Get(ctx, docs.Standard, "secure-logging")
+	if err := s.Delete(ctx, docs.Standard, "secure-logging", "b"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.LastDeleted(ctx, docs.Standard, "secure-logging", had.Version); !errors.Is(err, docs.ErrNotFound) {
+		t.Fatalf("an older incarnation: %v", err)
+	}
+	if d, err := s.LastDeleted(ctx, docs.Standard, "secure-logging", again.Version); err != nil || d.By != "b" {
+		t.Fatalf("the newer one: %+v %v", d, err)
 	}
 }
 

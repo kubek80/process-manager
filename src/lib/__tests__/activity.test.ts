@@ -34,6 +34,10 @@ describe("the activity list", () => {
       words: "marked feedback as fixed on the standard", target: { text: "“Secure logging”", hint: "secure-logging", quoted: true },
     });
   });
+  it("says a discard in words that fit a published and a never-published document alike", () => {
+    expect(ACTION["process.discard"]).toBe("threw away the changes kept in the draft of the process");
+    expect(ACTION["standard.discard"]).toBe("threw away the changes kept in the draft of the standard");
+  });
   it("keeps the id of a document the page cannot name (deleted, or not visible)", () => {
     expect(describeEntry(entry("process.delete", "old-one"), titles).target).toEqual({ text: "old-one", code: true });
   });

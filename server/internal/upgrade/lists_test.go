@@ -241,6 +241,11 @@ func (f fixture) body(t *testing.T, kind, id string) (map[string]any, docs.Doc) 
 
 func TestAnOlderDatabaseIsConvertedOnce(t *testing.T) {
 	f := oldDatabase(t)
+	// a working draft of the older content: converted in place like the versions
+	if _, err := f.pool.Exec(ctx, `insert into working_drafts (kind, id, body, base, revision, updated_by)
+		select kind, id, body, version, 4, 'alex@example.com' from documents where kind = 'process' and id = 'request-gcp-project'`); err != nil {
+		t.Fatal(err)
+	}
 	if err := upgrade.Lists(ctx, f.pool, quiet); err != nil {
 		t.Fatal(err)
 	}
@@ -302,6 +307,10 @@ func TestAnOlderDatabaseIsConvertedOnce(t *testing.T) {
 	if _, naming := f.body(t, docs.Standard, "naming"); naming.Version != 1 {
 		t.Fatal("a document that needs no change must not get a version")
 	}
+	if wd, err := f.docs.GetDraft(ctx, docs.Process, "request-gcp-project"); err != nil || wd.Revision != 4 ||
+		!strings.Contains(string(wd.Body), "\"category\": \"cloud\",\n  \"platform\": \"cloud-platform-team\"") {
+		t.Fatalf("working draft: %v %s", err, wd.Body)
+	}
 	history, _ := f.docs.History(ctx, docs.Process, "request-gcp-project")
 	if history[0].Note != upgrade.Note || history[0].SavedBy != upgrade.By {
 		t.Fatalf("history: %+v", history[0])
@@ -345,7 +354,7 @@ func TestAnOlderDatabaseIsConvertedOnce(t *testing.T) {
 	}
 	joined := strings.Join(actions, "\n")
 	for _, want := range []string{
-		"content.convert lists 5 documents moved to the new lists (6 older versions adjusted); added 2 practices, 1 platforms, 3 categories; 3 roles converted, 1 removed",
+		"content.convert lists 5 documents moved to the new lists (6 older versions and 1 working drafts adjusted); added 2 practices, 1 platforms, 3 categories; 3 roles converted, 1 removed",
 		"access.grant riley@example.com Standards editor for Cyber Security became Practice owner for the practice Cyber Security",
 		"access.revoke lee@example.com Standards editor for DNS team removed: it is neither a platform nor a practice",
 	} {

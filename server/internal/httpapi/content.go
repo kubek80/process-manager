@@ -40,6 +40,10 @@ const (
 // caller may not edit for.
 var errDenied = errors.New("not allowed")
 
+// errHiddenDoc is returned from inside a save when the stored document is a draft the caller may
+// not see: for them it does not exist.
+var errHiddenDoc = errors.New("hidden draft")
+
 // docMeta is what the app needs to know about a document besides its content. Draft says that
 // it has unpublished changes, and is only there for the people who may edit it.
 type docMeta struct {
@@ -259,13 +263,23 @@ func (a *api) personName(ctx context.Context, email string) string {
 	return names[email]
 }
 
-// deletion is the last deletion of a document that does not exist now, when the caller could
-// edit its last version.
+// deletion is the last deletion of a document that does not exist now, told only to somebody
+// who was working on it: who could edit its last version and names a version of it that they
+// had (`base`, or `known` on a save of the working draft).
 func (a *api) deletion(r *http.Request, kind, id string) (docs.Deletion, bool) {
 	if kind == docs.Catalog || !docs.ValidID(id) {
 		return docs.Deletion{}, false
 	}
-	del, err := a.Docs.LastDeleted(r.Context(), kind, id)
+	q := r.URL.Query()
+	raw := q.Get("known")
+	if raw == "" {
+		raw = q.Get("base")
+	}
+	seen, err := strconv.Atoi(raw)
+	if err != nil || seen < 1 {
+		return docs.Deletion{}, false
+	}
+	del, err := a.Docs.LastDeleted(r.Context(), kind, id, seen)
 	if err != nil || !who(r).CanEdit(kind, belongsOf(del.Last)) {
 		return docs.Deletion{}, false
 	}
@@ -540,12 +554,16 @@ func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 		return
 	}
 	note := sv.note
+	action := sv.action
 	doc, changed, err := a.Docs.Save(r.Context(), docs.Change{
 		Kind: kind, ID: id, Body: body, By: s.Email, Note: note, Base: sv.base,
 		Drafts: sv.drafts, Revision: sv.revision, Log: a.Log,
 		Check: func(current *docs.Doc) error {
 			var stored *rbac.Belongs
-			if current != nil {
+			// a draft somebody may not see is, for them, something that does not exist: every
+			// check below runs as for a new document, and only then is the save refused
+			hidden := current != nil && kind != docs.Catalog && !canSee(s, kind, current.Body)
+			if current != nil && !hidden {
 				b := belongsOf(current.Body)
 				if !s.CanEdit(kind, b) {
 					return errDenied
@@ -556,6 +574,21 @@ func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 			if field, id := s.Misplaced(kind, stored, belongsOf(body)); field != "" {
 				return &misplaced{kind: kind, field: field, name: placeName(lists, field, id)}
 			}
+			if kind != docs.Catalog {
+				// a document readers do not see becomes published (active), never retired directly
+				// (something new or deleted is saved as for the first time: see the format)
+				unseen := current == nil || hidden || docs.StatusOf(current.Body) == "draft"
+				if current != nil && !hidden && unseen && docs.StatusOf(body) == "deprecated" {
+					return fmt.Errorf("%w: A %s that readers do not see cannot be retired. Publish it first, or delete it.", docs.ErrInvalid, noun[kind])
+				}
+				// the first publication is logged as one, whichever call made it
+				if unseen && !hidden && docs.StatusOf(body) != "draft" {
+					action = "publish"
+				}
+			}
+			if hidden {
+				return errHiddenDoc
+			}
 			return nil
 		},
 		After: func(ctx context.Context, tx pgx.Tx, saved docs.Doc) error {
@@ -563,7 +596,15 @@ func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 			if n := strings.TrimSpace(note); n != "" {
 				detail += ": " + n
 			}
-			return audit.AddIn(ctx, tx, s.Email, s.Name, noun[kind]+"."+sv.action, id, detail)
+			return audit.AddIn(ctx, tx, s.Email, s.Name, noun[kind]+"."+action, id, detail)
+		},
+		// a working draft that went without a new version is not lost without a trace
+		DraftDropped: func(ctx context.Context, tx pgx.Tx, d docs.WorkingDraft) error {
+			detail := fmt.Sprintf("the changes kept in its draft, last saved by %s, were replaced by the %s as it is stored (version %d): nothing changed", d.UpdatedBy, noun[kind], d.Base)
+			if sv.drafts == docs.PublishDraft {
+				detail = fmt.Sprintf("the unpublished changes, last saved by %s, were the same as the published version: nothing was published", d.UpdatedBy)
+			}
+			return audit.AddIn(ctx, tx, s.Email, s.Name, noun[kind]+".discard", id, detail)
 		},
 	})
 	var c *docs.Conflict
@@ -573,6 +614,15 @@ func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 	switch {
 	case errors.Is(err, errDenied):
 		denied(w, kind)
+		return
+	case errors.Is(err, errHiddenDoc):
+		// what the same save of an id that does not exist would answer: "deleted meanwhile" for
+		// a save made from a version, else the id is taken (that much cannot be hidden)
+		if sv.drafts == docs.PublishDraft || sv.drafts == docs.ReplaceDraft || (sv.base != nil && *sv.base > 0) {
+			a.conflict(w, r, kind, id, &docs.Conflict{})
+		} else {
+			writeError(w, 409, fmt.Sprintf("Something else already has this id. Give the %s another name.", noun[kind]))
+		}
 		return
 	case errors.As(err, &m):
 		writeError(w, 403, m.Error())

@@ -432,7 +432,7 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) (Report, error) {
 
 	// ----- the history: older versions are converted in place, without new versions, so
 	// that putting one back neither fails on its category nor takes it off its platform
-	versions := 0
+	versions, workingDrafts := 0, 0
 	if old || len(kindOf) > 0 {
 		type version struct {
 			kind, id string
@@ -474,6 +474,48 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) (Report, error) {
 				return Report{}, err
 			}
 			versions++
+		}
+		// working drafts get the same changes in place (their revision stays): publishing one, or
+		// saving a never-published document from it, then meets the converted lists
+		type draft struct {
+			kind, id string
+			body     []byte
+		}
+		var drafts []draft
+		rows, err = tx.Query(ctx, `select kind, id, body from working_drafts order by kind, id`)
+		if err != nil {
+			return Report{}, err
+		}
+		for rows.Next() {
+			var d draft
+			if err := rows.Scan(&d.kind, &d.id, &d.body); err != nil {
+				rows.Close()
+				return Report{}, err
+			}
+			drafts = append(drafts, d)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return Report{}, err
+		}
+		for _, d := range drafts {
+			o, err := parse(d.body)
+			if err != nil {
+				continue // left as it is: publishing it is refused by the checks of a save
+			}
+			o, recategorised := recategorise(o, "")
+			o, placed := place(o)
+			if !recategorised && !placed {
+				continue
+			}
+			pretty, err := docs.Pretty(o.bytes())
+			if err != nil {
+				continue
+			}
+			if _, err := tx.Exec(ctx, `update working_drafts set body = $3 where kind = $1 and id = $2`, d.kind, d.id, string(pretty)); err != nil {
+				return Report{}, err
+			}
+			workingDrafts++
 		}
 	}
 
@@ -539,9 +581,9 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) (Report, error) {
 			return Report{}, err
 		}
 	}
-	summary := fmt.Sprintf("%d documents moved to the new lists (%d older versions adjusted); added %d practices, %d platforms, %d categories; %d roles converted, %d removed",
-		saved, versions, len(practices.added), len(platforms.added), len(categories.added), converted, dropped)
-	log.Info("database converted to practices, platforms and categories", "documents", saved, "versions", versions, "practices", len(practices.added),
+	summary := fmt.Sprintf("%d documents moved to the new lists (%d older versions and %d working drafts adjusted); added %d practices, %d platforms, %d categories; %d roles converted, %d removed",
+		saved, versions, workingDrafts, len(practices.added), len(platforms.added), len(categories.added), converted, dropped)
+	log.Info("database converted to practices, platforms and categories", "documents", saved, "versions", versions, "workingDrafts", workingDrafts, "practices", len(practices.added),
 		"platforms", len(platforms.added), "categories", len(categories.added), "rolesConverted", converted, "rolesRemoved", dropped)
 	report := Report{Converted: true, Lists: catChanged, Documents: saved, Versions: versions, Practices: len(practices.added),
 		Platforms: len(platforms.added), Categories: len(categories.added), RolesConverted: converted, RolesRemoved: dropped}

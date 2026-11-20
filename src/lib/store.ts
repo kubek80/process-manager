@@ -130,10 +130,11 @@ export async function loadWorkingDraft<T>(kind: TargetKind, id: string): Promise
 /**
  * Saves the working draft on top of revision `rev` (0: creates it). `base`: the published version
  * the changes were made from - with rev 0 the draft is created on it (so that publishing meets
- * any version published since), with a revision it moves the draft onto that version.
+ * any version published since), with a revision it moves the draft onto that version. `known`: the
+ * version of the document the screen knows - only used to say who deleted it, should it be gone.
  */
-export const putWorkingDraft = <T>(kind: TargetKind, id: string, doc: T, rev: number, base?: number) =>
-  call<DraftSaved>("PUT", `${docsPath(kind, id)}/draft?rev=${rev}${base ? `&base=${base}` : ""}`, doc);
+export const putWorkingDraft = <T>(kind: TargetKind, id: string, doc: T, rev: number, base?: number, known?: number) =>
+  call<DraftSaved>("PUT", `${docsPath(kind, id)}/draft?rev=${rev}${base ? `&base=${base}` : ""}${known ? `&known=${known}` : ""}`, doc);
 export const deleteWorkingDraft = (kind: TargetKind, id: string, rev: number) => call<void>("DELETE", `${docsPath(kind, id)}/draft?rev=${rev}`);
 /** Publishes the working draft as the next version. `over`: publish it over a version somebody else published since. */
 export const publishWorkingDraft = (kind: TargetKind, id: string, rev: number, note = "", over?: number) =>
