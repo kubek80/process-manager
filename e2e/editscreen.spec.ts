@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import {
   ALEX, CSRF, RILEY, addInOutline, editState, fields, moveTo, openEditor, outline, outlineNav, outlineTitles, pickKind, readWorkingDraft, saveDraft, signIn,
@@ -12,10 +13,10 @@ const PREFIX = "editscreen-demo-";
 const GCP = "request-gcp-project";
 const LIB = "publish-internal-library";
 
+/** A copy of a sample process as it is in its file (other tests change the stored one). */
 async function copyOf(request: APIRequestContext, src: string, id: string, title: string) {
   await request.post("/auth/dev/login", { data: { email: ALEX }, headers: CSRF });
-  const { processes } = await (await request.get("/api/processes")).json();
-  const doc = processes.find((p: { id: string }) => p.id === src);
+  const doc = JSON.parse(readFileSync(`processes/${src}.json`, "utf8"));
   const res = await request.put(`/api/processes/${id}?base=0`, { data: { ...doc, id, title, status: "active" }, headers: CSRF });
   expect(res.ok(), `create ${id}: ${await res.text()}`).toBeTruthy();
 }

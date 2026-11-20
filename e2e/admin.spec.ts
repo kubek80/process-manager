@@ -82,8 +82,11 @@ test("an admin gives someone a role and it takes effect at once", async ({ page,
   // all of it is in the activity log, newest first, in plain words
   await page.locator(".admin-nav").getByRole("link", { name: "Activity" }).click();
   const log = page.locator(".activity li");
-  await expect(log.nth(0)).toContainText("Dana Admin removed every role of sam@example.com");
-  await expect(log.nth(1)).toContainText("Sam Consumer published the standard code-review");
+  await expect(log.nth(0)).toContainText("Dana Admin took every role from sam@example.com");
+  // documents by their title, the id as tooltip
+  await expect(log.nth(1)).toContainText("Sam Consumer published the standard");
+  await expect(log.nth(1).locator(".activity-doc")).toHaveText("Code review");
+  await expect(log.nth(1).locator(".activity-doc")).toHaveAttribute("title", /code-review/);
   await expect(log.nth(2)).toContainText("Dana Admin changed the roles of sam@example.com");
   await expect(log.nth(2)).toContainText("added Practice owner for the practice Engineering");
 });

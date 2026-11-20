@@ -34,8 +34,7 @@ for (const [hash, panelId] of [["/processes", "process-filters"], ["/standards",
     await expect(results.locator("li.card").first()).toBeVisible();
     const [p, r] = [(await panel.boundingBox())!, (await results.boundingBox())!];
     expect(p.x + p.width).toBeLessThanOrEqual(r.x + 1); // the panel ends where the results begin
-    const level = hash === "/standards" ? "Level" : "Rigour";
-    for (const name of ["Category", "Platform", "Practice", level, "Owner"]) await expect(panel.getByRole("button", { name: new RegExp(`^${name}: Any$`) })).toBeVisible();
+    for (const name of ["Category", "Platform", "Practice", "Rigour", "Owner"]) await expect(panel.getByRole("button", { name: new RegExp(`^${name}: Any$`) })).toBeVisible();
     await expect(panel.getByRole("checkbox", { name: /^Only my bookmarks, \d+ results?$/ })).toBeVisible();
     // in groups with headings: what to show only, what narrows down, and the reader's application
     await expect(panel.locator(".filter-group-title")).toHaveText(["Show only", "Narrow down", "My application"]);

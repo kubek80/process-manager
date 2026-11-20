@@ -192,7 +192,7 @@ test("an unfinished draft can be saved, but not published: the reason is given a
   await expect(page.getByRole("dialog", { name: "Publish your changes" })).toHaveCount(0);
   const reason = refusal(page);
   await expect(reason).toHaveAttribute("role", "alert");
-  await expect(reason).toContainText(/^This cannot be published yet\. First fix /);
+  await expect(reason).toHaveText(/^First fix the \d+ things? listed under “\d+ to fix”\.$/);
   // the list itself is there below it, and the first problem is selected
   await expect(page.getByRole("dialog", { name: "What is to fix" }).getByRole("heading", { name: /^To fix/ })).toBeVisible();
   await expect(nav.locator('[aria-current="true"]')).toContainText((await readProcess(page, id))!.steps[1].title);
@@ -247,7 +247,7 @@ test("Discard changes goes back to the saved draft and can be undone; Discard dr
   // and it is in the activity log, in words
   await signIn(page, DANA);
   await open(page, "/admin/activity");
-  await expect(page.locator(".activity li").filter({ hasText: id }).first()).toContainText("threw away the unpublished changes of the process");
+  await expect(page.locator(".activity li").filter({ hasText: "Editing demo discard" }).first()).toContainText("threw away the unpublished changes of the process");
 });
 
 test("a new process is a draft nobody else sees until it is published", async ({ page, browser }) => {
@@ -639,7 +639,7 @@ test.describe("more of the editing screen", () => {
     await expect(publishButton).toHaveClass(/\bunavailable\b/);
     await publishButton.click();
     await expect(page.getByRole("dialog", { name: "Publish this standard" })).toHaveCount(0);
-    await expect(refusal(page)).toContainText(/^This cannot be published yet\. First replace the (example text|\d+ example texts) with your own words \(under “\d+ to fix”\)\.$/);
+    await expect(refusal(page)).toContainText(/^First replace the (example text|\d+ example texts) with your own words \(under “\d+ to fix”\)\.$/);
     await page.keyboard.press("Escape");
     // a checker error that is not example text stops a never-published draft from being saved, with the reason
     await outline(page, "About");

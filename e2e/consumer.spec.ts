@@ -68,8 +68,10 @@ test("follow the checklist: prerequisites, exact actions, ticks that are remembe
   await open(page, "/p/request-gcp-project/list");
   await expect(page.getByText("0 of 5 of your steps done")).toBeVisible();
   await expect(page.locator(".prereq")).toHaveCount(4);
-  await expect(page.locator(".prereqs .resources li.skill")).toContainText("Skill: add a GCP project");
-  await expect(page.locator(".link-list.row").getByRole("link", { name: "Infrastructure as code" })).toBeVisible();
+  // one compact panel, the same as on the map: the ways to do it faster and the standards on its first line
+  const before = page.getByRole("region", { name: "Before you start" });
+  await expect(before.locator(".before-head .before-links li.skill")).toContainText("Skill: add a GCP project");
+  await expect(before.locator(".before-head .before-links").getByRole("link", { name: "Infrastructure as code" })).toBeVisible();
 
   const first = page.locator(".step").first();
   await expect(first).toContainText("Choose the environment: dev, test or prod.");

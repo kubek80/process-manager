@@ -17,6 +17,8 @@ From both, the portal generates **skills for AI coding assistants** and, for sta
 
 ![Search results with filters](docs/search.png)
 
+![The same results as rows](docs/search-rows.png)
+
 ![The list of processes](docs/processes.png)
 
 ![Map view](docs/map.png)
@@ -124,6 +126,8 @@ The first admins are named in the server setting `PM_ADMINS`.
 ![Admin panel](docs/admin.png)
 
 ![The roles of one person](docs/roles.png)
+
+![Admin › Theming with its preview](docs/theming.png)
 
 ![A platform and its members](docs/platforms.png)
 
