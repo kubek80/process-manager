@@ -98,9 +98,10 @@ function Levels({ kind, rigour }: { kind: TargetKind; rigour: Partial<Record<Rig
 
 /**
  * One process or standard in a list. As a card: the kind (where kinds are mixed), the category and
- * the tiers; what needs attention (marks); the title and two lines of summary; one line of facts to
- * compare (how binding, how long, how much is yours) and one of who looks after it; after a search,
- * up to two places inside where it was found; a compact foot. As a row: one line of the same,
+ * the tiers; the title and two lines of summary; one line of facts to compare (how binding, how long,
+ * how much is yours) and one of who looks after it; after a search, up to two places inside where it
+ * was found; what needs attention (marks: draft, retired, review, unpublished changes, needs fixing)
+ * just above a compact foot. As a row: one line of the same,
  * for scanning many. The title is the link; it covers the whole card for the mouse, while the links
  * and buttons inside stay separate and reachable with the keyboard.
  */
@@ -181,7 +182,6 @@ export function DocCard(props: DocCardProps) {
             : <><span className="sr-only">Applies to: {tiers.full}</span><span aria-hidden="true">{tiers.short}</span></>}
         </span>
       </div>
-      {marks}
       {/* the title and the summary are one part, so that the titles of a row of cards start at the same height */}
       <div className="card-head">
         <H className="card-title"><a className="card-link" href={docHref(kind, doc.id, fix)}><Marked text={title} words={words} /></a></H>
@@ -209,8 +209,10 @@ export function DocCard(props: DocCardProps) {
               {shown.map((h, i) => (
                 <li key={`${h.where}:${h.item ?? i}`}>
                   <a href={hitHref(kind, doc.id, h)}>
-                    <span className="card-hit-where">{HIT_WORD[h.where]}{h.where === "requirement" && h.item ? ` ${h.item}` : ""}</span>{" "}
+                    <span className="card-hit-where">{HIT_WORD[h.where]}</span>{" "}
                     {h.where !== "scope" && h.where !== "summary" && <span className="card-hit-label"><Marked text={h.label} words={words} /></span>}
+                    {/* the requirement's code, quietly after its name: people quote it and search by it */}
+                    {h.where === "requirement" && h.item && <>{" "}<span className="card-hit-code"><Marked text={h.item} words={words} /></span></>}
                   </a>
                   {h.snippet && <span className="card-hit-snippet"> <Marked text={h.snippet} words={words} /></span>}
                 </li>
@@ -220,6 +222,9 @@ export function DocCard(props: DocCardProps) {
           {more > 0 && <a className="card-hits-more" href={docHref(kind, doc.id)}>{more === 1 ? "1 more place" : `${more} more places`}</a>}
         </div>
       )}
+      {/* what needs attention, in a fixed place just above the foot: a mark never pushes a title down,
+          so the titles of a row of cards stay level whether a card has no, one or two marks */}
+      {marks}
       <div className="card-foot">
         {openFeedback > 0
           ? <a className="card-feedback" href={feedbackHref}><MessageSquare size={14} aria-hidden="true" />{openFeedback} open feedback</a>

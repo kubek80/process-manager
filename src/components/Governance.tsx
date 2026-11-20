@@ -146,9 +146,11 @@ export function WhereFacts({ doc }: { doc: Governed }) {
  * was changed and reviewed. `actions` go to the right of the title; `children` (the use and
  * feedback line) below.
  */
-export function DocHead({ kind, doc, meta, review, facts, actions, onBack, onHistory, children }: {
+export function DocHead({ kind, doc, meta, review, facts, actions, notice, onBack, onHistory, children }: {
   kind: TargetKind; doc: Governed; meta?: DocMeta; review: ReviewInfo;
   facts: ReactNode; actions?: ReactNode; onBack: () => void; onHistory: () => void; children?: ReactNode;
+  /** What a reader must know before anything else (retired, review overdue): directly under the title. */
+  notice?: ReactNode;
 }) {
   const { catalog } = useCatalog();
   const status = statusOf(doc);
@@ -173,6 +175,7 @@ export function DocHead({ kind, doc, meta, review, facts, actions, onBack, onHis
         </div>
         {actions && <div className="head-actions">{actions}</div>}
       </div>
+      {notice && <div className="doc-notices">{notice}</div>}
       <div className="doc-facts">{facts}<WhereFacts doc={doc} /></div>
       <div className="doc-foot">
         <p className="doc-when">

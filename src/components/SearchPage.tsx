@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Blend, CircleHelp, SearchX, Sparkles, Type, X } from "lucide-react";
+import { Blend, CircleHelp, SearchX, Sparkles, Type } from "lucide-react";
 import type { FeedbackByTarget, Process, Standard } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { useEngagement } from "../lib/engagement";
@@ -7,7 +7,7 @@ import { pageOf, sizeOf, useListView, usePageSize } from "../lib/paging";
 import { useProfile, useRemembered } from "../lib/profile";
 import { canEdit, canManage, useMe, usePerms } from "../lib/session";
 import { sortOf, sortResults, type MetaByKind, type SortKey } from "../lib/sorting";
-import { closestWanted, noWordsText, otherWay, type ClosestOutcome, contentStamp, fromMeaning, fuse, markedWords, meaningHelp, modeLine, modeOf, needsServer, planOf, providerOf, rememberMode, SEARCH_MODES, truncatedText, typingMovesAddress, useMeaningSearch, type Found, type Provider, type SearchMode } from "../lib/meaning";
+import { closestWanted, emptyWithFilters, noWordsText, otherWay, type ClosestOutcome, contentStamp, fromMeaning, fuse, markedWords, meaningHelp, modeLine, modeOf, needsServer, planOf, providerOf, rememberMode, SEARCH_MODES, truncatedText, typingMovesAddress, useMeaningSearch, type Found, type Provider, type SearchMode } from "../lib/meaning";
 import { go, href, type SearchState } from "../lib/store";
 import { countText, FILTER_LABEL, filterCount, filtersOf, profileOptions, rigourOptionLabel, search, toggleFilter, typeTab, withTypeTab, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
 import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
@@ -241,6 +241,11 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   const noTools = n === 0 && !plan.busy;
   const other = otherWay({ offered, q: shownQ, show: plan.show, mode, filtered, closest: closestOutcome });
   const summary = <>{shownQ.trim() ? <> for “{shownQ.trim()}”</> : null}{chosen.length ? <> with {plural(chosen.length, "filter")}</> : null}</>;
+  // words found nothing and the closest by meaning are shown (or looked for): the line above says so, instead of a count of none
+  const closestShown = n === 0 && (closestOutcome === "waiting" || closestOutcome === "found");
+  const closestLine = closestShown ? <>No exact match for “{shownQ.trim()}”.{closestOutcome === "found" && closest?.length ? " Closest by meaning:" : ""}</> : undefined;
+  // nothing found, but the filters hide what there is: the empty state offers the one "Clear all filters"
+  const clearsInEmpty = n === 0 && !plan.busy && !closestShown && otherKind === 0 && chosen.length > 0 && withoutFilters > 0;
 
   return (
     <div className="page search-page">
@@ -256,11 +261,11 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
         <div className="list-head">
           {(!noTools || !!tab) && <TypeTabs value={tab} counts={tabCounts} atLeast={truncated} onChange={(t) => setFilters(withTypeTab(filters, t))} />}
           <ResultsBar page={page} noun={{ one: "result", many: "results" }} panelId="search-filters" open={open} onOpen={setOpen}
-            chosen={chosen.length} size={size} onSize={changeSize} extra={summary}
+            chosen={chosen.length} size={size} onSize={changeSize} extra={summary} line={closestLine}
             sort={sort} onSort={changeSort} searched={!!shownQ.trim()} view={view} onView={setView} bare={noTools}
             pager={<Pager page={page} onPage={goTo} label="Pages of results" compact />} />
           {truncated && <p className="search-truncated">{truncatedText(plan.meaning.length)}</p>}
-          <ChosenFilters chosen={chosen} onClear={clear} />
+          <ChosenFilters chosen={chosen} onClear={clear} clearAll={!clearsInEmpty} />
         </div>
         {!bare && (
           <FilterPanel id="search-filters" open={open} keys={KEYS} options={out.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}
@@ -296,10 +301,9 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
           {n === 0 && (closestOutcome === "waiting" || closestOutcome === "found") ? (
             <div className="search-closest" role="status" aria-live="polite">
               {closest === null ? (
-                <p className="search-busy"><span className="search-spinner" aria-hidden="true" />Nothing contains all these words. Looking for the closest by meaning…</p>
+                <p className="search-busy"><span className="search-spinner" aria-hidden="true" />Looking for the closest by meaning…</p>
               ) : (
                 <>
-                  <p className="search-closest-line"><b>Nothing contains all these words.</b> Closest by meaning:</p>
                   <ol className={`cards ${view === "rows" ? "rows" : ""}`.trim()}>
                     {closest.slice(0, size).map((r) => (
                       <DocCard key={`${r.kind}:${r.doc.id}`} kind={r.kind} doc={r.doc} rigour={r.rigour} rules={r.rules} hits={r.hits} words={closestWords} view={view}
@@ -329,17 +333,14 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
                     </div>
                   )}
                   {otherKind === 0 && <p className="muted">
-                    {chosen.length ? (shownQ.trim() ? `Nothing matches “${shownQ.trim()}” with these filters.` : "Nothing matches these filters.")
+                    {chosen.length ? emptyWithFilters(shownQ.trim(), withoutFilters)
                       : plan.show === "meaning" ? `Nothing close to “${shownQ.trim()}” was found.`
                       : plan.show === "words" ? noWordsText(shownQ.trim(), words.length, closestOutcome) : `Nothing matches “${shownQ.trim()}”.`}
-                    {chosen.length > 0 && withoutFilters > 0 && ` Without the filters there ${withoutFilters === 1 ? "is 1 result" : `are ${withoutFilters} results`}.`}
                     {chosen.length > 0 && !withoutFilters && closestOutcome === "nothing" && " Nothing comes close by meaning either."}
                   </p>}
-                  {chosen.length > 0 && otherKind === 0 && (
+                  {/* the one way out when the filters hide what was found (the chips above remove one at a time) */}
+                  {clearsInEmpty && (
                     <div className="btn-row">
-                      {chosen.map((c) => (
-                        <button key={c.key} type="button" className="btn small" onClick={c.remove}><X size={13} />Without {c.name}: {c.value}</button>
-                      ))}
                       <button type="button" className="btn small primary" onClick={clear}>Clear all filters</button>
                     </div>
                   )}

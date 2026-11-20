@@ -160,9 +160,15 @@
 .card-hit-where { font-size: 11px; font-weight: 650; letter-spacing: .02em; color: var(--text-3); white-space: nowrap; }
 .card-hit-label { font-weight: 600; }
 .card-hit-snippet { color: var(--text-2); font-size: 12.5px; }
+/* a requirement's code after its name: small and quiet, still there to quote and to search by */
+.card-hit-code { font-size: 11px; font-weight: 600; letter-spacing: .02em; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .card-hits-more { align-self: flex-start; font-size: 12px; font-weight: 600; color: var(--text-2); }
 .card-hits-more:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
-.search-mark { background: color-mix(in srgb, var(--warn) 24%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+/* the searched words: one neutral highlighter in every look (it does not follow the brand), the text
+   keeps its own colour; --search-mark is defined here, with its dark value, as no other part uses it */
+:root, .look-light { --search-mark: #fdeca6; }
+:root[data-theme="dark"], .look-dark { --search-mark: #4a4226; }
+.search-mark { background: var(--search-mark); color: inherit; border-radius: 3px; padding: 0 1px; }
 
 /* a compact foot: open feedback (when there is some) on the left, the actions on the right */
 .card-foot { display: flex; align-items: center; gap: 6px; margin-top: auto; padding-top: 6px; border-top: 1px solid var(--line); }
@@ -175,18 +181,19 @@
 .card-engage.pending { visibility: hidden; }
 .card > :nth-last-child(2) { margin-bottom: 2px; }
 
-/* a row of cards shares its lines: every part of a card (the top line, the marks, the title with the
-   summary, the facts, the places found, the foot) sits in a row of the grid shared by the cards
+/* a row of cards shares its lines: every part of a card (the top line, the title with the summary,
+   the facts, the places found, the marks, the foot) sits in a row of the grid shared by the cards
    beside it, so that titles, facts and feet start at the same height across the row */
 @supports (grid-template-rows: subgrid) {
   .cards:not(.rows) { row-gap: 0; }
   .cards:not(.rows) > .card { display: grid; grid-template-rows: subgrid; grid-row: span 6; row-gap: 0; margin-bottom: 14px; }
   .cards:not(.rows) > .card > * { grid-column: 1; min-width: 0; }
   .cards:not(.rows) > .card > .card-top { grid-row: 1; }
-  .cards:not(.rows) > .card > .card-marks { grid-row: 2; align-self: end; margin-top: 6px; }
-  .cards:not(.rows) > .card > .card-head { grid-row: 3; align-self: start; margin-top: 6px; }
-  .cards:not(.rows) > .card > .card-facts { grid-row: 4; align-self: start; margin-top: 8px; }
-  .cards:not(.rows) > .card > .card-found { grid-row: 5; align-self: start; margin-top: 8px; }
+  .cards:not(.rows) > .card > .card-head { grid-row: 2; align-self: start; margin-top: 6px; }
+  .cards:not(.rows) > .card > .card-facts { grid-row: 3; align-self: start; margin-top: 8px; }
+  .cards:not(.rows) > .card > .card-found { grid-row: 4; align-self: start; margin-top: 8px; }
+  /* the marks sit on the foot: a card without them has the room above its foot, never above its title */
+  .cards:not(.rows) > .card > .card-marks { grid-row: 5; align-self: end; margin-top: 10px; }
   .cards:not(.rows) > .card > .card-foot { grid-row: 6; align-self: end; margin-top: 8px; margin-bottom: 0; }
 }
 
@@ -234,9 +241,16 @@
 .home-ask { margin: 0 0 28px; }
 
 /* ---------- Home ---------- */
-.home-bookmarks { margin-bottom: 32px; }
+/* the bookmarks fill their row: two side by side when there are two, one wide when there is one */
+.home-bookmarks { margin-bottom: 28px; }
 .home-bookmarks h2 { font-size: 15px; margin-bottom: 12px; }
+.home-bookmarks .cards { grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); }
 .home-bookmarks-more { margin-top: 12px; }
+/* the cards keep 14px under each row of them: the section ends where its last card does */
+@supports (grid-template-rows: subgrid) {
+  .home-bookmarks .cards { margin-bottom: -14px; }
+  .home-bookmarks .cards + .home-bookmarks-more { margin-top: 26px; }
+}
 
 /* ---------- the lists' head: a short hero, then the same search box as Home ---------- */
 .hero.list-hero { padding: 8px 0 16px; align-items: center; }

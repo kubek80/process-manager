@@ -129,3 +129,17 @@ describe("what a process or standard belongs to", () => {
     expect(summarize(compareProcesses(base(), { ...base(), category: "cloud" }, catalog))).toBe("details changed");
   });
 });
+
+describe("a change to something without a name", () => {
+  it("is described without failing", () => {
+    // a prerequisite just added, or a step whose name was cleared, has an empty label
+    expect(() => describeChange({ kind: "added", what: "Prerequisite", label: "" })).not.toThrow();
+    expect(() => describeChange({ kind: "changed", what: "Step", label: "   ", details: ["name"] })).not.toThrow();
+    expect(describeChange({ kind: "changed", what: "Details", label: "" })).toMatch(/An item without a name/);
+  });
+  it("a prerequisite added with no text yet and a step with a cleared name compare cleanly", () => {
+    const before = { id: "p", title: "P", summary: "S", actors: [{ id: "me", name: "You" }], steps: [{ id: "a", title: "First", actor: "me", type: "task" }], prerequisites: [] } as never;
+    const after = { id: "p", title: "P", summary: "S", actors: [{ id: "me", name: "You" }], steps: [{ id: "a", title: "", actor: "me", type: "task" }], prerequisites: [{ title: "" }] } as never;
+    expect(() => compareProcesses(before, after).map(describeChange)).not.toThrow();
+  });
+});

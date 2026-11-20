@@ -99,11 +99,20 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
           <Fact icon={UserCheck} label="Steps" strong>{`${mine} of ${doc.steps.length} steps are yours`}</Fact>
           {doc.actors.length > 1 && <Fact icon={Users} label="Who else takes part">{`${doc.actors.length - 1} other ${doc.actors.length === 2 ? "party" : "parties"}`}</Fact>}
         </>}
+        notice={(status === "deprecated" || ((editor || manages) && review.state === "overdue")) && <>
+          {status === "deprecated" && (
+            <div className="check warn banner"><TriangleAlert size={16} /><span><b>This process is retired.</b>{" "}
+              {replacement ? <>Use <a href={`#/p/${replacement.id}/flow`}>{replacement.title}</a> instead.</> : "It is kept for reference only."}</span></div>
+          )}
+          {(editor || manages) && review.state === "overdue" && (
+            <div className="check bad banner"><CalendarCheck size={16} /><span><b>{review.label}.</b> Read it through{editor ? ", correct what changed on the editing screen," : ""} then press “Mark as reviewed”.</span></div>
+          )}
+        </>}
         actions={<>
           {/* the review belongs to the team that owns the process, and to whoever may edit it */}
-          {(editor || manages) && review.state !== "none" && status !== "draft" && <button className={`btn ${review.state === "soon" || review.state === "overdue" ? "review-due" : ""}`} onClick={() => onReviewed(meta?.version ?? 0)}
+          {(editor || manages) && review.state !== "none" && status !== "draft" && <button className={`btn ${review.state === "soon" || review.state === "overdue" ? "review-due" : "quiet"}`} onClick={() => onReviewed(meta?.version ?? 0)}
             title="Confirm that this process is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
-          {editor && <a className="btn" href={editHref}><Pencil size={16} />Edit</a>}
+          {editor && <a className="btn primary" href={editHref}><Pencil size={16} />Edit</a>}
         </>}>
         {status !== "draft" && <DocEngagement kind="process" id={process.id} title={doc.title} summary={doc.summary}
           open={openCount(feedback)} resolvedHere={feedback.length - openCount(feedback)}
@@ -123,14 +132,6 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
           <p className="map-hint"><MousePointerClick size={15} aria-hidden="true" /><span><b>Select a step</b> on the map to see what to do, who does it and with which tool.</span></p>
         )}
       </div>
-
-      {status === "deprecated" && (
-        <div className="check warn banner"><TriangleAlert size={16} /><span><b>This process is retired.</b>{" "}
-          {replacement ? <>Use <a href={`#/p/${replacement.id}/flow`}>{replacement.title}</a> instead.</> : "It is kept for reference only."}</span></div>
-      )}
-      {(editor || manages) && review.state === "overdue" && (
-        <div className="check bad banner"><CalendarCheck size={16} /><span><b>{review.label}.</b> Read it through{editor ? ", correct what changed on the editing screen," : ""} then press “Mark as reviewed”.</span></div>
-      )}
 
       {(view === "flow" || view === "list") && hasExtras && (
         <BeforeYouStart process={doc} all={all} standards={standards} open={extras} hasPre={hasPre} tickPre={tickPre} readyCount={readyCount}

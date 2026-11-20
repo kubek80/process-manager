@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Catalog, Process, Standard } from "../../types";
-import { answerKey, contentStamp, fromMeaning, fuse, markedWords, meaningHelp, meaningHits, mergeHits, modeOf, needsServer, planOf, problemOf, providerOf, truncatedText, typingMovesAddress, type Found, type MeaningState } from "../meaning";
+import { answerKey, contentStamp, emptyWithFilters, fromMeaning, fuse, markedWords, meaningHelp, meaningHits, mergeHits, modeOf, needsServer, planOf, problemOf, providerOf, truncatedText, typingMovesAddress, type Found, type MeaningState } from "../meaning";
 import { countText, countWords, search } from "../search";
 import { ApiError, searchByMeaning, type MeaningResult } from "../store";
 
@@ -237,5 +237,17 @@ describe("what Meaning is said to do", () => {
     expect(meaningHelp("builtin")).not.toMatch(/other words|about what/);
     expect(meaningHelp("vertex")).toContain("even when they use other words");
     expect(meaningHelp(undefined)).toBe("puts first what comes closest to what you type, even when not every word is in it.");
+  });
+});
+
+describe("emptyWithFilters", () => {
+  it("says the filters hide what there is, and how much", () => {
+    expect(emptyWithFilters("cloud", 1)).toBe("Nothing matches “cloud” with these filters. Without them there is 1 result.");
+    expect(emptyWithFilters("cloud", 4)).toBe("Nothing matches “cloud” with these filters. Without them there are 4 results.");
+    expect(emptyWithFilters("", 12)).toBe("Nothing matches these filters. Without them there are 12 results.");
+  });
+  it("says when nothing matches either way", () => {
+    expect(emptyWithFilters("zebra quantum", 0)).toBe("Nothing matches “zebra quantum”, with or without these filters.");
+    expect(emptyWithFilters("", 0)).toBe("Nothing matches these filters.");
   });
 });

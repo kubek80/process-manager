@@ -127,7 +127,7 @@ export function RequestsPage({ state, kind, processes, standards }: {
       {requests && shown.length > 0 && (
         <ul className="req-list" aria-label="Requests">
           {shown.map((r) => (
-            <RequestItem key={r.id} r={r} processes={processes} standards={standards}
+            <RequestItem key={r.id} r={r} showState={filter === "all"} processes={processes} standards={standards}
               onVote={() => vote(r)} onWithdraw={() => withdraw(r)} onRemove={() => remove(r)} onReopen={() => reopen(r)} onChange={(to) => setChanging({ request: r, to })} />
           ))}
         </ul>
@@ -149,7 +149,9 @@ export function RequestsPage({ state, kind, processes, standards }: {
   );
 }
 
-function RequestItem({ r, processes, standards, onVote, onWithdraw, onRemove, onReopen, onChange }: {
+function RequestItem({ r, showState, processes, standards, onVote, onWithdraw, onRemove, onReopen, onChange }: {
+  /** Under "All" each request says its state; under one state's tab that would only repeat the tab. */
+  showState: boolean;
   r: DocRequest; processes: Process[]; standards: Standard[];
   onVote: () => void; onWithdraw: () => void; onRemove: () => void; onReopen: () => void; onChange: (to: RequestState) => void;
 }) {
@@ -171,7 +173,7 @@ function RequestItem({ r, processes, standards, onVote, onWithdraw, onRemove, on
       <div className="req-body">
         <div className="req-tags">
           <KindTag kind={r.kind} />
-          <span className={`tier-tag req-state state-${r.state}`}>{STATE_LABEL[r.state]}</span>
+          {showState && <span className={`tier-tag req-state state-${r.state}`}>{STATE_LABEL[r.state]}</span>}
           {r.mine && <span className="tier-tag req-mine">Yours</span>}
         </div>
         <h3 id={titleId} className="req-title">{r.title}</h3>

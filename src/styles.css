@@ -144,11 +144,11 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
    The same container as the lists (.page): the same left edge and h1. With the side panel open the
    page keeps its left edge and makes room on the right. */
 .process-page { padding-top: 20px; }
-/* a standard is read like a document: the whole page, head and requirements, in one narrower column */
-.standard-page { max-width: 1080px; }
+/* a standard has the same frame as a process (the same left edge, gutter and head); below the head its
+   requirements are read like a document, in one column of a readable width */
+.standard-doc { max-width: 1080px; }
 @media (min-width: 1100px) {
   .process-page.with-drawer { max-width: none; margin-left: max(0px, calc((100% - 1360px) / 2)); margin-right: 440px; }
-  .standard-page.with-drawer { margin-left: max(0px, calc((100% - 1080px) / 2)); }
 }
 .back { display: inline-flex; align-items: center; gap: 6px; color: var(--text-3); font-weight: 550; font-size: 13px; margin-bottom: 14px; }
 .back:hover { color: var(--text); }
@@ -247,6 +247,14 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
 
 /* ---------- checklist ---------- */
 .list-view { max-width: 860px; }
+/* on a wide screen the steps take the width and the progress stays in view beside them */
+@media (min-width: 1100px) {
+  .process-page:not(.with-drawer) .list-view { max-width: none; display: grid; grid-template-columns: minmax(0, 1000px) minmax(240px, 300px); grid-template-areas: "steps bar"; gap: 0 28px; align-items: start; }
+  .process-page:not(.with-drawer) .list-view > .steps { grid-area: steps; }
+  .process-page:not(.with-drawer) .list-view > .list-bar { grid-area: bar; position: sticky; top: 72px; flex-direction: column; align-items: stretch; gap: 14px; margin: 0; padding: 14px 16px; }
+  .process-page:not(.with-drawer) .list-view > .list-bar .progress { flex: none; }
+  .process-page:not(.with-drawer) .list-view > .list-bar .btn { align-self: flex-start; }
+}
 .list-bar { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 18px; }
 .progress { flex: 1 1 220px; }
 .progress-text { font-size: 13px; color: var(--text-2); margin-bottom: 6px; }
@@ -448,6 +456,11 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 /* Teams & tools: the lists are underline tabs (.tabs > .tab, controls.css); one line says what the chosen one is */
 .catalog-page > .tabs.cat-kinds { margin: 22px 0 0; }
 .cat-blurb { margin: 12px 0 14px; color: var(--text-2); font-size: 14px; }
+/* Admin > Lists: the blurb and the lists' Undo / Redo / Save in one bar that stays in view above the list and the details */
+.cat-toolbar.with-save { position: sticky; top: 56px; z-index: 15; display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; margin: 4px 0 10px; padding: 6px 0; background: var(--bg); }
+.cat-toolbar.with-save .cat-blurb { margin: 0; flex: 1 1 280px; min-width: 0; }
+.cat-toolbar.with-save.dirty { padding: 8px 10px 8px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-2); }
+.cat-id { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--text-3); }
 .cat-avatar { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 10px; font-weight: 700; font-size: 14px; color: var(--text-2); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
 .cat-split { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow-1); overflow: hidden; min-height: 520px; }
 @media (max-width: 860px) { .cat-split { grid-template-columns: minmax(0, 1fr); } .cat-list { border-right: 0 !important; border-bottom: 1px solid var(--line); max-height: 320px; } .cat-detail { padding: 18px 16px 20px; } }
@@ -468,6 +481,15 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .cat-empty { padding: 28px 16px; color: var(--text-3); text-align: center; }
 .cat-detail { padding: 26px 28px 28px; display: flex; flex-direction: column; gap: 22px; min-width: 0; }
 .cat-detail > * { max-width: 640px; width: 100%; }
+/* a wide detail pane: the facts and where it is used on the left, the members on the right */
+.cat-detail { container-type: inline-size; }
+@container (min-width: 860px) {
+  .cat-detail:has(> .cat-members) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px 36px; align-content: start; }
+  .cat-detail:has(> .cat-members) > * { max-width: none; grid-column: 1 / -1; }
+  .cat-detail:has(> .cat-members) > :is(.form, .cat-facts, .cat-usage) { grid-column: 1; }
+  .cat-detail:has(> .cat-members) > .cat-members { grid-column: 2; grid-row: 2 / span 2; align-self: start; padding: 0 0 0 36px; border-top: 0; border-left: 1px solid var(--line); margin-left: -18px; }
+  .cat-detail:has(> .cat-members) > .cat-danger { margin-top: 0; }
+}
 .cat-detail-head { display: flex; align-items: center; gap: 16px; }
 .cat-detail-head > div:nth-child(2) { flex: 1; min-width: 0; }
 .cat-detail-head h2 { font-size: 22px; letter-spacing: -.015em; line-height: 1.2; overflow-wrap: anywhere; }
@@ -511,7 +533,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
   .guide-contents-btn > svg { flex: none; color: var(--text-2); }
   .guide-contents-here { min-width: 0; margin-left: 2px; padding-left: 10px; border-left: 1px solid var(--line); color: var(--text-3); font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
   .guide-top { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 13.5px; font-weight: 550; }
-  .guide-section { scroll-margin-top: 124px; }
+  .guide .guide-section { scroll-margin-top: 124px; }
 }
 .guide-toc-sheet { display: flex; flex-direction: column; gap: 18px; position: static; max-height: none; overflow: visible; }
 .guide-toc-sheet button { min-height: 44px; display: flex; align-items: center; font-size: 15px; }
@@ -663,9 +685,13 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .req.na { display: flex; align-items: center; gap: 10px; padding: 9px 18px; background: transparent; border-style: dashed; box-shadow: none; color: var(--text-3); }
 .req.na .req-title { font-size: 13.5px; font-weight: 550; color: var(--text-3); }
 .req-na { margin-left: auto; font-size: 12px; }
-.req-head { display: flex; align-items: center; gap: 10px; }
-@media (max-width: 520px) { .req-head { flex-wrap: wrap; } .req-head .req-title { order: 3; flex: 1 1 100%; } }
-.req-id { font: 600 12px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--text-2); padding: 2px 7px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); white-space: nowrap; }
+.req-head { display: flex; align-items: baseline; gap: 10px; }
+.req-head > .req-level, .req-head > .report, .req-head > .spacer { align-self: center; }
+/* the requirement's code stays visible (people quote it and search by it) but quietly, after the name */
+.req-head > .req-level { order: -1; }
+.req-id { order: 1; font: 500 11.5px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--text-3); white-space: nowrap; letter-spacing: .01em; }
+.req-head > .spacer, .req-head > .report, .req-na { order: 2; }
+@media (max-width: 520px) { .req-head { flex-wrap: wrap; row-gap: 4px; } .req-head .req-title { order: 3; flex: 1 1 auto; } .req-head .req-id { order: 4; } }
 .req-title { font-size: 16px; font-weight: 650; letter-spacing: -.005em; line-height: 1.3; }
 .req:hover .report { opacity: 1; }
 .req-statement { font-size: 15px; line-height: 1.55; max-width: 72ch; }
@@ -780,11 +806,10 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .activity .activity-portal { color: var(--text-2); font-weight: 600; }
 @media (max-width: 520px) { .activity li { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
 .admin .catalog-page > .tabs.cat-kinds { margin-top: 0; }
-/* in Admin the eight lists share a narrower column: no icons, and a second row rather than a cut-off strip */
+/* in Admin the eight lists share a narrower column: a second row rather than a cut-off strip */
 @media (min-width: 861px) {
   .admin .catalog-page > .tabs.cat-kinds { flex-wrap: wrap; overflow: visible; }
   .admin .cat-kinds > .tab { padding: 0 10px; }
-  .admin .cat-kinds > .tab > svg { display: none; }
 }
 @media (min-width: 861px) { .skills-split { grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); } }
 .skills-split .cat-detail > * { max-width: none; }
@@ -837,8 +862,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .save-note { height: 34px; width: 230px; max-width: 100%; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
 .save-note:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .icon-btn:disabled { opacity: .35; cursor: default; }
-.cat-save { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
-.cat-save.dirty { position: sticky; bottom: 12px; z-index: 15; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-2); }
+.cat-save { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; margin-left: auto; }
 .cat-save-text { margin-right: auto; font-size: 13.5px; }
 .banner .btn { flex: none; }
 .change-list { list-style: none; margin: 6px 0 12px; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }

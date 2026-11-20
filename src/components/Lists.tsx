@@ -29,18 +29,40 @@ export function chosenSummary(options: Option[]): string {
 }
 
 const SEARCH_PLACEHOLDER = "Search processes and standards, e.g. GCP project or logging";
+/** On a phone the box is narrow: a placeholder that fits whole (the heading above says what is searched). */
+const SHORT_PLACEHOLDER = "e.g. GCP project or logging";
+/** Where the box is too narrow for the long placeholder. */
+const NARROW = "(max-width: 520px)";
+
+/** Whether the screen is narrow (a phone), following changes of size and turning. */
+function useNarrow(): boolean {
+  const query = () => !!window.matchMedia?.(NARROW).matches;
+  const [narrow, setNarrow] = useState(query);
+  useEffect(() => {
+    const m = window.matchMedia?.(NARROW);
+    if (!m) return;
+    const on = () => setNarrow(m.matches);
+    m.addEventListener?.("change", on);
+    return () => m.removeEventListener?.("change", on);
+  }, []);
+  return narrow;
+}
 
 /**
  * The one search box, full width at the top: on Home and the results page it searches when
  * Enter or Search is pressed; on the lists (`live`) the results follow the typing.
  */
-export function SearchBox({ value, onChange, onSubmit, big, autoFocus, live, placeholder = SEARCH_PLACEHOLDER, label = "Search processes and standards" }: {
+export function SearchBox({ value, onChange, onSubmit, big, autoFocus, live, placeholder = SEARCH_PLACEHOLDER, shortPlaceholder = SHORT_PLACEHOLDER, label = "Search processes and standards" }: {
   value: string; onChange: (v: string) => void; onSubmit?: () => void; big?: boolean; autoFocus?: boolean;
   /** Searches as you type: no Search button. */
   live?: boolean;
-  placeholder?: string; label?: string;
+  placeholder?: string;
+  /** The placeholder on a phone, short enough to be read whole. */
+  shortPlaceholder?: string;
+  label?: string;
 }) {
   const ref = useRef<HTMLInputElement>(null);
+  const narrow = useNarrow();
   useEffect(() => {
     // on a desktop the box is ready for typing; on a phone the keyboard would cover the page
     if (autoFocus && window.matchMedia?.("(min-width: 768px) and (pointer: fine)").matches) ref.current?.focus();
@@ -49,7 +71,7 @@ export function SearchBox({ value, onChange, onSubmit, big, autoFocus, live, pla
     <form role="search" aria-label={live ? label : "Processes and standards"} className={`search-box ${big ? "big" : ""} ${live ? "live" : ""}`.trim()}
       onSubmit={(e) => { e.preventDefault(); onSubmit?.(); }}>
       <Search size={big ? 20 : 17} aria-hidden="true" />
-      <input ref={ref} type="search" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+      <input ref={ref} type="search" value={value} onChange={(e) => onChange(e.target.value)} placeholder={narrow ? shortPlaceholder : placeholder}
         aria-label={label} enterKeyHint="search" autoComplete="off" spellCheck={false} />
       {!live && <button type="submit" className="btn primary">Search</button>}
     </form>
@@ -280,8 +302,12 @@ export function TypeTabs({ value, counts, onChange, atLeast }: {
 /** A chosen filter as it is shown above the results, with a way to take it away. */
 export interface Chosen { key: string; name: string; value: string; remove: () => void }
 
-/** Every chosen filter at a glance, each with a way to remove it, and one to remove them all. */
-export function ChosenFilters({ chosen, onClear }: { chosen: Chosen[]; onClear: () => void }) {
+/**
+ * Every chosen filter at a glance, each with a way to remove it, and one to remove them all - unless
+ * the page offers that already (`clearAll` false: nothing was found and the empty state holds the one
+ * "Clear all filters").
+ */
+export function ChosenFilters({ chosen, onClear, clearAll = true }: { chosen: Chosen[]; onClear: () => void; clearAll?: boolean }) {
   if (!chosen.length) return null;
   return (
     <div className="filter-chosen" role="group" aria-label="Chosen filters">
@@ -290,7 +316,7 @@ export function ChosenFilters({ chosen, onClear }: { chosen: Chosen[]; onClear: 
           <span className="filter-chip-key">{c.name}:</span>{c.value}<X size={13} aria-hidden="true" />
         </button>
       ))}
-      <button type="button" className="filter-clear" onClick={onClear}>Clear all filters</button>
+      {clearAll && <button type="button" className="filter-clear" onClick={onClear}>Clear all filters</button>}
     </div>
   );
 }
@@ -307,9 +333,11 @@ export function profileChosen(profile: Profile, onChange: (p: Profile) => void, 
 }
 
 /** The line above the results: how many are shown (announced politely), "Filters (n)" on a phone, the order, the page size and the pages. */
-export function ResultsBar({ page, noun, panelId, open, onOpen, chosen, size, onSize, extra, sort, onSort, searched, pager, view, onView, bare }: {
+export function ResultsBar({ page, noun, panelId, open, onOpen, chosen, size, onSize, extra, line, sort, onSort, searched, pager, view, onView, bare }: {
   page: Page; noun: { one: string; many: string }; panelId: string; open: boolean; onOpen: (open: boolean) => void; chosen: number;
   size: number; onSize: (n: number) => void; extra?: ReactNode;
+  /** In place of the count: what is shown instead (the closest by meaning when nothing matched). */
+  line?: ReactNode;
   sort: SortKey; onSort: (k: SortKey) => void;
   /** Something is searched for: the usual order is the best match, else the name. */
   searched: boolean;
@@ -322,7 +350,7 @@ export function ResultsBar({ page, noun, panelId, open, onOpen, chosen, size, on
 }) {
   return (
     <div className="results-bar">
-      <p className="list-count" role="status" aria-live="polite" aria-atomic="true">{showingText(page, noun)}{extra}</p>
+      <p className="list-count" role="status" aria-live="polite" aria-atomic="true">{line ?? <>{showingText(page, noun)}{extra}</>}</p>
       {!bare && (
         <>
           <button type="button" className="btn small filter-toggle" aria-expanded={open} aria-controls={panelId} onClick={() => onOpen(!open)}>

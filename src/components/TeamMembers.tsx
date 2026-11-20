@@ -6,8 +6,13 @@ import { usePerms } from "../lib/session";
 import { grantAccess, loadAccess, revokeAccess, type Access } from "../lib/store";
 import { confirmDialog, LoadError, Loading, notify } from "./ui";
 
-/** What a member of a team, platform or practice may do, in one sentence. */
-export const memberText = (kind: GroupKind) => `A member is ${GROUP[kind].member} of this ${GROUP[kind].noun}: they ${GROUP[kind].may}, under “My responsibilities”.`;
+/** What the members of a team, platform or practice do, in one sentence. */
+const MEMBERS_DO: Record<GroupKind, string> = {
+  team: "Members confirm the reviews of what this team maintains and answer its feedback",
+  platform: "Members change the processes and standards that belong to this platform, confirm their reviews and answer their feedback",
+  practice: "Members change the processes and standards that belong to this practice, confirm their reviews and answer their feedback",
+};
+export const memberText = (kind: GroupKind) => `${MEMBERS_DO[kind]}. They find this under “My responsibilities”.`;
 
 /** The people of a group, read-only: what everyone may see. `members` is null while they load. */
 function MemberList({ kind, id, members, error, manage }: { kind: GroupKind; id: string; members: Membership[] | null; error?: string; manage?: boolean }) {

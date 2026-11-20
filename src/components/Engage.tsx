@@ -118,7 +118,7 @@ export function DocEngagement({ kind, id, title, summary, open, resolvedHere, on
         {!eng.known && <li className="engage-unknown">{eng.failed ? "The numbers are not available right now." : <span aria-label="Loading the numbers">–</span>}</li>}
       </ul>
       <div className="engage-actions">
-        <button type="button" className="btn small accent-soft give-feedback" onClick={onFeedback}><MessageSquarePlus size={15} />Give feedback</button>
+        <button type="button" className="btn small give-feedback" onClick={onFeedback}><MessageSquarePlus size={15} />Give feedback</button>
         <UpvoteButton kind={kind} id={id} title={title} size="page" />
         <BookmarkButton kind={kind} id={id} title={title} size="page" />
         <button type="button" className="btn small share-btn" onClick={() => setSharing(true)} aria-haspopup="dialog"><Share2 size={15} /><span className="engage-label">Share</span></button>

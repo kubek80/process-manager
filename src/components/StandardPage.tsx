@@ -134,11 +134,20 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
             return n > 0 && <span key={l} title={LEVEL[l].hint}><LevelMark level={l} count={n} /></span>;
           })}
         </>}
+        notice={(status === "deprecated" || ((editor || manages) && review.state === "overdue")) && <>
+          {status === "deprecated" && (
+            <div className="check warn banner"><TriangleAlert size={16} /><span><b>This standard is retired.</b>{" "}
+              {replacement ? <>Use <a href={href({ page: "standard", id: replacement.id, tab: "doc" })}>{replacement.title}</a> instead.</> : "It is kept for reference only."}</span></div>
+          )}
+          {(editor || manages) && review.state === "overdue" && (
+            <div className="check bad banner"><CalendarCheck size={16} /><span><b>{review.label}.</b> Read it through{editor ? ", correct what changed on the editing screen," : ""} then press “Mark as reviewed”.</span></div>
+          )}
+        </>}
         actions={<>
           {/* the review belongs to the team that issues the standard, and to whoever may edit it */}
-          {(editor || manages) && review.state !== "none" && status !== "draft" && <button className={`btn ${review.state === "soon" || review.state === "overdue" ? "review-due" : ""}`} onClick={() => onReviewed(meta?.version ?? 0)}
+          {(editor || manages) && review.state !== "none" && status !== "draft" && <button className={`btn ${review.state === "soon" || review.state === "overdue" ? "review-due" : "quiet"}`} onClick={() => onReviewed(meta?.version ?? 0)}
             title="Confirm that this standard is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
-          {editor && <a className="btn" href={editHref}><Pencil size={16} />Edit</a>}
+          {editor && <a className="btn primary" href={editHref}><Pencil size={16} />Edit</a>}
         </>}>
         {status !== "draft" && <DocEngagement kind="standard" id={standard.id} title={doc.title} summary={doc.summary}
           open={openCount(feedback)} resolvedHere={feedback.length - openCount(feedback)}
@@ -155,14 +164,6 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
           ))}
         </div>
       </div>
-
-      {status === "deprecated" && (
-        <div className="check warn banner"><TriangleAlert size={16} /><span><b>This standard is retired.</b>{" "}
-          {replacement ? <>Use <a href={href({ page: "standard", id: replacement.id, tab: "doc" })}>{replacement.title}</a> instead.</> : "It is kept for reference only."}</span></div>
-      )}
-      {(editor || manages) && review.state === "overdue" && (
-        <div className="check bad banner"><CalendarCheck size={16} /><span><b>{review.label}.</b> Read it through{editor ? ", correct what changed on the editing screen," : ""} then press “Mark as reviewed”.</span></div>
-      )}
 
       {view === "doc" && (
         <div className="standard-doc">

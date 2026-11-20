@@ -29,6 +29,12 @@
 
 /* less room above the map: the tabs closer to the page head and to the map */
 .process-page > .tabs-row { margin: 12px 0 10px; }
+/* the page head: "Edit" is its one primary; "Mark as reviewed" is a quiet secondary until a review is due */
+.head-actions .btn.quiet { box-shadow: none; color: var(--text-2); }
+.head-actions .btn.quiet:hover:not(:disabled) { color: var(--text); }
+/* retired, review overdue: directly under the title, before the facts */
+.doc-notices { display: grid; gap: 8px; margin: 12px 0 2px; max-width: 920px; }
+.doc-notices .banner { margin: 0; }
 
 /* "Before you start", the same compact panel on the map and the checklist: what is needed in one
    row of small items, then the faster ways and the standards in one line of chips */

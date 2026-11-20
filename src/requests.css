@@ -63,7 +63,8 @@
 .stat-sort:hover, .stat-sort.on { color: var(--text); }
 .stat-sort svg { opacity: .55; } .stat-sort.on svg { opacity: 1; color: var(--accent); }
 /* the name with its kind as a mark (a round one for a process, a square one for a standard), on two lines at most */
-.stat-name { display: flex; align-items: flex-start; gap: 8px; min-width: 200px; }
+.stat-name { min-width: 200px; }
+.stat-name-in { display: flex; align-items: flex-start; gap: 8px; }
 .stat-kind { display: grid; place-items: center; flex: none; width: 20px; height: 20px; margin-top: 0; }
 .stat-kind.process { border-radius: 50%; background: var(--kind-process-bg); color: var(--kind-process); }
 .stat-kind.standard { border-radius: 5px; background: var(--kind-standard-bg); color: var(--kind-standard); box-shadow: inset 0 0 0 1px var(--kind-standard-line); }

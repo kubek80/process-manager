@@ -141,7 +141,9 @@ export function compare(kind: "process" | "standard", before: unknown, after: un
  * `Platform changed from “Azure” to “Google Cloud”`.
  */
 export function describeChange(c: Change): string {
-  const Label = `${c.label[0].toUpperCase()}${c.label.slice(1)}`;
+  // a step, prerequisite or requirement can have no name yet (just added, or its name cleared)
+  const label = c.label.trim() || "An item without a name";
+  const Label = `${label[0].toUpperCase()}${label.slice(1)}`;
   if (c.what === "Details" && (c.from !== undefined || c.to !== undefined)) {
     if (c.from && c.to) return `${Label} changed from “${c.from}” to “${c.to}”`;
     if (c.to) return `${Label} set to “${c.to}”`;

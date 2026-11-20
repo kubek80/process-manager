@@ -87,10 +87,8 @@
 .search-empty .btn { max-width: 100%; white-space: normal; height: auto; min-height: 30px; padding-top: 4px; padding-bottom: 4px; margin-top: 0; }
 .search-empty-browse { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); align-self: stretch; }
 .search-empty .ask-for-it { margin-top: 6px; }
-/* words found nothing: the closest by meaning, under one line that says so */
+/* words found nothing: the closest by meaning (the line above the results says so) */
 .search-closest { display: flex; flex-direction: column; gap: 12px; }
-.search-closest-line { margin: 0; font-size: 14px; color: var(--text-2); }
-.search-closest-line b { color: var(--text); }
 
 /* ---------- search by: words, meaning, both (the control is .seg in controls.css) ---------- */
 .search-mode { flex: none; }

@@ -11,7 +11,7 @@ import { useDraft } from "../lib/draft";
 import { BehindBanner, ConflictDialog, SaveBar } from "./Editing";
 import { go, loadMembers } from "../lib/store";
 import { hasErrors, validateCatalog } from "../lib/validate";
-import { Field, IssueList, notify, useBottomBar } from "./ui";
+import { Field, IssueList, notify } from "./ui";
 
 type Key = "teams" | "practices" | "platforms" | "categories" | "tools" | "tiers" | "environments" | "languages";
 type Row = { id: string; name: string; contact?: string; url?: string; description?: string; icon?: string };
@@ -132,7 +132,6 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
   const issues = validateCatalog(clean);
   // the bar with Save and Discard sticks to the bottom while there are changes: messages go above it
   const saveBar = useRef<HTMLDivElement>(null);
-  useBottomBar(saveBar, editor && dirty);
   // who belongs to which team, platform and practice: everyone may read it
   const [members, setMembers] = useState<Membership[] | null>(null);
   const [membersError, setMembersError] = useState("");
@@ -180,15 +179,24 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
 
       <div className="tabs cat-kinds" role="tablist" aria-label="Lists">
         {KEYS.map((k) => {
-          const K = KINDS[k], Icon = K.icon;
+          const K = KINDS[k];
           return (
             <button key={k} role="tab" aria-selected={key === k} className={`tab ${key === k ? "on" : ""}`} title={K.blurb} onClick={() => switchTo(k)}>
-              <Icon size={16} aria-hidden="true" />{K.title}<span className="tab-count">{(draft[k] ?? []).length}</span>
+              {K.title}<span className="tab-count">{(draft[k] ?? []).length}</span>
             </button>
           );
         })}
       </div>
-      <p className="cat-blurb">{kind.blurb}</p>
+      <div ref={saveBar} className={`cat-toolbar ${editor ? "with-save" : ""} ${editor && dirty ? "dirty" : ""}`}>
+        <p className="cat-blurb">{kind.blurb}</p>
+        {/* the lists are saved together: Undo, Redo and Save stay in view above the list and the details */}
+        {editor && (
+          <div className="cat-save">
+            {dirty && <span className="cat-save-text" role="status"><b>Unsaved changes</b> to the lists</span>}
+            <SaveBar d={d} editor blocked={hasErrors(issues) ? "Fix the problems first" : undefined} />
+          </div>
+        )}
+      </div>
 
       {issues.length > 0 && <div className="issues-panel"><IssueList issues={issues} /></div>}
 
@@ -247,7 +255,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
                 <div>
                   <span className="eyebrow">{kind.noun}</span>
                   <h2>{current.name || "Unnamed"}</h2>
-                  <code>{current.id}</code>
+                  {editor && <p className="cat-id">Id <code>{current.id}</code></p>}
                 </div>
                 {editor && ORDERED.includes(key) && (
                   <div className="cat-order">
@@ -314,12 +322,6 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
       </div>
 
       {editor && <BehindBanner d={d} meta={{ version, updatedAt: "", updatedBy: "", createdAt: "" }} noun="the lists" />}
-      {editor && (
-        <div ref={saveBar} className={`cat-save ${dirty ? "dirty" : ""}`}>
-          {dirty && <span className="cat-save-text" role="status"><b>Unsaved changes</b> to the lists</span>}
-          <SaveBar d={d} editor blocked={hasErrors(issues) ? "Fix the problems first" : undefined} />
-        </div>
-      )}
       {editor && <ConflictDialog d={d} kind="catalog" id="catalog" noun="the lists" />}
     </div>
   );

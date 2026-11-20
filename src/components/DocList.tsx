@@ -17,6 +17,8 @@ import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel
 const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "owner"];
 const NOUN: Record<TargetKind, { one: string; many: string }> = { process: { one: "process", many: "processes" }, standard: { one: "standard", many: "standards" } };
 const PLACEHOLDER: Record<TargetKind, string> = { process: "Search processes: GCP, repository, Akamai…", standard: "Search standards: logging, Terraform, SEC-LOG-01…" };
+/** On a phone: the examples alone, short enough to be read whole (the heading says what is listed). */
+const SHORT_PLACEHOLDER: Record<TargetKind, string> = { process: "e.g. GCP, repository, Akamai", standard: "e.g. logging, SEC-LOG-01" };
 
 /**
  * The list of all processes, or all standards: the filters on the left, the cards, the pages.
@@ -125,13 +127,14 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
 
   return (
     <>
-      <SearchBox big live value={text} onChange={type} placeholder={PLACEHOLDER[kind]} label={kind === "process" ? "Search processes" : "Search standards"} />
+      <SearchBox big live value={text} onChange={type} placeholder={PLACEHOLDER[kind]} shortPlaceholder={SHORT_PLACEHOLDER[kind]} label={kind === "process" ? "Search processes" : "Search standards"} />
       <div className={`list-layout ${bare ? "no-panel" : ""}`.trim()}>
         <div className="list-head">
           <ResultsBar page={pg} noun={NOUN[kind]} panelId={panelId} open={open} onOpen={setOpen} chosen={chosen.length} size={size} onSize={changeSize}
             sort={sort} onSort={changeSort} searched={!!q.trim()} view={view} onView={setView} bare={n === 0}
             pager={<Pager page={pg} onPage={goTo} label={`Pages of ${NOUN[kind].many}`} compact />} />
-          <ChosenFilters chosen={chosen} onClear={clear} />
+          {/* nothing found: the empty state holds the one "Clear all filters" */}
+          <ChosenFilters chosen={chosen} onClear={clear} clearAll={n > 0} />
         </div>
         {!bare && (
           <FilterPanel id={panelId} open={open} keys={KEYS} options={out.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}

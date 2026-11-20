@@ -119,13 +119,13 @@ export function StatisticsSection() {
                     const belongs = [r.platform && platformName(catalog, r.platform), r.practice && practiceName(catalog, r.practice)].filter(Boolean).join(" · ");
                     return (
                     <tr key={r.kind + r.id}>
-                      <td className="stat-name">
+                      <td className="stat-name"><div className="stat-name-in">
                         <span className={`stat-kind ${r.kind}`} title={kindWord(r.kind)}><KindIcon kind={r.kind} size={12} /><span className="stat-sr-only">{kindWord(r.kind)}: </span></span>
                         <span className="stat-title">
                           <a href={href(r.kind === "process" ? { page: "process", id: r.id, tab: "flow" } : { page: "standard", id: r.id, tab: "doc" })} title={r.title}>{r.title}</a>
                           {r.status && r.status !== "active" && <span className={`tier-tag status-${r.status}`}>{r.status === "draft" ? "Draft" : "Retired"}</span>}
                         </span>
-                      </td>
+                      </div></td>
                       <td className="stat-belongs">
                         {r.owner ? <span className="stat-owner">{teamName(catalog, r.owner)}</span> : <span className="muted">No owning team</span>}
                         {belongs && <span className="stat-scope">{belongs}</span>}

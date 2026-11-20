@@ -374,6 +374,19 @@ export function noWordsText(q: string, nWords: number, closest: ClosestOutcome):
 }
 
 /**
+ * The sentence of the empty state when nothing is found with the chosen filters: whether the filters
+ * are what hides it (`without` results without them; the page then offers "Clear all filters"), or
+ * nothing matches either way.
+ */
+export function emptyWithFilters(q: string, without: number): string {
+  if (without > 0) {
+    const rest = `Without them there ${without === 1 ? "is 1 result" : `are ${without} results`}.`;
+    return q ? `Nothing matches “${q}” with these filters. ${rest}` : `Nothing matches these filters. ${rest}`;
+  }
+  return q ? `Nothing matches “${q}”, with or without these filters.` : "Nothing matches these filters.";
+}
+
+/**
  * The other way of searching the empty state offers, if any: by words after a search by meaning
  * found nothing; the closest by meaning after words found nothing while typing (it is looked for
  * by itself once the search is run with Enter or Search, so it is not offered again then); and,
