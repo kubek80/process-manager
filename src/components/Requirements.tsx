@@ -45,8 +45,8 @@ export function RequirementCard({ r, standard, processes, applies, flags, select
         <span className="req-id">{r.id}</span>
         <span className="spacer" />
         {onReport
-          ? <button className={`report ${flags ? "has" : ""}`} onClick={onReport} title={flags ? `${flags} open feedback` : "Something wrong or unclear? Tell us"}
-              aria-label={`${flags ? `${flags} open feedback` : "Report a problem"} on ${r.id}`}><Flag size={14} />{flags || ""}</button>
+          ? <button className={`report ${flags ? "has" : ""}`} onClick={onReport} title={flags ? `${flags} open feedback · Report a problem with this requirement` : "Report a problem with this requirement"}
+              aria-label={`${flags ? `${flags} open feedback. ` : ""}Report a problem with requirement ${r.id}`}><Flag size={14} />{flags || ""}</button>
           : flags > 0 && <span className="report has" title={`${flags} open feedback`}><Flag size={14} />{flags}</span>}
       </header>
       <p className="req-statement">{r.statement}</p>
@@ -144,7 +144,8 @@ function IdField({ id, taken, onRename }: { id: string; taken: string[]; onRenam
     const next = value.trim().toUpperCase();
     if (next === id) { setValue(id); return setError(""); }
     const refuse = (why: string) => { setError(why); if (leaving) setValue(id); };
-    if (!REQUIREMENT_ID.test(next) || next.length > 30) return refuse(`“${next}” cannot be used: an id is capital letters and digits in groups joined by dashes, like SEC-LOG-07. The requirement keeps ${id}.`);
+    if (!next) return refuse(`Give the requirement an id, e.g. SEC-LOG-01. It keeps ${id}.`);
+    if (!REQUIREMENT_ID.test(next) || next.length > 30) return refuse(`Write the id in capitals and digits in groups joined by dashes, e.g. SEC-LOG-07. “${next}” is not written so; the requirement keeps ${id}.`);
     if (taken.includes(next)) return refuse(`${next} is already the id of another requirement, so this one keeps ${id}.`);
     setError(""); onRename(next);
   };

@@ -199,10 +199,10 @@
 .preview-head p { color: var(--text-2); max-width: 75ch; font-size: 14px; line-height: 1.45; }
 .preview-head:not(.on) p { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 /* a process: the name and summary are one line (they are changed in the fields), the map gets the height */
-.process-preview > .preview-head { display: flex; align-items: baseline; gap: 10px; padding: 4px 12px; }
-.process-preview > .preview-head .preview-label { flex: none; }
-.process-preview > .preview-head h2 { flex: none; max-width: 50%; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.process-preview > .preview-head p { flex: 1 1 0; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:is(.process-preview, .standard-preview) > .preview-head { display: flex; align-items: baseline; gap: 10px; padding: 4px 12px; }
+:is(.process-preview, .standard-preview) > .preview-head .preview-label { flex: none; }
+:is(.process-preview, .standard-preview) > .preview-head h2 { flex: none; max-width: 50%; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:is(.process-preview, .standard-preview) > .preview-head p { flex: 1 1 0; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* what is needed before step 1: one line, each part a way to its fields */
 .preview-before { border: 1px dashed transparent; border-radius: 12px; }
 .preview-before.on { border-color: var(--accent); border-style: solid; background: color-mix(in srgb, var(--accent) 4%, transparent); }
@@ -218,6 +218,10 @@
 .preview-before-show svg { transition: transform .15s; }
 .preview-before.open .preview-before-show svg { transform: rotate(180deg); }
 .preview-before .before-panel { margin: 4px 0 0; }
+.preview-intro-open { padding: 6px 4px 4px; }
+.preview-intro-open .standard-intro { margin: 0; }
+.ai-changes { margin-top: 10px; }
+.ai-changes h4 { font-size: 13.5px; margin: 0 0 4px; }
 .preview-head:hover, .preview-part.clickable:hover { border-color: var(--line-strong); }
 .preview-head.on, .preview-part.on { border-color: var(--accent); border-style: solid; background: color-mix(in srgb, var(--accent) 4%, transparent); }
 .preview-part { border: 1px dashed transparent; border-radius: 14px; padding: 2px; }
@@ -239,6 +243,8 @@
 .flow-tip { flex: 1 1 auto; min-width: 0; display: block; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .flow-tip .kbd { display: inline-grid; margin-right: 4px; vertical-align: middle; }
 .flow-tip-loop svg { margin-right: 5px; vertical-align: middle; }
+/* on a phone the line would be cut to a few letters: the Legend button says it all */
+@media (max-width: 600px) { .flow-tip { display: none; } }
 .edit-middle .reqs { margin: 0; }
 .req.selectable { cursor: pointer; }
 .req.selectable:hover:not(.selected) { border-color: var(--line-strong); }
@@ -306,7 +312,11 @@
 .quiet-danger { color: var(--text-3); }
 .quiet-danger:hover:not(:disabled) { color: var(--bad); }
 .res-edit > input { width: 100%; }
-.res-edit .res-kind { flex: 1; }
+.res-edit .res-kind { flex: 0 1 220px; min-width: 0; }
+/* a link's fields keep their labels once filled in: name, address, what it does */
+.mini-field { display: grid; gap: 3px; padding-left: 28px; }
+.mini-label { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.mini-field input { width: 100%; }
 .edit-fields .rows .row textarea:not(.mono) { min-height: 38px; }
 .name-new { display: flex; gap: 6px; align-items: center; padding: 10px 0 2px; }
 .name-new input { flex: 1; min-width: 0; }
@@ -321,6 +331,16 @@
 .path-row select { flex: 1; min-width: 0; }
 .path-row.back select { border-color: color-mix(in srgb, var(--warn) 55%, var(--line-strong)); }
 .path-adds { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 6px; }
+/* an answer of a decision: its name above where it goes, both the full width */
+.path-rows.answers { gap: 10px; }
+.answer-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: 6px; }
+.answer-row > .row-n { padding-top: 9px; }
+.answer-fields { display: grid; gap: 4px; min-width: 0; }
+.answer-fields .next-label { width: 100%; font-weight: 600; }
+.answer-to { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.answer-goes { flex: none; width: 16px; text-align: center; color: var(--text-3); font-weight: 700; display: inline-flex; justify-content: center; }
+.answer-to select { flex: 1; min-width: 0; width: 100%; }
+.answer-row.back .answer-goes { color: var(--warn); }
 .detail-offers { display: flex; flex-wrap: wrap; gap: 6px; }
 .detail-offers .chip { height: 30px; padding: 0 11px; }
 .fields-move { display: flex; align-items: center; gap: 4px; margin-left: auto; }
@@ -474,6 +494,19 @@ body:has(.edit-screen) .toast p span { white-space: pre-line; }
 /* who takes part: the name and how to reach them share both edges; moving and removing are on the line under them */
 .actor-tools { display: inline-flex; align-items: center; gap: 2px; }
 .people-rows .row > .actor-name, .people-rows .row.indent > textarea { width: 100%; }
+/* the name has no button after it: how to reach them ends at the same right edge */
+.people-rows .row.indent { padding-right: 0; }
+/* every field with a problem, the moment it has one: outlined, and what to do in a line under it */
+.edit-fields .has-problem { outline: 2px solid var(--bad); outline-offset: 1px; }
+.edit-fields .has-example { outline: 2px solid var(--warn); outline-offset: 1px; }
+.edit-fields [data-problem] { flex-wrap: wrap; }
+.edit-fields [data-problem]::after {
+  content: attr(data-problem); display: block; flex-basis: 100%; grid-column: 1 / -1; order: 99;
+  margin-top: 1px; font-size: 12.5px; font-weight: 550; line-height: 1.35; color: var(--bad); white-space: normal;
+}
+.edit-fields [data-problem].problem-example::after { color: var(--warn); }
+.edit-fields .row[data-problem]::after { padding-left: 28px; }
+.edit-fields .row.indent[data-problem]::after { padding-left: 0; }
 /* a line of the Publish list that would take back a change somebody published since */
 .publish-changes li.undoes::marker { color: var(--warn); }
 .publish-undoes { display: flex; align-items: center; gap: 5px; margin-top: 1px; font-size: 12.5px; font-weight: 600; color: var(--warn); }

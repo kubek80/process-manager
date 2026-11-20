@@ -116,7 +116,7 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
 .step-report .muted { margin: 0 0 10px; }
 
 /* a decision is a diamond: the arrows meet its corners */
-.block.decision { background: transparent; border: none; box-shadow: none; }
+.block.decision, .block.decision:not(.mine) { background: transparent; border: none; box-shadow: none; }
 .block.decision::before { display: none; }
 .block.decision:hover, .block.decision.selected, .block.decision.mine { box-shadow: none; border: none; }
 .diamond { position: absolute; inset: 0; overflow: visible; pointer-events: none; filter: drop-shadow(0 1px 1.5px rgb(16 24 40 / .10)); }
@@ -127,7 +127,11 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
 .block.decision.selected .diamond-ring { opacity: .3; stroke-width: 5; }
 .block.decision .block-main { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); justify-content: center; align-items: center; padding: 6px 34px; text-align: center; }
 .block.decision .block-main:focus-visible { outline: none; }
-.block.decision:has(.block-main:focus-visible) .diamond-ring { opacity: 1; stroke-width: 2.5; }
+.block.decision:has(.block-main:focus-visible) .diamond-ring { opacity: 1; stroke-width: 3.5; }
+.block.decision:has(.block-main:focus-visible) .diamond-shape { stroke: var(--accent); stroke-width: 2; }
+/* the block that has the keyboard: a clear ring around the whole block, on every kind */
+.block:not(.decision) > .block-main:focus-visible { outline: none; }
+.block:not(.decision):has(> .block-main:focus-visible) { outline: 3px solid var(--accent); outline-offset: 3px; }
 .block.decision .block-text { flex: 0 1 auto; height: auto; max-width: 140px; align-items: center; justify-content: center; }
 /* the shape says "decision" (and the legend explains it); the word stays for screen readers, the title gets the room */
 .block.decision .block-type { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

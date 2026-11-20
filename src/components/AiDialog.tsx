@@ -4,7 +4,9 @@ import type { Issue } from "../types";
 import { fixPrompt } from "../lib/prompt";
 import { extractJson, hasErrors } from "../lib/validate";
 import { download } from "../lib/store";
-import { CopyButton, IssueList, Modal } from "./ui";
+import { issuePlace, issueText, publishLines } from "../lib/editing";
+import { useCatalog } from "../lib/catalog";
+import { CopyButton, Modal } from "./ui";
 
 /** What the dialog needs to know about the kind of document it creates or changes. */
 export interface AiSpec<T extends { id: string; title: string }> {
@@ -33,6 +35,12 @@ export function AiDialog<T extends { id: string; title: string }>({ spec, onImpo
   const result = parsed?.value as T | undefined;
   const replaces = ok && !current && spec.existingIds.includes(result!.id);
   const idChanged = ok && current && result!.id !== current.id;
+  const { catalog } = useCatalog();
+  // what applying changes in the draft, in the words of the Publish list
+  const changes = useMemo(() => {
+    if (!ok || !current) return [];
+    try { return publishLines(noun, current as never, { ...(result as object), id: current.id } as never, catalog); } catch { return []; }
+  }, [ok, current, result, noun, catalog]);
   const title: ReactNode = current ? `Change “${current.title}” with AI` : `Create a ${noun} from text with AI`;
 
   return (
@@ -90,13 +98,30 @@ export function AiDialog<T extends { id: string; title: string }>({ spec, onImpo
                     ? <>Valid: <b>{result!.title}</b> - {spec.describe(result!)}{issues.length ? `, ${issues.length} ${issues.length === 1 ? "suggestion" : "suggestions"}` : ""}.</>
                     : <>{issues.filter((i) => i.level === "error").length} to fix. Send the fix request to the same chat and paste the new answer.</>}</span>
                 </div>
+                {ok && current && (
+                  <div className="ai-changes">
+                    <h4>What changes in your draft{changes.length ? ` (${changes.length})` : ""}</h4>
+                    {changes.length
+                      ? <ul className="publish-changes">{changes.map((l, k) => <li key={k}>{l}</li>)}</ul>
+                      : <p className="muted small">Nothing that readers see changes.</p>}
+                  </div>
+                )}
                 {idChanged && <div className="check warn"><TriangleAlert size={16} /><span>The answer changed the address of the {noun}. Its own (“{current!.id}”) is kept.</span></div>}
-                {issues.length > 0 && <IssueList issues={issues} />}
+                {issues.length > 0 && (
+                  <ul className="issues ai-issues">
+                    {issues.map((i, k) => (
+                      <li key={k} className={i.level}>
+                        {i.level === "error" ? <CircleAlert size={15} /> : <TriangleAlert size={15} />}
+                        <span><b>{issuePlace(noun, parsed.value, i.path)}</b> {issueText(i, noun)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </>
             )}
             {(parsed?.error || (parsed?.value != null && issues.length > 0)) && (
               <div className="btn-row">
-                <CopyButton label="Copy fix request" icon={<Wrench size={16} />} text={() => fixPrompt(issues, parsed?.error)} />
+                <CopyButton label="Copy fix request" icon={<Wrench size={16} />} text={() => fixPrompt(issues, parsed?.error, parsed?.value)} />
               </div>
             )}
           </div>

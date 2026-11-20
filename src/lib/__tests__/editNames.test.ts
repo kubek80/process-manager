@@ -39,7 +39,7 @@ describe("an item without a name", () => {
 
   it("is said by Undo and Redo", () => {
     expect(steppedMessage("undo", { kind: "added", what: "Before you start", label: "", unnamed: "Prerequisite 2" })).toBe("Prerequisite 2 (no name yet) is back.");
-    expect(steppedMessage("redo", { kind: "changed", what: "Step", label: "", unnamed: "Step 4", details: ["what happens"] })).toBe("Step 4 (no name yet) is changed again: what happens.");
+    expect(steppedMessage("redo", { kind: "changed", what: "Step", label: "", unnamed: "Step 4", details: ["what happens"] })).toBe("Step 4 (no name yet): what happens changed again.");
     expect(steppedMessage("undo", { kind: "changed", what: "Details", label: "" })).toBe("It is as it was.");
   });
 
@@ -47,7 +47,7 @@ describe("an item without a name", () => {
     const p = base(), q = structuredClone(p);
     q.actors[1] = { ...q.actors[1], name: "Finance" };
     const c = compareProcesses(q, p)[0];
-    expect(steppedMessage("undo", c)).toBe(`Participant “${p.actors[1].name}” is as it was: name.`);
+    expect(steppedMessage("undo", c)).toBe(`Participant “${p.actors[1].name}”: name as before.`);
   });
 
   it("is cut short safely", () => {
@@ -78,11 +78,11 @@ describe("field names follow the labels on the editing screen", () => {
     expect(pathContext("requirements[2].title")).toBe("requirement");
     expect(pathContext("steps[0].next[1].to")).toBe("step");
     expect(pathContext("title", "standard")).toBe("standard");
-    expect(issueText({ level: "error", path: "requirements[2].title", message: "is too short (minimum 3 characters)" })).toBe("Short name is too short (minimum 3 characters)");
-    expect(issueText({ level: "error", path: "steps[1].title", message: "is too short (minimum 3 characters)" })).toBe("What happens is too short (minimum 3 characters)");
-    expect(issueText({ level: "error", path: "title", message: "is too short (minimum 3 characters)" }, "process")).toBe("Name is too short (minimum 3 characters)");
-    expect(issueText({ level: "error", path: "requirements[0]", message: "is missing the required field \"title\"" })).toBe("Write the short name.");
-    expect(issueText({ level: "error", path: "steps[0]", message: "is missing the required field \"title\"" })).toBe("Say what happens in this step.");
+    expect(issueText({ level: "error", path: "requirements[2].title", message: "is too short (minimum 3 characters)" })).toBe("Give the requirement a short name of a few words.");
+    expect(issueText({ level: "error", path: "steps[1].title", message: "is too short (minimum 3 characters)" })).toBe("Write what happens in this step in a few more words.");
+    expect(issueText({ level: "error", path: "title", message: "is too short (minimum 3 characters)" }, "process")).toBe("Write the name in a few more words.");
+    expect(issueText({ level: "error", path: "requirements[0]", message: "is missing the required field \"title\"" })).toBe("Give the requirement a short name.");
+    expect(issueText({ level: "error", path: "steps[0]", message: "is missing the required field \"title\"" })).toBe("Write what happens in this step.");
   });
 });
 

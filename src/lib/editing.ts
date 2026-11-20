@@ -20,14 +20,21 @@ export type DraftKind = "unpublished" | "working";
 export const draftKindOf = (status: Status | undefined): DraftKind => (status === "draft" ? "unpublished" : "working");
 
 /** The calls behind "Save draft" and "Publish". */
-export type SaveCall = "save-version" | "save-working-draft" | "recreate-as-draft";
+export type SaveCall = "save-version" | "save-working-draft" | "replace-working-draft" | "recreate-as-draft";
 export type PublishCall = "save-version-as-active" | "publish-working-draft";
 /**
+ * Which call "Save draft" makes. A published document: its working draft. A never-published one
+ * is saved as itself while nothing is to fix (`toFix`: the checker finds something that stops
+ * publishing); with something to fix it is saved as its working draft, which only its editors
+ * see - so saving always works. Once nothing is to fix any more and a working draft exists
+ * (`working`), the save stores the document itself in place of the working draft.
  * `gone`: the document was deleted by somebody else while it was open. Bringing it back is the
  * ordinary save that creates something new, as a draft readers do not see until it is published.
  */
-export const saveCallOf = (kind: DraftKind, gone = false): SaveCall =>
-  (gone ? "recreate-as-draft" : kind === "unpublished" ? "save-version" : "save-working-draft");
+export const saveCallOf = (kind: DraftKind, gone = false, o: { toFix?: boolean; working?: boolean } = {}): SaveCall =>
+  (gone ? "recreate-as-draft"
+    : kind === "working" || o.toFix ? "save-working-draft"
+      : o.working ? "replace-working-draft" : "save-version");
 export const publishCallOf = (kind: DraftKind): PublishCall => (kind === "unpublished" ? "save-version-as-active" : "publish-working-draft");
 
 export type StateKey = "draft" | "published" | "changes" | "retired";
@@ -267,33 +274,109 @@ export function pathContext(path: string, kind?: TargetKind): FieldContext | und
 }
 
 /**
- * A problem in words: the field it is about, by the label the person sees, then what is wrong
- * with it, e.g. "Who does it must be one of: me, boss". The place (which step) is shown by where
- * the problem is listed. `kind`: a process or a standard (their fields are not all called alike).
+ * A problem in words, as an instruction to the person: what to do, in the words of the field's
+ * label ("Write what happens in this step.", "Link 1: start the address with https://"). Never a
+ * path, a schema word or a number of characters. `kind`: a process or a standard (their fields are
+ * not all called alike). The place (which step) is shown by where the problem is listed.
  */
 export function issueText(issue: Issue, kind?: TargetKind): string {
   const message = typeof issue.message === "string" ? issue.message : "";
+  const path = typeof issue.path === "string" ? issue.path : "";
   // a whole sentence already ("Say exactly what the reader does in this step.")
-  if (/^[A-Z]/.test(message)) return message;
-  const context = pathContext(issue.path ?? "", kind);
+  if (/^[A-Z“]/.test(message)) return message;
+  const context = pathContext(path, kind);
   const missing = message.match(/^is missing the required field "(\w+)"$/);
   if (missing) return requiredText(missing[1], context);
-  const keys = (issue.path ?? "").match(/[A-Za-z$]+/g) ?? [];
-  // the last named part of the path, unless that is the list a step or requirement sits in
-  const key = keys.length > 1 || !["steps", "requirements"].includes(keys[0] ?? "") ? keys[keys.length - 1] : undefined;
-  if (!key || issue.path === "(root)") return cap(message);
-  return `${cap(fieldName(key, context))} ${message}`;
+  const parts = [...path.matchAll(/([A-Za-z$]+)(?:\[(\d+)\])?/g)].map((m) => ({ key: m[1], i: m[2] === undefined ? undefined : Number(m[2]) }));
+  const last = parts[parts.length - 1] ?? { key: "", i: undefined };
+  // a link is named by its place in its list: "Link 2: …"
+  const link = [...parts].reverse().find((x) => x.key === "resources" && x.i !== undefined);
+  const prefix = link ? `Link ${link.i! + 1}: ` : "";
+  const say = (t: string) => (prefix ? `${prefix}${t.charAt(0).toLowerCase()}${t.slice(1)}` : t);
+  const field = fieldName(last.key, link ? undefined : context);
+  if (/^is empty$/.test(message) || /^is too short/.test(message)) return say(shortText(last.key, last.i, context, !!link, /^is empty$/.test(message)));
+  const long = message.match(/^is too long \(maximum (\d+)/);
+  if (long) return say(`Shorten ${theField(field)}: it holds at most ${long[1]} characters.`);
+  if (/full link/.test(message)) return say("Start the address with https://");
+  if (/upper case with dashes/.test(message)) return "Write the id in capitals and digits joined by dashes, e.g. SEC-LOG-01.";
+  if (/kebab-case/.test(message)) return say("Use only lowercase letters, digits and dashes here.");
+  if (/pattern \^\\d\{4\}/.test(message)) return say("Write the date as year-month-day, e.g. 2026-11-20.");
+  if (/^must be one of/.test(message)) return say(`Choose ${theField(field)} from the list.`);
+  const extra = message.match(/^has a field "([^"]+)"/);
+  if (extra) return `“${extra[1]}” is not part of a ${kind ?? "document"}: remove it in the JSON (More › JSON).`;
+  const few = message.match(/^needs at least (\d+)/);
+  if (few) return MIN_ITEMS[last.key] ?? say(`Add ${theField(field)}.`);
+  const many = message.match(/^has too many items \(maximum (\d+)\)/);
+  if (many) return say(`Keep at most ${many[1]} ${field}: remove some.`);
+  if (/^must be of type|^must be exactly|^must match/.test(message)) return say(`${cap(theField(field))} is not in a form the portal can use: repair it in the JSON (More › JSON).`);
+  if (message === EXAMPLE_MESSAGE) return say(`${cap(field)} is still the example text: write your own.`);
+  return last.key && path !== "(root)" ? say(`${cap(field)} ${message}`) : cap(message);
+}
+
+/**
+ * Where a problem is, in words: "Step 3 “Approve”", "Requirement SEC-LOG-01", "Link 2",
+ * "Prerequisite 1 (no name yet)", else the section ("About"). For lists of problems outside the
+ * editing screen's outline, such as the AI dialog's.
+ */
+export function issuePlace(kind: TargetKind, doc: unknown, path: string): string {
+  const d = (doc && typeof doc === "object" ? doc : {}) as Record<string, unknown>;
+  const m = (typeof path === "string" ? path : "").match(/^(steps|requirements|actors|prerequisites|resources)\[(\d+)\]/);
+  if (m) {
+    const i = Number(m[2]);
+    const list = Array.isArray(d[m[1]]) ? (d[m[1]] as Record<string, unknown>[]) : [];
+    const item = list[i] && typeof list[i] === "object" ? list[i] : {};
+    const name = typeof item.title === "string" ? item.title.trim() : typeof item.name === "string" ? item.name.trim() : "";
+    if (m[1] === "requirements") return `Requirement ${typeof item.id === "string" && item.id ? item.id : i + 1}${name ? ` “${name}”` : ""}`;
+    const what = { steps: "Step", actors: "Participant", prerequisites: "Prerequisite", resources: "Link" }[m[1] as "steps"];
+    return name ? `${what} ${i + 1} “${name}”` : `${what} ${i + 1} (no name yet)`;
+  }
+  const t = issueTarget(kind, (kind === "process" ? { steps: [] } : { requirements: [] }) as unknown as Process, path);
+  return (kind === "process" ? PROCESS_SECTIONS : STANDARD_SECTIONS).find((x) => x.id === t.section)?.label ?? "About";
+}
+
+/** "the name", "what happens": a field in a sentence. */
+const theField = (f: string) => (/^(the |what |who |how |why |where )/.test(f) ? f : `the ${f}`);
+
+const MIN_ITEMS: Record<string, string> = {
+  steps: "Add a step.", requirements: "Add a requirement.", actors: "Add who takes part.", lookFor: "Write at least one sign of a violation.",
+};
+
+/** A text that is empty (or too short to say anything) as what to write. */
+function shortText(key: string, i: number | undefined, context: FieldContext | undefined, isLink: boolean, empty: boolean): string {
+  const more = empty ? "" : " in a few more words";
+  if (isLink) return key === "url" ? "Write the address, starting with https://" : `Write the name of the link${more}.`;
+  switch (key) {
+    case "title":
+      if (context === "step") return empty ? "Write what happens in this step." : "Write what happens in this step in a few more words.";
+      if (context === "requirement") return empty ? "Give the requirement a short name." : "Give the requirement a short name of a few words.";
+      if (context === "prerequisite") return empty ? "Write the prerequisite." : "Write the prerequisite in a few more words.";
+      return `Write the name${more}.`;
+    case "summary": return empty ? "Write the summary." : "Write the summary in a sentence or two.";
+    case "statement": return empty ? "Write the rule." : "Write the rule as a whole sentence.";
+    case "name": return context === "participant" ? "Write the name of who takes part." : `Write the name${more}.`;
+    case "label": return "Name the answer, e.g. Approved.";
+    case "instructions": return i === undefined ? "Write what to do." : `Write action ${i + 1}, or remove it.`;
+    case "guidance": return i === undefined ? "Write the steps to comply." : `Write step ${i + 1} to comply, or remove it.`;
+    case "good": case "bad": return i === undefined ? "Write the example." : `Write example ${i + 1}, or remove it.`;
+    case "lookFor": return i === undefined ? "Write a sign of a violation." : `Write sign ${i + 1}, or remove it.`;
+    case "paths": return "Write the files, or remove the empty line.";
+    case "id": return "Give the requirement an id, e.g. SEC-LOG-01.";
+    case "url": return "Write the address, starting with https://";
+    default: return `Fill in ${theField(fieldName(key, context))}${more}.`;
+  }
 }
 
 /** A field that must be there, by what the editing screen calls it. */
 const REQUIRED: Record<string, string> = {
   summary: "Write the summary.", statement: "Write the rule.", owner: "Choose the team that issues it.",
   actor: "Choose who does it.", type: "Choose the kind of step.", level: "Choose the level.", verification: "Say how it is checked.",
-  name: "Write the name.", id: "Give it an id.", steps: "Add a step.", requirements: "Add a requirement.", actors: "Add who takes part.",
+  name: "Write the name.", id: "Give the requirement an id, e.g. SEC-LOG-01.", steps: "Add a step.", requirements: "Add a requirement.", actors: "Add who takes part.",
+  url: "Write the address, starting with https://", to: "Choose where the answer goes.", lookFor: "Write at least one sign of a violation.",
 };
 function requiredText(key: string, context?: FieldContext): string {
-  if (key === "title") return context === "step" ? "Say what happens in this step." : context === "requirement" ? "Write the short name." : "Write the name.";
-  return REQUIRED[key] ?? `Fill in ${fieldName(key, context)}.`;
+  if (key === "id" && context !== "requirement") return "Give it an id in the JSON (More › JSON).";
+  if (key === "title") return context === "step" ? "Write what happens in this step." : context === "requirement" ? "Give the requirement a short name." : context === "prerequisite" ? "Write the prerequisite." : "Write the name.";
+  return REQUIRED[key] ?? `Fill in ${theField(fieldName(key, context))}.`;
 }
 
 // ---------- example texts
@@ -457,6 +540,16 @@ export function unpublishedLine(draft: { updatedAt: string; updatedBy: string; u
   return `There are unpublished changes by ${name}${at ? `, saved ${at}` : ""}. Readers see the published version.`;
 }
 
+/**
+ * The reader's page line of a never-published document, for its editors, when it has newer
+ * changes than what is shown (kept as its working draft, as they still have something to fix).
+ */
+export function newerChangesLine(draft: { updatedAt: string; updatedBy: string; updatedByName?: string }, myEmail: string | undefined): string {
+  const who = author(draft, myEmail);
+  const at = formatDateTime(draft.updatedAt);
+  return `There are newer changes on the editing screen${who.you ? "" : ` by ${who.name}`}${at ? `, saved ${at}` : ""}.`;
+}
+
 /** "at 2026-11-20 14:02": when something was saved, for a sentence. "" when not known. */
 export function savedWhen(iso?: string): string {
   const at = formatDateTime(iso);
@@ -478,12 +571,35 @@ export function deletedSentence(latest: Latest | undefined, myEmail?: string): s
  * Why the shared draft is gone: published as a new version (by whom, as which version), or
  * discarded. Without a newer version than the one the changes started from, it was discarded.
  */
-export function goneDraftSentence(latest: Latest | undefined, startedFrom: number | undefined, myEmail?: string): string {
-  if (!latest || latest.deleted || !startedFrom) return "The shared draft was published or discarded, perhaps in another window, while you were editing.";
+export function goneDraftSentence(latest: Latest | undefined, startedFrom: number | undefined, myEmail?: string, published = true): string {
+  // a never-published document: its working draft goes when somebody saves it with nothing to fix
+  const did = published ? "published" : "saved";
+  if (!latest || latest.deleted || !startedFrom) return `The shared draft was ${did} or discarded, perhaps in another window, while you were editing.`;
   if (latest.version <= startedFrom) return "The shared draft was discarded, perhaps in another window, while you were editing.";
   const who = author({ updatedBy: latest.savedBy, updatedByName: latest.savedByName }, myEmail);
   const at = savedWhen(latest.savedAt);
-  return `${who.you ? "You" : who.name} published it as version ${latest.version}${at ? ` ${at}` : ""}${who.you ? " in another window" : ""}, while you were editing.`;
+  return `${who.you ? "You" : who.name} ${published ? "published it" : "saved the draft with nothing left to fix"} as version ${latest.version}${at ? ` ${at}` : ""}${who.you ? " in another window" : ""}, while you were editing.`;
+}
+
+/**
+ * Said when a save of the working draft finds that somebody else retired, unpublished, published
+ * or brought back the document meanwhile ("" when nothing like that happened, or it was the
+ * person themselves). `was`: the status the screen knew.
+ */
+export function statusChangedSentence(
+  noun: string, was: Status | undefined,
+  now: { status: Status; updatedBy: string; updatedByName?: string; updatedAt?: string } | undefined, myEmail?: string,
+): string {
+  const before = was ?? "active";
+  if (!now || now.status === before) return "";
+  const who = author(now, myEmail);
+  if (who.you) return "";
+  const at = savedWhen(now.updatedAt);
+  const did = (what: string, then: string, after = "") => `${who.name} ${what} this ${noun}${after}${at ? ` ${at}` : ""}, while you were editing. ${then}`;
+  if (now.status === "deprecated") return did("retired", "Readers see it marked as retired. Your changes are saved as unpublished changes.");
+  if (now.status === "draft") return did("unpublished", "Readers no longer see it. Your changes are saved in its draft.");
+  if (before === "draft") return did("published", "Readers now see their version. Your changes are saved as unpublished changes.");
+  return did("brought", "Your changes are saved as unpublished changes.", " back into use");
 }
 
 /**
@@ -519,14 +635,18 @@ export function steppedMessage(dir: "undo" | "redo", change?: Change): string {
   const Label = cap(typeof change.label === "string" ? change.label.trim() : "") || "It";
   if (change.what === "Details") {
     if (change.from !== undefined || change.to !== undefined) return change.to ? `${Label} is “${change.to}” again.` : `${Label} is empty again.`;
-    return dir === "undo" ? `${Label} is as it was.` : `${Label} is changed again.`;
+    const many = isPlural(Label);
+    return dir === "undo" ? `${Label} ${many ? "are as they were" : "is as it was"}.` : `${Label} ${many ? "are" : "is"} changed again.`;
   }
-  const thing = itemWords(change);
+  const thing = cap(itemWords(change));
   if (change.kind === "added") return dir === "undo" ? `${thing} is back.` : `${thing} is added again.`;
-  if (change.kind === "removed") return dir === "undo" ? `${thing} is removed again.` : `${thing} is deleted again.`;
-  const parts = change.details?.length ? `: ${change.details.join(", ")}` : "";
-  return dir === "undo" ? `${thing} is as it was${parts}.` : `${thing} is changed again${parts}.`;
+  if (change.kind === "removed") return dir === "undo" ? `${thing} is gone again.` : `${thing} is deleted again.`;
+  const parts = change.details?.length ? change.details.join(", ") : "";
+  return dir === "undo" ? (parts ? `${thing}: ${parts} as before.` : `${thing} is as it was.`) : (parts ? `${thing}: ${parts} changed again.` : `${thing} is changed again.`);
 }
+
+/** Whether a field's name is a plural ("Application tiers", "Tags"), for "are" or "is". */
+export const isPlural = (label: string) => /s$/i.test(label.trim()) && !/^order of|status$|process$|access$|address$|is$/i.test(label.trim());
 
 /**
  * The delete button of a step or requirement ignores presses for a moment after the selection
@@ -580,7 +700,7 @@ export function issueField(path: string, kind?: TargetKind): { selectors: string
     case "title": case "name": case "description": case "processId": case "url":
       if (parts[0]?.key === "prerequisites") sel.push(`[aria-label="${last.key === "title" ? `Prerequisite ${(at("prerequisites") ?? 0) + 1}` : last.key === "description" ? `About prerequisite ${(at("prerequisites") ?? 0) + 1}` : `Process that provides prerequisite ${(at("prerequisites") ?? 0) + 1}`}"]`);
       else if (parts[0]?.key === "actors") sel.push(`[aria-label="${last.key === "description" ? "About" : "Name of"} participant ${(at("actors") ?? 0) + 1}"]`);
-      else if (parts[0]?.key === "resources") sel.push(`[aria-label="${last.key === "url" ? "Address of" : "Name of"} link ${(at("resources") ?? 0) + 1}"]`);
+      else if (parts.some((p) => p.key === "resources")) sel.push(`[aria-label="${last.key === "url" ? "Address of" : last.key === "description" ? "What" : "Name of"} link ${(at("resources") ?? 0) + 1}${last.key === "description" ? " does for the reader" : ""}"]`);
       else if (context === "step" && last.key === "title") sel.push("input.step-title");
       break;
     case "lookFor": sel.push(".edit-fields [aria-label^='Signs of a violation']"); break;
@@ -608,7 +728,7 @@ export function undoesPublished(kind: TargetKind, c: Change, base: Process | Sta
     const key = [...new Set([...Object.keys(B), ...Object.keys(C), ...Object.keys(D)])].find((k) => fieldName(k, kind) === c.label);
     return !!key && reverts(key, B, C, D);
   }
-  if (c.what === "Before you start") {
+  if (c.what === "Prerequisite") {
     const has = (d: Record<string, unknown>) => (Array.isArray(d.prerequisites) ? d.prerequisites as { title?: string }[] : []).some((q) => (q?.title ?? "") === c.label);
     if (c.kind === "added") return has(B) && !has(C);   // they removed it, the draft brings it back
     if (c.kind === "removed") return !has(B) && has(C); // they added it, the draft does not have it

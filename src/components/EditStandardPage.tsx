@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { ChevronDown, ListChecks, ListPlus, PenLine, Plus, ScrollText } from "lucide-react";
 import type { DocMeta, Feedback, Process, Standard } from "../types";
 import { addRequirement, appendRequirement, deleteRequirement, EXAMPLE, moveRequirementTo, shortName, tidyStandard, today, updateRequirement } from "../lib/edit";
 import { issueTarget, issuesByPlace, issuesFor, noteMove, selectionKey, STANDARD_SECTIONS, standardOutline, withoutEarlySuggestions, type Selection, type StandardSection } from "../lib/editing";
@@ -11,12 +11,12 @@ import { useCatalog } from "../lib/catalog";
 import { statusOf } from "../lib/lifecycle";
 import { href } from "../lib/store";
 import { openCount } from "./Feedback";
-import { EditFrame, EditSection, focusSelectedInOutline, ItemIssues, Outline } from "./EditFrame";
+import { EditFrame, EditSection, focusSelectedInOutline, ItemIssues, Outline, focusFirstField } from "./EditFrame";
 import { EditSession, type Session } from "./EditSession";
-import { NoRight } from "./EditProcessPage";
+import { NoRight, StartHere, type StartItem } from "./EditProcessPage";
 import { GovernedSections, WhereSection } from "./ProcessSections";
 import { RequirementCard, RequirementFields } from "./Requirements";
-import { ResourceEditor, Resources } from "./Resources";
+import { ResourceEditor } from "./Resources";
 import { standardAiSpec, StandardIntro } from "./StandardPage";
 import { Field, scrollBehavior } from "./ui";
 import { editNotice } from "./Editing";
@@ -105,6 +105,10 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
   const sectionLabel = STANDARD_SECTIONS.find((x) => x.id === section)?.label ?? "About";
   const fieldsLabel = current ? `${current.id}: ${current.title || "(no name yet)"}` : sectionLabel;
   const helpers = processes.filter((p) => p.standards?.includes(draft.id) && statusOf(p) === "active");
+  // scope, exceptions and background fold into one line above the requirements; "Show" opens them
+  const [introOpen, setIntroOpen] = useState(false);
+  // a standard that is still (almost) blank: say where to start
+  const fresh = s.draftKind === "unpublished" && draft.requirements.length <= 2 && draft.requirements.some((r) => r.title === EXAMPLE.firstRequirement || r.statement === EXAMPLE.statement);
 
   let fields;
   if (!drawable) fields = <p className="empty-hint pad">Repair the JSON first: its problems are listed next to it.</p>;
@@ -132,7 +136,7 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
         <>
           <EditSection title="Name and summary">
             <Field label="Name" hint="What it is about, in a few words"><input value={draft.title} maxLength={80} onChange={(e) => set({ title: e.target.value })} /></Field>
-            <Field label="Summary" hint="What it protects or achieves"><textarea rows={3} maxLength={400} value={draft.summary} onChange={(e) => set({ summary: e.target.value })}
+            <Field label="Summary" hint="What it protects or achieves"><textarea rows={3} maxLength={400} value={draft.summary} data-field="summary" onChange={(e) => set({ summary: e.target.value })}
               onFocus={(e) => { if (draft.summary === EXAMPLE.standardSummary) e.target.select(); }} /></Field>
             <Field label="Issued by" hint="The team that reviews it, answers feedback and grants exceptions">
               <select value={draft.owner} onChange={(e) => set({ owner: e.target.value })}>
@@ -174,18 +178,24 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
   }
 
   const middle = s.json ? s.jsonView : (
-    <div className="edit-preview standard-doc">
+    <div className="edit-preview standard-doc standard-preview">
       <button className={`preview-head ${sel.section === "about" ? "on" : ""}`} onClick={() => choose({ section: "about" })} aria-label={`About: ${draft.title || "(no name yet)"}`}>
         <span className="preview-label">What readers will see</span>
         <h2>{draft.title || <span className="muted">(no name yet)</span>}</h2>
         <p>{draft.summary && draft.summary !== EXAMPLE.standardSummary ? draft.summary : <span className="muted">No summary yet. Say what it protects or achieves.</span>}</p>
       </button>
-      <div className={`preview-part clickable ${sel.section === "scope" ? "on" : ""}`} onClick={() => choose({ section: "scope" })}>
-        <StandardIntro standard={draft} processes={processes} helpers={helpers} />
-      </div>
-      {draft.resources?.length
-        ? <div className={`preview-part clickable ${sel.section === "background" ? "on" : ""}`} onClick={() => choose({ section: "background" })}><section className="prereqs"><h2>Background</h2><Resources list={draft.resources} /></section></div>
-        : <button className="preview-empty" onClick={() => choose({ section: "background" })}>No background yet. <b>Link the policy behind it</b></button>}
+      {fresh && <StartHere items={standardStart(draft, () => {
+        choose({ section: "about" });
+        setTimeout(() => document.querySelector<HTMLTextAreaElement>(".edit-fields [data-field=summary]")?.focus(), 50);
+      }, () => draft.requirements[0] && choose({ section: "requirements", item: draft.requirements[0].id }), () => {
+        s.setPanel("outline");
+        requestAnimationFrame(() => {
+          document.querySelector<HTMLButtonElement>(".outline-add-line")?.click();
+          document.querySelector<HTMLInputElement>(".outline-add-form input")?.focus();
+        });
+      })} />}
+      <PreviewIntro standard={draft} on={sel.section === "scope" || sel.section === "background"} open={introOpen} onToggle={() => setIntroOpen(!introOpen)}
+        onChoose={(section) => choose({ section })} intro={<StandardIntro standard={draft} processes={processes} helpers={helpers} background />} />
       <ol className="reqs">
         {draft.requirements.map((r) => (
           <RequirementCard key={r.id} r={r} standard={draft} processes={processes} applies flags={openCount(feedback, r.id)}
@@ -198,13 +208,13 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
 
   return (
     <>
-      <EditFrame kind="standard" title={draft.title} {...s.frame} issues={issues} selection={selectionKey(sel)}
+      <EditFrame kind="standard" title={draft.title} {...s.frame} issues={issues} selection={selectionKey(sel)} fieldIssues={drawable ? issuesFor("standard", draft, issues, sel) : undefined}
         place={(i) => { const t = issueTarget("standard", draft, i.path); return t.item ?? STANDARD_SECTIONS.find((x) => x.id === t.section)?.label ?? "About"; }}
         onPickIssue={(i) => choose(issueTarget("standard", draft, i.path))}
         outline={drawable ? <Outline label="Outline of the standard" entries={standardOutline(draft)} selected={selectionKey(sel)} issues={byPlace}
           feedback={(id) => openCount(feedback, id)}
           onSelect={(e) => choose({ section: e.section, item: e.item })}
-          onEnter={() => { s.setPanel("fields"); setTimeout(() => document.querySelector<HTMLElement>(".edit-fields-body :is(input, textarea, select):not([disabled])")?.focus(), 60); }}
+          onEnter={() => { s.setPanel("fields"); focusFirstField(); }}
           onAdd={{ section: "requirements", label: "Add a requirement", placeholder: "Short name of the rule", run: (name) => { const r = appendRequirement(draft, name); setDraft(r.standard); selectReq(r.id); } }}
           onMove={(id, before) => { const next = moveRequirementTo(draft, id, before); noteMove(next, id); setDraft(next); }}
           onNudge={(id, dir) => {
@@ -218,4 +228,47 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
       {s.dialogs}
     </>
   );
+}
+
+/**
+ * Scope, exceptions and background, folded to one line above the requirements (as "Before you
+ * start" on a process): each part a button to its fields, "Show" opens them as readers see them.
+ */
+function PreviewIntro({ standard, on, open, onToggle, onChoose, intro }: {
+  standard: Standard; on: boolean; open: boolean; onToggle: () => void; onChoose: (section: StandardSection) => void; intro: React.ReactNode;
+}) {
+  const links = (standard.resources ?? []).filter((r) => typeof r.title === "string" && r.title.trim()).length;
+  const parts: { section: StandardSection; text: string; set: boolean }[] = [
+    { section: "scope", text: standard.scope?.trim() ? "scope written" : "no scope", set: !!standard.scope?.trim() },
+    { section: "scope", text: standard.exceptionProcessId ? "exceptions by a process" : "exceptions: ask the issuing team", set: true },
+    { section: "background", text: links ? `${links} ${links === 1 ? "background link" : "background links"}` : "no background", set: links > 0 },
+  ];
+  return (
+    <div className={`preview-before ${on ? "on" : ""} ${open ? "open" : ""}`}>
+      <div className="preview-before-line">
+        <ScrollText size={15} aria-hidden="true" />
+        <b>Scope and exceptions</b>
+        {parts.map((x) => (
+          <button key={x.text} className={`preview-before-part ${x.set ? "" : "none"}`} onClick={() => onChoose(x.section)} title={x.set ? `Change: ${x.text}` : `Add: ${x.text}`}>{x.text}</button>
+        ))}
+        <button className="preview-before-show" aria-expanded={open} onClick={onToggle} title={open ? "Fold it away again" : "Show it as readers see it"}>
+          {open ? "Hide" : "Show"}<ChevronDown size={14} aria-hidden="true" />
+        </button>
+      </div>
+      {open && <div className="preview-intro-open">{intro}</div>}
+    </div>
+  );
+}
+
+/** What a blank standard asks for first: its summary, its requirements by name, the rule of the first. */
+function standardStart(standard: Standard, onSummary: () => void, onFirst: () => void, onAdd: () => void): StartItem[] {
+  const summary = !!standard.summary.trim() && standard.summary !== EXAMPLE.standardSummary;
+  const named = standard.requirements.some((r) => r.title.trim() && r.title !== EXAMPLE.firstRequirement && r.title !== EXAMPLE.newRequirement);
+  const first = standard.requirements[0];
+  const rule = !!first && !!first.statement.trim() && first.statement !== EXAMPLE.statement;
+  return [
+    { done: summary, icon: <PenLine size={16} />, title: "Say what it protects", text: "One or two sentences: what goes wrong without it.", action: "Write the summary", run: onSummary },
+    { done: named, icon: <ListPlus size={16} />, title: "Name the requirements", text: "In the outline, under Add a requirement: a short name, Enter, the next one.", action: "Add requirements", run: onAdd },
+    { done: rule, icon: <ListChecks size={16} />, title: "Write each rule", text: "Its level, the rule in one testable sentence, and why it matters.", action: "Open the first requirement", run: onFirst },
+  ];
 }

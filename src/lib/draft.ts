@@ -17,8 +17,11 @@ export interface DraftOptions<T> {
   tidy: (d: T) => T;
   /** Added to the document just before it is sent, e.g. the date of the save. */
   stamp?: (d: T) => T;
-  /** Stores the document on top of version `base` and returns the new version. */
-  save: (doc: T, base: number, note: string) => Promise<number>;
+  /**
+   * Stores the document on top of version `base` and returns the new version. `over`: the
+   * conflict this save goes over ("Save mine over theirs"), whose `version` is `base`.
+   */
+  save: (doc: T, base: number, note: string, over?: Conflict) => Promise<number>;
   /** Fetches what the server has now: used to take over somebody else's version. */
   reload: () => Promise<{ saved: T; version: number } | null>;
   /** What to call it when asking before leaving, e.g. "this process". */
@@ -120,14 +123,14 @@ export function useDraft<T>(o: DraftOptions<T>): Draft<T> {
 
   // what the last save added to the document, for "Save mine over theirs" after it was refused
   const finishing = useRef<((d: T) => T) | undefined>(undefined);
-  const send = useCallback(async (base: number, note: string): Promise<boolean> => {
+  const send = useCallback(async (base: number, note: string, over?: Conflict): Promise<boolean> => {
     const tidied = opts.current.tidy(latest.current.draft);
     const finished = finishing.current ? finishing.current(tidied) : tidied;
     const sent = opts.current.stamp ? opts.current.stamp(finished) : finished;
     setSaving(true);
     setError(null);
     try {
-      const newVersion = await opts.current.save(sent, base, note);
+      const newVersion = await opts.current.save(sent, base, note, over);
       setState((s) => savedAs(s, sent, newVersion, opts.current.tidy, tidied));
       setConflict(null);
       return true;
@@ -142,7 +145,7 @@ export function useDraft<T>(o: DraftOptions<T>): Draft<T> {
   }, []);
 
   const save = useCallback((note = "", finish?: (d: T) => T) => { finishing.current = finish; return send(latest.current.base, note); }, [send]);
-  const keepMine = useCallback((note = "") => send(conflict?.exists ? (conflict.version ?? 0) : 0, note), [send, conflict]);
+  const keepMine = useCallback((note = "") => send(conflict?.exists ? (conflict.version ?? 0) : 0, note, conflict ?? undefined), [send, conflict]);
   const takeTheirs = useCallback(async () => {
     let now: { saved: T; version: number } | null;
     try { now = await opts.current.reload(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); return; }

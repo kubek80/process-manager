@@ -111,11 +111,36 @@ describe("where the checker's problems are shown", () => {
 
 describe("a problem in words", () => {
   it("names the field, not the path", () => {
-    expect(issueText({ level: "error", path: "steps[1].actor", message: "must be one of: me, boss" })).toBe("Who does it must be one of: me, boss");
-    expect(issueText({ level: "error", path: "title", message: "is too short (minimum 3 characters)" })).toBe("Name is too short (minimum 3 characters)");
+    expect(issueText({ level: "error", path: "steps[1].actor", message: "must be one of: me, boss" })).toBe("Choose who does it from the list.");
+    expect(issueText({ level: "error", path: "title", message: "is too short (minimum 3 characters)" })).toBe("Write the name in a few more words.");
     expect(issueText({ level: "error", path: "steps[1].next[0].to", message: "points at a step that does not exist" })).toBe("Goes to points at a step that does not exist");
-    expect(issueText({ level: "warning", path: "steps[2]", message: "cannot be reached from the first step" })).toBe("Cannot be reached from the first step");
-    expect(issueText({ level: "error", path: "(root)", message: "is missing the required field \"id\"" })).toBe("Give it an id.");
+    expect(issueText({ level: "error", path: "(root)", message: "is missing the required field \"id\"" })).toBe("Give it an id in the JSON (More › JSON).");
+  });
+  it("is an instruction in the person's words: never a path, a schema word or a number of characters", () => {
+    const cases: [string, string, string, ("process" | "standard")?][] = [
+      ["prerequisites[1].title", "is too short (minimum 3 characters)", "Write the prerequisite in a few more words."],
+      ["prerequisites[0].title", "is empty", "Write the prerequisite."],
+      ["resources[0].url", "must be a full link starting with http:// or https://", "Link 1: start the address with https://"],
+      ["resources[1].title", "is too short (minimum 2 characters)", "Link 2: write the name of the link in a few more words."],
+      ["steps[0].resources[2].url", "must be a full link starting with http:// or https://", "Link 3: start the address with https://"],
+      ["steps[3].title", "is empty", "Write what happens in this step."],
+      ["steps[3].instructions[1]", "is empty", "Write action 2, or remove it."],
+      ["steps[3].next[0].label", "is empty", "Name the answer, e.g. Approved."],
+      ["actors[2].name", "is empty", "Write the name of who takes part."],
+      ["summary", "is too short (minimum 10 characters)", "Write the summary in a sentence or two."],
+      ["requirements[0].id", "must be upper case with dashes, e.g. \"SEC-LOG-01\"", "Write the id in capitals and digits joined by dashes, e.g. SEC-LOG-01.", "standard"],
+      ["requirements[0].statement", "is too short (minimum 10 characters)", "Write the rule as a whole sentence.", "standard"],
+      ["requirements[0].review.lookFor", "needs at least 1 item(s)", "Write at least one sign of a violation.", "standard"],
+      ["title", "is too long (maximum 80 characters)", "Shorten the name: it holds at most 80 characters.", "process"],
+      ["updatedAt", "must match the pattern ^\\d{4}-\\d{2}-\\d{2}$", "Write the date as year-month-day, e.g. 2026-11-20.", "process"],
+      ["steps[0]", "has a field \"owner\" that the schema does not allow - remove or rename it", "“owner” is not part of a process: remove it in the JSON (More › JSON).", "process"],
+      ["steps[0].title", "is still the example: write your own before publishing.", "What happens is still the example text: write your own."],
+    ];
+    for (const [path, message, said, kind] of cases) {
+      const text = issueText({ level: "error", path, message }, kind);
+      expect(text).toBe(said);
+      expect(text).not.toMatch(/\[\d+\]|minimum|schema|must be|item\(s\)/);
+    }
   });
 });
 
@@ -126,7 +151,7 @@ describe("the example texts of something new", () => {
     const issues = exampleIssues("process", p);
     expect(issues.map((i) => i.path)).toEqual(["summary", "steps[0].title", "steps[0].instructions[0]"]);
     expect(issues.every((i) => i.level === "error")).toBe(true);
-    expect(issueText(issues[0])).toBe("Summary is still the example: write your own before publishing.");
+    expect(issueText(issues[0])).toBe("Summary is still the example text: write your own.");
     expect(processIssueTarget(p, issues[1].path)).toEqual({ section: "steps", item: "first-step" });
     // a step added later starts with an example name too
     const more = addStepAfter({ ...p, summary: "Real words." }, "first-step").process;
@@ -296,13 +321,13 @@ describe("what Undo and Redo say", () => {
     // Redo deletes it again
     expect(steppedMessage("redo", main(p, without))).toBe("Step “Fix the request” is deleted again.");
     // a step was added; Undo takes it out, Redo puts it back
-    expect(steppedMessage("undo", main(p, without))).toBe("Step “Fix the request” is removed again.");
+    expect(steppedMessage("undo", main(p, without))).toBe("Step “Fix the request” is gone again.");
     expect(steppedMessage("redo", main(without, p))).toBe("Step “Fix the request” is added again.");
   });
   it("for a changed step, a detail and a value", () => {
     const renamed = { ...p, steps: p.steps.map((s) => (s.id === "ask" ? { ...s, instructions: ["Another line."] } : s)) };
-    expect(steppedMessage("undo", main(renamed, p))).toBe("Step “Ask for it” is as it was: what to do.");
-    expect(steppedMessage("redo", main(p, renamed))).toBe("Step “Ask for it” is changed again: what to do.");
+    expect(steppedMessage("undo", main(renamed, p))).toBe("Step “Ask for it”: what to do as before.");
+    expect(steppedMessage("redo", main(p, renamed))).toBe("Step “Ask for it”: what to do changed again.");
     const platform = { ...p, platform: "gcp" };
     const name = catalog.platforms.find((x) => x.id === "gcp")?.name ?? "gcp";
     expect(steppedMessage("redo", main(p, platform))).toBe(`Platform is “${name}” again.`);
@@ -310,6 +335,13 @@ describe("what Undo and Redo say", () => {
     expect(steppedMessage("undo", main(p, { ...p, summary: "Other." }))).toBe("Summary is as it was.");
   });
   it("without a difference, plainly", () => {
+    // plural names take "are"; links and prerequisites are named one by one, with a capital
+    expect(steppedMessage("undo", { kind: "changed", what: "Details", label: "application tiers" })).toBe("Application tiers are as they were.");
+    expect(steppedMessage("redo", { kind: "changed", what: "Details", label: "environments" })).toBe("Environments are changed again.");
+    expect(steppedMessage("undo", { kind: "changed", what: "Details", label: "order of the steps" })).toBe("Order of the steps is as it was.");
+    expect(steppedMessage("undo", main({ ...p, resources: [{ title: "Supplier form", url: "https://x.example.com" }] }, p))).toBe("Link “Supplier form” is gone again.");
+    expect(steppedMessage("redo", main(p, { ...p, resources: [{ title: "Supplier form", url: "https://x.example.com" }] }))).toBe("Link “Supplier form” is added again.");
+    expect(steppedMessage("undo", main(p, { ...p, prerequisites: [{ title: "A cost centre" }] }))).toBe("Prerequisite “A cost centre” is back.");
     expect(steppedMessage("undo")).toBe("Undone.");
     expect(steppedMessage("redo")).toBe("Done again.");
   });

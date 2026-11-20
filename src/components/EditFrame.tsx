@@ -6,6 +6,8 @@ import {
 import type { Feedback, Issue } from "../types";
 import { type PublishLine, checkerSummary, DELETE_PAUSE, deleteReady, dropBefore, issueField, isExampleIssue, issueText, outlineCollapsed, outlineKey, type EditState, type IssueCount, type OutlineEntry } from "../lib/editing";
 import { useMe } from "../lib/session";
+import { useMedia } from "../lib/media";
+import { TOUCH } from "../lib/zoom";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import type { Notice } from "./EditSession";
 import { FeedbackItem, type FeedbackTarget } from "./Feedback";
@@ -110,8 +112,6 @@ export const selectExample = (...texts: string[]) => (e: React.FocusEvent<HTMLIn
   if (texts.includes(el.value.trim())) requestAnimationFrame(() => { if (document.activeElement === el) el.select(); });
 };
 
-/** Whether a problem has to be fixed before saving (a draft never published) or only before publishing. */
-const FixBefore = createContext<(i: Issue) => "saving" | "publishing">(() => "publishing");
 /** What is edited: a process and a standard call some of their fields otherwise ("Owning team", "Issued by"). */
 const KindOf = createContext<"process" | "standard" | undefined>(undefined);
 
@@ -149,18 +149,80 @@ function focusIssueField(issue: Issue, kind: "process" | "standard", mark: (el: 
   setTimeout(attempt, 60);
 }
 
+/**
+ * Marks every field that has a problem, the moment it has one: the field is outlined
+ * (`.has-problem`, calmer `.has-example` for an example text still to replace) with
+ * aria-invalid, and the line around it says what to do under it (`data-problem`, shown by CSS),
+ * so nothing is added to what React draws. `issues`: the problems of what the fields show.
+ */
+function useFieldMarks(issues: Issue[] | undefined, kind: "process" | "standard") {
+  useEffect(() => {
+    const box = document.querySelector<HTMLElement>(".edit-fields");
+    if (!box) return;
+    const wanted = new Map<HTMLElement, { text: string; example: boolean; holder: HTMLElement }>();
+    for (const issue of issues ?? []) {
+      if (issue.level !== "error") continue;
+      const { selectors, label } = issueField(issue.path, kind);
+      let el: HTMLElement | null = selectors[0] ? box.querySelector<HTMLElement>(selectors[0]) : null;
+      if (!el && label) {
+        const want = label.toLowerCase();
+        for (const f of box.querySelectorAll<HTMLElement>(".field")) {
+          const text = (f.querySelector(".field-label")?.firstChild?.textContent ?? "").trim().toLowerCase();
+          if (text && text === want) { el = f.querySelector<HTMLElement>("input, textarea, select"); break; }
+        }
+      }
+      if (!el || wanted.has(el)) continue;
+      const holder = el.closest<HTMLElement>(".field, .mini-field, .path-row, .ins-rows > li") ?? el.parentElement ?? el;
+      wanted.set(el, { text: issueText(issue, kind), example: isExampleIssue(issue), holder });
+    }
+    for (const el of box.querySelectorAll<HTMLElement>(".has-problem, .has-example")) {
+      if (wanted.has(el)) continue;
+      el.classList.remove("has-problem", "has-example");
+      el.removeAttribute("aria-invalid");
+      el.removeAttribute("aria-description");
+    }
+    const holders = new Set([...wanted.values()].map((w) => w.holder));
+    for (const h of box.querySelectorAll<HTMLElement>("[data-problem]")) if (!holders.has(h)) h.removeAttribute("data-problem");
+    for (const [el, w] of wanted) {
+      el.classList.toggle("has-problem", !w.example);
+      el.classList.toggle("has-example", w.example);
+      el.setAttribute("aria-invalid", "true");
+      el.setAttribute("aria-description", w.text);
+      w.holder.setAttribute("data-problem", w.text);
+      w.holder.classList.toggle("problem-example", w.example);
+    }
+  });
+}
+
+/**
+ * After Enter on the outline: the keyboard goes to the first field of what was chosen - a step's
+ * name, else the first field, else the first button (a section with nothing in it yet: its "Add").
+ * Waits for the fields to be shown (a panel that slides in on a small screen).
+ */
+export function focusFirstField() {
+  const order = [".edit-fields-body input.step-title", ".edit-fields-body .req-fields :is(input, textarea, select):not([disabled])",
+    ".edit-fields-body :is(input, textarea, select):not([disabled])", ".edit-fields-body .empty-hint button, .edit-fields-body button:not([disabled])"];
+  let tries = 30;
+  const attempt = () => {
+    for (const sel of order) {
+      const el = document.querySelector<HTMLElement>(sel);
+      if (el && el.getClientRects().length) { el.focus(); return; }
+    }
+    if (tries-- > 0) requestAnimationFrame(attempt);
+  };
+  setTimeout(attempt, 30);
+}
+
 /** The checker's findings about what is selected, at the top of its fields. */
 export function ItemIssues({ issues }: { issues: Issue[] }) {
-  const fixBefore = useContext(FixBefore);
   const kind = useContext(KindOf);
   if (!issues.length) return null;
   const errors = issues.filter((i) => i.level === "error");
   const n = (list: Issue[], one: string, many: string) => `${list.length} ${list.length === 1 ? one : many}`;
-  const saving = errors.filter((i) => fixBefore(i) === "saving");
-  const publishing = errors.filter((i) => fixBefore(i) !== "saving" && !isExampleIssue(i));
-  const examples = errors.filter((i) => fixBefore(i) !== "saving" && isExampleIssue(i));
+  // nothing stops saving a draft: what is to fix stops publishing only
+  const publishing = errors.filter((i) => !isExampleIssue(i));
+  const examples = errors.filter((i) => isExampleIssue(i));
   const groups: { title: string; tone: "bad" | "warn" | "hint"; list: Issue[] }[] = [
-    { list: saving, tone: "bad", title: n(saving, "to fix before saving", "to fix before saving") },
     { list: publishing, tone: "bad", title: n(publishing, "to fix before publishing", "to fix before publishing") },
     // example texts of something new: calmer, they are simply still to be written
     { list: examples, tone: "warn", title: n(examples, "to fix before publishing: example text", "to fix before publishing: example texts") },
@@ -246,6 +308,8 @@ export function Outline({ entries, selected, onSelect, issues, feedback, onAdd, 
 }) {
   const items = entries.filter((e) => e.depth === 1);
   const ids = items.map((e) => e.item!);
+  // on a touch screen there is no Alt key to speak of
+  const touch = useMedia(TOUCH);
   const list = useRef<HTMLUListElement>(null);
   // dragging by the handle: which item, and the gap it would land in (0 = before the first)
   const [drag, setDrag] = useState<{ item: string; gap: number } | null>(null);
@@ -354,7 +418,7 @@ export function Outline({ entries, selected, onSelect, issues, feedback, onAdd, 
           ];
         })}
       </ul>
-      {items.length > 1 && <p className="outline-tip">Drag <GripVertical size={12} aria-hidden="true" /> to move, or Alt + ↑ ↓</p>}
+      {items.length > 1 && !touch && <p className="outline-tip">Drag <GripVertical size={12} aria-hidden="true" /> to move, or Alt + ↑ ↓</p>}
     </nav>
   );
 }
@@ -461,7 +525,7 @@ function MenuPop({ items, onClose, onRun }: { items: MenuItem[]; onClose: () => 
  * moves.
  */
 function Checker({ issues, place, onPick, reason, onReason, kind, fixBefore }: {
-  issues: Issue[]; place: (i: Issue) => string; onPick: (i: Issue) => void; kind: "process" | "standard"; fixBefore: (i: Issue) => "saving" | "publishing";
+  issues: Issue[]; place: (i: Issue) => string; onPick: (i: Issue) => void; kind: "process" | "standard"; fixBefore?: (i: Issue) => "saving" | "publishing";
   /** Why Save draft or Publish… did not happen. */
   reason?: Notice | null; onReason: () => void;
 }) {
@@ -489,7 +553,7 @@ function Checker({ issues, place, onPick, reason, onReason, kind, fixBefore }: {
 
 function CheckerPop({ issues, place, reason, onClose, onPick, kind, fixBefore }: {
   issues: Issue[]; place: (i: Issue) => string; reason?: Notice | null; onClose: () => void; onPick: (i: Issue) => void;
-  kind: "process" | "standard"; fixBefore: (i: Issue) => "saving" | "publishing";
+  kind: "process" | "standard"; fixBefore?: (i: Issue) => "saving" | "publishing";
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayer(ref, onClose, { watch: reason });
@@ -507,8 +571,9 @@ function CheckerPop({ issues, place, reason, onClose, onPick, kind, fixBefore }:
     <div ref={ref} className="checker-pop" role="dialog" aria-label="What is to fix" tabIndex={-1}>
       {reason && <p className={`checker-reason ${reason.tone}`} role="alert"><CircleAlert size={16} /><span>{reason.text}</span></p>}
       {fix.length > 0 && <>
-        {/* the heading says the strongest thing it lists: a never-published draft is not saved with these */}
-        <h3 className="checker-head">To fix<span>{fix.some((i) => fixBefore(i) === "saving") ? "stops saving" : "stops publishing"}</span></h3>
+        {/* a draft is always saved: what is to fix stops publishing (only bringing back a document
+            somebody deleted needs it fixed first) */}
+        <h3 className="checker-head">To fix<span>{fixBefore && fix.some((i) => fixBefore(i) === "saving") ? "stops bringing it back" : "stops publishing"}</span></h3>
         <ul>{fix.map(entry)}</ul>
       </>}
       {hints.length > 0 && <>
@@ -526,7 +591,7 @@ function CheckerPop({ issues, place, reason, onClose, onPick, kind, fixBefore }:
  */
 export interface BarAction { label: string; run: () => void; blocked?: string; unavailable?: string; busy?: boolean }
 
-export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo, onBack, discard, save, publish, more, unsaved, saveLine, banners, outline, middle, fields, fieldsLabel, selection, panel, setPanel, json, notice, onNotice, fixBefore }: {
+export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo, onBack, discard, save, publish, more, unsaved, saveLine, banners, outline, middle, fields, fieldsLabel, selection, panel, setPanel, json, notice, onNotice, fieldIssues, fixBefore }: {
   kind: "process" | "standard"; title: string; state: EditState;
   issues: Issue[]; place: (i: Issue) => string; onPickIssue: (i: Issue) => void;
   undo: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void; undoTitle?: string; redoTitle?: string };
@@ -551,7 +616,10 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
   /** The JSON of the whole document is shown: it takes the whole width. */
   json?: boolean;
   notice?: Notice | null; onNotice: () => void;
-  fixBefore: (i: Issue) => "saving" | "publishing";
+  /** Whether a problem stops saving: only when a document somebody deleted is brought back. */
+  fixBefore?: (i: Issue) => "saving" | "publishing";
+  /** The problems of what the fields panel shows: each marks its own field. */
+  fieldIssues?: Issue[];
 }) {
   const off = (unavailable: boolean) => (unavailable ? { "aria-disabled": true, className: "eb-icon off" } : { className: "eb-icon" });
   const noun = kind === "process" ? "process" : "standard";
@@ -580,6 +648,7 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
   const fieldsBox = useRef<HTMLElement>(null);
   useEffect(() => { fieldsBox.current?.scrollTo({ top: 0 }); }, [selection]);
   // the field the checker's list led to stays outlined until its problem is gone
+  useFieldMarks(fieldIssues, kind);
   const [marked, setMarked] = useState<{ el: HTMLElement; issue: Issue } | null>(null);
   useEffect(() => {
     if (!marked) return;
@@ -656,7 +725,7 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
           requestAnimationFrame(() => item.focus());
         }}>
           <div className="panel-close"><button className="btn small ghost" onClick={() => setPanel(null)}><ArrowLeft size={16} />{kind === "process" ? "Back to the map" : "Back to the requirements"}</button></div>
-          <KindOf.Provider value={kind}><FixBefore.Provider value={fixBefore}>{fields}</FixBefore.Provider></KindOf.Provider>
+          <KindOf.Provider value={kind}>{fields}</KindOf.Provider>
         </aside>
         {panel && <div className="panel-scrim" onClick={() => setPanel(null)} aria-hidden="true" />}
       </div>

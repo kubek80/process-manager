@@ -281,3 +281,16 @@ describe("a review date has to be a date", () => {
     expect(hasErrors(validateProcess(base()))).toBe(false);
   });
 });
+
+describe("which steps are asked to say exactly what to do", () => {
+  it("one rule: the reader's steps done by hand; never a decision, a wait, an automated step or a sub-process", () => {
+    const p = base();
+    const kinds = ["task", "form", "decision", "wait", "automation", "verify"] as const;
+    p.steps = kinds.map((type, i) => ({ id: `s${i}`, title: `Step ${i}`, actor: "me", type, next: i < kinds.length - 1 ? [{ to: `s${i + 1}`, ...(type === "decision" ? { label: "Yes" } : {}) }, ...(type === "decision" ? [{ to: "s0", label: "No" }] : [])] : [] }));
+    const asked = validateProcess(p).filter((i) => i.path.endsWith(".instructions")).map((i) => p.steps[Number(i.path.match(/\d+/)![0])].type);
+    expect(asked).toEqual(["task", "form", "verify"]);
+    // somebody else's step: not asked
+    p.steps[0].actor = "boss";
+    expect(validateProcess(p).some((i) => i.path === "steps[0].instructions")).toBe(false);
+  });
+});

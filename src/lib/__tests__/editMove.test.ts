@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addActor, answerChanges, movedHead, newDecisionNotice, restructureNotice, structureChanges, shortName, appendRequirement, appendStep, blankProcess, deleteStep, EXAMPLE, flowMoveBlocked, moveRequirementTo, moveStepInFlow, nudgeStep, setStepType } from "../edit";
+import { addActor, answerChanges, movedHead, newDecisionNotice, restructureNotice, structureChanges, shortName, appendRequirement, appendStep, blankProcess, blankStandard, deleteStep, EXAMPLE, flowMoveBlocked, moveRequirementTo, moveStepInFlow, nudgeStep, setStepType } from "../edit";
 import { clock, movedItem, movedMessage, dropBefore, issueText, processOutline, standardOutline, withoutEarlySuggestions } from "../editing";
 import { validateProcess } from "../validate";
 import type { Process } from "../../types";
@@ -78,6 +78,13 @@ describe("adding from the outline", () => {
     expect(r.process.steps[0]).toMatchObject({ id: "choose-a-model", title: "Choose a model", actor: "me", type: "task", instructions: undefined });
     // the next one is added after it
     expect(appendStep(r.process, "Fill in the form").process.steps.map((s) => s.id)).toEqual(["choose-a-model", "fill-in-the-form"]);
+  });
+  it("on a blank standard, the first name replaces the example requirement", () => {
+    const s = blankStandard([], "security", "Supplier data");
+    const r = appendRequirement(s, "Encrypt supplier data");
+    expect(r.standard.requirements).toHaveLength(1);
+    expect(r.standard.requirements[0]).toMatchObject({ id: "REQ-01", title: "Encrypt supplier data", statement: EXAMPLE.statement });
+    expect(appendRequirement(r.standard, "Delete it after a year").standard.requirements.map((x) => x.id)).toEqual(["REQ-01", "REQ-02"]);
   });
   it("adds the first step of an empty process", () => {
     const r = appendStep({ ...line(), steps: [] }, "Start");

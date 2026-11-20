@@ -7,6 +7,9 @@ import { isDate } from "./lifecycle";
 // They are not built in the browser: that needs eval, which the app's security policy forbids.
 import { validateCatalogDoc as validateCatalogSchema, validateProcessDoc as validateSchema, validateStandardDoc as validateStandardSchema } from "./validators.generated.js";
 
+/** The kinds of step somebody does by hand: they say exactly what to do. */
+export const NEEDS_ACTIONS = new Set<string>(["form", "code", "approval", "review", "communication", "meeting", "document", "verify", "task"]);
+
 export interface CheckContext { processIds?: Iterable<string>; standardIds?: Iterable<string>; catalog?: Catalog }
 
 export { schema as processSchema, standardSchema };
@@ -144,7 +147,10 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
       if (s.subProcessId === p.id) err(`${at}.subProcessId`, "A process cannot be its own sub-process.");
       else if (known && !known.has(s.subProcessId)) warn(`${at}.subProcessId`, "The sub-process does not exist (yet).");
     }
-    if (s.actor === "me" && s.type !== "wait" && !s.instructions?.length && !s.subProcessId)
+    // one rule for every step: a step the reader does by hand says exactly what to do; a decision,
+    // a wait, an automated step and a sub-process need no actions, and what other participants do
+    // is theirs to know (their steps say what happens, not how)
+    if (s.actor === "me" && NEEDS_ACTIONS.has(s.type) && !s.instructions?.length && !s.subProcessId)
       warn(`${at}.instructions`, "Say exactly what the reader does in this step.");
   });
 

@@ -4,7 +4,8 @@ import type { Feedback, Process, StepType } from "../types";
 import { diamondPoints, L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import { toolName, useCatalog } from "../lib/catalog";
-import { afterFit, fitWhole, hiddenEdges, isZoomWheel, laneChars, laneColumn, laneLabel, openingZoom, scrollForZoom, scrollToCentre, stepZoom, wheelZoom, wrapWords, zoomKey } from "../lib/zoom";
+import { afterFit, fitWhole, hiddenEdges, isZoomWheel, laneChars, laneColumn, laneLabel, openingZoom, panHint, scrollForZoom, TOUCH, scrollToCentre, stepZoom, wheelZoom, wrapWords, zoomKey } from "../lib/zoom";
+import { useMedia } from "../lib/media";
 import { openCount } from "./Feedback";
 import { EntryIcon } from "./EntryIcon";
 import { scrollBehavior, TypeIcon } from "./ui";
@@ -44,6 +45,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   // the drawing passes under it. Its text keeps its size at every zoom; the column gets narrower
   // when the drawing is small. HEADW is that column, in pixels.
   const narrow = useNarrowScreen();
+  const touch = useMedia(TOUCH);
   const column = (z: number) => (bare ? 136 : laneColumn(z, narrow));
   const [zoom, setZoomState] = useState(1);
   const HEADW = column(zoom);
@@ -240,6 +242,8 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
       const view = { left: el.scrollLeft, top: el.scrollTop, width: el.clientWidth, height: el.clientHeight };
       const to = scrollToCentre(box, view, { width: el.scrollWidth, height: el.scrollHeight });
       if (to) el.scrollTo({ ...to, behavior: scrollBehavior() });
+      // and the page, when the block is (partly) outside the window
+      revealBlock(el.querySelector<HTMLElement>(`[data-step="${CSS.escape(node.step.id)}"]`), el, to);
     });
     return () => cancelAnimationFrame(frame);
   }, [selectedId, nodeAt, recentre, viewSize]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -294,6 +298,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
         const z = zoomNow.current;
         const pos = scrollToCentre({ x: (node.x - L.HEADER) * z, y: node.y * z, w: L.W * z, h: L.H * z }, { left: sc.scrollLeft, top: sc.scrollTop, width: sc.clientWidth, height: sc.clientHeight }, { width: sc.scrollWidth, height: sc.scrollHeight });
         if (pos) sc.scrollTo({ ...pos, behavior: scrollBehavior() });
+        revealBlock(el?.closest<HTMLElement>(".block") ?? null, sc, pos);
       }
     } else if (e.key === "Enter" && onEnter) {
       e.preventDefault();
@@ -314,12 +319,12 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
           </div>
         ) : editable && (<>
           <LegendButton types={usedTypes} />
-          <p className="flow-tip" title="Press + on an arrow to insert a step there, + on a block to add one after it. Drag a block to another lane to change who does it. Drag the map by an empty spot to move it; Ctrl or ⌘ + scroll zooms.">
-            <span className="kbd">+</span> on an arrow inserts a step · drag a block to another lane · <span className="flow-tip-loop"><svg width="20" height="8" aria-hidden="true"><path d="M0,4 H20" className="edge back" /></svg>loop back</span>
+          <p className="flow-tip" title={touch ? "Tap + on an arrow to insert a step there, + on a block to add one after it. Swipe to move the map, pinch to zoom." : "Press + on an arrow to insert a step there, + on a block to add one after it. Drag a block to another lane to change who does it. Drag the map by an empty spot to move it; Ctrl or ⌘ + scroll zooms."}>
+            <span className="kbd">+</span> on an arrow inserts a step{touch ? "" : " · drag a block to another lane"} · <span className="flow-tip-loop"><svg width="20" height="8" aria-hidden="true"><path d="M0,4 H20" className="edge back" /></svg>loop back</span>
           </p>
         </>)}
         {!bare && <div className="map-tools">
-          {legend && <span className="map-pan-hint"><Hand size={14} aria-hidden="true" />Drag to move · <kbd className="key">{zoomKey()}</kbd> + scroll to zoom</span>}
+          {legend && <span className="map-pan-hint"><Hand size={14} aria-hidden="true" />{touch ? `${panHint(true).move} · ${panHint(true).zoom}` : <>Drag to move · <kbd className="key">{zoomKey()}</kbd> + scroll to zoom</>}</span>}
           <div className="zoom" role="group" aria-label="Zoom">
             <button className="btn small ghost" onClick={() => fit()} title="Show the whole flow"><Maximize2 size={14} />Fit</button>
             <button className="icon-btn" onClick={() => step(-1)} aria-label="Zoom out"><Minus size={16} /></button>
@@ -508,6 +513,32 @@ function laneFits(column: number, small: boolean, avatar: boolean): ((line: stri
     ctx.font = `650 ${small ? 11.5 : 13.5}px ${family}`;
     return ctx.measureText(line).width <= room;
   };
+}
+
+/**
+ * Brings a block fully into the window, the page included, by the nearest amount (nothing when it
+ * is already in view): below the top bar and above the bottom, or in the column that scrolls the
+ * map. `to`: where the map itself is being scrolled to (smoothly), so that the block's place after
+ * that is what counts.
+ */
+function revealBlock(block: HTMLElement | null, map: HTMLElement, to: { left: number; top: number } | null) {
+  if (!block) return;
+  const r = block.getBoundingClientRect();
+  const dy = to ? to.top - map.scrollTop : 0;
+  const top = r.top - dy, bottom = r.bottom - dy;
+  // the part of the window the page shows: under the sticky top bar, inside a scrolling column
+  let host: HTMLElement | null = null;
+  for (let p = map.parentElement; p && p !== document.body; p = p.parentElement) {
+    const st = getComputedStyle(p);
+    if (/(auto|scroll)/.test(st.overflowY) && p.scrollHeight > p.clientHeight + 1) { host = p; break; }
+  }
+  const bar = document.querySelector(".topbar")?.getBoundingClientRect().bottom ?? 0;
+  const area = host ? host.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+  const from = Math.max(area.top, host ? 0 : bar) + 8, till = Math.min(area.bottom, window.innerHeight) - 8;
+  const by = top < from ? top - from : bottom > till ? Math.min(bottom - till, top - from) : 0;
+  if (!by) return;
+  if (host) host.scrollBy({ top: by, behavior: scrollBehavior() });
+  else window.scrollBy({ top: by, behavior: scrollBehavior() });
 }
 
 /** The height the map can have: its own limit (the reader's map), else the height its column gives it (the editing map). */

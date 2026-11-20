@@ -584,6 +584,11 @@ export function moveRequirementTo(s: Standard, id: string, beforeId: string | nu
  * texts (they say what to write), to be replaced before publishing.
  */
 export function appendRequirement(s: Standard, title: string): { standard: Standard; id: string } {
+  // a blank standard: the first name typed replaces the example requirement it starts with
+  const only = s.requirements.length === 1 ? s.requirements[0] : undefined;
+  if (only && only.title === EXAMPLE.firstRequirement && only.statement === EXAMPLE.statement && title.trim()) {
+    return { standard: updateRequirement(s, only.id, { title: title.trim() }), id: only.id };
+  }
   const r = addRequirement(s);
   return { standard: updateRequirement(r.standard, r.id, { title: title.trim() || EXAMPLE.newRequirement }), id: r.id };
 }

@@ -79,7 +79,7 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
           </span>
         </>} />
       {naming && <NameNew label={step.type === "decision" ? "Name of the step on the new branch" : "Name of the step after this one"}
-        onAdd={(name) => { setNaming(false); onAddAfter(name); }} onCancel={() => setNaming(false)} />}
+        onAdd={(name) => { setNaming(false); onAddAfter(name); focusSoon(".edit-fields input.step-title"); }} onCancel={() => setNaming(false)} />}
       <ItemIssues issues={issues} />
       <ItemFeedback feedback={feedback.filter((f) => f.itemId === step.id && !f.resolved)} target={processTarget(process)} noun="step" />
 
@@ -156,6 +156,18 @@ export function markBackPath() {
   requestAnimationFrame(attempt);
 }
 
+/** Moves the keyboard to what a change has just made, once it is on screen (a few frames at most). */
+export function focusSoon(selector: string, select = false) {
+  let tries = 20;
+  const attempt = () => {
+    const el = document.querySelector<HTMLElement>(selector);
+    if (!el) { if (tries-- > 0) requestAnimationFrame(attempt); return; }
+    el.focus();
+    if (select && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) el.select();
+  };
+  requestAnimationFrame(attempt);
+}
+
 /** A name for a new step, asked right where it is added: Enter adds it, Escape does not. */
 function NameNew({ label, onAdd, onCancel }: { label: string; onAdd: (name: string) => void; onCancel: () => void }) {
   const [name, setName] = useState("");
@@ -182,6 +194,8 @@ function WhoField({ process, step, onChange, setProcess }: { process: Process; s
     const r = addActor(process, name, catalog.teams);
     setProcess({ ...r.process, steps: r.process.steps.map((s) => (s.id === step.id ? { ...s, actor: r.id } : s)) });
     setName(""); setAdding(false);
+    // the keyboard goes on from the new participant's chip, which is now chosen
+    focusSoon(".edit-fields .step-core .chips [aria-pressed=true]");
   };
   return (
     <div className="field">
@@ -240,13 +254,28 @@ function KindPop({ type, onPick, onClose }: { type: StepType; onPick: (t: StepTy
     return () => document.removeEventListener("mousedown", away);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [hint, setHint] = useState<StepType>(type);
+  // one stop for Tab: the arrow keys move through the kinds (up and down by rows), Enter chooses
+  const [stop, setStop] = useState<StepType>(type);
+  const roam = (e: React.KeyboardEvent<HTMLButtonElement>, t: StepType) => {
+    const all = [...(ref.current?.querySelectorAll<HTMLButtonElement>(".type-opt") ?? [])];
+    const at = STEP_TYPES.indexOf(t);
+    const top = (b: HTMLElement) => b.offsetTop;
+    const perRow = Math.max(1, all.filter((b) => top(b) === top(all[0])).length);
+    const to = e.key === "ArrowRight" ? at + 1 : e.key === "ArrowLeft" ? at - 1 : e.key === "ArrowDown" ? at + perRow : e.key === "ArrowUp" ? at - perRow
+      : e.key === "Home" ? 0 : e.key === "End" ? STEP_TYPES.length - 1 : null;
+    if (to === null) return;
+    e.preventDefault();
+    const next = STEP_TYPES[Math.max(0, Math.min(STEP_TYPES.length - 1, to))];
+    setStop(next);
+    all[STEP_TYPES.indexOf(next)]?.focus();
+  };
   return (
     <div ref={ref} className="kind-pop" role="group" aria-label="Kind of step">
       <div className="type-grid">
         {STEP_TYPES.map((t) => (
-          <button key={t} className={`type-opt ${type === t ? "on" : ""}`} aria-pressed={type === t} title={stepHelp(t)}
-            style={{ "--c": STEP_META[t].color } as React.CSSProperties} onClick={() => onPick(t)}
-            onMouseEnter={() => setHint(t)} onFocus={() => setHint(t)}>
+          <button key={t} className={`type-opt ${type === t ? "on" : ""}`} aria-pressed={type === t} title={stepHelp(t)} tabIndex={t === stop ? 0 : -1}
+            style={{ "--c": STEP_META[t].color } as React.CSSProperties} onClick={() => onPick(t)} onKeyDown={(e) => roam(e, t)}
+            onMouseEnter={() => setHint(t)} onFocus={() => { setHint(t); setStop(t); }}>
             <TypeIcon type={t} size={24} /><span>{STEP_META[t].label}</span>
           </button>
         ))}
@@ -283,20 +312,33 @@ function PathsField({ process, step, onChange }: { process: Process; step: Step;
         <em>{decision ? "Name each answer, for example Approved and Rejected." : step.next.length === 0 ? "Nothing follows this step." : "The arrow on the map."}</em>
       </span>
       {step.next.length > 0 && (
-        <ul className="rows path-rows">
+        <ul className={`rows path-rows ${named ? "answers" : ""}`}>
           {step.next.map((p, i) => {
             const back = n(p.to) > 0 && n(p.to) <= index + 1;
+            const target = (
+              <select value={p.to} aria-label={`Path ${i + 1} goes to`} onChange={(e) => onChange(step.next.map((x, j) => (j === i ? { ...x, to: e.target.value } : x)))}>
+                {later.length > 0 && <optgroup label="Later steps">{later.map((o) => <option key={o.id} value={o.id}>{n(o.id)}. {o.title}</option>)}</optgroup>}
+                {earlier.length > 0 && <optgroup label="Back to an earlier step">{earlier.map((o) => <option key={o.id} value={o.id}>↩ {n(o.id)}. {o.title}</option>)}</optgroup>}
+              </select>
+            );
+            const remove = <button className="icon-btn" onClick={() => onChange(step.next.filter((_, j) => j !== i))} aria-label={`Remove path ${i + 1}`} title={named ? "Remove this answer" : "Remove this way on"}><X size={15} /></button>;
+            // an answer: its name above where it goes, both the whole width of the column
+            if (named) return (
+              <li className={`path-row answer-row ${back ? "back" : ""}`} key={i}>
+                <span className="row-n" aria-hidden="true">{i + 1}</span>
+                <span className="answer-fields">
+                  <input className="next-label" value={p.label ?? ""} maxLength={30} placeholder={decision ? (i === 0 ? "e.g. Yes" : "e.g. No") : "Name (optional)"} aria-label={`Name of path ${i + 1}`}
+                    onChange={(e) => onChange(step.next.map((x, j) => (j === i ? { ...x, label: e.target.value || undefined } : x)))} />
+                  <span className="answer-to"><span className="answer-goes" aria-hidden="true">{back ? <CornerUpLeft size={13} /> : "→"}</span>{target}</span>
+                </span>
+                {remove}
+              </li>
+            );
             return (
               <li className={`row path-row ${back ? "back" : ""}`} key={i}>
-                {named
-                  ? <input className="next-label" value={p.label ?? ""} maxLength={30} placeholder={decision ? (i === 0 ? "e.g. Yes" : "e.g. No") : "Name (optional)"} aria-label={`Name of path ${i + 1}`}
-                      onChange={(e) => onChange(step.next.map((x, j) => (j === i ? { ...x, label: e.target.value || undefined } : x)))} />
-                  : <span className="path-then" aria-hidden="true">→</span>}
-                <select value={p.to} aria-label={`Path ${i + 1} goes to`} onChange={(e) => onChange(step.next.map((x, j) => (j === i ? { ...x, to: e.target.value } : x)))}>
-                  {later.length > 0 && <optgroup label="Later steps">{later.map((o) => <option key={o.id} value={o.id}>{n(o.id)}. {o.title}</option>)}</optgroup>}
-                  {earlier.length > 0 && <optgroup label="Back to an earlier step">{earlier.map((o) => <option key={o.id} value={o.id}>↩ {n(o.id)}. {o.title}</option>)}</optgroup>}
-                </select>
-                <button className="icon-btn" onClick={() => onChange(step.next.filter((_, j) => j !== i))} aria-label={`Remove path ${i + 1}`}><X size={15} /></button>
+                <span className="path-then" aria-hidden="true">→</span>
+                {target}
+                {remove}
               </li>
             );
           })}
@@ -304,10 +346,16 @@ function PathsField({ process, step, onChange }: { process: Process; step: Step;
       )}
       <div className="path-adds">
         {nextFree && (decision
-          ? <button className="btn small ghost" onClick={() => add(nextFree.id, spare(step.next.length === 0 ? "Yes" : step.next.length === 1 ? "No" : "Other"))}><GitBranch size={14} />Add a branch</button>
-          : <button className="btn small ghost" onClick={() => add(nextFree.id)}><Plus size={14} />{step.next.length === 0 ? "Continue to a step" : "Add another way on"}</button>)}
+          ? <button className="btn small ghost" onClick={() => {
+              const label = spare(step.next.length === 0 ? "Yes" : step.next.length === 1 ? "No" : "Other");
+              add(nextFree.id, label);
+              // the new answer's name is ready to type over, and the screen says where it leads
+              focusSoon(".edit-fields .path-rows > li:last-child .next-label", true);
+              editNotice.info(`Answer “${label}” added: it goes to ${n(nextFree.id)}. ${nextFree.title || "(no name yet)"}. Name it, and choose where it goes.`);
+            }}><GitBranch size={14} />Add a branch</button>
+          : <button className="btn small ghost" onClick={() => { add(nextFree.id); focusSoon(".edit-fields .path-rows > li:last-child select"); }}><Plus size={14} />{step.next.length === 0 ? "Continue to a step" : "Add another way on"}</button>)}
         {backTo && <button className="btn small ghost" title={`A loop: the flow goes back to “${backTo.title || `step ${n(backTo.id)}`}”, for example to correct something`}
-          onClick={() => add(backTo.id, decision ? spare("No") : undefined)}><CornerUpLeft size={14} />Go back to an earlier step</button>}
+          onClick={() => { add(backTo.id, decision ? spare("No") : undefined); focusSoon(`.edit-fields .path-rows > li:last-child ${decision ? ".next-label" : "select"}`, decision); }}><CornerUpLeft size={14} />Go back to an earlier step</button>}
       </div>
     </div>
   );

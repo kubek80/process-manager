@@ -118,6 +118,12 @@ export interface Conflict {
   updatedAt?: string;
   /** The name of whoever saved, when the server knew it. */
   updatedByName?: string;
-  /** The conflict is about the working draft (its revision), not about the published versions. */
+  /** The conflict is about the working draft (its revision), not about the versions of the document. */
   draft?: boolean;
+  /** For a version conflict: the status of the stored version ("deprecated": somebody retired it). */
+  status?: "draft" | "active" | "deprecated";
+  /** For a deleted document, to those who could edit it: who deleted it (email, name) and when. */
+  deletedBy?: string;
+  deletedByName?: string;
+  deletedAt?: string;
 }

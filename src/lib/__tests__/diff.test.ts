@@ -35,12 +35,12 @@ describe("what changed between two versions of a process", () => {
     after.prerequisites = [{ title: "A cost centre" }];
     [after.steps[3], after.steps[4]] = [after.steps[4], after.steps[3]];
     expect(compareProcesses(base(), after).map(describeChange)).toEqual([
-      "Name changed", "Application tiers changed", "Before you start “A cost centre” added", "Order of the steps changed",
+      "Name changed", "Application tiers changed", "Prerequisite “A cost centre” added", "Order of the steps changed",
     ]);
     const back = compareProcesses(after, base()).map(describeChange);
-    expect(back).toContain("Before you start “A cost centre” removed");
+    expect(back).toContain("Prerequisite “A cost centre” removed");
     const edited = { ...after, prerequisites: [{ title: "A cost centre", description: "Ask finance." }] };
-    expect(compareProcesses(after, edited).map(describeChange)).toEqual(["Before you start “A cost centre” changed: why it is needed"]);
+    expect(compareProcesses(after, edited).map(describeChange)).toEqual(["Prerequisite “A cost centre” changed: why it is needed"]);
     expect(summarize(compareProcesses(base(), after))).toBe("1 added, details changed");
   });
 
@@ -86,13 +86,21 @@ describe("comparing versions does not mislead", () => {
     ]);
   });
 
+  it("names each link: added, removed, changed, by its name", () => {
+    const one = { ...base(), resources: [{ title: "Supplier form", url: "https://forms.example.com/s" }] };
+    expect(compareProcesses(base(), one).map(describeChange)).toEqual(["Link “Supplier form” added"]);
+    expect(compareProcesses(one, base()).map(describeChange)).toEqual(["Link “Supplier form” removed"]);
+    const moved = { ...one, resources: [{ title: "Supplier form", url: "https://forms.example.com/t" }] };
+    expect(compareProcesses(one, moved).map(describeChange)).toEqual(["Link “Supplier form” changed: address"]);
+    expect(compareProcesses(base(), { ...base(), resources: [{ title: "", url: "" }] }).map(describeChange)).toEqual(["Link 1 (no name yet) added"]);
+  });
   it("copes with two prerequisites of the same name, and reports a new order", () => {
     const twice = { ...base(), prerequisites: [{ title: "Access" }, { title: "Access", description: "To the second system." }, { title: "Budget" }] };
     expect(compareProcesses(twice, structuredClone(twice))).toEqual([]);
     const reordered = { ...twice, prerequisites: [twice.prerequisites[2], twice.prerequisites[0], twice.prerequisites[1]] };
     expect(compareProcesses(twice, reordered).map(describeChange)).toEqual(["Order of what is needed before you start changed"]);
     const one = { ...twice, prerequisites: [{ title: "Access" }, { title: "Budget" }] };
-    expect(compareProcesses(twice, one).map(describeChange)).toEqual(["Before you start “Access” removed"]);
+    expect(compareProcesses(twice, one).map(describeChange)).toEqual(["Prerequisite “Access” removed"]);
   });
 
   it("does not call an empty list a change, and survives a version that is not a document", () => {

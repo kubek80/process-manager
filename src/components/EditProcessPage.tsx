@@ -10,7 +10,7 @@ import { usePerms } from "../lib/session";
 import { useCatalog } from "../lib/catalog";
 import { href } from "../lib/store";
 import { openCount } from "./Feedback";
-import { EditFrame, focusSelectedInOutline, ItemIssues, Outline } from "./EditFrame";
+import { EditFrame, focusFirstField, focusSelectedInOutline, ItemIssues, Outline } from "./EditFrame";
 import { EditSession } from "./EditSession";
 import { editNotice } from "./Editing";
 import { FlowView } from "./FlowView";
@@ -116,12 +116,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
   const byPlace = useMemo(() => (drawable ? issuesByPlace("process", draft, issues) : new Map()), [drawable, draft, issues]);
   const outline = drawable ? processOutline(draft) : [];
   // Enter on an item of the outline: the focus goes to the first field of what it selected
-  const focusFields = () => {
-    s.setPanel("fields");
-    // a step: its name ("What happens"), not the tools above it
-    setTimeout(() => (document.querySelector<HTMLElement>(".edit-fields-body input.step-title")
-      ?? document.querySelector<HTMLElement>(".edit-fields-body .step-core :is(input, textarea, select):not([disabled]), .edit-fields-body :is(input, textarea, select):not([disabled])"))?.focus(), 60);
-  };
+  const focusFields = () => { s.setPanel("fields"); focusFirstField(); };
   // the line under the steps in the outline that adds one by its name
   const openAddLine = () => {
     s.setPanel("outline");
@@ -187,10 +182,10 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
         <h2>{draft.title || <span className="muted">(no name yet)</span>}</h2>
         <p>{draft.summary && draft.summary !== EXAMPLE.processSummary ? draft.summary : <span className="muted">No summary yet. Say what the reader has at the end.</span>}</p>
       </button>
-      {fresh && <StartHere process={draft} onSummary={() => {
+      {fresh && <StartHere items={processStart(draft, () => {
         choose({ section: "about" });
         setTimeout(() => document.querySelector<HTMLTextAreaElement>(".edit-fields [data-field=summary]")?.focus(), 50);
-      }} onSteps={openAddLine} onFirst={() => draft.steps[0] && choose({ section: "steps", item: draft.steps[0].id })} />}
+      }, openAddLine, () => draft.steps[0] && choose({ section: "steps", item: draft.steps[0].id }))} />}
       <PreviewBefore process={draft} all={all} standards={standards} on={["before", "links", "standards"].includes(sel.section)} open={beforeOpen}
         onToggle={() => setBeforeOpen(!beforeOpen)} onChoose={(section) => choose({ section })} />
       <FlowView editable legend={false} openMin={0.6} follow process={draft} selectedId={stepId} done={NONE} feedback={feedback}
@@ -208,7 +203,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
 
   return (
     <>
-      <EditFrame kind="process" title={draft.title} {...s.frame} issues={issues} selection={selectionKey(sel)}
+      <EditFrame kind="process" title={draft.title} {...s.frame} issues={issues} selection={selectionKey(sel)} fieldIssues={drawable ? issuesFor("process", draft, issues, sel) : undefined}
         place={(i) => placeOf(draft, i.path)}
         onPickIssue={(i) => choose(issueTarget("process", draft, i.path))}
         outline={<Outline label="Outline of the process" entries={outline} selected={selectionKey(sel)} issues={byPlace}
@@ -235,10 +230,12 @@ function PreviewBefore({ process, all, standards, on, open, onToggle, onChoose }
   process: Process; all: Process[]; standards: Standard[]; on: boolean; open: boolean; onToggle: () => void; onChoose: (section: ProcessSection) => void;
 }) {
   const shown = { ...process, resources: (process.resources ?? []).filter((r) => typeof r.title === "string" && r.title.trim()) };
-  const pre = process.prerequisites.length, links = shown.resources.length, helps = process.standards?.length ?? 0;
+  // the same count as the outline: every link, those without a name yet said apart (readers do not see them)
+  const pre = process.prerequisites.length, links = (process.resources ?? []).length, helps = process.standards?.length ?? 0;
+  const unnamed = links - shown.resources.length;
   const parts: { section: ProcessSection; text: string; none: string }[] = [
     { section: "before", text: `${pre} needed`, none: "nothing needed" },
-    { section: "links", text: `${links} ${links === 1 ? "link" : "links"}`, none: "no links" },
+    { section: "links", text: `${links} ${links === 1 ? "link" : "links"}${unnamed ? ` (${unnamed} without a name)` : ""}`, none: "no links" },
     { section: "standards", text: `${helps} ${helps === 1 ? "standard" : "standards"}`, none: "no standards" },
   ];
   const count = [pre, links, helps];
@@ -262,20 +259,14 @@ function PreviewBefore({ process, all, standards, on, open, onToggle, onChoose }
   );
 }
 
+/** One thing to do on a document that is still blank: done or not, with the button to where it is done. */
+export interface StartItem { done: boolean; icon: React.ReactNode; title: string; text: string; action: string; run: () => void }
+
 /**
- * On a process that is still blank: the order in which a process is written, each a button to
+ * On a process or standard that is still blank: the order in which it is written, each a button to
  * the place where it is done, ticked off as it is done.
  */
-function StartHere({ process, onSummary, onSteps, onFirst }: { process: Process; onSummary: () => void; onSteps: () => void; onFirst: () => void }) {
-  const summary = !!process.summary.trim() && process.summary !== EXAMPLE.processSummary;
-  const steps = process.steps.length > 1 || process.steps.some((x) => x.title !== EXAMPLE.firstStep);
-  const first = process.steps[0];
-  const filled = !!first && first.actor !== undefined && !!first.instructions?.length && !first.instructions.includes(EXAMPLE.instruction);
-  const items: { done: boolean; icon: React.ReactNode; title: string; text: string; action: string; run: () => void }[] = [
-    { done: summary, icon: <PenLine size={16} />, title: "Say what the reader gets", text: "One or two sentences: what they have in hand at the end.", action: "Write the summary", run: onSummary },
-    { done: steps, icon: <ListPlus size={16} />, title: "Type the steps in order", text: "In the outline, under Add a step: a name, Enter, the next name.", action: "Add the steps", run: onSteps },
-    { done: filled, icon: <UserRound size={16} />, title: "Fill in each step", text: "Who does it, its kind, and exactly what to do, one action per line.", action: "Open the first step", run: onFirst },
-  ];
+export function StartHere({ items }: { items: StartItem[] }) {
   return (
     <section className="start-here" aria-label="Start here">
       <h3>Start here</h3>
@@ -291,6 +282,19 @@ function StartHere({ process, onSummary, onSteps, onFirst }: { process: Process;
       <p className="start-last"><Send size={13} aria-hidden="true" /><span>Then <b>Publish…</b>: the checker on the bar says what is still to do.</span></p>
     </section>
   );
+}
+
+/** What a blank process asks for first: its summary, its steps, the first step filled in. */
+function processStart(process: Process, onSummary: () => void, onSteps: () => void, onFirst: () => void): StartItem[] {
+  const summary = !!process.summary.trim() && process.summary !== EXAMPLE.processSummary;
+  const steps = process.steps.length > 1 || process.steps.some((x) => x.title !== EXAMPLE.firstStep);
+  const first = process.steps[0];
+  const filled = !!first && first.actor !== undefined && !!first.instructions?.length && !first.instructions.includes(EXAMPLE.instruction);
+  return [
+    { done: summary, icon: <PenLine size={16} />, title: "Say what the reader gets", text: "One or two sentences: what they have in hand at the end.", action: "Write the summary", run: onSummary },
+    { done: steps, icon: <ListPlus size={16} />, title: "Type the steps in order", text: "In the outline, under Add a step: a name, Enter, the next name.", action: "Add the steps", run: onSteps },
+    { done: filled, icon: <UserRound size={16} />, title: "Fill in each step", text: "Who does it, its kind, and exactly what to do, one action per line.", action: "Open the first step", run: onFirst },
+  ];
 }
 
 /** The place a problem is about, in words: "About", "Step 3 “Approve”". */

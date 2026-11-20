@@ -153,11 +153,33 @@ ${request.trim() || "(describe the change here)"}
 `;
 }
 
-/** Follow-up message for the same chat when the checker found problems. */
-export function fixPrompt(issues: Issue[], parseError?: string): string {
+/** The value at a checker path ("steps[2].next[0].to") in a document, or undefined. */
+export function valueAt(doc: unknown, path: string): unknown {
+  let at: unknown = doc;
+  for (const m of path.matchAll(/([A-Za-z$]+)|\[(\d+)\]/g)) {
+    if (at === null || typeof at !== "object") return undefined;
+    at = m[1] !== undefined ? (at as Record<string, unknown>)[m[1]] : (at as unknown[])[Number(m[2])];
+  }
+  return at;
+}
+
+/** A value for the fix request: short, as JSON. */
+const shown = (v: unknown) => {
+  const t = JSON.stringify(v);
+  return t === undefined ? "missing" : t.length > 120 ? `${t.slice(0, 117)}…` : t;
+};
+
+/**
+ * Follow-up message for the same chat when the checker found problems: each with where it is, the
+ * value that is wrong there (from `answer`, the JSON the chat returned) and what is wrong.
+ */
+export function fixPrompt(issues: Issue[], parseError?: string, answer?: unknown): string {
   const list = parseError
     ? `- ${parseError}`
-    : issues.map((i) => `- [${i.level}] ${i.path}: ${i.message}`).join("\n");
+    : issues.map((i) => {
+      const value = answer !== undefined && i.path && i.path !== "(root)" && !/^is missing the required field/.test(i.message) ? ` (value now: ${shown(valueAt(answer, i.path))})` : "";
+      return `- [${i.level}] ${i.path}${value}: ${i.message}`;
+    }).join("\n");
   return `The JSON you returned did not pass the Process Manager checker. Fix every problem below and return the COMPLETE corrected JSON again, as one \`\`\`json code block and nothing else. Do not change anything that is not needed for the fix.
 
 Problems found:

@@ -55,6 +55,14 @@ export function zoomKey(platform = typeof navigator !== "undefined" ? navigator.
   return /Mac|iPhone|iPad/i.test(platform) ? "Cmd" : "Ctrl";
 }
 
+/** A screen used by touch (no mouse to hover with): hints speak of swiping and pinching. */
+export const TOUCH = "(hover: none) and (pointer: coarse)";
+
+/** How to move and zoom the map, by the device: "Swipe to move · pinch to zoom" on a touch screen. */
+export function panHint(touch: boolean, key: "Ctrl" | "Cmd" = zoomKey()): { move: string; zoom: string } {
+  return touch ? { move: "Swipe to move", zoom: "pinch to zoom" } : { move: "Drag to move", zoom: `${key} + scroll to zoom` };
+}
+
 /**
  * How wide the column of lane names is at a zoom: narrower when the drawing is small, so that the
  * drawing gets the room and a name never runs into the lines of a short lane.

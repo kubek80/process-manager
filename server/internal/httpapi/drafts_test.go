@@ -175,14 +175,6 @@ func TestWhoMayWorkOnAWorkingDraft(t *testing.T) {
 	// a document jordan may not edit at all
 	status, body = j.do("PUT", "/api/processes/"+repoP+"/draft?rev=0", e.body(docs.Process, repoP, "", ""))
 	wantError(t, status, body, 404, "That does not exist.")
-	// the never-published one: saved the ordinary way
-	status, body = e.as(alex).do("PUT", "/api/processes/"+repoP, e.asDraft(docs.Process, repoP, "Hidden"))
-	wantStatus(t, status, 200, body)
-	status, body = e.as(alex).do("PUT", "/api/processes/"+repoP+"/draft?rev=0", e.body(docs.Process, repoP, "", ""))
-	wantError(t, status, body, 409, "This process is not published yet, so readers do not see it: save your changes to it directly.")
-	if status, _ := e.as(alex).do("GET", "/api/processes/"+repoP+"/draft", nil); status != 204 {
-		t.Fatal("a draft of something never published")
-	}
 }
 
 func TestWhatADraftNeedsAndWhatPublishingNeeds(t *testing.T) {

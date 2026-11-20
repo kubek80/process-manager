@@ -68,7 +68,8 @@ export const logout = () => call<void>("POST", "/auth/logout");
 // version; a save says which version it was made from (`base`) and is refused when somebody
 // else saved in the meantime (ApiError.conflict).
 export type MetaById = Record<string, DocMeta>;
-const saveQuery = (base: number, note = "") => `?base=${base}${note.trim() ? `&note=${encodeURIComponent(note.trim())}` : ""}`;
+// `draft`: the revision of the working draft of a never-published document that the save replaces
+const saveQuery = (base: number, note = "", draft?: number) => `?base=${base}${note.trim() ? `&note=${encodeURIComponent(note.trim())}` : ""}${draft ? `&draft=${draft}` : ""}`;
 
 /** An older server sends no `createdAt`: the date of the last save stands in for it. */
 export function completeMeta(meta: Record<string, Partial<DocMeta>> | undefined): MetaById {
@@ -100,13 +101,23 @@ export async function loadStandards(): Promise<{ docs: Standard[]; meta: MetaByI
 }
 export const putStandard = (s: Standard, base: number, note?: string) => call<DocMeta>("PUT", `/api/standards/${s.id}${saveQuery(base, note)}`, s);
 export const removeStandard = (id: string, base: number) => call<void>("DELETE", `/api/standards/${id}?base=${base}`);
+/**
+ * Saves a never-published process or standard that has a working draft as the document itself,
+ * in place of the working draft of revision `draft`: the draft is removed in the same step. Refused
+ * (409, a draft conflict) when the draft is gone or has another revision.
+ */
+export const putDocReplacingDraft = <T extends Process | Standard>(kind: TargetKind, doc: T, base: number, note: string, draft: number) =>
+  call<DocMeta>("PUT", `${docsPath(kind, doc.id)}${saveQuery(base, note, draft)}`, doc);
 
-// Unpublished changes to a published process or standard: one shared working draft beside it,
-// seen only by its editors. Readers, skills and search keep the published version until it is
-// published. `revision` counts the saves of the draft; a save says which one it was made from.
+// The working draft: one shared draft beside a process or standard, seen only by its editors -
+// the unpublished changes to a published one, or what cannot be saved as a never-published one
+// yet (something still to fix). Readers, skills and search never see it. `revision` counts the
+// saves of the draft; a save says which one it was made from.
 /** `updatedByName`: the person's name when the server knew it; `updatedBy` is their email. */
 export interface WorkingDraft<T> { doc: T; base: number; revision: number; updatedBy: string; updatedByName?: string; updatedAt: string }
-export interface DraftSaved { revision: number; base: number; updatedBy: string; updatedByName?: string; updatedAt: string }
+/** The stored document as a save of its working draft found it: somebody may have retired, unpublished or saved it meanwhile. */
+export interface DocHead { version: number; status: "draft" | "active" | "deprecated"; updatedAt: string; updatedBy: string; updatedByName?: string }
+export interface DraftSaved { revision: number; base: number; updatedBy: string; updatedByName?: string; updatedAt: string; document?: DocHead }
 const docsPath = (kind: TargetKind, id: string) => `/api/${kind === "process" ? "processes" : "standards"}/${encodeURIComponent(id)}`;
 /** The working draft, or null when there is none. */
 export async function loadWorkingDraft<T>(kind: TargetKind, id: string): Promise<WorkingDraft<T> | null> {

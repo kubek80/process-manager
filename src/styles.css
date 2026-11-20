@@ -136,8 +136,10 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
 .chip span { color: var(--text-3); font-weight: 500; font-variant-numeric: tabular-nums; }
 .chip:hover { border-color: var(--text-3); }
 /* chosen: the brand colour as a fill (as the segmented control and the pages), never black */
-.chip.on { background: var(--accent-fill, var(--accent)); border-color: var(--accent-fill, var(--accent)); color: var(--accent-ink); }
-.chip.on span { color: inherit; opacity: .7; }
+/* a chosen chip looks like a chosen segment: raised and outlined, brand-coloured text and a dot - not a brand fill */
+.chip.on { background: var(--seg-on, var(--surface)); border-color: color-mix(in srgb, var(--accent) 55%, var(--line-strong)); color: var(--accent); font-weight: 650; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, var(--line-strong)), var(--shadow-1); }
+.chip.on::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.chip.on span { color: inherit; opacity: .75; }
 /* the cards of the lists and of the search results are in lists.css */
 .empty { grid-column: 1 / -1; padding: 40px 0; text-align: center; }
 

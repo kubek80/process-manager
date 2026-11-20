@@ -175,6 +175,8 @@ export interface DocVersion {
 /** What the server knows about a document besides its content. */
 export interface DocMeta {
   version: number; updatedAt: string; updatedBy: string;
+  /** The name of whoever saved it last, where the portal knows it. */
+  updatedByName?: string;
   /** When the first version was saved. */
   createdAt: string;
   /** When readers could first see it (its first version that was not a draft); none while it was never published. */

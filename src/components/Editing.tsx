@@ -5,7 +5,7 @@ import type { Draft } from "../lib/draft";
 import { compare, describeChange, summarize, type Change } from "../lib/diff";
 import { ApiError, loadHistory, loadVersion } from "../lib/store";
 import { useCatalog } from "../lib/catalog";
-import { author, deletedSentence, goneDraftSentence, savedByText, savedWhen, unpublishedLine } from "../lib/editing";
+import { author, deletedSentence, goneDraftSentence, newerChangesLine, savedByText, savedWhen, unpublishedLine } from "../lib/editing";
 import { formatDateTime } from "../lib/dates";
 import { cap } from "../lib/diff";
 import { useMe } from "../lib/session";
@@ -45,7 +45,9 @@ export function DraftLine({ meta, status, editHref, noun }: { meta?: DocMeta; st
     return (
       <p className="draft-line never" role="note">
         <PencilLine size={16} aria-hidden="true" />
-        <span><b>Draft</b> · Readers do not see this {noun} yet. Only the people who may change or look after it can open it.</span>
+        <span><b>Draft</b> · Readers do not see this {noun} yet. Only the people who may change or look after it can open it.
+          {/* changes that still have something to fix are kept on the editing screen, not shown here */}
+          {meta?.draft && editHref ? ` ${newerChangesLine(meta.draft, myEmail)}` : ""}</span>
         {editHref && <a href={editHref}>Continue editing</a>}
       </p>
     );
@@ -79,7 +81,7 @@ export function NotShown({ kind, title, editHref, back, problems }: { kind: Targ
 export function VersionTag({ meta, onOpen }: { meta?: DocMeta; onOpen: () => void }) {
   if (!meta?.version) return null;
   return (
-    <button className="version-tag" onClick={onOpen} title={`Saved ${when(meta.updatedAt)} by ${meta.updatedBy}. Press to see all versions.`}>
+    <button className="version-tag" onClick={onOpen} title={`Stored ${when(meta.updatedAt)} by ${meta.updatedByName || meta.updatedBy}. Press to see all versions.`}>
       <History size={13} />Version {meta.version}
     </button>
   );
@@ -123,10 +125,10 @@ export function BehindBanner<T>({ d, meta, noun }: { d: Draft<T>; meta?: DocMeta
   return (
     <div className="check warn banner">
       <TriangleAlert size={16} />
-      <span><b>{meta?.updatedBy || "Somebody else"} saved a newer version of {noun}</b>{meta?.version ? ` (version ${meta.version})` : ""} while you were editing. Your changes are still here.</span>
+      <span><b>{meta?.updatedByName || meta?.updatedBy || "Somebody else"} saved a newer version of {noun}</b>{meta?.version ? ` (version ${meta.version})` : ""} while you were editing. Your changes are still here.</span>
       <span className="spacer" />
       {/* opens the comparison without trying to save: a save could be refused for another reason first */}
-      <button className="btn small" onClick={() => d.raiseConflict({ exists: true, version: meta?.version, updatedBy: meta?.updatedBy || undefined, updatedAt: meta?.updatedAt || undefined })}>Compare and decide</button>
+      <button className="btn small" onClick={() => d.raiseConflict({ exists: true, version: meta?.version, updatedBy: meta?.updatedBy || undefined, updatedByName: meta?.updatedByName, updatedAt: meta?.updatedAt || undefined })}>Compare and decide</button>
     </div>
   );
 }
@@ -179,13 +181,15 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
     return () => { live = false; };
   }, [c?.version, c?.exists, kind, id, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
   // who deleted it, or who published the shared draft, is in the list of versions
-  const latest = useLatestVersion(kind, id, !!c && !c.exists);
+  // (the server names who deleted it to those who could edit it: then the versions are not needed)
+  const latest = useLatestVersion(kind, id, !!c && !c.exists && !c.deletedBy);
   if (!c) return null;
   const run = (fn: () => Promise<unknown>) => async () => { setBusy(true); try { await fn(); } finally { setBusy(false); } };
 
   if (!c.exists && c.draft) {
     return (
-      <Modal title="The unpublished changes are gone" subtitle={goneDraftSentence(latest, startedFrom, myEmail)} onClose={d.dismissConflict}
+      <Modal title={wasPublished === false ? "The newer changes are gone" : "The unpublished changes are gone"}
+        subtitle={goneDraftSentence(latest, startedFrom, myEmail, wasPublished !== false)} onClose={d.dismissConflict}
         footer={<><span className="spacer" /><button className="btn" onClick={d.dismissConflict}>Keep editing</button>
           <button className="btn primary" disabled={busy} onClick={run(() => d.keepMine())}>Save mine as a new draft</button></>}>
         <p>Your changes are still here and not saved. Saving starts a new draft with your changes. If something was published meanwhile, you are shown what changed and asked before yours is published over it.</p>
@@ -195,26 +199,27 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
   if (loadTheirs && c.exists) {
     return (
       <Modal title={who.you ? "You saved the draft in another window first" : "Somebody else saved the draft first"}
-        subtitle={`${who.you ? "You" : who.name} saved the unpublished changes ${c.updatedAt ? `at ${when(c.updatedAt)}` : ""}${who.you ? " in another window or tab" : ""}, after you started editing here.`} onClose={d.dismissConflict}
+        subtitle={`${who.you ? "You" : who.name} saved ${wasPublished === false ? "newer changes to the draft" : "the unpublished changes"} ${c.updatedAt ? `at ${when(c.updatedAt)}` : ""}${who.you ? " in another window or tab" : ""}, after you started editing here.`} onClose={d.dismissConflict}
         footer={<>
           <button className="btn" onClick={d.dismissConflict}>Keep editing</button>
           <span className="spacer" />
-          <button className="btn" disabled={busy} onClick={run(d.takeTheirs)} title="Continue from their draft. Your own changes stay one Undo away.">Use their draft</button>
+          <button className="btn" disabled={busy} onClick={run(d.takeTheirs)} title="Continue from their draft. Undo puts your whole version back.">Use their draft</button>
           <button className="btn primary danger" disabled={busy || !!blocked} onClick={run(() => d.keepMine())}
             title={blocked ?? "Your version becomes the draft. Theirs is replaced."}>Save mine over theirs</button>
         </>}>
-        <p>There is one shared draft of unpublished changes. Yours are still here and not saved. Nothing was overwritten.</p>
+        <p>{wasPublished === false ? "There is one shared draft." : "There is one shared draft of unpublished changes."} Yours are still here and not saved. Nothing was overwritten.</p>
         <h3 className="mini-title"><GitCompare size={14} />What their draft has that you started without</h3>
         {theirs === "failed" ? <LoadError what="Their draft could not be loaded." onRetry={() => setAttempt(attempt + 1)} />
           : theirs ? <ChangeList changes={theirs} /> : <p className="muted">Looking…</p>}
         {blocked && <div className="check warn">{blocked} Until then you can only continue from their draft.</div>}
-        <p className="muted small">“Use their draft” continues from what they saved; Undo brings your own changes back. “Save mine over theirs” replaces their draft with yours.</p>
+        <p className="muted small">“Use their draft” continues from what they saved. Undo then puts your whole version back as it was, also where theirs is newer: nothing is merged. “Save mine over theirs” replaces their draft with yours.</p>
       </Modal>
     );
   }
   if (!c.exists) {
     return (
-      <Modal title={`${cap(noun)} was deleted`} subtitle={deletedSentence(latest, myEmail)} onClose={d.dismissConflict}
+      <Modal title={`${cap(noun)} was deleted`} onClose={d.dismissConflict}
+        subtitle={deletedSentence(c.deletedBy ? { version: 0, deleted: true, savedBy: c.deletedBy, savedByName: c.deletedByName, savedAt: c.deletedAt ?? "" } : latest, myEmail)}
         footer={<><span className="spacer" /><button className="btn" onClick={d.dismissConflict}>Keep editing</button>
           <button className="btn primary" disabled={busy} onClick={onRestore ? () => { d.dismissConflict(); onRestore(); } : run(() => d.keepMine("Restored after it was deleted"))}>Save mine and bring it back</button></>}>
         <p>Your changes are still here. Saving brings {noun} back with your version; ask whoever deleted it first if you are not sure.</p>
@@ -227,7 +232,7 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
       footer={<>
         <button className="btn" onClick={d.dismissConflict}>Keep editing</button>
         <span className="spacer" />
-        <button className="btn" disabled={busy} onClick={run(d.takeTheirs)} title="Continue from their version. Your own changes stay one Undo away.">Use their version</button>
+        <button className="btn" disabled={busy} onClick={run(d.takeTheirs)} title="Continue from their version. Undo puts your whole version back.">Use their version</button>
         <button className="btn primary danger" disabled={busy || !!blocked} onClick={run(() => d.keepMine(`Saved over version ${c.version}`))}
           title={blocked ?? "Your version becomes the newest. Theirs stays in the list of versions."}>Save mine over theirs</button>
       </>}>
@@ -239,7 +244,7 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
       </>}
       {kind === "catalog" && <p className="muted">Open the lists in another tab to see what they changed.</p>}
       {blocked && <div className="check warn">{blocked} Until then you can only continue from their version.</div>}
-      <p className="muted small">“Use their version” continues from what they saved; you can bring your own changes back with Undo and add them again.
+      <p className="muted small">“Use their version” continues from what they saved. Undo then puts your whole version back as it was, also where theirs is newer: nothing is merged.
         “Save mine over theirs” makes your version the newest; theirs stays in the list of versions and can be restored.</p>
     </Modal>
   );
@@ -356,8 +361,8 @@ export function HistoryDialog<T>({ kind, id, title, onRestore, onClose, draftKep
     <Modal wide title={`Versions of “${title}”`}
       subtitle={onRestore
         ? `${draftKept ? "Every published version is listed here; your saved draft is not." : "Every save is a version."} Restoring one puts it into your draft on this screen: nothing is kept until you save the draft, and readers see nothing until you publish.`
-        : "Every save is a version: who changed it, when, and what they said about it."}
-      onClose={onClose} footer={<><span className="spacer" /><button className="btn primary" onClick={onClose}>Close</button></>}>
+        : "Every save is stored as a version: who stored it, when, and what they said about it."}
+      onClose={onClose} footer={<><span className="spacer" /><button className="btn" onClick={onClose}>Close</button></>}>
       {error && (versions ? <div className="check bad">{error}</div> : <LoadError what="The versions could not be loaded." error={error} onRetry={load} />)}
       {!versions && !error && <p className="muted">Loading…</p>}
       <ul className="history">
@@ -368,9 +373,10 @@ export function HistoryDialog<T>({ kind, id, title, onRestore, onClose, draftKep
               <span className="history-text">
                 <strong>{v.deleted ? "Deleted" : `Version ${v.version}`}{i === 0 && !v.deleted && <span className="history-current">current</span>}</strong>
                 {v.note && <span className="history-note">{v.note}</span>}
-                <em>{savedByText(v)} · {when(v.savedAt)}</em>
+                <em>{savedByText(v)} · stored {when(v.savedAt)}</em>
               </span>
-              {!v.deleted && <button className="btn small ghost" aria-expanded={open === v.version} onClick={() => show(v)}><GitCompare size={14} />What changed</button>}
+              {/* the first version has nothing before it to compare with */}
+              {!v.deleted && !!previousOf(v) && <button className="btn small ghost" aria-expanded={open === v.version} onClick={() => show(v)}><GitCompare size={14} />What changed</button>}
               {!v.deleted && i > 0 && onRestore && <button className="btn small" onClick={() => restore(v.version)}><RotateCcw size={14} />Restore</button>}
             </div>
             {open === v.version && <div className="history-detail">{detail(v)}</div>}

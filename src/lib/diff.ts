@@ -32,7 +32,7 @@ const same = (a: unknown, b: unknown) => (blank(a) && blank(b)) || JSON.stringif
 const isObject = (v: unknown): v is Doc => !!v && typeof v === "object" && !Array.isArray(v);
 
 /** What a field belongs to: its name depends on it ("name" of a process, "short name" of a requirement). */
-export type FieldContext = "process" | "standard" | "step" | "requirement" | "participant" | "prerequisite";
+export type FieldContext = "process" | "standard" | "step" | "requirement" | "participant" | "prerequisite" | "link";
 
 /** Names for the fields, as the labels on the editing screen call them. */
 const FIELD: Record<string, string> = {
@@ -51,6 +51,7 @@ const IN: Partial<Record<FieldContext, Record<string, string>>> = {
   step: { title: "what happens", description: "context", resources: "skills and links", processId: "process" },
   requirement: { title: "short name", review: "signs of a violation", processId: "process that helps to comply" },
   participant: { description: "how to reach them" },
+  link: { title: "name", url: "address", description: "what it does for the reader", kind: "kind" },
   prerequisite: { description: "why it is needed", processId: "process that provides it" },
 };
 const name = (key: string, context?: FieldContext) => (context && IN[context]?.[key]) ?? FIELD[key] ?? key;
@@ -114,13 +115,16 @@ function compareItems<T extends { id: string }>(what: string, before: T[], after
 const list = <T,>(v: T[] | undefined): T[] => (Array.isArray(v) ? v.filter((x) => isObject(x)) : []);
 
 /** The details that hold one value from a list: said with what they were and what they are now. */
-const VALUED = ["category", "practice", "platform", "rigour", "owner"] as const;
+const VALUED = ["category", "practice", "platform", "rigour", "owner", "status"] as const;
+/** A status as the editing bar calls it. */
+const STATUS_NAME: Record<string, string> = { draft: "Draft", active: "Published", deprecated: "Retired" };
 
 /** The changed details of a whole document; those in VALUED say from what to what, by name where the lists are known. */
 function detailChanges(before: Doc, after: Doc, skip: string[], catalog?: Catalog, context?: FieldContext): Change[] {
   const nameIn = (list: { id: string; name: string }[] | undefined, v: unknown) => (typeof v === "string" && v ? list?.find((x) => x.id === v)?.name ?? v : "");
   const valueName = (field: (typeof VALUED)[number], v: unknown): string => {
     if (field === "rigour") return typeof v === "string" ? RIGOUR_NAME[v as Rigour] ?? v : "";
+    if (field === "status") return typeof v === "string" ? STATUS_NAME[v] ?? v : "";
     const list = field === "category" ? catalog?.categories : field === "practice" ? catalog?.practices : field === "owner" ? catalog?.teams : catalog?.platforms;
     return nameIn(list, v);
   };
@@ -132,25 +136,33 @@ function detailChanges(before: Doc, after: Doc, skip: string[], catalog?: Catalo
   return changes;
 }
 
+/**
+ * Items without an id (prerequisites, links), matched by their name, two with the same name in the
+ * order they come: added, removed and changed ones, and a change of their order. `what`: "Prerequisite",
+ * "Link"; `order`: the words for a change of their order.
+ */
+function compareNamed(what: string, before: Doc[], after: Doc[], changes: Change[], context: FieldContext | undefined, order: string) {
+  const text = (v: unknown) => (typeof v === "string" ? v : "");
+  const left = [...before];
+  const pairs: [number, number][] = []; // [position before, position after]
+  const at = (i: number) => `${what} ${i + 1}`;
+  after.forEach((q, i) => {
+    const j = left.findIndex((o) => o.title === q.title);
+    if (j < 0) return void changes.push({ kind: "added", what, label: text(q.title), unnamed: at(i) });
+    const [prev] = left.splice(j, 1);
+    pairs.push([before.indexOf(prev), i]);
+    if (!same(prev, q)) changes.push({ kind: "changed", what, label: text(q.title), unnamed: at(i), details: changedFields(prev, q, ["title"], context) });
+  });
+  for (const q of left) changes.push({ kind: "removed", what, label: text(q.title), unnamed: at(before.indexOf(q)) });
+  if (pairs.some(([was], i) => i > 0 && was < pairs[i - 1][0])) changes.push({ kind: "changed", what: "Details", label: order });
+}
+
 export function compareProcesses(before: Process, after: Process, catalog?: Catalog): Change[] {
   if (!isObject(before) || !isObject(after)) return [];
-  // updatedAt changes with every save and says nothing; steps and prerequisites are listed on their own
-  const changes = detailChanges(before as unknown as Doc, after as unknown as Doc, ["steps", "prerequisites", "actors", "updatedAt", "$schema", "schemaVersion", "id"], catalog, "process");
-  // prerequisites have no id: they are matched by title, and two with the same title in the order they come
-  const oldPre = list(before.prerequisites), newPre = list(after.prerequisites);
-  const text = (v: unknown) => (typeof v === "string" ? v : "");
-  const left = [...oldPre];
-  const pairs: [number, number][] = []; // [position before, position after]
-  const pre = (at: number) => `Prerequisite ${at + 1}`;
-  newPre.forEach((q, at) => {
-    const i = left.findIndex((o) => o.title === q.title);
-    if (i < 0) return void changes.push({ kind: "added", what: "Before you start", label: text(q.title), unnamed: pre(at) });
-    const [prev] = left.splice(i, 1);
-    pairs.push([oldPre.indexOf(prev), at]);
-    if (!same(prev, q)) changes.push({ kind: "changed", what: "Before you start", label: text(q.title), unnamed: pre(at), details: changedFields(prev as unknown as Doc, q as unknown as Doc, ["title"], "prerequisite") });
-  });
-  for (const q of left) changes.push({ kind: "removed", what: "Before you start", label: text(q.title), unnamed: pre(oldPre.indexOf(q)) });
-  if (pairs.some(([was], i) => i > 0 && was < pairs[i - 1][0])) changes.push({ kind: "changed", what: "Details", label: "order of what is needed before you start" });
+  // updatedAt changes with every save and says nothing; steps, prerequisites and links are listed one by one
+  const changes = detailChanges(before as unknown as Doc, after as unknown as Doc, ["steps", "prerequisites", "actors", "resources", "updatedAt", "$schema", "schemaVersion", "id"], catalog, "process");
+  compareNamed("Prerequisite", list(before.prerequisites) as unknown as Doc[], list(after.prerequisites) as unknown as Doc[], changes, "prerequisite", "order of what is needed before you start");
+  compareNamed("Link", list(before.resources) as unknown as Doc[], list(after.resources) as unknown as Doc[], changes, "link", "order of the links");
   compareItems("Participant", list(before.actors), list(after.actors), (a) => a.name, changes, "participant");
   compareItems<Step>("Step", list(before.steps), list(after.steps), (s) => s.title, changes, "step");
   return changes;
@@ -158,7 +170,8 @@ export function compareProcesses(before: Process, after: Process, catalog?: Cata
 
 export function compareStandards(before: Standard, after: Standard, catalog?: Catalog): Change[] {
   if (!isObject(before) || !isObject(after)) return [];
-  const changes = detailChanges(before as unknown as Doc, after as unknown as Doc, ["requirements", "updatedAt", "$schema", "schemaVersion", "id"], catalog, "standard");
+  const changes = detailChanges(before as unknown as Doc, after as unknown as Doc, ["requirements", "resources", "updatedAt", "$schema", "schemaVersion", "id"], catalog, "standard");
+  compareNamed("Link", list(before.resources) as unknown as Doc[], list(after.resources) as unknown as Doc[], changes, "link", "order of the links");
   // a requirement is named by its id and name; without a name yet, by its id
   compareItems<Requirement>("Requirement", list(before.requirements), list(after.requirements), (r) => (typeof r.title === "string" && r.title.trim() ? `${r.id} ${r.title}` : ""), changes, "requirement",
     (r) => `Requirement ${r.id}`);

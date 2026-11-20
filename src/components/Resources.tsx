@@ -34,22 +34,33 @@ export function Resources({ list, compact }: { list: Resource[]; compact?: boole
   );
 }
 
-/** Links and skills, one field per row: the kind, its name, its address, what it does for the reader. */
+/**
+ * Links and skills, one block each: the kind and Remove on its head, then its name, its address and
+ * what it does for the reader, each with a label that stays when the field is filled in.
+ */
 export function ResourceEditor({ list, onChange }: { list: Resource[]; onChange: (l: Resource[]) => void }) {
   const upd = (i: number, patch: Partial<Resource>) => onChange(list.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   return (
     <div className="rows">
       {list.map((r, i) => (
         <div className="prereq-edit res-edit" key={i}>
-          <div className="row">
+          <div className="row res-head">
+            <span className="row-n">{i + 1}</span>
             <select className="res-kind" value={r.kind ?? "other"} aria-label={`Kind of link ${i + 1}`} onChange={(e) => upd(i, { kind: e.target.value as ResourceKind })}>
               {(Object.keys(RESOURCE_KINDS) as ResourceKind[]).map((k) => <option key={k} value={k}>{RESOURCE_KINDS[k].label}</option>)}
             </select>
-            <button className="icon-btn" onClick={() => onChange(list.filter((_, j) => j !== i))} aria-label={`Remove link ${i + 1}`}><X size={15} /></button>
+            <span className="spacer" />
+            <button className="icon-btn" onClick={() => onChange(list.filter((_, j) => j !== i))} aria-label={`Remove link ${i + 1}`} title="Remove this link"><X size={15} /></button>
           </div>
-          <input value={r.title} maxLength={80} placeholder="Name, e.g. Order form" aria-label={`Name of link ${i + 1}`} autoFocus={r.title === "" && r.url === ""} onChange={(e) => upd(i, { title: e.target.value })} />
-          <input value={r.url} placeholder="https://…" aria-label={`Address of link ${i + 1}`} onChange={(e) => upd(i, { url: e.target.value })} />
-          <input value={r.description ?? ""} maxLength={200} placeholder="What it does for the reader" aria-label={`What link ${i + 1} does for the reader`} onChange={(e) => upd(i, { description: e.target.value })} />
+          <label className="mini-field"><span className="mini-label">Name</span>
+            <input value={r.title} maxLength={80} placeholder="e.g. Order form" aria-label={`Name of link ${i + 1}`} autoFocus={r.title === "" && r.url === ""} onChange={(e) => upd(i, { title: e.target.value })} />
+          </label>
+          <label className="mini-field"><span className="mini-label">Address</span>
+            <input value={r.url} placeholder="https://…" inputMode="url" aria-label={`Address of link ${i + 1}`} onChange={(e) => upd(i, { url: e.target.value })} />
+          </label>
+          <label className="mini-field"><span className="mini-label">What it does for the reader</span>
+            <input value={r.description ?? ""} maxLength={200} placeholder="e.g. Fills in the request for you" aria-label={`What link ${i + 1} does for the reader`} onChange={(e) => upd(i, { description: e.target.value })} />
+          </label>
         </div>
       ))}
       <button className="btn small ghost" onClick={() => onChange([...list, { title: "", url: "", kind: "other" }])}><Plus size={14} />Add link or skill</button>
