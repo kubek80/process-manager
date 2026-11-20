@@ -3,18 +3,18 @@ import { Blend, CircleHelp, SearchX, Sparkles, Type, X } from "lucide-react";
 import type { FeedbackByTarget, Process, Standard } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { useEngagement } from "../lib/engagement";
-import { pageOf, sizeOf, usePageSize } from "../lib/paging";
+import { pageOf, sizeOf, useListView, usePageSize } from "../lib/paging";
 import { useProfile, useRemembered } from "../lib/profile";
 import { canEdit, canManage, useMe, usePerms } from "../lib/session";
 import { sortOf, sortResults, type MetaByKind, type SortKey } from "../lib/sorting";
-import { contentStamp, fromMeaning, fuse, markedWords, meaningHelp, modeLine, modeOf, needsServer, planOf, providerOf, rememberMode, SEARCH_MODES, truncatedText, typingMovesAddress, useMeaningSearch, type Found, type Provider, type SearchMode } from "../lib/meaning";
+import { closestWanted, contentStamp, fromMeaning, fuse, markedWords, meaningHelp, modeLine, modeOf, needsServer, planOf, providerOf, rememberMode, SEARCH_MODES, truncatedText, typingMovesAddress, useMeaningSearch, type Found, type Provider, type SearchMode } from "../lib/meaning";
 import { go, href, type SearchState } from "../lib/store";
-import { countText, FILTER_LABEL, filterCount, filtersOf, profileOptions, search, toggleFilter, typeTab, withTypeTab, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
+import { countText, FILTER_LABEL, filterCount, filtersOf, profileOptions, rigourOptionLabel, search, toggleFilter, typeTab, withTypeTab, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
 import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
 import { openCount } from "./Feedback";
 import { DocCard, Marked } from "./DocCard";
 import { needsReview } from "./DocList";
-import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, Pager, profileChosen, ResultsBar, ResultsFoot, SearchBox, toResults, TypeTabs, type Chosen, type FlagControl } from "./Lists";
+import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, OrderControls, Pager, profileChosen, ResultsBar, ResultsFoot, SearchBox, toResults, TypeTabs, type Chosen, type FlagControl } from "./Lists";
 import "../search.css";
 
 export { Marked };
@@ -32,7 +32,7 @@ const MODE_ICON: Record<SearchMode, typeof Type> = { words: Type, meaning: Spark
  * "Search by": Words, Meaning, Both. One choice of three, like radio buttons: the arrow keys move
  * the choice, Tab leaves the group; the choice is announced.
  */
-export function SearchModeSwitch({ mode, onChange, outside, provider }: { mode: SearchMode; onChange: (m: SearchMode) => void; outside: boolean; provider?: Provider }) {
+export function SearchModeSwitch({ mode, onChange, provider }: { mode: SearchMode; onChange: (m: SearchMode) => void; provider?: Provider }) {
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [help, setHelp] = useState(false);
   const onKey = (e: KeyboardEvent) => {
@@ -48,27 +48,29 @@ export function SearchModeSwitch({ mode, onChange, outside, provider }: { mode: 
   return (
     <div className={`search-mode ${help ? "help-open" : ""}`.trim()}>
       <div className="search-mode-row">
-        <span className="search-mode-name" id="search-mode-name">Search by</span>
-        <div className="search-mode-choices" role="radiogroup" aria-labelledby="search-mode-name" aria-describedby="search-mode-help" onKeyDown={onKey}>
+        <span className="search-mode-name sr-only" id="search-mode-name">Search by</span>
+        <div className="seg search-mode-choices" role="radiogroup" aria-labelledby="search-mode-name" aria-describedby="search-mode-help" onKeyDown={onKey}>
           {SEARCH_MODES.map((m) => {
             const Icon = MODE_ICON[m];
             return (
               <button key={m} ref={(el) => { refs.current[m] = el; }} type="button" role="radio" aria-checked={m === mode} tabIndex={m === mode ? 0 : -1}
-                className={m === mode ? "on" : ""} data-mode={m} onClick={() => onChange(m)}><Icon size={14} aria-hidden="true" />{MODE_LABEL[m]}</button>
+                className={`seg-item ${m === mode ? "on" : ""}`.trim()} data-mode={m} title={modeLine(m, provider)} onClick={() => onChange(m)}>
+                <Icon size={14} aria-hidden="true" />{MODE_LABEL[m]}
+              </button>
             );
           })}
         </div>
-        <p className="search-mode-line" aria-hidden="true">{modeLine(mode, provider)}</p>
-        <button type="button" className="search-mode-more" aria-expanded={help} aria-controls="search-mode-help" onClick={() => setHelp(!help)}>
-          <CircleHelp size={14} aria-hidden="true" />How this works
+        <button type="button" className="search-mode-more" aria-expanded={help} aria-controls="search-mode-help" onClick={() => setHelp(!help)} title="How this works">
+          <CircleHelp size={16} aria-hidden="true" /><span className="search-mode-more-word">How this works</span>
         </button>
       </div>
-      {outside && <p className="search-mode-outside">With Meaning and Both, what you type is sent to Google Cloud to be compared.</p>}
-      <ul className="search-mode-help" id="search-mode-help" hidden={!help}>
-        <li><b>Words</b> finds what contains every word you type.</li>
-        <li className="search-mode-meaning" data-provider={provider ?? "unknown"}><b>Meaning</b> {meaningHelp(provider)}</li>
-        <li><b>Both</b> shows what either finds, the best of each first.</li>
-      </ul>
+      <div className="search-mode-help-box" id="search-mode-help" hidden={!help}>
+        <ul className="search-mode-help">
+          <li><b>Words</b> finds what contains every word you type.</li>
+          <li className="search-mode-meaning" data-provider={provider ?? "unknown"}><b>Meaning</b> {meaningHelp(provider)}</li>
+          <li><b>Both</b> shows what either finds, the best of each first.</li>
+        </ul>
+      </div>
     </div>
   );
 }
@@ -120,9 +122,12 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   // what is typed is in the address at once, without a new entry in the browser's history
   const [text, setText] = useState(q);
   const pushed = useRef(q);
+  // what a person asked for on purpose (Enter, Search, a link): only then is the server asked
+  // for the closest by meaning when words find nothing, never while typing
+  const [submitted, setSubmitted] = useState(q.trim());
   useEffect(() => {
     // the address changed from elsewhere (Back, a link): the box shows what it says
-    if (q !== pushed.current) { pushed.current = q; setText(q); }
+    if (q !== pushed.current) { pushed.current = q; setText(q); setSubmitted(q.trim()); }
   }, [q]);
   // writes the words to the address: the search is run with them
   const run = (v: string, m: SearchMode = mode) => {
@@ -131,7 +136,7 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   };
   // with Words the results follow the typing; with Meaning and Both the typing waits for Search
   const type = (v: string) => { setText(v); if (typingMovesAddress(mode, offered)) run(v); };
-  const submit = () => { run(text); setAttempt((n) => n + 1); };
+  const submit = () => { run(text); setSubmitted(text.trim()); setAttempt((n) => n + 1); };
   const setMode = (m: SearchMode) => {
     rememberMode(me.user?.email, m);
     run(text, m);
@@ -179,6 +184,18 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   const kindCount = (k: string) => out.options.type.find((o) => o.value === k)?.count ?? 0;
   const tabCounts = { "": kindCount("process") + kindCount("standard"), process: kindCount("process"), standard: kindCount("standard") };
 
+  // words found nothing (whatever the filters): on a search asked for on purpose, the closest by meaning
+  const wordHits = plan.show === "words" && asked ? search({ processes, standards, catalog, q: asked, drafts, profile }).results.length : -1;
+  const wantClosest = closestWanted({ mode, offered, asked, submitted, wordHits });
+  const closestState = useMeaningSearch(asked, wantClosest, attempt, stamp);
+  const closest = useMemo(() => {
+    if (!wantClosest || closestState.for !== asked || closestState.loading || !closestState.answer || closestState.answer.query !== asked) return null;
+    const byKey = new Map<string, Process | Standard>([...processes.map((p) => [`process:${p.id}`, p] as const), ...standards.map((d) => [`standard:${d.id}`, d] as const)]);
+    return search({ processes, standards, catalog, drafts, profile, found: fromMeaning(closestState.answer.results, (k, id) => byKey.get(`${k}:${id}`)) }).results;
+  }, [wantClosest, closestState, asked, processes, standards, catalog, drafts, profile]);
+  const closestWords = useMemo(() => markedWords(wordsOf(asked)), [asked]);
+
+  const [view, setView] = useListView(me.user?.email);
   const [open, setOpen] = useState(false); // the filters on a narrow screen
   const results = useRef<HTMLElement>(null);
   const n = out.results.length;
@@ -207,11 +224,13 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
     ...(bookmarked ? [{ key: "bookmarked", name: "Bookmarks", value: "only mine", remove: () => { setBookmarked(false); toFirst(); } }] : []),
     ...(due ? [{ key: "review", name: "Review", value: "due or overdue", remove: () => { setDue(false); toFirst(); } }] : []),
     ...KEYS.flatMap((k) => out.options[k].filter((o) => o.chosen).map((o) => ({
-      key: `${k}:${o.value}`, name: FILTER_LABEL[k], value: o.label, remove: () => setFilters(toggleFilter(filters, k, o.value)),
+      key: `${k}:${o.value}`, name: FILTER_LABEL[k], value: k === "rigour" ? rigourOptionLabel(o.value as never, "any") : o.label, remove: () => setFilters(toggleFilter(filters, k, o.value)),
     }))),
     ...profileChosen(profile, changeProfile, catalog),
   ];
   const clear = () => { setBookmarked(false); setDue(false); setProfile({}); setFilters({}); };
+  // nothing found and nothing chosen to blame: no tabs, filters, order or pages to offer
+  const bare = n === 0 && !anyChosen && !plan.busy;
   const summary = <>{shownQ.trim() ? <> for “{shownQ.trim()}”</> : null}{chosen.length ? <> with {plural(chosen.length, "filter")}</> : null}</>;
 
   return (
@@ -219,22 +238,27 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
       <h1 className="sr-only">Search processes and standards</h1>
       <div className="search-head">
         <SearchBox big value={text} onChange={type} onSubmit={submit} autoFocus={!q && !chosen.length} />
-        {offered && <SearchModeSwitch mode={mode} onChange={setMode} outside={!!me.search?.outside} provider={providerOf(me.search?.provider)} />}
+        {offered && <SearchModeSwitch mode={mode} onChange={setMode} provider={providerOf(me.search?.provider)} />}
       </div>
+      {/* a fact about privacy, not help: visible before Meaning or Both is chosen */}
+      {offered && me.search?.outside && <p className="search-mode-outside">With Meaning and Both, what you type is sent to Google Cloud to be compared.</p>}
 
-      <div className="list-layout">
+      <div className={`list-layout ${bare ? "no-panel" : ""}`.trim()}>
         <div className="list-head">
-          <TypeTabs value={tab} counts={tabCounts} atLeast={truncated} onChange={(t) => setFilters(withTypeTab(filters, t))} />
+          {!bare && <TypeTabs value={tab} counts={tabCounts} atLeast={truncated} onChange={(t) => setFilters(withTypeTab(filters, t))} />}
           <ResultsBar page={page} noun={{ one: "result", many: "results" }} panelId="search-filters" open={open} onOpen={setOpen}
             chosen={chosen.length} size={size} onSize={changeSize} extra={summary}
-            sort={sort} onSort={changeSort} searched={!!shownQ.trim()}
+            sort={sort} onSort={changeSort} searched={!!shownQ.trim()} view={view} onView={setView} bare={bare}
             pager={<Pager page={page} onPage={goTo} label="Pages of results" compact />} />
           {truncated && <p className="search-truncated">{truncatedText(plan.meaning.length)}</p>}
           <ChosenFilters chosen={chosen} onClear={clear} />
         </div>
-        <FilterPanel id="search-filters" open={open} keys={KEYS} options={out.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}
-          flags={flagControls} profile={profile} onProfile={changeProfile} profileOptions={mine} subject="any" total={n} atLeast={truncated}
-          done={{ label: `Show ${countText(n, truncated)} ${n === 1 ? "result" : "results"}`, onClick: () => { setOpen(false); toResults(results.current); } }} />
+        {!bare && (
+          <FilterPanel id="search-filters" open={open} keys={KEYS} options={out.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}
+            flags={flagControls} profile={profile} onProfile={changeProfile} profileOptions={mine} subject="any" total={n} atLeast={truncated}
+            order={<OrderControls sort={sort} onSort={changeSort} searched={!!shownQ.trim()} size={size} onSize={changeSize} />}
+            done={{ label: `Show ${countText(n, truncated)} ${n === 1 ? "result" : "results"}`, onClick: () => { setOpen(false); toResults(results.current); } }} />
+        )}
         <section className="list-results" aria-label="Results" ref={results} tabIndex={-1} aria-busy={plan.busy || undefined}>
           {offered && (
             <div className="search-state" role="status" aria-live="polite">
@@ -260,7 +284,27 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
               )}
             </div>
           )}
-          {plan.show === "none" || (plan.busy && n === 0) ? null : n === 0 ? (
+          {wantClosest && n === 0 && !closestState.problem ? (
+            <div className="search-closest" role="status" aria-live="polite">
+              {closest === null ? (
+                <p className="search-busy"><span className="search-spinner" aria-hidden="true" />Nothing contains all these words. Looking for the closest by meaning…</p>
+              ) : closest.length === 0 ? (
+                <p className="search-closest-line">Nothing contains all these words, and nothing close was found by meaning. <a href={href({ page: "library" })}>Browse all processes</a> or <a href={href({ page: "standards" })}>all standards</a>.</p>
+              ) : (
+                <>
+                  <p className="search-closest-line"><b>Nothing contains all these words.</b> Closest by meaning:</p>
+                  <ol className={`cards ${view === "rows" ? "rows" : ""}`.trim()}>
+                    {closest.slice(0, size).map((r) => (
+                      <DocCard key={`${r.kind}:${r.doc.id}`} kind={r.kind} doc={r.doc} rigour={r.rigour} rules={r.rules} hits={r.hits} words={closestWords} view={view}
+                        openFeedback={openCount(feedback?.[r.kind]?.[r.doc.id] ?? [])} mayEdit={mayEdit(r.kind, r.doc)} manages={manages(r.kind, r.doc)} meta={meta?.[r.kind]?.[r.doc.id]}
+                        usedBy={r.kind === "process" ? usedBy(r.doc.id) : undefined} />
+                    ))}
+                  </ol>
+                  <AskForIt />
+                </>
+              )}
+            </div>
+          ) : plan.show === "none" || (plan.busy && n === 0) ? null : n === 0 ? (
             <div className="list-empty search-empty">
               <span className="list-empty-icon" aria-hidden="true"><SearchX size={22} /></span>
               <h2>Nothing found</h2>
@@ -297,14 +341,14 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
               )}
             </div>
           ) : (
-            <ol className="cards">
+            <ol className={`cards ${view === "rows" ? "rows" : ""}`.trim()}>
               {sorted.slice(page.start, page.end).map((r) => {
                 const edits = mayEdit(r.kind, r.doc);
                 const broken = edits && hasErrors(r.kind === "process" ? validateProcess(r.doc, ids) : validateStandard(r.doc, ids));
                 return (
                   <DocCard key={`${r.kind}:${r.doc.id}`} kind={r.kind} doc={r.doc} rigour={r.rigour} rules={r.rules} hits={r.hits} words={words}
                     openFeedback={openCount(feedback?.[r.kind]?.[r.doc.id] ?? [])} mayEdit={edits} manages={manages(r.kind, r.doc)} broken={broken} meta={meta?.[r.kind]?.[r.doc.id]}
-                    usedBy={r.kind === "process" ? usedBy(r.doc.id) : undefined} foundBy={plan.show === "both" ? r.by : undefined} />
+                    usedBy={r.kind === "process" ? usedBy(r.doc.id) : undefined} foundBy={plan.show === "both" ? r.by : undefined} view={view} />
                 );
               })}
             </ol>

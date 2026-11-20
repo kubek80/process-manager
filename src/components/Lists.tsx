@@ -260,16 +260,16 @@ export function TypeTabs({ value, counts, onChange, atLeast }: {
     refs.current[tabs[to]]?.focus();
   };
   return (
-    <div className="type-tabs" role="radiogroup" aria-label="Show" onKeyDown={onKey}>
+    <div className="tabs type-tabs" role="radiogroup" aria-label="Show" onKeyDown={onKey}>
       {tabs.map((t) => {
         const Icon = t ? TAB_ICON[t] : null;
         return (
           <button key={t || "all"} ref={(el) => { refs.current[t] = el; }} type="button" role="radio" aria-checked={t === value} tabIndex={t === value ? 0 : -1}
-            className={`type-tab ${t || "all"} ${t === value ? "on" : ""}`.trim()} data-type={t || "all"} onClick={() => onChange(t)}
+            className={`tab type-tab ${t || "all"} ${t === value ? "on" : ""}`.trim()} data-type={t || "all"} onClick={() => onChange(t)}
             aria-label={`${TAB_LABEL[t]}, ${countWords(counts[t], atLeast)}`}>
             {Icon && <span className={`type-tab-mark ${t}`} aria-hidden="true"><Icon size={12} /></span>}
             <span className="type-tab-name">{TAB_LABEL[t]}</span>
-            <span className="type-tab-count" aria-hidden="true">{countText(counts[t], atLeast)}</span>
+            <span className="tab-count" aria-hidden="true">{countText(counts[t], atLeast)}</span>
           </button>
         );
       })}
@@ -307,7 +307,7 @@ export function profileChosen(profile: Profile, onChange: (p: Profile) => void, 
 }
 
 /** The line above the results: how many are shown (announced politely), "Filters (n)" on a phone, the order, the page size and the pages. */
-export function ResultsBar({ page, noun, panelId, open, onOpen, chosen, size, onSize, extra, sort, onSort, searched, pager }: {
+export function ResultsBar({ page, noun, panelId, open, onOpen, chosen, size, onSize, extra, sort, onSort, searched, pager, view, onView, bare }: {
   page: Page; noun: { one: string; many: string }; panelId: string; open: boolean; onOpen: (open: boolean) => void; chosen: number;
   size: number; onSize: (n: number) => void; extra?: ReactNode;
   sort: SortKey; onSort: (k: SortKey) => void;
@@ -315,18 +315,63 @@ export function ResultsBar({ page, noun, panelId, open, onOpen, chosen, size, on
   searched: boolean;
   /** The pager above the results, at the end of the line. */
   pager?: ReactNode;
+  /** Cards or rows. */
+  view: ListView; onView: (v: ListView) => void;
+  /** Nothing to order, page or filter (nothing found, nothing chosen): the count alone. */
+  bare?: boolean;
 }) {
   return (
     <div className="results-bar">
       <p className="list-count" role="status" aria-live="polite" aria-atomic="true">{showingText(page, noun)}{extra}</p>
-      <button type="button" className="btn small filter-toggle" aria-expanded={open} aria-controls={panelId} onClick={() => onOpen(!open)}>
-        <SlidersHorizontal size={14} aria-hidden="true" />Filters{chosen ? ` (${chosen})` : ""}
-      </button>
-      <div className="results-tools">
-        <SortBy sort={sort} onSort={onSort} searched={searched} />
-        <PageSize size={size} onSize={onSize} />
-        {pager}
-      </div>
+      {!bare && (
+        <>
+          <button type="button" className="btn small filter-toggle" aria-expanded={open} aria-controls={panelId} onClick={() => onOpen(!open)}>
+            <SlidersHorizontal size={14} aria-hidden="true" />Filters{chosen ? ` (${chosen})` : ""}
+          </button>
+          <div className="results-tools">
+            <ViewSwitch view={view} onView={onView} />
+            <span className="results-order"><SortBy sort={sort} onSort={onSort} searched={searched} /><PageSize size={size} onSize={onSize} /></span>
+            {pager}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const VIEW_LABEL: Record<ListView, string> = { cards: "Cards", rows: "Rows" };
+/** Cards or rows: one segmented control; the arrow keys move the choice. */
+export function ViewSwitch({ view, onView }: { view: ListView; onView: (v: ListView) => void }) {
+  const views: ListView[] = ["cards", "rows"];
+  const refs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const onKey = (e: KeyboardEvent) => {
+    if (!["ArrowRight", "ArrowLeft", "ArrowUp", "ArrowDown"].includes(e.key)) return;
+    e.preventDefault();
+    const to = view === "cards" ? "rows" : "cards";
+    onView(to);
+    refs.current[to]?.focus();
+  };
+  return (
+    <div className="seg view-switch" role="radiogroup" aria-label="Show as" onKeyDown={onKey}>
+      {views.map((v) => {
+        const Icon = v === "cards" ? LayoutGrid : Rows3;
+        return (
+          <button key={v} ref={(el) => { refs.current[v] = el; }} type="button" role="radio" aria-checked={v === view} tabIndex={v === view ? 0 : -1}
+            className={`seg-item ${v === view ? "on" : ""}`.trim()} data-view={v} onClick={() => onView(v)} title={`Show as ${VIEW_LABEL[v].toLowerCase()}`}>
+            <Icon size={14} aria-hidden="true" /><span className="seg-word">{VIEW_LABEL[v]}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The order and the page size, for the filter sheet of a phone (the bar holds them on a wider screen). */
+export function OrderControls({ sort, onSort, searched, size, onSize }: { sort: SortKey; onSort: (k: SortKey) => void; searched: boolean; size: number; onSize: (n: number) => void }) {
+  return (
+    <div className="order-controls">
+      <SortBy sort={sort} onSort={onSort} searched={searched} />
+      <PageSize size={size} onSize={onSize} />
     </div>
   );
 }

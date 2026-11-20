@@ -82,11 +82,14 @@ export function Fact({ icon, label, strong, children, className = "", title }: {
   /** The tooltip; by default the label and the text when the text is plain. */
   title?: string;
 }) {
-  const Icon = typeof icon === "function" || (typeof icon === "object" && icon !== null && "render" in (icon as object)) ? (icon as LucideIcon) : null;
+  // a lucide icon is a component (a function or a forwardRef object); anything else is drawn as it is
+  const isComponent = typeof icon === "function" || (typeof icon === "object" && icon !== null && "render" in (icon as object));
+  const Icon = isComponent ? (icon as LucideIcon) : null;
+  const node = isComponent ? null : (icon as ReactNode);
   const tip = title ?? (typeof children === "string" ? (label ? `${label}: ${children}` : children) : label);
   return (
     <span className={`fact ${strong ? "strong" : ""} ${className}`.replace(/\s+/g, " ").trim()} title={tip}>
-      {Icon ? <Icon size={14} aria-hidden="true" className="fact-icon" /> : icon ?? null}
+      {Icon ? <Icon size={14} aria-hidden="true" className="fact-icon" /> : node ?? null}
       <span className="fact-text">{label && <span className="sr-only">{label}: </span>}{children}</span>
     </span>
   );

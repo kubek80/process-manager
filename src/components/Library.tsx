@@ -13,10 +13,10 @@ export function Library({ processes, standardIds, onNew, onAi, feedback, meta }:
   const editor = canCreate(perms, "process");
   return (
     <div className="page library">
-      <section className="hero">
+      <section className="hero list-hero">
         <div>
           <h1>How do I get…?</h1>
-          <p className="lead">Platform processes, step by step. See who does what on the map, then follow your own checklist.</p>
+          <p className="lead">Step by step: who does what, and your own checklist.</p>
         </div>
         {editor && (
           <div className="hero-actions">

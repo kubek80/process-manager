@@ -102,9 +102,9 @@ describe("where the checker's problems are shown", () => {
     expect(issuesFor("process", p, issues, { section: "steps", item: "ask" })).toEqual([]);
   });
   it("are summed up in a few words", () => {
-    expect(checkerSummary([])).toEqual({ level: "good", text: "No problems" });
-    expect(checkerSummary([{ level: "warning", path: "x", message: "m" }])).toEqual({ level: "warn", text: "1 hint" });
-    expect(checkerSummary([{ level: "error", path: "x", message: "m" }, { level: "error", path: "y", message: "m" }, { level: "warning", path: "x", message: "m" }])).toEqual({ level: "bad", text: "2 problems" });
+    expect(checkerSummary([])).toEqual({ level: "good", text: "Nothing to fix" });
+    expect(checkerSummary([{ level: "warning", path: "x", message: "m" }])).toEqual({ level: "hint", text: "1 suggestion" });
+    expect(checkerSummary([{ level: "error", path: "x", message: "m" }, { level: "error", path: "y", message: "m" }, { level: "warning", path: "x", message: "m" }])).toEqual({ level: "bad", text: "2 to fix" });
   });
 });
 
@@ -114,7 +114,7 @@ describe("a problem in words", () => {
     expect(issueText({ level: "error", path: "title", message: "is too short (minimum 3 characters)" })).toBe("Name is too short (minimum 3 characters)");
     expect(issueText({ level: "error", path: "steps[1].next[0].to", message: "points at a step that does not exist" })).toBe("Goes to points at a step that does not exist");
     expect(issueText({ level: "warning", path: "steps[2]", message: "cannot be reached from the first step" })).toBe("Cannot be reached from the first step");
-    expect(issueText({ level: "error", path: "(root)", message: "is missing the required field \"id\"" })).toBe("Is missing the required field \"id\"");
+    expect(issueText({ level: "error", path: "(root)", message: "is missing the required field \"id\"" })).toBe("Give it an id.");
   });
 });
 
@@ -125,7 +125,7 @@ describe("the example texts of something new", () => {
     const issues = exampleIssues("process", p);
     expect(issues.map((i) => i.path)).toEqual(["summary", "steps[0].title", "steps[0].instructions[0]"]);
     expect(issues.every((i) => i.level === "error")).toBe(true);
-    expect(issueText(issues[0])).toBe("Summary still has the example text. Say it in your own words before publishing.");
+    expect(issueText(issues[0])).toBe("Summary is still the example: write your own before publishing.");
     expect(processIssueTarget(p, issues[1].path)).toEqual({ section: "steps", item: "first-step" });
     // a step added later starts with an example name too
     const more = addStepAfter({ ...p, summary: "Real words." }, "first-step").process;
@@ -212,11 +212,11 @@ describe("a new document's example texts read calmer than real problems", () => 
   const example = { level: "error" as const, path: "summary", message: exampleIssues("process", blankProcess([], "X"))[0].message };
   const real = { level: "error" as const, path: "title", message: "is too short" };
   it("are counted as things to fill in when they are all there is", () => {
-    expect(checkerSummary([example, example, example])).toEqual({ level: "warn", text: "3 to fill in" });
-    expect(checkerSummary([example])).toEqual({ level: "warn", text: "1 to fill in" });
+    expect(checkerSummary([example, example, example])).toEqual({ level: "warn", text: "3 to fix" });
+    expect(checkerSummary([example])).toEqual({ level: "warn", text: "1 to fix" });
   });
   it("are problems as soon as a real one is among them", () => {
-    expect(checkerSummary([example, real])).toEqual({ level: "bad", text: "2 problems" });
+    expect(checkerSummary([example, real])).toEqual({ level: "bad", text: "2 to fix" });
   });
   it("are told apart per place in the outline", () => {
     const p = blankProcess([], "X");

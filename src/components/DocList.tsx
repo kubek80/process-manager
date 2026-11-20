@@ -1,28 +1,32 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DocMeta, Feedback, Process, Standard, TargetKind } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { useEngagement } from "../lib/engagement";
 import { reviewInfo } from "../lib/lifecycle";
-import { pageOf, usePageSize } from "../lib/paging";
+import { pageOf, sizeOf, useListView, usePageSize } from "../lib/paging";
 import { useProfile, useRemembered } from "../lib/profile";
 import { canEdit, canManage, useMe, usePerms } from "../lib/session";
-import { useRememberedSort, sortResults } from "../lib/sorting";
-import { FILTER_LABEL, profileOptions, search, toggleFilter, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
+import { sortOf, useRememberedSort, sortResults, type SortKey } from "../lib/sorting";
+import { FILTER_LABEL, filterCount, filtersOf, profileOptions, rigourFilterName, rigourOptionLabel, search, toggleFilter, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
+import { go, parseRoute, type ListState } from "../lib/store";
 import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
 import { openCount } from "./Feedback";
 import { DocCard } from "./DocCard";
-import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, Pager, profileChosen, ResultsBar, ResultsFoot, SearchBox, toResults, usePaging, type Chosen, type FlagControl } from "./Lists";
+import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, OrderControls, Pager, profileChosen, ResultsBar, ResultsFoot, SearchBox, toResults, type Chosen, type FlagControl } from "./Lists";
 
 const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "owner"];
 const NOUN: Record<TargetKind, { one: string; many: string }> = { process: { one: "process", many: "processes" }, standard: { one: "standard", many: "standards" } };
-const PLACEHOLDER: Record<TargetKind, string> = { process: "Search: GCP, repository, Akamai…", standard: "Search: logging, Terraform, SEC-LOG-01…" };
+const PLACEHOLDER: Record<TargetKind, string> = { process: "Search processes: GCP, repository, Akamai…", standard: "Search standards: logging, Terraform, SEC-LOG-01…" };
 
 /** Whether the owner of a process or standard should confirm it soon (or should have already). */
 export const needsReview = (d: Process | Standard) => ["overdue", "soon"].includes(reviewInfo(d).state);
 
 /**
  * The list of all processes, or all standards: the filters on the left, the cards, the pages.
- * What somebody searched and filtered for is still there when they come back from one.
+ * The search, the filters, the page and a chosen order are in the address (`#/processes?q=…&
+ * platform=…&page=2`, the same names as the search page), so that a list can be shared, reloaded
+ * and come back to with Back. "Only my bookmarks" and "Only what needs a review" are remembered in
+ * this browser tab; "My application" and the page size in this browser.
  */
 export function DocList({ kind, processes, standards, standardIds, feedback, empty, meta }: {
   kind: TargetKind;
@@ -44,18 +48,37 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
   const eng = useEngagement();
   const known = engagementKnown(eng);
   const list = kind === "process" ? "processes" : "standards";
-  const [q, setQ] = useRemembered(`pm:${list}:q`, "");
-  const [filters, setFilters] = useRemembered<Filters>(`pm:${list}:filters`, {});
+  const page = kind === "process" ? "library" : "standards";
+  // the address is the truth; the app re-renders this page whenever it changes
+  const route = parseRoute(location.hash) as ListState & { page: string };
+  const state: ListState = route.page === page ? route : {};
+  const q = state.q ?? "";
+  const filters = useMemo(() => filtersOf(state), [JSON.stringify(state)]); // eslint-disable-line react-hooks/exhaustive-deps
   const [bookmarked, setBookmarked] = useRemembered(`pm:${list}:bookmarked`, false);
   const [due, setDue] = useRemembered(`pm:${list}:review`, false);
   const [profile, setProfile] = useProfile();
-  const [size, setSize] = usePageSize();
-  const [sort, setSort] = useRememberedSort(list, me.user?.email);
+  const [mySize, setMySize] = usePageSize();
+  const size = state.size ? sizeOf(state.size) : mySize;
+  const [mySort, setMySort] = useRememberedSort(list, me.user?.email);
+  const sort: SortKey = state.sort ? sortOf(state.sort) : mySort;
+  const [view, setView] = useListView(me.user?.email);
   const [open, setOpen] = useState(false);
   const results = useRef<HTMLElement>(null);
   const mayEdit = (d: Process | Standard) => canEdit(perms, kind, d);
   // who looks after it (edits it, or owns the team that maintains it) sees where its review stands
   const manages = (d: Process | Standard) => canManage(perms, kind, d);
+
+  // what stays in the address when something else changes
+  const keep = { ...(state.size ? { size: state.size } : {}), ...(state.sort ? { sort: state.sort } : {}) };
+  const to = (s: ListState, replace = true) => go({ page, ...s } as never, { replace });
+  // what is typed is in the address at once (a new search starts on the first page)
+  const [text, setText] = useState(q);
+  const pushed = useRef(q);
+  useEffect(() => { if (q !== pushed.current) { pushed.current = q; setText(q); } }, [q]);
+  const type = (v: string) => { setText(v); pushed.current = v.trim() ? v : ""; to({ q: v, ...filters, ...keep }); };
+  const setQ = (v: string) => { setText(v); pushed.current = v; to({ q: v, ...filters, ...keep }); };
+  const setFilters = (f: Filters) => to({ q, ...f, ...keep });
+  const toFirst = () => { if (state.pageNo) to({ q, ...filters, ...keep }); };
 
   const flags: Record<string, Flag> = {
     // while the bookmarks are not known, "only my bookmarks" waits instead of showing nothing
@@ -71,68 +94,74 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
   const mine = profileOptions(input);
   const sorted = useMemo(() => sortResults(out.results, sort, { [kind]: meta }), [out.results, sort, kind, meta]);
   const words = useMemo(() => wordsOf(q), [q]);
-  const what = JSON.stringify([q, filters, profile, bookmarked, due]);
-  // the page is remembered with the search and filters, so that Back and a reload come back to it
-  const [at, setAt] = usePaging(what, `pm:${list}:page`);
-  const page = pageOf(out.results.length, at, size);
-  const goTo = (n: number) => { setAt(n); toResults(results.current); };
+  const n = out.results.length;
+  const pg = pageOf(n, state.pageNo ?? 1, size);
+  const goTo = (p: number) => { to({ q, ...filters, ...keep, pageNo: p }, false); toResults(results.current); };
+  const changeSize = (s: number) => { setMySize(s); to({ q, ...filters, ...keep, size: s }); };
+  const changeSort = (k: SortKey) => { setMySort(k); to({ q, ...filters, ...(state.size ? { size: state.size } : {}), ...(k ? { sort: k } : {}) }); };
 
   const ids = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds, catalog }), [processes, standardIds, catalog]);
   const broken = (d: Process | Standard) => hasErrors(kind === "process" ? validateProcess(d, ids) : validateStandard(d, ids));
   const usedBy = (id: string) => processes.filter((p) => Array.isArray(p.steps) && p.steps.some((s) => s && s.subProcessId === id)).length;
 
   const flagControls: FlagControl[] = [
-    { key: "bookmarked", label: "Only my bookmarks", count: out.flags.bookmarked ?? 0, on: bookmarked, onChange: setBookmarked, unknown: bookmarksUnknown(eng) },
+    { key: "bookmarked", label: "Only my bookmarks", count: out.flags.bookmarked ?? 0, on: bookmarked, onChange: (v) => { setBookmarked(v); toFirst(); }, unknown: bookmarksUnknown(eng) },
   ];
   // offered to whoever has something to look after that is due
-  if ((out.flags.review ?? 0) > 0 || due) flagControls.push({ key: "review", label: "Only what needs a review", count: out.flags.review ?? 0, on: due, onChange: setDue });
+  if ((out.flags.review ?? 0) > 0 || due) flagControls.push({ key: "review", label: "Only what needs a review", count: out.flags.review ?? 0, on: due, onChange: (v) => { setDue(v); toFirst(); } });
 
   const chosen: Chosen[] = [
     ...(q.trim() ? [{ key: "q", name: "Search", value: q.trim(), remove: () => setQ("") }] : []),
-    ...(bookmarked ? [{ key: "bookmarked", name: "Bookmarks", value: "only mine", remove: () => setBookmarked(false) }] : []),
-    ...(due ? [{ key: "review", name: "Review", value: "due or overdue", remove: () => setDue(false) }] : []),
+    ...(bookmarked ? [{ key: "bookmarked", name: "Bookmarks", value: "only mine", remove: () => { setBookmarked(false); toFirst(); } }] : []),
+    ...(due ? [{ key: "review", name: "Review", value: "due or overdue", remove: () => { setDue(false); toFirst(); } }] : []),
     ...KEYS.flatMap((k) => out.options[k].filter((o) => o.chosen).map((o) => ({
-      key: `${k}:${o.value}`, name: FILTER_LABEL[k], value: o.label, remove: () => setFilters(toggleFilter(filters, k, o.value)),
+      key: `${k}:${o.value}`, name: k === "rigour" ? rigourFilterName(kind) : FILTER_LABEL[k],
+      value: k === "rigour" ? rigourOptionLabel(o.value as never, kind) : o.label, remove: () => setFilters(toggleFilter(filters, k, o.value)),
     }))),
-    ...profileChosen(profile, setProfile, catalog),
+    ...profileChosen(profile, (p) => { setProfile(p); toFirst(); }, catalog),
   ];
-  const clear = () => { setQ(""); setFilters({}); setBookmarked(false); setDue(false); setProfile({}); };
+  const clear = () => { setText(""); pushed.current = ""; setBookmarked(false); setDue(false); setProfile({}); to({ ...keep }); };
   const nothing = kind === "process" ? processes.length === 0 : standards.length === 0;
   const panelId = `${kind}-filters`;
+  // nothing found and nothing chosen to blame: no filters, order or pages to offer
+  const bare = n === 0 && filterCount(filters) === 0 && !bookmarked && !due && !(profile.tier || profile.environment || profile.language);
 
   return (
     <>
-      <SearchBox live value={q} onChange={setQ} placeholder={PLACEHOLDER[kind]} label={kind === "process" ? "Search processes" : "Search standards"} />
-      <div className="list-layout">
+      <SearchBox big live value={text} onChange={type} placeholder={PLACEHOLDER[kind]} label={kind === "process" ? "Search processes" : "Search standards"} />
+      <div className={`list-layout ${bare ? "no-panel" : ""}`.trim()}>
         <div className="list-head">
-          <ResultsBar page={page} noun={NOUN[kind]} panelId={panelId} open={open} onOpen={setOpen} chosen={chosen.length} size={size} onSize={setSize}
-            sort={sort} onSort={setSort} searched={!!q.trim()}
-            pager={<Pager page={page} onPage={goTo} label={`Pages of ${NOUN[kind].many}`} compact />} />
+          <ResultsBar page={pg} noun={NOUN[kind]} panelId={panelId} open={open} onOpen={setOpen} chosen={chosen.length} size={size} onSize={changeSize}
+            sort={sort} onSort={changeSort} searched={!!q.trim()} view={view} onView={setView} bare={bare}
+            pager={<Pager page={pg} onPage={goTo} label={`Pages of ${NOUN[kind].many}`} compact />} />
           <ChosenFilters chosen={chosen} onClear={clear} />
         </div>
-        <FilterPanel id={panelId} open={open} keys={KEYS} options={out.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}
-          flags={flagControls} profile={profile} onProfile={setProfile} profileOptions={mine} subject={kind} total={out.results.length}
-          done={{ label: `Show ${out.results.length} ${out.results.length === 1 ? NOUN[kind].one : NOUN[kind].many}`, onClick: () => { setOpen(false); toResults(results.current); } }} />
+        {!bare && (
+          <FilterPanel id={panelId} open={open} keys={KEYS} options={out.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}
+            flags={flagControls} profile={profile} onProfile={(p) => { setProfile(p); toFirst(); }} profileOptions={mine} subject={kind} total={n}
+            order={<OrderControls sort={sort} onSort={changeSort} searched={!!q.trim()} size={size} onSize={changeSize} />}
+            done={{ label: `Show ${n} ${n === 1 ? NOUN[kind].one : NOUN[kind].many}`, onClick: () => { setOpen(false); toResults(results.current); } }} />
+        )}
         <section className="list-results" aria-label="Results" ref={results} tabIndex={-1}>
-          {out.results.length === 0 ? (
+          {n === 0 ? (
             <div className="list-empty">
               <p>{nothing ? empty : `No ${NOUN[kind].one} matches.`}</p>
               {!nothing && chosen.length > 0 && <button type="button" className="btn small" onClick={clear}>Clear all filters</button>}
               <AskForIt />
             </div>
           ) : (
-            <ol className="cards">
-              {sorted.slice(page.start, page.end).map((r) => {
+            <ol className={`cards ${view === "rows" ? "rows" : ""}`.trim()}>
+              {sorted.slice(pg.start, pg.end).map((r) => {
                 const edits = mayEdit(r.doc);
                 return (
-                  <DocCard key={r.doc.id} kind={kind} doc={r.doc} rigour={r.rigour} rules={r.rules} hits={r.hits} words={words}
+                  <DocCard key={r.doc.id} kind={kind} doc={r.doc} rigour={r.rigour} rules={r.rules} hits={r.hits} words={words} showKind={false} view={view}
                     openFeedback={openCount(feedback[r.doc.id] ?? [])} mayEdit={edits} manages={manages(r.doc)} broken={edits && broken(r.doc)}
                     usedBy={kind === "process" ? usedBy(r.doc.id) : undefined} meta={meta?.[r.doc.id]} />
                 );
               })}
             </ol>
           )}
-          <ResultsFoot page={page} onPage={goTo} label={`Pages of ${NOUN[kind].many}, at the end`} size={size} onSize={setSize} />
+          <ResultsFoot page={pg} onPage={goTo} label={`Pages of ${NOUN[kind].many}, at the end`} size={size} onSize={changeSize} />
         </section>
       </div>
     </>

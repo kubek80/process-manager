@@ -9,7 +9,8 @@ import { rememberedMode } from "../lib/meaning";
 import { go, href } from "../lib/store";
 import { NO_CATEGORY_LABEL, search, type FilterKey, type Result } from "../lib/search";
 import { SearchBox } from "./SearchPage";
-import { DocCard, docHref, KIND } from "./DocCard";
+import { DocCard, docHref } from "./DocCard";
+import { KindIcon, kindWord } from "./marks";
 import { openCount } from "./Feedback";
 import { AskForIt, engagementKnown } from "./Lists";
 import "../search.css";
@@ -18,6 +19,8 @@ import "../search.css";
 const FEW = 6;
 /** How many entries the short lists of Home show. */
 const SHELF = 5;
+/** How many ways in each group of Browse shows before "Show all". */
+const BROWSE_FEW = 6;
 
 const WAYS: { key: Extract<FilterKey, "platform" | "practice" | "category">; title: string; hint: string }[] = [
   { key: "platform", title: "By platform", hint: "Everything about one platform" },
@@ -55,6 +58,7 @@ export function HomePage({ processes, standards, feedback, meta }: {
     return sortBookmarks(eng.bookmarks).map((b) => byKey.get(`${b.kind}:${b.id}`)).filter((r): r is Result => !!r);
   }, [eng.bookmarks, out]);
   const [allMarked, setAllMarked] = useState(false);
+  const [allWays, setAllWays] = useState<Partial<Record<string, boolean>>>({});
   // what is new and what is used: published only, never a draft (whoever may see one or not)
   const recent = useMemo(() => recentlyUpdated(out.results, meta, SHELF), [out, meta]);
   const viewed = known ? mostViewed(out.results, (r) => eng.countsOf(r.kind, r.doc.id).views, SHELF) : [];
@@ -77,7 +81,7 @@ export function HomePage({ processes, standards, feedback, meta }: {
               <span className="home-entry-icon process"><Workflow size={20} aria-hidden="true" /></span>
               <span className="home-entry-text">
                 <span className="home-entry-kind">Processes</span>
-                <b>All processes</b><span className="muted">How to get something done, step by step</span>
+                <b>All processes</b><span className="muted">How to get something done</span>
               </span>
               <span className="home-entry-count">{nProcesses}<span className="search-sr"> processes</span></span>
               <ArrowRight size={16} className="home-entry-go" aria-hidden="true" />
@@ -86,7 +90,7 @@ export function HomePage({ processes, standards, feedback, meta }: {
               <span className="home-entry-icon standard"><ShieldCheck size={20} aria-hidden="true" /></span>
               <span className="home-entry-text">
                 <span className="home-entry-kind">Standards</span>
-                <b>All standards</b><span className="muted">Rules set by cyber security, platforms and practices</span>
+                <b>All standards</b><span className="muted">The rules your work must meet</span>
               </span>
               <span className="home-entry-count">{nStandards}<span className="search-sr"> standards</span></span>
               <ArrowRight size={16} className="home-entry-go" aria-hidden="true" />
@@ -131,7 +135,7 @@ export function HomePage({ processes, standards, feedback, meta }: {
                     {viewed.map(({ item: r, views }) => (
                       <ShelfRow key={`${r.kind}:${r.doc.id}`} r={r} sub={subOf(r, catalog)}
                         figure={<>
-                          <span className="home-rank-bar" aria-hidden="true"><i style={{ width: `${Math.max(8, Math.round((views / maxViews) * 100))}%` }} /></span>
+                          <span className={`home-rank-bar ${r.kind}`} aria-hidden="true"><i style={{ width: `${Math.max(8, Math.round((views / maxViews) * 100))}%` }} /></span>
                           <span className="home-rank-n">{views}<span className="search-sr"> {views === 1 ? "view" : "views"}</span></span>
                         </>} />
                     ))}
@@ -151,8 +155,8 @@ export function HomePage({ processes, standards, feedback, meta }: {
               <section key={key} className="home-group" data-browse={key} aria-labelledby={`home-${key}`}>
                 <h3 id={`home-${key}`}>{title}</h3>
                 <p className="muted small">{hint}</p>
-                <ul className="home-links">
-                  {options.map((o) => (
+                <ul className="home-links" id={`home-links-${key}`}>
+                  {(allWays[key] ? options : options.slice(0, BROWSE_FEW)).map((o) => (
                     <li key={o.value}>
                       <a className="chip" href={href({ page: "search", [key]: [o.value] })} aria-label={`${o.label}, ${o.count} ${o.count === 1 ? "result" : "results"}`}>
                         {o.label}<span>{o.count}</span>
@@ -160,6 +164,12 @@ export function HomePage({ processes, standards, feedback, meta }: {
                     </li>
                   ))}
                 </ul>
+                {options.length > BROWSE_FEW && (
+                  <button type="button" className="home-links-more" aria-expanded={!!allWays[key]} aria-controls={`home-links-${key}`}
+                    onClick={() => setAllWays({ ...allWays, [key]: !allWays[key] })}>
+                    {allWays[key] ? "Show fewer" : `Show all ${options.length}`}
+                  </button>
+                )}
               </section>
             ))}
           </aside>
@@ -178,12 +188,12 @@ function subOf(r: Result, catalog: ReturnType<typeof useCatalog>["catalog"]): st
 
 /** One row of a short list on Home: the kind mark, the title and what it is about, a figure on the right. */
 function ShelfRow({ r, sub, figure }: { r: Result; sub: string; figure: React.ReactNode }) {
-  const { word, Icon } = KIND[r.kind];
+  const word = kindWord(r.kind);
   const title = typeof r.doc.title === "string" && r.doc.title ? r.doc.title : r.doc.id;
   return (
     <li data-kind={r.kind} data-id={r.doc.id}>
       <a className="home-rank-row" href={docHref(r.kind, r.doc.id)}>
-        <span className={`home-rank-mark ${r.kind}`} title={word}><Icon size={14} aria-hidden="true" /><span className="search-sr">{word}: </span></span>
+        <span className={`home-rank-mark ${r.kind}`} title={word}><KindIcon kind={r.kind} size={14} /><span className="search-sr">{word}: </span></span>
         <span className="home-rank-text">
           <span className="home-rank-title">{title}</span>
           <span className="home-rank-sub">{sub}</span>

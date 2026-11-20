@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { addActor, appendRequirement, appendStep, blankProcess, EXAMPLE, flowMoveBlocked, moveRequirementTo, moveStepInFlow, nudgeStep, setStepType } from "../edit";
-import { dropBefore, processOutline, standardOutline } from "../editing";
+import { addActor, answerChanges, appendRequirement, appendStep, blankProcess, deleteStep, EXAMPLE, flowMoveBlocked, moveRequirementTo, moveStepInFlow, nudgeStep, setStepType } from "../edit";
+import { dropBefore, processOutline, standardOutline, withoutEarlySuggestions } from "../editing";
 import { validateProcess } from "../validate";
 import type { Process } from "../../types";
-import { base, baseStandard } from "./fixtures";
+import { base, baseStandard, readJson } from "./fixtures";
 
 const flow = (p: Process) => p.steps.map((s) => `${s.id}>${s.next.map((n) => (n.label ? `${n.to}(${n.label})` : n.to)).join(",")}`).join(" ");
 
@@ -34,11 +34,13 @@ describe("moving a step in the flow", () => {
     expect(flow(p)).toBe("ask>approve approve>ok ok>fix(Yes),approve(No) fix>done done>");
     expect(validateProcess(p)).toEqual([]);
   });
-  it("leaves a decision where it is, and says why", () => {
-    const p = base();
-    expect(flowMoveBlocked(p, "ok")).toMatch(/several paths/);
-    expect(moveStepInFlow(p, "ok", "ask")).toBe(p);
-    expect(flowMoveBlocked(p, "ask")).toBe("");
+  it("moves a decision with its answers: the answer that carried the flow on is reconnected", () => {
+    // ask > approve > ok? (Yes: done, No: fix > approve); ok before approve
+    const p = moveStepInFlow(base(), "ok", "approve");
+    // every arrow into the step it is put before now goes into it, the loop back from "fix" too
+    expect(flow(p)).toBe("ask>ok ok>approve(Yes),fix(No) approve>done fix>ok done>");
+    expect(answerChanges(base(), p)).toEqual(["“Yes” of “Approved?” now leads to “Approve it”"]);
+    expect(flowMoveBlocked(base(), "ok")).toBe("");
   });
   it("does nothing for an unknown step or target, or onto itself", () => {
     const p = line();
@@ -150,5 +152,62 @@ describe("what the outline says about each item", () => {
   it("gives a requirement its level", () => {
     const s = baseStandard();
     expect(standardOutline(s).filter((x) => x.item).map((x) => x.level)).toEqual(s.requirements.map((r) => r.level));
+  });
+});
+
+describe("the restructuring the critic did in “Release a service to production” (demo)", () => {
+  const release = () => readJson<Process>("demo/processes/release-service-to-production.json");
+  const to = (p: Process, id: string) => Object.fromEntries(p.steps.find((s) => s.id === id)!.next.map((n) => [n.label ?? "", n.to]));
+  const order = (p: Process) => p.steps.map((s) => s.id);
+
+  it("moves step 12 (Release healthy?) before step 10, with its answers", () => {
+    const before = release();
+    const p = moveStepInFlow(before, "release-healthy", "roll-out");
+    expect(to(p, "start-deployment")).toEqual({ "": "release-healthy" });
+    // "Yes" carried the flow on: it now leads to the step it was put before; "No" is unchanged
+    expect(to(p, "release-healthy")).toEqual({ Yes: "roll-out", No: "roll-back" });
+    // the steps it was cut out of are joined to where "Yes" led
+    expect(to(p, "watch-release")).toEqual({ "": "close-change" });
+    expect(order(p).indexOf("release-healthy")).toBe(order(p).indexOf("roll-out") - 1);
+    expect(answerChanges(before, p)).toEqual(["“Yes” of “Release healthy?” now leads to “Roll out to 10%, then to all”"]);
+    expect(validateProcess(p)).toEqual([]);
+  });
+
+  it("moves step 10 after step 12 (before 13): “No” now leads to it, and that is said", () => {
+    const before = release();
+    const p = moveStepInFlow(before, "roll-out", "roll-back");
+    expect(to(p, "start-deployment")).toEqual({ "": "watch-release" });
+    expect(to(p, "release-healthy")).toEqual({ Yes: "close-change", No: "roll-out" });
+    expect(to(p, "roll-out")).toEqual({ "": "roll-back" });
+    expect(answerChanges(before, p)).toEqual(["“No” of “Release healthy?” now leads to “Roll out to 10%, then to all”"]);
+  });
+
+  it("deletes step 8 (Book an SRE) inside a branch: both answers stay, and that is said", () => {
+    const before = release();
+    const p = deleteStep(before, "book-sre");
+    expect(p.steps.find((s) => s.id === "tier-zero")!.next).toEqual([{ to: "start-deployment", label: "Yes" }, { to: "start-deployment", label: "No" }]);
+    expect(answerChanges(before, p)).toEqual(["“Yes” of “Is it a tier 0 service?” now leads to “Start the production deployment”, as “No” does"]);
+    // the checker asks to tell the two answers apart: a problem to fix, not a silent loss
+    expect(validateProcess(p).some((i) => i.level === "error" && i.path.startsWith("steps[6].next"))).toBe(true);
+  });
+
+  it("moves a decision to the end with its answers", () => {
+    const p = moveStepInFlow(release(), "tier-zero", null);
+    expect(to(p, "tier-zero")).toEqual({ Yes: "book-sre", No: "start-deployment" });
+    expect(order(p).at(-1)).toBe("tier-zero");
+    expect(to(p, "change-approved").Approved).toBe("book-sre");
+  });
+});
+
+describe("suggestions about something new wait until it is left", () => {
+  it("hides suggestions about a new step, never problems, never those about other parts", () => {
+    const issues = [
+      { level: "warning" as const, path: "steps[0].instructions", message: "m" },
+      { level: "error" as const, path: "steps[0].title", message: "m" },
+      { level: "warning" as const, path: "steps[1].instructions", message: "m" },
+      { level: "warning" as const, path: "summary", message: "m" },
+    ];
+    const shown = withoutEarlySuggestions("process", base(), issues, (id) => id === "ask");
+    expect(shown.map((i) => i.path)).toEqual(["steps[0].title", "steps[1].instructions", "summary"]);
   });
 });

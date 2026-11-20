@@ -67,10 +67,18 @@ export interface Session<T extends Doc> {
     banners?: ReactNode;
     /** Why a press on Save draft or Publish did nothing, or why publishing waits: shown under the bar. */
     notice?: Notice | null; onNotice: () => void;
+    /** Always true: "Not saved yet", "Draft saved 14:02", "Saved". */
+    saveLine: string;
     /** Whether a problem has to be fixed before saving (a never-published draft) or before publishing. */
     fixBefore: (i: Issue) => "saving" | "publishing";
   };
   dialogs: ReactNode;
+}
+
+/** "14:02" for today, "on 2026-11-17" for another day: when something was saved, short. */
+export function clock(iso?: string, now = new Date()): string {
+  const w = savedWhen(iso, now);
+  return w.startsWith("today at ") ? w.slice(9) : w.replace(/ at .*$/, "");
 }
 
 /** A line under the editing bar: why something did not happen, with the first problem to go to. */
@@ -265,8 +273,8 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
   const firstError = issues.find((i) => i.level === "error");
   const onlyExamples = errors > 0 && issues.filter((i) => i.level === "error").every(isExampleIssue);
   const problemsBlock = !errors ? "" : onlyExamples
-    ? `Publishing waits until ${errors === 1 ? "the example text is" : `the ${errors} example texts are`} replaced. First: ${issueText(firstError!)}`
-    : `Publishing waits until ${errors === 1 ? "the problem is" : `the ${errors} problems are`} fixed. First: ${issueText(firstError!)}`;
+    ? `Publishing waits until ${errors === 1 ? "the example text is" : `the ${errors} example texts are`} replaced with your own words.`
+    : `Publishing waits until ${errors === 1 ? "1 thing is" : `${errors} things are`} fixed.`;
   const saveBlocked = !d.dirty && !jsonPending ? "Nothing to save: all changes are saved." : undefined;
   const publishBlocked = rightsBlock || jsonBlock || problemsBlock
     || (!unpublished && !working && !d.dirty ? "There are no changes to publish." : "") || undefined;
@@ -280,9 +288,9 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
     if (saveErrors.length) {
       const first = saveErrors[0];
       const why = isGone
-        ? `This ${noun} cannot be brought back yet: it comes back as a draft, which is only saved when the checker finds no problems. Your changes are still here.`
-        : `This draft cannot be saved yet: a ${noun} that was never published is only saved when the checker finds no problems.`;
-      setNotice({ text: `${why} ${saveErrors.length === 1 ? "The problem" : `First of ${saveErrors.length}`}: ${issueText(first)}`, tone: "bad", issue: first });
+        ? `This ${noun} cannot be brought back yet: it comes back as a draft, which is only saved with nothing to fix. Your changes are still here.`
+        : `This draft cannot be saved yet: a ${noun} that was never published is only saved with nothing to fix.`;
+      setNotice({ text: why, tone: "bad", issue: first });
       return goTo(first);
     }
     setNotice(null);
@@ -493,7 +501,8 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
     d, draftKind, drawable, working, issues, json, jsonView, panel, setPanel, dialogs, focus,
     frame: {
       state, unsaved,
-      notice: notice ?? (problemsBlock && (d.dirty || working || unpublished) ? { text: problemsBlock, tone: "warn", issue: firstError, persistent: true } : null),
+      notice,
+      saveLine: unsaved ? "Not saved yet" : working ? `Draft saved ${clock(working.updatedAt)}` : unpublished && o.meta?.updatedAt ? `Saved ${clock(o.meta.updatedAt)}` : "Saved",
       onNotice: () => setNotice(null),
       fixBefore: (i) => (unpublished && !isExampleIssue(i) ? "saving" : "publishing"),
       undo: { canUndo: d.canUndo, canRedo: d.canRedo, undo: d.undo, redo: d.redo },

@@ -217,15 +217,30 @@ export function dropBefore(ids: string[], id: string, to: number): string | null
 /** The outline key of a selection. */
 export const selectionKey = (sel: Selection) => (sel.item ? `${sel.section}/${sel.item}` : sel.section);
 
-/** "3 problems", "No problems", "2 hints": the checker's summary on the editing bar. */
-export function checkerSummary(issues: Issue[]): { level: "bad" | "warn" | "good"; text: string } {
-  const errors = issues.filter((i) => i.level === "error").length;
-  const hints = issues.length - errors;
-  // only example texts still to be replaced (something new): calmer than real problems
-  if (errors && issues.filter((i) => i.level === "error").every((i) => isExampleIssue(i))) return { level: "warn", text: `${errors} to fill in` };
-  if (errors) return { level: "bad", text: `${errors} problem${errors > 1 ? "s" : ""}` };
-  if (hints) return { level: "warn", text: `${hints} hint${hints > 1 ? "s" : ""}` };
-  return { level: "good", text: "No problems" };
+/**
+ * The checker's summary on the editing bar, in two words only: "to fix" (stops publishing; calm
+ * amber while it is only example text still to replace, red otherwise) and "suggestions" (never
+ * stop anything). "Nothing to fix" when there is neither.
+ */
+export function checkerSummary(issues: Issue[]): { level: "bad" | "warn" | "hint" | "good"; text: string } {
+  const errors = issues.filter((i) => i.level === "error");
+  const hints = issues.length - errors.length;
+  if (errors.length) return { level: errors.every((i) => isExampleIssue(i)) ? "warn" : "bad", text: `${errors.length} to fix` };
+  if (hints) return { level: "hint", text: `${hints} suggestion${hints > 1 ? "s" : ""}` };
+  return { level: "good", text: "Nothing to fix" };
+}
+
+/**
+ * Suggestions about a step or requirement that is new on this screen wait until the person has
+ * left it once: while it is being written, "say what to do" is not news. `isNew` says whether an
+ * item was added on this screen and not left yet; problems that stop publishing always show.
+ */
+export function withoutEarlySuggestions(kind: TargetKind, doc: Process | Standard, issues: Issue[], isNew: (item: string) => boolean): Issue[] {
+  return issues.filter((i) => {
+    if (i.level !== "warning") return true;
+    const t = issueTarget(kind, doc, i.path);
+    return !t.item || !isNew(t.item);
+  });
 }
 
 /**
@@ -233,6 +248,10 @@ export function checkerSummary(issues: Issue[]): { level: "bad" | "warn" | "good
  * be one of: me, boss". The place (which step) is shown by where the problem is listed.
  */
 export function issueText(issue: Issue): string {
+  // a whole sentence already ("Say exactly what the reader does in this step.")
+  if (/^[A-Z]/.test(issue.message)) return issue.message;
+  const missing = issue.message.match(/^is missing the required field "(\w+)"$/);
+  if (missing) return REQUIRED[missing[1]] ?? `Fill in ${fieldName(missing[1]).toLowerCase()}.`;
   const keys = issue.path.match(/[A-Za-z$]+/g) ?? [];
   // the last named part of the path, unless that is the list a step or requirement sits in
   const key = keys.length > 1 || !["steps", "requirements"].includes(keys[0] ?? "") ? keys[keys.length - 1] : undefined;
@@ -241,9 +260,16 @@ export function issueText(issue: Issue): string {
   return `${words[0].toUpperCase()}${words.slice(1)} ${issue.message}`;
 }
 
+/** A field that must be there, by what the editing screen calls it. */
+const REQUIRED: Record<string, string> = {
+  title: "Write the name.", summary: "Write the summary.", statement: "Write the rule.", owner: "Choose the team that issues it.",
+  actor: "Choose who does it.", type: "Choose the kind of step.", level: "Choose the level.", verification: "Say how it is checked.",
+  name: "Write the name.", id: "Give it an id.", steps: "Add a step.", requirements: "Add a requirement.", actors: "Add who takes part.",
+};
+
 // ---------- example texts
 
-const EXAMPLE_MESSAGE = "still has the example text. Say it in your own words before publishing.";
+const EXAMPLE_MESSAGE = "is still the example: write your own before publishing.";
 /** Whether a problem is an example text left in (it waits for publishing, not for saving). */
 export const isExampleIssue = (i: Issue) => i.message === EXAMPLE_MESSAGE;
 

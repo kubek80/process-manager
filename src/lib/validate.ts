@@ -131,12 +131,12 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
     s.next.forEach((n, j) => {
       if (!stepIds.has(n.to)) err(`${at}.next[${j}].to`, `"${n.to}" is not a step id in this process`);
       if (n.to === s.id) err(`${at}.next[${j}].to`, "a step cannot point to itself");
-      if (targets.has(n.to)) err(`${at}.next[${j}].to`, `"${n.to}" is listed twice`);
+      if (targets.has(n.to)) err(`${at}.next[${j}].to`, "Another answer already leads to this step: let each lead somewhere else.");
       targets.add(n.to);
     });
     if (s.type === "decision") {
-      if (s.next.length < 2) err(`${at}.next`, "a decision needs at least two outgoing paths");
-      if (s.next.some((n) => !n.label)) err(`${at}.next`, "every path out of a decision needs a label (e.g. \"Approved\" / \"Rejected\")");
+      if (s.next.length < 2) err(`${at}.next`, "This decision needs at least two answers that lead somewhere.");
+      if (s.next.some((n) => !n.label)) err(`${at}.next`, "Every answer of a decision needs a name, such as Approved or Rejected.");
     }
     if (cat && s.tool && !cat.tools.some((t) => t.id === s.tool))
       warn(`${at}.tool`, `"${s.tool}" is not in the tools list. Known tools: ${ids(cat.tools).join(", ") || "(none)"}`);
@@ -146,7 +146,7 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
       else if (known && !known.has(s.subProcessId)) warn(`${at}.subProcessId`, `no process with id "${s.subProcessId}" exists yet`);
     }
     if (s.actor === "me" && s.type !== "wait" && !s.instructions?.length && !s.subProcessId)
-      warn(`${at}.instructions`, `"${s.title}" is done by the reader but has no instructions - say exactly what to do`);
+      warn(`${at}.instructions`, "Say exactly what the reader does in this step.");
   });
 
   p.prerequisites.forEach((q, i) => {
@@ -250,9 +250,9 @@ export function validateStandard(data: unknown, ctx: CheckContext = {}): Issue[]
     dims(`${at}.`, r, s);
     if (r.processId && processes && !processes.has(r.processId)) warn(`${at}.processId`, `no process with id "${r.processId}" exists yet`);
     if (r.verification.method === "review" && !r.review?.lookFor.length)
-      warn(`${at}.review`, `"${r.title}" is checked in review but does not say what a reviewer should look for - the review agent will skip it`);
+      warn(`${at}.review`, "Say what a reviewer should look for, or it cannot be checked in pull requests.");
     if (r.level === "must" && !r.rationale && !r.guidance?.length)
-      warn(`${at}.guidance`, `"${r.title}" is mandatory but gives neither a reason nor how to comply`);
+      warn(`${at}.guidance`, "Say why this rule matters, or how to comply with it.");
   });
   return issues;
 }

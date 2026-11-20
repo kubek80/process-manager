@@ -240,7 +240,7 @@ export type AdminSection = "access" | "lists" | "skills" | "health" | "activity"
 /** `item` is the step or the requirement that is open, so that a link can point at one. */
 export type Route =
   | { page: "home" } | ({ page: "search" } & SearchState)
-  | { page: "library" } | { page: "standards" } | { page: "catalog" } | { page: "guide" } | { page: "mine" }
+  | ({ page: "library" } & ListState) | ({ page: "standards" } & ListState) | { page: "catalog" } | { page: "guide" } | { page: "mine" }
   | ({ page: "requests" } & RequestsView)
   | { page: "admin"; section: AdminSection }
   | { page: "process"; id: string; tab: Tab; item?: string }
@@ -271,6 +271,10 @@ export interface SearchState {
   /** The order: newest first (date added), recently updated first; left out, the best match (or by name). */
   sort?: "newest" | "updated";
 }
+/** What the list of processes or of standards carries in its address: the search, the filters, the page, the order. */
+export type ListState = Omit<SearchState, "type" | "mode">;
+/** Only what a list keeps of a search address. */
+const listOf = (r: SearchState): ListState => { const { type: _t, mode: _m, ...rest } = r; void _t; void _m; return rest; };
 const SEARCH_LISTS = ["type", "rigour", "category", "practice", "platform", "owner"] as const;
 const SEARCH_SIZES = [12, 24, 48];
 const SEARCH_ALLOWED: Partial<Record<(typeof SEARCH_LISTS)[number], string[]>> = { type: ["process", "standard"], rigour: ["mandatory", "recommended", "optional"] };
@@ -303,7 +307,7 @@ function parseSearch(query: string): Route {
   }
   return r;
 }
-function searchHref(r: SearchState): string {
+function searchHref(r: SearchState, path = "#/search"): string {
   const parts: string[] = [];
   if (r.q?.trim()) parts.push(`q=${encodeURIComponent(r.q)}`);
   for (const k of SEARCH_LISTS) if (r[k]?.length) parts.push(`${k}=${(r[k] as string[]).map(encodeURIComponent).join(",")}`);
@@ -311,12 +315,18 @@ function searchHref(r: SearchState): string {
   if (r.size && SEARCH_SIZES.includes(r.size)) parts.push(`size=${r.size}`);
   if (r.mode === "meaning" || r.mode === "both") parts.push(`mode=${r.mode}`);
   if (r.sort === "newest" || r.sort === "updated") parts.push(`sort=${r.sort}`);
-  return `#/search${parts.length ? `?${parts.join("&")}` : ""}`;
+  return `${path}${parts.length ? `?${parts.join("&")}` : ""}`;
 }
 
 const parse = (h: string = location.hash): Route => {
   const search = h.match(/^#\/search(?:\?(.*))?$/);
   if (search) return parseSearch(search[1] ?? "");
+  const list = h.match(/^#\/(processes|standards)(?:\?(.*))?$/);
+  if (list) {
+    const { page: _p, ...state } = parseSearch(list[2] ?? "") as { page: "search" } & SearchState;
+    void _p;
+    return { page: list[1] === "processes" ? "library" : "standards", ...listOf(state) };
+  }
   if (h.startsWith("#/processes")) return { page: "library" };
   if (h.startsWith("#/catalog")) return { page: "catalog" };
   if (h.startsWith("#/guide")) return { page: "guide" };
@@ -467,8 +477,8 @@ export const href = (r: Route): string => {
   switch (r.page) {
     case "home": return "#/";
     case "search": return searchHref(r);
-    case "library": return "#/processes";
-    case "standards": return "#/standards";
+    case "library": return searchHref(listOf(r), "#/processes");
+    case "standards": return searchHref(listOf(r), "#/standards");
     case "catalog": return "#/catalog";
     case "guide": return "#/guide";
     case "mine": return "#/mine";

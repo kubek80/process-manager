@@ -1,27 +1,32 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { Check, ImageUp, Info, Loader2, Moon, RotateCcw, Save, ShieldCheck, Sun, TriangleAlert, Trash2, Workflow } from "lucide-react";
+import { ImageUp, Info, LayoutGrid, Loader2, Moon, RotateCcw, Save, Search, Sun, TriangleAlert, Trash2 } from "lucide-react";
+import type { Process, Standard } from "../types";
+import { useCatalog } from "../lib/catalog";
+import { search } from "../lib/search";
 import { useDraft } from "../lib/draft";
 import { ICON_TYPES, iconContentType, iconFileProblem } from "../lib/icons";
 import { iconUrl, loadAdminLook, saveLook, uploadIcon, type SavedLook } from "../lib/store";
 import {
-  DEFAULT_APPEARANCE, DEFAULT_COLOR, DEFAULT_NAME, derive, lookProblems, lookProperties, MAX_NAME, nameOf, normalizeHex, PALETTES, takeLook, tidyLook,
-  type Appearance, type ColorPart, type ColorUse, type Look,
+  confusion, DEFAULT_APPEARANCE, DEFAULT_COLOR, DEFAULT_NAME, derive, forgetOwnChoice, isDark, kindsAlikeText, lookProblems, lookProperties, MAX_NAME, nameOf,
+  normalizeHex, PALETTES, takeLook, tidyLook, underlineLinks, useLook, type Appearance, type ColorPart, type ColorUse, type Look,
 } from "../lib/theme";
-import { BrandLogo, DefaultMark } from "./Brand";
+import { BrandLogo } from "./Brand";
+import { DocCard } from "./DocCard";
 import { confirmDialog, LoadError, Loading, Modal, useBottomBar } from "./ui";
 import "../icons.css";
 import "../lists.css";
+import "../controls.css";
 import "../theme.css";
 
 /** Admin › Theming: the name, the logo, the colours and the appearance of the portal, with a live preview. */
-export function ThemeSection() {
+export function ThemeSection({ processes, standards }: { processes: Process[]; standards: Standard[] }) {
   const [saved, setSaved] = useState<SavedLook | null>(null);
   const [error, setError] = useState("");
   const load = useCallback(() => { setError(""); loadAdminLook().then(setSaved, (e) => setError(e.message)); }, []);
   useEffect(load, [load]);
   if (error) return <LoadError what="The look of the portal could not be loaded." error={error} onRetry={load} />;
   if (!saved) return <Loading />;
-  return <ThemeEditor saved={saved} onSaved={setSaved} />;
+  return <ThemeEditor saved={saved} onSaved={setSaved} processes={processes} standards={standards} />;
 }
 
 const COLOR_TEXT: Record<ColorPart, { label: string; hint: string }> = {
@@ -38,7 +43,8 @@ const APPEARANCES: { id: Appearance; label: string; icon?: typeof Sun }[] = [
 const same = (a: Look, b: Look) => JSON.stringify(tidyLook(a)) === JSON.stringify(tidyLook(b));
 const when = (iso?: string) => (iso ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
 
-function ThemeEditor({ saved, onSaved }: { saved: SavedLook; onSaved: (s: SavedLook) => void }) {
+function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLook; onSaved: (s: SavedLook) => void; processes: Process[]; standards: Standard[] }) {
+  const { own } = useLook();
   const d = useDraft<Look>({
     docKey: "theme", saved: saved.look, version: saved.revision, tidy: tidyLook, what: "the look of the portal",
     save: async (look, base) => {
@@ -75,22 +81,41 @@ function ThemeEditor({ saved, onSaved }: { saved: SavedLook; onSaved: (s: SavedL
     <div className="admin-section theme-section">
       <div className="theme-layout">
         <div className="theme-settings">
+          <div className="theme-status">
+            <p className="small">
+              {saved.revision > 0 && saved.updatedAt
+                ? <>Last changed by <b>{saved.updatedByName || saved.updatedBy || "an admin"}</b> on {when(saved.updatedAt)}.</>
+                : <>This is the default look: nobody has changed it yet.</>}
+            </p>
+            <button type="button" className="btn small" disabled={(isDefault && !d.dirty) || d.saving} onClick={backToDefault}>
+              <RotateCcw size={14} aria-hidden="true" />Back to the default look
+            </button>
+          </div>
+
           <section className="theme-group" aria-labelledby="theme-name">
             <h3 id="theme-name">Name and logo</h3>
             <NameField value={look.name ?? ""} onChange={(name) => set({ name: name || undefined })} />
-            <LogoField logo={look.logo} onChange={(logo) => set({ logo })} />
+            <LogoField look={look} onChange={(logo) => set({ logo })} />
           </section>
 
           <section className="theme-group" aria-labelledby="theme-colours">
             <h3 id="theme-colours">Colours</h3>
+            <div className="palettes-head">
+              <span className="field-label">Ready-made colours</span>
+              <span className="palette-legend muted small" aria-hidden="true">
+                <span><i className="dot" />brand</span><span><i className="dot" />processes</span><span><i className="square" />standards</span>
+              </span>
+            </div>
             <div className="palettes" role="group" aria-label="Ready-made colours">
               {PALETTES.map((p) => {
                 const on = (["brand", "process", "standard"] as const).every((k) => (look[k] ?? "") === (p.colors[k] ?? ""));
+                const c = (k: ColorPart) => p.colors[k] ?? DEFAULT_COLOR[k];
                 return (
                   <button key={p.name} type="button" className={`palette ${on ? "on" : ""}`} aria-pressed={on}
+                    title={`${p.name}: brand ${c("brand")}, processes ${c("process")}, standards ${c("standard")}`}
                     onClick={() => set({ brand: p.colors.brand, process: p.colors.process, standard: p.colors.standard })}>
                     <span className="palette-swatches" aria-hidden="true">
-                      {(["brand", "process", "standard"] as const).map((k) => <i key={k} style={{ background: p.colors[k] ?? DEFAULT_COLOR[k] }} />)}
+                      {(["brand", "process", "standard"] as const).map((k) => <i key={k} style={{ background: c(k) }} />)}
                     </span>
                     {p.name}
                   </button>
@@ -100,38 +125,31 @@ function ThemeEditor({ saved, onSaved }: { saved: SavedLook; onSaved: (s: SavedL
             {(["brand", "process", "standard"] as const).map((part) => (
               <ColorField key={part} part={part} value={look[part]} use={derived.colors.find((c) => c.part === part)} onChange={(v) => set({ [part]: v })} />
             ))}
+            {derived.kindsAlike.length > 0 && (
+              <p className="color-note warn" role="status"><TriangleAlert size={14} aria-hidden="true" /><span>{kindsAlikeText(derived.kindsAlike)}</span></p>
+            )}
             <p className="muted small">The colours for good, warning and problems stay as they are, so that they always mean the same.</p>
           </section>
 
           <section className="theme-group" aria-labelledby="theme-appearance">
             <h3 id="theme-appearance">Light or dark</h3>
             <p className="muted small">For people who have not chosen light or dark with the switch in the top bar. Their own choice always wins.</p>
-            <div className="segmented" role="radiogroup" aria-labelledby="theme-appearance">
+            <div className="seg" role="radiogroup" aria-labelledby="theme-appearance">
               {APPEARANCES.map((a) => {
                 const on = (look.appearance ?? DEFAULT_APPEARANCE) === a.id;
                 return (
-                  <button key={a.id} type="button" role="radio" aria-checked={on} className={on ? "on" : ""}
+                  <button key={a.id} type="button" role="radio" aria-checked={on} className={`seg-item ${on ? "on" : ""}`}
                     onClick={() => set({ appearance: a.id === DEFAULT_APPEARANCE ? undefined : a.id })}>
                     {a.icon && <a.icon size={14} aria-hidden="true" />}{a.label}
                   </button>
                 );
               })}
             </div>
-          </section>
-
-          <section className="theme-group theme-default">
-            <p className="muted small">
-              {saved.revision > 0 && saved.updatedAt
-                ? <>Last changed by {saved.updatedByName || saved.updatedBy || "an admin"} on {when(saved.updatedAt)}.</>
-                : <>This is the default look: nobody has changed it yet.</>}
-            </p>
-            <button type="button" className="btn small ghost" disabled={(isDefault && !d.dirty) || d.saving} onClick={backToDefault}>
-              <RotateCcw size={14} aria-hidden="true" />Back to the default look
-            </button>
+            <OwnChoiceNote own={own} appearance={saved.look.appearance} />
           </section>
         </div>
 
-        <LookPreview look={look} />
+        <LookPreview look={look} processes={processes} standards={standards} />
       </div>
 
       {(d.dirty || d.error) && (
@@ -169,19 +187,24 @@ function ThemeEditor({ saved, onSaved }: { saved: SavedLook; onSaved: (s: SavedL
 function NameField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const id = useId();
   const n = value.trim().length;
+  const over = n - MAX_NAME;
   return (
     <div className="field">
       <label className="field-label" htmlFor={id}>Name of the portal<em>In the top bar, the browser tab, the sign-in page and shared links</em></label>
       <div className="theme-name">
-        <input id={id} value={value} maxLength={MAX_NAME + 20} placeholder={DEFAULT_NAME} onChange={(e) => onChange(e.target.value)} aria-describedby={`${id}-n`} />
-        <span id={`${id}-n`} className={`theme-count ${n > MAX_NAME ? "over" : ""}`} aria-live="polite">{n}/{MAX_NAME}</span>
+        <input id={id} value={value} placeholder={DEFAULT_NAME} onChange={(e) => onChange(e.target.value)}
+          aria-invalid={over > 0 || undefined} aria-describedby={`${id}-n${over > 0 ? ` ${id}-e` : ""}`} className={over > 0 ? "invalid" : ""} />
+        <span id={`${id}-n`} className={`theme-count ${over > 0 ? "over" : ""}`}>{n}/{MAX_NAME}</span>
       </div>
-      {!value.trim() && <span className="muted small">Empty: “{DEFAULT_NAME}”.</span>}
+      {over > 0
+        ? <span className="field-error" id={`${id}-e`} role="alert">The name can have at most {MAX_NAME} characters: remove {over === 1 ? "one" : over}.</span>
+        : !value.trim() && <span className="muted small">Empty: “{DEFAULT_NAME}”.</span>}
     </div>
   );
 }
 
-function LogoField({ logo, onChange }: { logo?: string; onChange: (logo: string | undefined) => void }) {
+function LogoField({ look, onChange }: { look: Look; onChange: (logo: string | undefined) => void }) {
+  const logo = look.logo;
   const input = useRef<HTMLInputElement>(null);
   const labelId = useId();
   const [busy, setBusy] = useState(false);
@@ -206,8 +229,12 @@ function LogoField({ logo, onChange }: { logo?: string; onChange: (logo: string 
     <div className="field" role="group" aria-labelledby={labelId}>
       <span className="field-label" id={labelId}>Logo<em>In the top bar and on the sign-in page</em></span>
       <div className="theme-logo">
-        <span className="theme-logo-tile">
-          {logo ? <img src={iconUrl(logo)} alt="" width={44} height={44} /> : <span className="logo big"><DefaultMark size={24} /></span>}
+        <span className="theme-logo-tiles">
+          {(["light", "dark"] as const).map((m) => (
+            <span key={m} className={`theme-logo-tile look-${m}`} style={lookProperties(look) as React.CSSProperties} title={m === "light" ? "On the light top bar" : "On the dark top bar"}>
+              <BrandLogo look={look} big src={logo ? iconUrl(logo) : undefined} />
+            </span>
+          ))}
         </span>
         <div className="theme-logo-actions">
           <div className="btn-row">
@@ -216,7 +243,7 @@ function LogoField({ logo, onChange }: { logo?: string; onChange: (logo: string 
             </button>
             {logo && <button type="button" className="btn small ghost" disabled={busy} onClick={() => { setProblem(""); onChange(undefined); }}><Trash2 size={14} aria-hidden="true" />Use the default mark</button>}
           </div>
-          <span className="muted small">A square image: PNG, JPEG, WebP or SVG, at most 64 KB and 512 × 512 pixels. It should read on light and on dark.</span>
+          <span className="muted small">A square image: PNG, JPEG, WebP or SVG, at most 64 KB and 512 × 512 pixels. In the dark look it stands on a light plate.</span>
           <input ref={input} type="file" hidden accept={[...ICON_TYPES, ".svg"].join(",")} aria-label="Logo image" onChange={(e) => pick(e.target.files?.[0])} />
         </div>
       </div>
@@ -264,14 +291,28 @@ function ColorField({ part, value, use, onChange }: { part: ColorPart; value?: s
       {adjusted && <p className="color-note"><Info size={14} aria-hidden="true" /><span>{adjustedText(use!)}</span></p>}
       {use?.grey && (
         <p className="color-note warn"><TriangleAlert size={14} aria-hidden="true" />
-          <span>This colour is grey: {part === "brand" ? "buttons, links and what is selected" : `the mark of ${part === "process" ? "processes" : "standards"}`} hardly stand out from ordinary text.</span>
+          <span>{part === "brand"
+            ? "This colour is nearly grey: buttons and what is selected hardly stand out, so links are underlined to tell them from text."
+            : `This colour is nearly grey: the mark of ${part === "process" ? "processes" : "standards"} hardly stands out from ordinary text.`}</span>
         </p>
       )}
-      {use?.nearRed && (
-        <p className="color-note warn"><TriangleAlert size={14} aria-hidden="true" />
-          <span>This colour looks like the red that marks problems. People may take {part === "brand" ? "buttons and links" : `the mark of ${part === "process" ? "processes" : "standards"}`} for a warning. You can still use it.</span>
-        </p>
-      )}
+      {use?.like.map((k) => (
+        <p key={k} className="color-note warn"><TriangleAlert size={14} aria-hidden="true" /><span>{confusion(part, k)}</span></p>
+      ))}
+    </div>
+  );
+}
+
+/** The admin's own light / dark switch hides the appearance chosen for new visitors: says so, with a way to see it. */
+function OwnChoiceNote({ own, appearance }: { own: "light" | "dark" | null; appearance?: Appearance }) {
+  const deviceDark = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  if (!own || isDark(own, appearance, deviceDark) === isDark(null, appearance, deviceDark)) return null;
+  const theirs = isDark(null, appearance, deviceDark) ? "dark" : "light";
+  return (
+    <div className="color-note own-note" role="status">
+      <Info size={14} aria-hidden="true" />
+      <span>You see the {own} look because you chose it with the switch in the top bar. New visitors see the saved look in {theirs}.</span>
+      <button type="button" className="btn small" onClick={forgetOwnChoice}>Show me what new visitors see</button>
     </div>
   );
 }
@@ -283,10 +324,20 @@ export function adjustedText(u: ColorUse): string {
   return `Made ${how}, so that text in this colour stays readable.`;
 }
 
-/** The look as it would be, in light and dark next to each other: driven by the values being edited. */
-function LookPreview({ look }: { look: Look }) {
+/**
+ * The look as it would be, in light and dark next to each other, driven by the values being edited.
+ * Built from the real parts: the top bar's markup and classes, the buttons, the segmented control
+ * and the real cards of a process and a standard (DocCard). Nothing in it can be pressed (inert).
+ */
+function LookPreview({ look, processes, standards }: { look: Look; processes: Process[]; standards: Standard[] }) {
   const style = lookProperties(look) as React.CSSProperties;
   const name = nameOf(look);
+  const { catalog } = useCatalog();
+  const sample = useMemo(() => {
+    const p = processes.find((x) => x.status !== "draft") ?? processes[0];
+    const s = standards.find((x) => x.status !== "draft") ?? standards[0];
+    return search({ processes: p ? [p] : [], standards: s ? [s] : [], catalog, drafts: false }).results;
+  }, [processes, standards, catalog]);
   return (
     <section className="theme-preview" aria-label="Preview">
       <div className="theme-preview-head">
@@ -295,37 +346,38 @@ function LookPreview({ look }: { look: Look }) {
       </div>
       <div className="preview-panes">
         {(["light", "dark"] as const).map((mode) => (
-          <div key={mode} className={`preview-pane look-${mode}`} style={style} aria-label={mode === "light" ? "Light" : "Dark"} role="img">
-            <div className="pv-top">
-              <BrandLogo look={look} className="pv-logo" src={look.logo ? iconUrl(look.logo) : undefined} />
-              <b className="pv-name" title={name}>{name}</b>
-              <span className="pv-nav on">Home</span>
-              <span className="pv-nav">Processes</span>
-              <span className="pv-mode">{mode === "light" ? <Moon size={13} /> : <Sun size={13} />}</span>
-            </div>
+          <div key={mode} className={`preview-pane look-${mode} ${underlineLinks(look) ? "pv-lines" : ""}`} style={style} aria-label={`Preview, ${mode}`} role="group" {...{ inert: true }}>
+            <header className="topbar pv-topbar">
+              <span className="brand" title={name}>
+                <BrandLogo look={look} src={look.logo ? iconUrl(look.logo) : undefined} />
+                <span className="brand-name">{name}</span>
+              </span>
+              <nav className="nav pv-nav">
+                <span className="nav-link on"><Search size={15} /><span>Home</span></span>
+                <span className="nav-link"><LayoutGrid size={15} /><span>Processes</span></span>
+              </nav>
+              <span className="spacer" />
+              <span className="icon-btn">{mode === "light" ? <Moon size={16} /> : <Sun size={16} />}</span>
+            </header>
             <div className="pv-body">
               <div className="pv-row">
-                <span className="btn small primary pv-btn">Save changes</span>
-                <span className="btn small pv-btn">Cancel</span>
-                <span className="pv-link">Read the guide</span>
+                <button type="button" className="btn small primary">Save changes</button>
+                <button type="button" className="btn small">Cancel</button>
+                <a className="pv-link" href="#/guide">Read the guide</a>
               </div>
-              <div className="pv-field">
-                <span className="pv-label">Search</span>
-                <span className="pv-input">GCP project<i className="pv-caret" /></span>
+              <label className="field pv-field">
+                <span className="field-label">Search</span>
+                <input className="pv-focused" defaultValue="GCP project" readOnly tabIndex={-1} />
+              </label>
+              <div className="seg" role="radiogroup" aria-label="Search by">
+                <button type="button" className="seg-item on" role="radio" aria-checked>Words</button>
+                <button type="button" className="seg-item" role="radio" aria-checked={false}>Meaning</button>
+                <button type="button" className="seg-item" role="radio" aria-checked={false}>Both</button>
               </div>
-              <div className="pv-options">
-                <span className="pv-option on"><Check size={13} />Google Cloud<b>2</b></span>
-                <span className="pv-option">GitHub<b>4</b></span>
-              </div>
-              <div className="pv-card process">
-                <span className="pv-tag process"><Workflow size={11} />Process</span>
-                <strong>Request a GCP project</strong>
-                <span className="pv-sum">Get a new Google Cloud project with the right owners.</span>
-              </div>
-              <div className="pv-card standard">
-                <span className="pv-tag standard"><ShieldCheck size={11} />Standard</span>
-                <strong>Secure logging</strong>
-                <span className="pv-sum">What to log, and what never to log.</span>
+              <div className="pv-cards">
+                {sample.map((r) => (
+                  <DocCard key={`${r.kind}:${r.doc.id}`} kind={r.kind} doc={r.doc} rigour={r.rigour} rules={r.rules} openFeedback={0} mayEdit={false} level={3} />
+                ))}
               </div>
             </div>
             <span className="pv-mode-label">{mode === "light" ? "Light" : "Dark"}</span>

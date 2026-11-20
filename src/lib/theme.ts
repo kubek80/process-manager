@@ -414,12 +414,16 @@ export function takeLook(look: Look, revision: number) {
  * Either way the look counts as known afterwards, so that nothing waits for it any longer.
  */
 export async function refreshLook(): Promise<void> {
+  // a new visitor waits for the look before anything is drawn: never longer than this
+  const stop = typeof AbortController === "undefined" ? null : new AbortController();
+  const timer = setTimeout(() => stop?.abort(), 3000);
   try {
-    const res = await fetch("/api/theme", { cache: "no-cache" });
+    const res = await fetch("/api/theme", { cache: "no-cache", signal: stop?.signal });
     if (!res.ok) return;
     const data = await res.json();
     if (data && typeof data.revision === "number") takeLook(data.look, data.revision);
-  } catch { /* offline or an older server: keep the last look */ } finally {
+  } catch { /* offline, too slow or an older server: keep the last look */ } finally {
+    clearTimeout(timer);
     if (!state.known) set({ known: true });
   }
 }

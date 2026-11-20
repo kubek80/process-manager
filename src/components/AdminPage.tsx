@@ -230,7 +230,7 @@ export function AdminPage({ section, processes, standards, feedback }: {
         {current.id === "health" && <HealthSection processes={processes} standards={standards} feedback={feedback} />}
         {current.id === "activity" && <ActivitySection />}
         {current.id === "statistics" && <StatisticsSection />}
-        {current.id === "theming" && <ThemeSection />}
+        {current.id === "theming" && <ThemeSection processes={processes} standards={standards} />}
         {current.id === "system" && <SystemSection />}
       </main>
     </div>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ALL_PROPERTIES, BAD, cleanLook, contrast, DEFAULT_NAME, derive, distance, inkOn, isDark, lookProblems, lookProperties, luminance, mix, nameOf, NEAR_RED,
+  ALL_PROPERTIES, ALIKE, cleanLook, confusion, contrast, DEFAULT_NAME, derive, distance, FILL_MIN, inkOn, isDark, kindsAlikeText, lookProblems, lookProperties, luminance, mix, nameOf, SEMANTIC, underlineLinks,
   PALETTES, readable, SURFACES, tidyLook,
 } from "../theme";
 
@@ -54,19 +54,19 @@ describe("the readable variant of a colour", () => {
 
 describe("the derived tokens", () => {
   it("leave every part that was not chosen to the default look in CSS", () => {
-    expect(derive({})).toEqual({ tokens: { light: {}, dark: {} }, colors: [] });
+    expect(derive({})).toEqual({ tokens: { light: {}, dark: {} }, colors: [], kindsAlike: [] });
     expect(derive({ name: "Acme", brand: "nope" }).colors).toEqual([]);
   });
   it("give the brand colour a readable accent, its ink and a soft tint in both themes", () => {
     const d = derive({ brand: "#facc15" });
     for (const mode of ["light", "dark"] as const) {
       const t = d.tokens[mode], s = SURFACES[mode];
-      expect(Object.keys(t).sort()).toEqual(["accent", "accent-ink", "accent-soft"]);
+      expect(Object.keys(t).sort()).toEqual(["accent", "accent-fill", "accent-ink", "accent-soft"]);
       expect(min(t.accent, [s.bg, s.surface, s.surface2, t["accent-soft"]])).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(t["accent-ink"], t.accent)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(t["accent-ink"], t["accent-fill"])).toBeGreaterThanOrEqual(4.5);
     }
     const [c] = d.colors;
-    expect(c).toMatchObject({ part: "brand", chosen: "#facc15", adjusted: { light: true, dark: false }, nearRed: false });
+    expect(c).toMatchObject({ part: "brand", chosen: "#facc15", adjusted: { light: true, dark: false }, like: ["warn"] });
     expect(c.used.dark).toBe("#facc15");
     // the light tint stays a pale yellow, not a pale brown
     expect(d.tokens.light["accent-soft"]).toBe(mix("#facc15", "#ffffff", 0.1));
@@ -84,14 +84,14 @@ describe("the derived tokens", () => {
     expect(d.colors[1].adjusted).toEqual({ light: false, dark: true });
   });
   it("warn when a colour looks like the red of problems, not otherwise", () => {
-    expect(distance(BAD.light, BAD.light)).toBe(0);
-    for (const red of ["#dc2626", "#be123c", "#e11d48", "#b91c1c"]) expect(derive({ brand: red }).colors[0].nearRed, red).toBe(true);
-    for (const other of ["#4f46e5", "#0f766e", "#6d28d9", "#facc15", "#334155", "#0369a1", "#808080"]) expect(derive({ brand: other }).colors[0].nearRed, other).toBe(false);
-    expect(distance("#dc2626", BAD.light)).toBeLessThan(NEAR_RED);
+    expect(distance(SEMANTIC.bad.light, SEMANTIC.bad.light)).toBe(0);
+    for (const red of ["#dc2626", "#be123c", "#e11d48", "#b91c1c"]) expect(derive({ brand: red }).colors[0].like, red).toContain("bad");
+    for (const other of ["#4f46e5", "#0f766e", "#6d28d9", "#334155", "#0369a1", "#808080"]) expect(derive({ brand: other }).colors[0].like, other).toEqual([]);
+    expect(distance("#dc2626", SEMANTIC.bad.light)).toBeLessThan(ALIKE);
   });
   it("warn when a colour is grey", () => {
     for (const g of ["#808080", "#6b6b70", "#3f3f46"]) expect(derive({ brand: g }).colors[0].grey, g).toBe(true);
-    for (const c of ["#4f46e5", "#0369a1", "#facc15", "#166534", "#334155"]) expect(derive({ brand: c }).colors[0].grey, c).toBe(false);
+    for (const c of ["#4f46e5", "#0369a1", "#facc15", "#166534", "#2b4c7e"]) expect(derive({ brand: c }).colors[0].grey, c).toBe(false);
   });
   it("as element properties: the chosen colours, and initial for the rest so that the defaults apply", () => {
     const p = lookProperties({ brand: "#0369a1" });
@@ -99,11 +99,54 @@ describe("the derived tokens", () => {
     expect(p["--theme-light-accent"]).toBe("#0369a1");
     expect(p["--theme-dark-accent"]).toMatch(/^#[0-9a-f]{6}$/);
     expect(p["--theme-light-kind-process"]).toBe("initial");
-    expect(ALL_PROPERTIES).toHaveLength(18);
+    expect(ALL_PROPERTIES).toHaveLength(28);
   });
   it("the ready-made palettes start with the default look, and none of them looks like the red of problems", () => {
     expect(PALETTES[0].colors).toEqual({});
-    for (const p of PALETTES) expect(derive(p.colors).colors.filter((c) => c.nearRed), p.name).toEqual([]);
+    for (const p of PALETTES) {
+      const d = derive(p.colors);
+      expect(d.colors.filter((c) => c.like.length || c.grey).map((c) => c.part), p.name).toEqual([]);
+      expect(d.kindsAlike, p.name).toEqual([]);
+    }
+  });
+});
+
+describe("fills, warnings and adjustments people can see", () => {
+  it("a fill keeps the chosen colour with the ink that reads on it, unless it vanishes into the surface", () => {
+    const d = derive({ brand: "#facc15" });
+    expect(d.tokens.light["accent-fill"]).toBe("#facc15"); // a yellow button with black ink...
+    expect(d.tokens.light["accent-ink"]).toBe("#11121c");
+    expect(d.tokens.light.accent).not.toBe("#facc15"); // ...while yellow text would be unreadable
+    const navy = derive({ brand: "#0b1f3a" });
+    expect(navy.tokens.light["accent-fill"]).toBe("#0b1f3a");
+    expect(navy.tokens.dark["accent-fill"]).toBe(navy.tokens.dark.accent); // navy would vanish on the dark surface
+    for (const c of ["#facc15", "#0b1f3a", "#808080", "#ffffff", "#000000", "#0369a1", "#dc2626"]) {
+      for (const mode of ["light", "dark"] as const) {
+        const t = derive({ brand: c, process: c }).tokens[mode];
+        expect(contrast(t["accent-ink"], t["accent-fill"]), `${c} ${mode}`).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(t["kind-process-ink"], t["kind-process-fill"]), `${c} ${mode}`).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(t["accent-fill"], SURFACES[mode].surface), `${c} ${mode}`).toBeGreaterThanOrEqual(FILL_MIN);
+      }
+    }
+  });
+  it("reports an adjustment only when it can be seen", () => {
+    expect(derive({ brand: "#2563eb" }).colors[0].adjusted.light).toBe(false);
+    expect(derive({ brand: "#facc15" }).colors[0].adjusted.light).toBe(true);
+  });
+  it("says what would be confused with what: amber, green, red, and the two kinds", () => {
+    expect(derive({ brand: "#c2410c" }).colors[0].like).toEqual(["warn"]);
+    expect(derive({ process: "#166534" }).colors[0].like).toEqual(["good"]);
+    expect(confusion("brand", "bad")).toContain("Buttons that save or approve will look like buttons that delete");
+    expect(confusion("standard", "warn")).toContain("Every standard will look as if its review were due.");
+    expect(derive({ process: "#6d28d9" }).kindsAlike).toContain("light");
+    expect(derive({ process: "#0369a1", standard: "#0284c7" }).kindsAlike.length).toBeGreaterThan(0);
+    expect(derive({}).kindsAlike).toEqual([]);
+    expect(kindsAlikeText(["dark"])).toBe("Processes and standards will be hard to tell apart in the dark look: their marks and tags have nearly the same colour. Choose colours further apart.");
+  });
+  it("underlines links when the brand colour is nearly grey", () => {
+    for (const g of ["#808080", "#334155", "#0b1f3a"]) expect(underlineLinks({ brand: g }), g).toBe(true);
+    for (const c of ["#4f46e5", "#2b4c7e", "#facc15"]) expect(underlineLinks({ brand: c }), c).toBe(false);
+    expect(underlineLinks({})).toBe(false);
   });
 });
 

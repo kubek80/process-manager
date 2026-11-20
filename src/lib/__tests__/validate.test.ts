@@ -68,11 +68,11 @@ describe("rules the schema cannot express", () => {
   it("unknown actor", () => expect(find(check((p) => (p.steps[1].actor = "nobody")), "steps[1].actor")[0]).toMatchObject({ level: "error" }));
   it("unknown next step", () => expect(find(check((p) => (p.steps[0].next[0].to = "nowhere")), "steps[0].next[0].to")).toHaveLength(1));
   it("step pointing to itself", () => expect(check((p) => (p.steps[0].next[0].to = "ask")).some((i) => i.message.includes("itself"))).toBe(true));
-  it("same target twice", () => expect(check((p) => p.steps[0].next.push({ to: "approve" })).some((i) => i.message.includes("listed twice"))).toBe(true));
+  it("same target twice", () => expect(check((p) => p.steps[0].next.push({ to: "approve" })).some((i) => i.message.includes("already leads to this step"))).toBe(true));
   it("duplicate step id", () => expect(check((p) => (p.steps[3].id = "ask")).some((i) => i.message.includes('duplicate step id "ask"'))).toBe(true));
   it("duplicate actor id", () => expect(check((p) => p.actors.push({ id: "boss", name: "Other" })).some((i) => i.message.includes("duplicate actor id"))).toBe(true));
-  it("decision needs two paths", () => expect(check((p) => p.steps[2].next.pop()).some((i) => i.message.includes("at least two outgoing paths"))).toBe(true));
-  it("decision paths need labels", () => expect(check((p) => delete p.steps[2].next[0].label).some((i) => i.message.includes("needs a label"))).toBe(true));
+  it("decision needs two paths", () => expect(check((p) => p.steps[2].next.pop()).some((i) => i.message.includes("at least two answers"))).toBe(true));
+  it("decision paths need labels", () => expect(check((p) => delete p.steps[2].next[0].label).some((i) => i.message.includes("needs a name"))).toBe(true));
   it("subprocess needs a process", () => expect(find(check((p) => (p.steps[0].type = "subprocess")), "steps[0].subProcessId")[0].level).toBe("error"));
   it("unknown sub-process is a warning", () => expect(find(check((p) => (p.steps[0].subProcessId = "not-written-yet")), "steps[0].subProcessId")[0].level).toBe("warning"));
   it("known sub-process is fine", () => expect(check((p) => (p.steps[0].subProcessId = "raise-servicenow-request"))).toEqual([]));
@@ -239,7 +239,7 @@ describe("standards", () => {
     expect(issues[0]).toMatchObject({ level: "warning", path: "requirements[0].environments[1]" });
   });
   it("warns when a review-checked rule gives reviewers nothing to look for", () =>
-    expect(find(check((s) => delete s.requirements[0].review), "requirements[0].review")[0].message).toContain("the review agent will skip it"));
+    expect(find(check((s) => delete s.requirements[0].review), "requirements[0].review")[0].message).toContain("cannot be checked in pull requests"));
   it("warns when a mandatory rule gives neither a reason nor how to comply", () =>
     expect(find(check((s) => delete s.requirements[0].rationale), "requirements[0].guidance")[0].level).toBe("warning"));
   it("references to processes and other standards", () => {

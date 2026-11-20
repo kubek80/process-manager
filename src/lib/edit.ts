@@ -139,9 +139,14 @@ export function deleteStep(p: Process, id: string): Process {
     // what the removed step called it; an ordinary step has no use for the names.
     const label = (n: NextLink, g: NextLink) => (single ? n.label ?? (decides ? g.label : undefined) : decides ? g.label ?? n.label : undefined);
     const seen = new Set<string>();
+    // An answer of a decision that led to a step with one way on keeps its name and now leads
+    // there, even when another answer already does: the answers stay, and the checker asks to tell
+    // them apart, instead of one answer silently disappearing.
+    const keeps = (n: NextLink) => decides && single && !!n.label;
     const next = s.next
-      .flatMap((n) => (n.to === id ? gone.next.map((g): NextLink => { const l = label(n, g); return l ? { to: g.to, label: l } : { to: g.to }; }) : [n]))
-      .filter((n) => n.to !== s.id && n.to !== id && !seen.has(n.to) && seen.add(n.to))
+      .flatMap((n): (NextLink & { inherited?: boolean })[] => (n.to === id ? gone.next.map((g) => { const l = label(n, g); return l ? { to: g.to, label: l, inherited: true } : { to: g.to, inherited: true }; }) : [n]))
+      .filter((n) => n.to !== s.id && n.to !== id && ((!seen.has(n.to) && !!seen.add(n.to)) || keeps(n)))
+      .map(({ inherited: _, ...n }) => n) // eslint-disable-line @typescript-eslint/no-unused-vars
       .reduce<NextLink[]>((out, n) => [...out, decides && n.label && out.some((x) => x.label === n.label) ? { ...n, label: freeLabel(n.label, out) } : n], []);
     return { ...s, next };
   });
@@ -157,17 +162,20 @@ export function moveStep(p: Process, id: string, dir: -1 | 1): Process {
   return { ...p, steps };
 }
 
-/**
- * Why a step cannot be moved to another place in the flow, or "" when it can. A step with several
- * paths (a decision) keeps its branches: cutting it out would have to drop all but one of them.
- */
+/** Why a step cannot be moved to another place in the flow, or "" when it can. */
 export function flowMoveBlocked(p: Process, id: string): string {
-  const s = p.steps.find((x) => x.id === id);
-  if (!s) return "This step no longer exists.";
-  if (s.next.length > 1) return "A step with several paths keeps its branches, so it cannot be moved as a whole. Change where its paths go instead.";
-  return "";
+  return p.steps.some((x) => x.id === id) ? "" : "This step no longer exists.";
 }
 
+/**
+ * The answer of a step with several paths that carries the flow on: the first that leads to a
+ * later step in the list (not back), else the first. Moving or cutting the step out joins the
+ * steps before it to where this answer leads; its other answers stay as they are.
+ */
+function throughPath(p: Process, s: Step): NextLink | undefined {
+  const at = p.steps.indexOf(s);
+  return s.next.find((n) => p.steps.findIndex((x) => x.id === n.to) > at) ?? s.next[0];
+}
 /** Puts `step` right after `afterId` in the flow (as insertStep does): it takes over what followed, or becomes a new branch of a decision. */
 function placeAfter(steps: Step[], afterId: string, step: Step): Step[] {
   const after = steps.find((s) => s.id === afterId);
@@ -187,24 +195,56 @@ function placeAfter(steps: Step[], afterId: string, step: Step): Step[] {
  * Moves a step to another place in the flow - not only in the numbering: the steps around it are
  * joined (as when it is deleted), then it goes on every arrow into `beforeId` and leads to it.
  * `null` moves it to the end: after the last step in the list. The list order follows, so the
- * numbers on the map read in the new order. A step with several paths is not moved (see
- * flowMoveBlocked); nor is anything when the target is unknown or the step itself.
+ * numbers on the map read in the new order.
+ *
+ * A decision moves with its answers. The answer that carried the flow on (see throughPath) is the
+ * one that is reconnected: the steps before the decision now lead where it led, and it leads to
+ * `beforeId`; every other answer keeps its target. `answerChanges` says what moved.
  */
 export function moveStepInFlow(p: Process, id: string, beforeId: string | null): Process {
   const moving = p.steps.find((s) => s.id === id);
   if (!moving || flowMoveBlocked(p, id) || beforeId === id) return p;
   if (beforeId !== null && !p.steps.some((s) => s.id === beforeId)) return p;
-  const rest = deleteStep(p, id).steps;
+  const through = moving.next.length > 1 ? throughPath(p, moving) : moving.next[0];
+  // cut out as if it had only the path that carries the flow on
+  const cutFrom = moving.next.length > 1 ? { ...p, steps: p.steps.map((s) => (s.id === id ? { ...s, next: [through!] } : s)) } : p;
+  const rest = deleteStep(cutFrom, id).steps;
   if (rest.length === p.steps.length) return p;
   if (beforeId === null) {
     const last = rest[rest.length - 1];
-    return { ...p, steps: placeAfter(rest, last.id, { ...moving, next: [] }) };
+    const placed = placeAfter(rest, last.id, { ...moving, next: [] });
+    // a decision keeps its answers; an ordinary step takes over what followed the last step
+    return { ...p, steps: moving.next.length > 1 ? placed.map((s) => (s.id === id ? { ...moving } : s)) : placed };
   }
   // the arrows that went into the target now go into the moved step, with their names
   const redirected = rest.map((s) => (s.next.some((n) => n.to === beforeId) ? { ...s, next: s.next.map((n) => (n.to === beforeId ? { ...n, to: id } : n)) } : s));
   const at = redirected.findIndex((s) => s.id === beforeId);
-  const moved: Step = { ...moving, next: [{ to: beforeId }] };
+  const moved: Step = moving.next.length > 1
+    ? { ...moving, next: moving.next.map((n) => (n === through ? { ...n, to: beforeId } : n)) }
+    : { ...moving, next: [{ ...(through?.label ? { label: through.label } : {}), to: beforeId }] };
   return { ...p, steps: [...redirected.slice(0, at), moved, ...redirected.slice(at)] };
+}
+
+/**
+ * What a change did to the answers of decisions, in words: "“No” of “Release healthy?” now leads
+ * to “Roll out to 10%”". Only named paths are reported; a path that is new, or that leads to
+ * another step than before, is a change. Said right away after a move or a delete, with Undo.
+ */
+export function answerChanges(before: Process, after: Process): string[] {
+  const title = (q: Process, id: string) => q.steps.find((s) => s.id === id)?.title || id;
+  const out: string[] = [];
+  for (const s of after.steps) {
+    const was = before.steps.find((x) => x.id === s.id);
+    if (!was || s.type !== "decision") continue;
+    for (const n of s.next) {
+      if (!n.label) continue;
+      const old = was.next.find((x) => x.label === n.label);
+      if (old && old.to === n.to) continue;
+      const also = s.next.filter((x) => x !== n && x.to === n.to).map((x) => `“${x.label}”`);
+      out.push(`“${n.label}” of “${s.title}” now leads to “${title(after, n.to)}”${also.length ? `, as ${also.join(" and ")} does` : ""}`);
+    }
+  }
+  return out;
 }
 
 /** Moves a step one place up (-1) or down (1) in the flow, as moveStepInFlow does: before the step listed before it, or after the one listed after it. */

@@ -15,10 +15,10 @@ export function StandardsLibrary({ standards, processes, feedback, onNew, onAi, 
   const standardIds = useMemo(() => standards.map((s) => s.id), [standards]);
   return (
     <div className="page library">
-      <section className="hero">
+      <section className="hero list-hero">
         <div>
           <h1>What must I meet?</h1>
-          <p className="lead">Standards set by cyber security, platforms and practices. Each one is a list of requirements with the reason, how to comply and how it is checked.</p>
+          <p className="lead">The rules your work must meet, set by cyber security, platforms and practices.</p>
         </div>
         {editor && (
           <div className="hero-actions">

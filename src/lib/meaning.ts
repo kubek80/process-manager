@@ -350,3 +350,13 @@ export function modeLine(mode: SearchMode, provider: Provider): string {
 
 /** The sentence near the count when the server sent only the closest of more that matched. */
 export const truncatedText = (n: number) => `Showing the ${n} closest. Add words or choose a filter to narrow it down.`;
+
+/**
+ * Whether to show the closest by meaning under a word search that found nothing: only when search
+ * by meaning is offered, words are chosen, and the words were asked for on purpose (Enter, Search,
+ * a link: `submitted` is what was asked then), never while typing. `wordHits` is how many the
+ * words found without filters (-1: not worked out).
+ */
+export function closestWanted(o: { mode: SearchMode; offered: boolean; asked: string; submitted: string; wordHits: number }): boolean {
+  return o.offered && o.mode === "words" && !!o.asked.trim() && o.asked.trim() === o.submitted.trim() && o.wordHits === 0;
+}

@@ -51,7 +51,9 @@ function NotFound({ noun, id }: { noun: "process" | "standard"; id: string }) {
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { name } = useLook();
+  // a new visitor (no look kept from an earlier visit) sees nothing until the look is known, so
+  // that the first thing drawn already has the portal's name, logo and colours
+  const { name, known } = useLook();
   const refresh = useCallback(() => { setError(null); loadMe().then(setMe).catch((e) => setError(e.message)); }, []);
   useEffect(refresh, [refresh]);
   // the look as it is now: also before signing in, for the sign-in page
@@ -60,7 +62,7 @@ export default function App() {
 
   let body;
   if (error) body = <main className="login"><div className="login-card"><h1>{name}</h1><LoadError what="The portal could not be opened." error={error} onRetry={refresh} /></div></main>;
-  else if (!me) body = null;
+  else if (!me || !known) body = null;
   else if (!me.authenticated) body = <Login me={me} onSignedIn={refresh} />;
   else body = <MeContext.Provider value={me}><EngagementProvider key={me.user!.email}><Shell key={me.user!.email} me={me} onSignedOut={refresh} /></EngagementProvider></MeContext.Provider>;
   return <>{body}<Notices /></>;
