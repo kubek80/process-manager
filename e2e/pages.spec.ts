@@ -387,6 +387,8 @@ test("from 1000 px wide the reader's buttons sit on the tab row, icons only belo
   await page.setViewportSize({ width: 1440, height: 900 });
   await open(page, "/p/request-gcp-project/flow");
   const onTabs = page.locator(".tabs-row .engage-actions");
+  // the buttons are a named group there too, as in the head
+  await expect(page.getByRole("group", { name: "What you can do with this process" })).toBeVisible();
   await expect(onTabs.getByRole("button", { name: "Give feedback" })).toBeVisible();
   await expect(onTabs.getByRole("button", { name: /^Upvote / })).toBeVisible();
   await expect(onTabs.getByRole("button", { name: /^Bookmark / })).toBeVisible();
