@@ -120,6 +120,10 @@ type Change struct {
 	Revision int
 	// Log is kept for the callers; nothing is logged by a save at the moment.
 	Log *slog.Logger
+	// DraftDropped runs in the same transaction when a save from a working draft (PublishDraft,
+	// ReplaceDraft) removed the draft but stored no version, the body being the stored one: the
+	// place to record that the draft is gone.
+	DraftDropped func(ctx context.Context, tx pgx.Tx, dropped WorkingDraft) error
 }
 
 // Removal is one delete.
@@ -286,11 +290,17 @@ func SaveIn(ctx context.Context, tx pgx.Tx, c Change) (doc Doc, changed bool, er
 	if fromDraft && cur == nil {
 		return doc, false, &Conflict{} // deleted, with its working draft
 	}
-	if fromDraft && (draft == nil || draft.Revision != c.Revision) {
-		return doc, false, &DraftConflict{Current: draft}
-	}
+	// the published document's changes are published, never saved over it
 	if c.Drafts == ReplaceDraft && Published(cur.Body) {
 		return doc, false, ErrPublished
+	}
+	if c.Drafts == ReplaceDraft && draft == nil && c.Base != nil && *c.Base != cur.Version {
+		// somebody saved it as the document itself meanwhile (perhaps in another window): that is
+		// what the person is told, with who and which version
+		return doc, false, &Conflict{Current: *cur, Exists: true}
+	}
+	if fromDraft && (draft == nil || draft.Revision != c.Revision) {
+		return doc, false, &DraftConflict{Current: draft, Discarded: draft == nil && c.Drafts == ReplaceDraft}
 	}
 	if err := checkBase(c.Base, cur); err != nil {
 		return doc, false, err
@@ -304,6 +314,11 @@ func SaveIn(ctx context.Context, tx pgx.Tx, c Change) (doc Doc, changed bool, er
 		}
 	}
 	if cur != nil && bytes.Equal(cur.Body, pretty) {
+		if fromDraft && c.DraftDropped != nil {
+			if err := c.DraftDropped(ctx, tx, *draft); err != nil {
+				return doc, false, err
+			}
+		}
 		return *cur, false, nil
 	}
 	// continue the numbering even if the document was deleted in between
@@ -431,16 +446,20 @@ type Deletion struct {
 	Last json.RawMessage
 }
 
-// LastDeleted returns the most recent deletion of a document, or ErrNotFound when it was never
-// deleted or exists again.
-func (s *Store) LastDeleted(ctx context.Context, kind, id string) (Deletion, error) {
+// LastDeleted returns the most recent deletion of a document that does not exist now, when seen
+// is a version of what was deleted (one saved after any earlier deletion): somebody who was
+// working on that version is told who deleted it. ErrNotFound otherwise - also when it was never
+// deleted, exists again, or seen is 0 or a version of something deleted before.
+func (s *Store) LastDeleted(ctx context.Context, kind, id string, seen int) (Deletion, error) {
 	var d Deletion
 	err := s.Pool.QueryRow(ctx, `select v.saved_by, v.saved_at, (select p.body from document_versions p
 			where p.kind = v.kind and p.id = v.id and p.version < v.version and p.body is not null order by p.version desc limit 1)
 		from document_versions v
-		where v.kind = $1 and v.id = $2 and v.body is null
+		where v.kind = $1 and v.id = $2 and v.body is null and $3 > 0 and $3 < v.version
 			and not exists (select 1 from documents d where d.kind = $1 and d.id = $2)
-		order by v.version desc limit 1`, kind, id).Scan(&d.By, &d.At, &d.Last)
+			and exists (select 1 from document_versions x where x.kind = $1 and x.id = $2 and x.version = $3 and x.body is not null)
+			and not exists (select 1 from document_versions x where x.kind = $1 and x.id = $2 and x.body is null and x.version > $3 and x.version < v.version)
+			and v.version = (select max(m.version) from document_versions m where m.kind = $1 and m.id = $2)`, kind, id, seen).Scan(&d.By, &d.At, &d.Last)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && d.Last == nil) {
 		return Deletion{}, ErrNotFound
 	}

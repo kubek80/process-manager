@@ -98,7 +98,12 @@ func (d *DraftPending) Error() string {
 
 // DraftConflict is returned when a working draft was saved, published or discarded by somebody
 // else since the caller read it. Current is nil when there is none any more.
-type DraftConflict struct{ Current *WorkingDraft }
+type DraftConflict struct {
+	Current *WorkingDraft
+	// Discarded: it is known to have been discarded (a never-published document whose version
+	// did not move since; one saved as the document itself is a version conflict instead).
+	Discarded bool
+}
 
 func (c *DraftConflict) Error() string {
 	if c.Current == nil {
