@@ -1,4 +1,5 @@
 import type { TargetKind } from "../types";
+import { portalName } from "./theme";
 
 // Sharing a process or standard: its link, the link with its title, an e-mail, or the device's
 // own share sheet. Nothing is posted anywhere from the app.
@@ -30,18 +31,18 @@ export function oneLine(text: string | undefined, max = 240): string {
 
 const noun = (kind: TargetKind) => (kind === "process" ? "process" : "standard");
 
-/** A mailto: link that opens the person's mail program with subject and text filled in. */
-export function mailtoLink(s: ShareInfo, url: string): string {
+/** A mailto: link that opens the person's mail program with subject and text filled in. `app`: the portal's name (Admin › Theming). */
+export function mailtoLink(s: ShareInfo, url: string, app = portalName()): string {
   const title = oneLine(s.title, 200);
   const summary = oneLine(s.summary, 600);
-  const body = [`Have a look at the ${noun(s.kind)} “${title}” in the Process Manager:`, "", summary, "", url].filter((l, i, a) => l || (a[i - 1] ?? "") !== "").join("\r\n");
+  const body = [`Have a look at the ${noun(s.kind)} “${title}” in ${app}:`, "", summary, "", url].filter((l, i, a) => l || (a[i - 1] ?? "") !== "").join("\r\n");
   // encodeURIComponent writes a space as %20, which every mail program reads (a "+" would stay a "+")
   return `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
 }
 
-/** "Copy link and title": the title on one line, the address on the next - reads well in any chat or document. */
-export function linkAndTitle(s: ShareInfo, url: string): string {
-  return `${oneLine(s.title, 200)}\n${url}`;
+/** "Copy link and title": the title and the portal's name on one line, the address on the next - reads well in any chat or document. */
+export function linkAndTitle(s: ShareInfo, url: string, app = portalName()): string {
+  return `${oneLine(s.title, 200)} · ${app}\n${url}`;
 }
 
 /** What the device's own share sheet gets (`navigator.share`). */

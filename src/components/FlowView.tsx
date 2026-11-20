@@ -20,8 +20,10 @@ const NO_PAN = "button:not(.block-main), a, input, select, textarea, label, .qui
 /** How far the pointer moves before a press becomes a drag of the map (and no longer a click). */
 const PAN_START = 5;
 
-export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, editable = true, bare, fitMin, openMin, follow }: {
+export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, editable = true, bare, fitMin, openMin, follow, legend = true }: {
   editable?: boolean; bare?: boolean;
+  /** The legend of the kinds of steps. The editing screen leaves it out: every block names its kind, and the map needs the room. */
+  legend?: boolean;
   /** The smallest zoom "Fit" (and opening) goes down to; the reader's page keeps text readable (75%), the editing screen shows the whole flow. */
   fitMin?: number;
   /** The smallest zoom the map opens at (default: `fitMin`): readable, a wider flow scrolls sideways. */
@@ -179,14 +181,20 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   return (
     <div className={`flow-wrap ${bare ? "bare" : ""}`}>
       <div className="flow-head">
-        <div className="legend" role="group" aria-label="Kinds of steps">
-          {usedTypes.map((t) => (
-            <span key={t} className="legend-item"><TypeIcon type={t} size={20} />{STEP_META[t].label}</span>
-          ))}
-          <span className="legend-item"><svg width="26" height="8" aria-hidden="true"><path d="M0,4 H26" className="edge back" /></svg>Loop back</span>
-        </div>
+        {legend ? (
+          <div className="legend" role="group" aria-label="Kinds of steps">
+            {usedTypes.map((t) => (
+              <span key={t} className="legend-item"><TypeIcon type={t} size={20} />{STEP_META[t].label}</span>
+            ))}
+            <span className="legend-item"><svg width="26" height="8" aria-hidden="true"><path d="M0,4 H26" className="edge back" /></svg>Loop back</span>
+          </div>
+        ) : editable && (
+          <p className="flow-tip" title="Press + on an arrow to insert a step there, + on a block to add one after it. Drag a block to another lane to change who does it. Drag the map by an empty spot to move it; Ctrl or ⌘ + scroll zooms.">
+            <span className="kbd">+</span> on an arrow inserts a step · drag a block to another lane · <span className="flow-tip-loop"><svg width="20" height="8" aria-hidden="true"><path d="M0,4 H20" className="edge back" /></svg>loop back</span>
+          </p>
+        )}
         {!bare && <div className="map-tools">
-          <span className="map-pan-hint"><Hand size={14} aria-hidden="true" />Drag to move · <kbd className="key">{zoomKey()}</kbd> + scroll to zoom</span>
+          {legend && <span className="map-pan-hint"><Hand size={14} aria-hidden="true" />Drag to move · <kbd className="key">{zoomKey()}</kbd> + scroll to zoom</span>}
           <div className="zoom" role="group" aria-label="Zoom">
             <button className="btn small ghost" onClick={() => fit()} title="Show the whole width of the flow"><Maximize2 size={14} />Fit</button>
             <button className="icon-btn" onClick={() => step(-1)} aria-label="Zoom out"><Minus size={16} /></button>
@@ -307,7 +315,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
       </div>
       </div>
 
-      {editable && <p className="flow-hint"><b>Edit on the map:</b> press <span className="kbd">+</span> on an arrow to insert a step there · <span className="kbd">+</span> on a block to add one after it · drag a block to another lane to change who does it · select a block to change it.</p>}
+      {editable && legend && <p className="flow-hint"><b>Edit on the map:</b> press <span className="kbd">+</span> on an arrow to insert a step there · <span className="kbd">+</span> on a block to add one after it · drag a block to another lane to change who does it · select a block to change it.</p>}
     </div>
   );
 }

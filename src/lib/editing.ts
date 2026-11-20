@@ -1,4 +1,4 @@
-import type { Catalog, Issue, Process, Standard, Status, TargetKind } from "../types";
+import type { Catalog, Issue, Level, Process, Standard, Status, StepType, TargetKind } from "../types";
 import { compare, describeChange, fieldName } from "./diff";
 import { EXAMPLE } from "./edit";
 
@@ -164,6 +164,12 @@ export interface OutlineEntry {
   /** How many things a section holds, where that helps (steps, lanes, links). */
   count?: number;
   depth: 0 | 1;
+  /** A step: its kind, who does it, and the position of that participant (the colour of its lane). */
+  type?: StepType;
+  who?: string;
+  lane?: number;
+  /** A requirement: its level. */
+  level?: Level;
 }
 
 /** What the outline of a process lists, in order: its sections, and every step under "Steps". */
@@ -175,7 +181,13 @@ export function processOutline(p: Process): OutlineEntry[] {
   };
   for (const s of PROCESS_SECTIONS) {
     out.push({ key: s.id, section: s.id, label: s.label, count: counts[s.id], depth: 0 });
-    if (s.id === "steps") (p.steps ?? []).forEach((step, i) => out.push({ key: `steps/${step.id}`, section: "steps", item: step.id, label: step.title || "(no name yet)", number: String(i + 1), depth: 1 }));
+    if (s.id === "steps") (p.steps ?? []).forEach((step, i) => {
+      const lane = (p.actors ?? []).findIndex((a) => a.id === step.actor);
+      out.push({
+        key: `steps/${step.id}`, section: "steps", item: step.id, label: step.title || "(no name yet)", number: String(i + 1), depth: 1,
+        type: step.type, who: lane >= 0 ? p.actors[lane].name : step.actor, lane: lane >= 0 ? lane : undefined,
+      });
+    });
   }
   return out;
 }
@@ -186,9 +198,20 @@ export function standardOutline(s: Standard): OutlineEntry[] {
   const counts: Partial<Record<StandardSection, number>> = { requirements: s.requirements?.length ?? 0, background: s.resources?.length ?? 0 };
   for (const sec of STANDARD_SECTIONS) {
     out.push({ key: sec.id, section: sec.id, label: sec.label, count: counts[sec.id], depth: 0 });
-    if (sec.id === "requirements") (s.requirements ?? []).forEach((r) => out.push({ key: `requirements/${r.id}`, section: "requirements", item: r.id, label: r.title || "(no name yet)", number: r.id, depth: 1 }));
+    if (sec.id === "requirements") (s.requirements ?? []).forEach((r) => out.push({ key: `requirements/${r.id}`, section: "requirements", item: r.id, label: r.title || "(no name yet)", number: r.id, depth: 1, level: r.level }));
   }
   return out;
+}
+
+/**
+ * Where a dragged item lands, as the item it is put before (`null`: at the end), or `undefined`
+ * when it stays where it is. `to` is the gap it is dropped into: 0 before the first item,
+ * `ids.length` after the last.
+ */
+export function dropBefore(ids: string[], id: string, to: number): string | null | undefined {
+  const from = ids.indexOf(id);
+  if (from < 0 || to < 0 || to > ids.length || to === from || to === from + 1) return undefined;
+  return to === ids.length ? null : ids[to];
 }
 
 /** The outline key of a selection. */

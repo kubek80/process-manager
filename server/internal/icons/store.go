@@ -69,11 +69,13 @@ const CleanAfter = 24 * time.Hour
 
 // Clean removes the icons that neither the lists nor any stored version of them names and
 // that were uploaded more than CleanAfter ago. Every icon a version names stays, so that
-// restoring an older version of the lists keeps its icons. It returns how many it removed.
+// restoring an older version of the lists keeps its icons, and so does the portal's logo (the
+// look in portal_settings). It returns how many it removed.
 func (s *Store) Clean(ctx context.Context) (int, error) {
 	tag, err := s.Pool.Exec(ctx, `delete from icons i where i.created_at < now() - make_interval(secs => $1)
 		and not exists (select 1 from document_versions v where v.kind = 'catalog' and v.body is not null and strpos(v.body::text, i.id) > 0)
-		and not exists (select 1 from documents d where d.kind = 'catalog' and strpos(d.body::text, i.id) > 0)`, CleanAfter.Seconds())
+		and not exists (select 1 from documents d where d.kind = 'catalog' and strpos(d.body::text, i.id) > 0)
+		and not exists (select 1 from portal_settings s where strpos(s.value::text, i.id) > 0)`, CleanAfter.Seconds())
 	if err != nil {
 		return 0, err
 	}

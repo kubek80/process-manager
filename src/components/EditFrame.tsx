@@ -1,12 +1,13 @@
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
-  ArrowDown, ArrowLeft, ArrowUp, ChevronRight, CircleAlert, CircleCheck, Flag, ListTree, MoreHorizontal, PanelRight, Plus, Redo2, Send, TriangleAlert, Undo2, X,
+  ArrowLeft, ChevronDown, ChevronRight, CircleAlert, CircleCheck, Flag, GripVertical, ListTree, MoreHorizontal, PanelRight, Plus, Redo2, Send, TriangleAlert, Undo2, X,
 } from "lucide-react";
 import type { Feedback, Issue } from "../types";
-import { checkerSummary, isExampleIssue, issueText, type EditState, type IssueCount, type OutlineEntry } from "../lib/editing";
+import { checkerSummary, dropBefore, isExampleIssue, issueText, type EditState, type IssueCount, type OutlineEntry } from "../lib/editing";
+import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import type { Notice } from "./EditSession";
 import { FeedbackItem, type FeedbackTarget } from "./Feedback";
-import { Modal, useLayer } from "./ui";
+import { Modal, notify, TypeIcon, useLayer } from "./ui";
 import "../edit.css";
 
 /**
@@ -17,14 +18,32 @@ import "../edit.css";
  * phone the fields do too.
  */
 
-/** A group of fields with a heading. */
-export function EditSection({ title, hint, children }: { title: string; hint?: ReactNode; children: ReactNode }) {
+/**
+ * A group of fields with a heading. With `folded` it can be folded away: folded, it shows
+ * `summary` (what is set, in a line) instead of its fields. It opens by itself when `folded`
+ * turns false, e.g. when the checker finds a problem in it.
+ */
+export function EditSection({ title, hint, children, summary, folded }: { title: string; hint?: ReactNode; children: ReactNode; summary?: ReactNode; folded?: boolean }) {
   const id = useId();
+  const [open, setOpen] = useState(!folded);
+  useEffect(() => { if (folded === false) setOpen(true); }, [folded]);
+  if (folded === undefined) {
+    return (
+      <section className="edit-section" aria-labelledby={id}>
+        <h3 id={id}>{title}</h3>
+        {hint && <p className="edit-section-hint">{hint}</p>}
+        <div className="edit-section-body form">{children}</div>
+      </section>
+    );
+  }
   return (
-    <section className="edit-section" aria-labelledby={id}>
-      <h3 id={id}>{title}</h3>
-      {hint && <p className="edit-section-hint">{hint}</p>}
-      <div className="edit-section-body form">{children}</div>
+    <section className={`edit-section fold ${open ? "open" : ""}`} aria-labelledby={id}>
+      <h3><button id={id} className="fold-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <ChevronRight size={15} className="fold-chev" aria-hidden="true" /><span>{title}</span>
+      </button></h3>
+      {!open && summary && <button className="fold-summary" onClick={() => setOpen(true)} tabIndex={-1}>{summary}</button>}
+      {open && hint && <p className="edit-section-hint">{hint}</p>}
+      {open && <div className="edit-section-body form">{children}</div>}
     </section>
   );
 }
@@ -76,13 +95,21 @@ export function ItemIssues({ issues }: { issues: Issue[] }) {
   );
 }
 
-/** Open feedback about a step or a requirement: shown where it is changed, because it is why people edit. */
+/**
+ * Open feedback about a step or a requirement: shown where it is changed, because it is why people
+ * edit - as one line with the first remark, so it does not push the fields away; opened on demand.
+ */
 export function ItemFeedback({ feedback, target, noun }: { feedback: Feedback[]; target: FeedbackTarget; noun: string }) {
+  const [open, setOpen] = useState(false);
   if (!feedback.length) return null;
   return (
-    <section className="item-feedback" aria-label={`Open feedback about this ${noun}`}>
-      <h3><Flag size={14} />{feedback.length} open feedback about this {noun}</h3>
-      <ul className="fb-list">{feedback.map((f) => <FeedbackItem key={f.id} item={f} target={target} hideItem />)}</ul>
+    <section className={`item-feedback ${open ? "open" : ""}`} aria-label={`Open feedback about this ${noun}`}>
+      <button className="item-feedback-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Flag size={14} aria-hidden="true" />
+        <span className="item-feedback-text"><b>{feedback.length} open feedback</b>{!open && <> · “{feedback[0].text}”</>}</span>
+        <ChevronDown size={15} className="fold-chev" aria-hidden="true" />
+      </button>
+      {open && <ul className="fb-list">{feedback.map((f) => <FeedbackItem key={f.id} item={f} target={target} hideItem />)}</ul>}
     </section>
   );
 }
@@ -98,7 +125,16 @@ const markWords = (c: IssueCount, lead = "") => {
   return "";
 };
 
-export function Outline({ entries, selected, onSelect, issues, feedback, onAdd, onMove, label }: {
+export interface OutlineAdd {
+  /** The section whose items the line at its end adds to. */
+  section: string;
+  /** The label of the line, e.g. "Add a step", and what the field says while empty. */
+  label: string; placeholder: string;
+  /** Adds an item with the name typed. */
+  run: (name: string) => void;
+}
+
+export function Outline({ entries, selected, onSelect, issues, feedback, onAdd, onMove, onNudge, moveBlocked, label }: {
   entries: OutlineEntry[];
   /** The key of what is selected: "about", "steps/<id>". */
   selected: string;
@@ -107,45 +143,131 @@ export function Outline({ entries, selected, onSelect, issues, feedback, onAdd, 
   issues: Map<string, IssueCount>;
   /** Open feedback per item id. */
   feedback: (item: string) => number;
-  /** The section whose items can be added to, with what the button says. */
-  onAdd: { section: string; label: string; run: () => void };
-  /** Moves an item one place earlier or later. */
-  onMove: (item: string, dir: -1 | 1) => void;
+  onAdd: OutlineAdd;
+  /** Puts an item before another one, or (null) at the end. */
+  onMove: (item: string, before: string | null) => void;
+  /** Moves an item one place up or down (Alt+Up / Alt+Down). */
+  onNudge: (item: string, dir: -1 | 1) => void;
+  /** Why an item cannot be moved, if it cannot. */
+  moveBlocked?: (item: string) => string;
   label: string;
 }) {
   const items = entries.filter((e) => e.depth === 1);
+  const ids = items.map((e) => e.item!);
+  const list = useRef<HTMLUListElement>(null);
+  // dragging by the handle: which item, and the gap it would land in (0 = before the first)
+  const [drag, setDrag] = useState<{ item: string; gap: number } | null>(null);
+  const gapAt = (y: number) => {
+    const rows = [...(list.current?.querySelectorAll<HTMLElement>(".outline-row.depth-1") ?? [])];
+    const i = rows.findIndex((r) => { const b = r.getBoundingClientRect(); return y < b.top + b.height / 2; });
+    return i < 0 ? rows.length : i;
+  };
+  const startDrag = (e: React.PointerEvent, item: string) => {
+    if (e.button !== 0 || moveBlocked?.(item)) return;
+    e.preventDefault();
+    const handle = e.currentTarget as HTMLElement;
+    try { handle.setPointerCapture(e.pointerId); } catch { /* gone */ }
+    const start = e.clientY;
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.abs(ev.clientY - start) < 4) return;
+      moved = true;
+      setDrag({ item, gap: gapAt(ev.clientY) });
+    };
+    const up = (ev: PointerEvent) => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", cancel);
+      setDrag(null);
+      if (!moved) return;
+      const before = dropBefore(ids, item, gapAt(ev.clientY));
+      if (before !== undefined) onMove(item, before);
+    };
+    const cancel = () => { handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); handle.removeEventListener("pointercancel", cancel); setDrag(null); };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", cancel);
+  };
+  const keyMove = (e: React.KeyboardEvent, item: string, always = false) => {
+    if (!(e.key === "ArrowUp" || e.key === "ArrowDown") || (!always && !e.altKey)) return;
+    e.preventDefault();
+    const why = moveBlocked?.(item);
+    if (why) { notify.info(why); return; }
+    onNudge(item, e.key === "ArrowUp" ? -1 : 1);
+  };
+  // the selected item keeps the focus where it was after a move by the keys: the row is rendered anew
+  const dropping = drag ? dropBefore(ids, drag.item, drag.gap) : undefined;
   return (
-    <nav className="outline" aria-label={label}>
-      <ul>
-        {entries.map((e) => {
+    <nav className={`outline ${drag ? "dragging" : ""}`} aria-label={label}>
+      <ul ref={list}>
+        {entries.flatMap((e, k) => {
+          // the line that adds an item comes right after the last item of its section
+          const endsSection = e.section === onAdd.section && entries[k + 1]?.section !== onAdd.section;
           const c = issues.get(e.key);
           const on = selected === e.key;
           const flags = e.item ? feedback(e.item) : 0;
-          const at = e.item ? items.findIndex((x) => x.key === e.key) : -1;
-          return (
-            <li key={e.key} className={`outline-row depth-${e.depth} ${on ? "on" : ""}`}>
+          const at = e.item ? ids.indexOf(e.item) : -1;
+          const blocked = e.item ? moveBlocked?.(e.item) : "";
+          const lane = e.lane !== undefined ? LANE_COLORS[e.lane % LANE_COLORS.length] : undefined;
+          const marker = drag && e.item && dropping !== undefined && ((dropping === e.item) ? "before" : (dropping === null && at === ids.length - 1) ? "after" : "");
+          const mark = c && (c.errors || c.warnings) ? markWords(c) : "";
+          return [
+            <li key={e.key} className={`outline-row depth-${e.depth} ${on ? "on" : ""} ${e.level ? `lvl-${e.level}` : ""} ${drag && e.item && drag.item === e.item ? "lifted" : ""} ${marker ? `drop-${marker}` : ""}`}
+              style={lane ? ({ "--lane": lane } as React.CSSProperties) : undefined}>
+              {e.depth === 1 && items.length > 1 && (
+                <button className="outline-grip" tabIndex={on ? 0 : -1} aria-label={`Move “${e.label}”: drag, or press the up and down arrow keys`}
+                  title={blocked || "Drag to move. With the keyboard: Alt+Up or Alt+Down on the item."} aria-disabled={blocked ? true : undefined}
+                  onPointerDown={(ev) => startDrag(ev, e.item!)} onKeyDown={(ev) => keyMove(ev, e.item!, true)}
+                  onClick={() => { if (blocked) notify.info(blocked); }}>
+                  <GripVertical size={14} />
+                </button>
+              )}
               <button className={`outline-item ${(e.number?.length ?? 0) > 3 ? "long-n" : ""}`} aria-current={on ? "true" : undefined} onClick={() => onSelect(e)}
-                aria-label={`${e.number && e.depth === 1 ? `${e.number} ` : ""}${e.label}${c ? markWords(c, ", ") : ""}${flags ? `, ${flags} open feedback` : ""}`}>
-                {e.depth === 1 && <span className="outline-n">{e.number}</span>}
-                <span className="outline-label">{e.label}</span>
-                {e.depth === 0 && e.count !== undefined && <span className="outline-count">{e.count}</span>}
-                {flags > 0 && <span className="outline-flag" title={`${flags} open feedback`}><Flag size={11} strokeWidth={2.5} />{flags}</span>}
-                {c && (c.errors || c.warnings) ? <span className={`outline-mark ${c.errors > c.examples ? "bad" : "warn"}`} title={markWords(c)}>{c.errors || c.warnings}</span> : null}
-              </button>
-              {e.depth === 0 && e.section === onAdd.section && (
-                <button className="icon-btn outline-add" onClick={onAdd.run} aria-label={onAdd.label} title={onAdd.label}><Plus size={15} /></button>
-              )}
-              {on && e.item && items.length > 1 && (
-                <span className="outline-move">
-                  <button className="btn small ghost" disabled={at <= 0} onClick={() => onMove(e.item!, -1)} aria-label={`Move ${e.label} earlier`}><ArrowUp size={13} />Earlier</button>
-                  <button className="btn small ghost" disabled={at === items.length - 1} onClick={() => onMove(e.item!, 1)} aria-label={`Move ${e.label} later`}><ArrowDown size={13} />Later</button>
+                onKeyDown={e.item ? (ev) => keyMove(ev, e.item!) : undefined}
+                title={e.who ? `${e.number}. ${e.label} - ${e.who}${e.type ? `, ${STEP_META[e.type].label}` : ""}` : undefined}
+                aria-label={`${e.number && e.depth === 1 ? `${e.number} ` : ""}${e.label}${e.who ? `, by ${e.who}` : ""}${mark ? `, ${mark}` : ""}${flags ? `, ${flags} open feedback` : ""}`}>
+                {e.depth === 1 && (e.type ? <span className="outline-kind" aria-hidden="true"><TypeIcon type={e.type} size={20} /></span> : <span className="outline-n">{e.number}</span>)}
+                <span className="outline-label">
+                  {e.depth === 1 && e.type && <span className="outline-num">{e.number}</span>}
+                  {e.label}
                 </span>
-              )}
-            </li>
-          );
+                {e.depth === 0 && e.count !== undefined && <span className={`outline-count ${e.count === 0 ? "none" : ""}`}>{e.count === 0 ? "none" : e.count}</span>}
+                {flags > 0 && <span className="outline-flag" title={`${flags} open feedback`}><Flag size={11} strokeWidth={2.5} />{flags}</span>}
+                {mark ? <span className={`outline-mark ${c!.errors > c!.examples ? "bad" : "warn"}`} title={mark}>{c!.errors || c!.warnings}</span> : null}
+              </button>
+            </li>,
+            // its own row with a key of its own, so that it keeps the focus while items are added above it
+            endsSection ? <li key={`add:${onAdd.section}`} className="outline-row outline-add-row"><OutlineAddLine add={onAdd} /></li> : null,
+          ];
         })}
       </ul>
+      {items.length > 1 && <p className="outline-tip">Drag <GripVertical size={12} aria-hidden="true" /> to move, or Alt + ↑ ↓</p>}
     </nav>
+  );
+}
+
+/** "Add a step" at the end of the outline: type a name, Enter, type the next one. */
+function OutlineAddLine({ add }: { add: OutlineAdd }) {
+  const [value, setValue] = useState("");
+  const [open, setOpen] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (open) field.current?.focus(); }, [open]);
+  const commit = () => {
+    const name = value.trim();
+    if (name.length < 2) return;
+    add.run(name);
+    setValue("");
+    // stay in the field for the next one
+    requestAnimationFrame(() => field.current?.focus());
+  };
+  if (!open) return <button className="outline-add-line" onClick={() => setOpen(true)}><Plus size={15} />{add.label}</button>;
+  return (
+    <form className="outline-add-form" onSubmit={(e) => { e.preventDefault(); commit(); }}>
+      <input ref={field} value={value} maxLength={80} aria-label={add.label} placeholder={add.placeholder} onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setValue(""); setOpen(false); } }}
+        onBlur={() => { if (!value.trim()) setOpen(false); }} />
+      <span className="outline-add-help">Enter adds it · Esc closes</span>
+    </form>
   );
 }
 
@@ -298,7 +420,7 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
         </div>
         <div className="eb-state" role="status" aria-label={`${state.pill}. ${state.sentence}.${unsaved ? " Changes not saved yet." : ""}`}>
           <span className={`state-pill ${state.key}`}>{state.pill}</span>
-          <span className="eb-sentence">{state.sentence}{unsaved && <span className="eb-unsaved"> · not saved yet</span>}</span>
+          <span className="eb-sentence" title={state.sentence}>{state.sentence}</span>
         </div>
         <span className="spacer" />
         <div className="eb-tools">
@@ -309,7 +431,9 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
         <div className="eb-actions">
           <MoreMenu items={items} />
           {discard && !phone && <button className="eb-btn eb-discard" disabled={!!discard.blocked || discard.busy} onClick={discard.run} title={discard.blocked}>{discard.label}</button>}
-          <button className="eb-btn eb-save" disabled={!!save.blocked || save.busy} onClick={save.run} title={save.blocked}>{save.busy ? "Saving…" : save.label}</button>
+          <button className="eb-btn eb-save" disabled={!!save.blocked || save.busy} onClick={save.run} title={save.blocked ?? "Changes not saved yet. Save them as a draft (Ctrl+S)"}>
+            {unsaved && !save.busy && <span className="eb-dot" aria-hidden="true" />}{save.busy ? "Saving…" : save.label}
+          </button>
           <button className={`eb-btn eb-publish ${publish.unavailable ? "unavailable" : ""}`} disabled={!!publish.blocked || publish.busy} onClick={publish.run}
             title={publish.blocked} aria-describedby={publish.unavailable && notice ? "edit-notice" : undefined}><Send size={15} />{publish.label}</button>
         </div>

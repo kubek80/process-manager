@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { X } from "lucide-react";
+import { Blend, CircleHelp, SearchX, Sparkles, Type, X } from "lucide-react";
 import type { FeedbackByTarget, Process, Standard } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { useEngagement } from "../lib/engagement";
@@ -7,24 +7,26 @@ import { pageOf, sizeOf, usePageSize } from "../lib/paging";
 import { useProfile, useRemembered } from "../lib/profile";
 import { canEdit, canManage, useMe, usePerms } from "../lib/session";
 import { sortOf, sortResults, type MetaByKind, type SortKey } from "../lib/sorting";
-import { contentStamp, fromMeaning, fuse, markedWords, meaningHelp, modeOf, needsServer, planOf, providerOf, rememberMode, SEARCH_MODES, truncatedText, typingMovesAddress, useMeaningSearch, type Found, type Provider, type SearchMode } from "../lib/meaning";
+import { contentStamp, fromMeaning, fuse, markedWords, meaningHelp, modeLine, modeOf, needsServer, planOf, providerOf, rememberMode, SEARCH_MODES, truncatedText, typingMovesAddress, useMeaningSearch, type Found, type Provider, type SearchMode } from "../lib/meaning";
 import { go, href, type SearchState } from "../lib/store";
-import { countText, FILTER_LABEL, filterCount, filtersOf, profileOptions, search, toggleFilter, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
+import { countText, FILTER_LABEL, filterCount, filtersOf, profileOptions, search, toggleFilter, typeTab, withTypeTab, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
 import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
 import { openCount } from "./Feedback";
 import { DocCard, Marked } from "./DocCard";
 import { needsReview } from "./DocList";
-import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, Pager, profileChosen, ResultsBar, ResultsFoot, SearchBox, toResults, type Chosen, type FlagControl } from "./Lists";
+import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, Pager, profileChosen, ResultsBar, ResultsFoot, SearchBox, toResults, TypeTabs, type Chosen, type FlagControl } from "./Lists";
 import "../search.css";
 
 export { Marked };
 
-const KEYS: FilterKey[] = ["type", "category", "platform", "practice", "rigour", "owner"];
+/** The filters of the panel; the type is chosen with the tabs above the results. */
+const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "owner"];
 
 /** The one search box, on Home and on the results page (it lives with the lists, which use it too). */
 export { SearchBox };
 
 const MODE_LABEL: Record<SearchMode, string> = { words: "Words", meaning: "Meaning", both: "Both" };
+const MODE_ICON: Record<SearchMode, typeof Type> = { words: Type, meaning: Sparkles, both: Blend };
 
 /**
  * "Search by": Words, Meaning, Both. One choice of three, like radio buttons: the arrow keys move
@@ -32,6 +34,7 @@ const MODE_LABEL: Record<SearchMode, string> = { words: "Words", meaning: "Meani
  */
 export function SearchModeSwitch({ mode, onChange, outside, provider }: { mode: SearchMode; onChange: (m: SearchMode) => void; outside: boolean; provider?: Provider }) {
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [help, setHelp] = useState(false);
   const onKey = (e: KeyboardEvent) => {
     const at = SEARCH_MODES.indexOf(mode);
     const to = e.key === "ArrowRight" || e.key === "ArrowDown" ? (at + 1) % SEARCH_MODES.length
@@ -43,19 +46,28 @@ export function SearchModeSwitch({ mode, onChange, outside, provider }: { mode: 
     refs.current[SEARCH_MODES[to]]?.focus();
   };
   return (
-    <div className="search-mode">
-      <span className="search-mode-name" id="search-mode-name">Search by</span>
-      <div className="search-mode-choices" role="radiogroup" aria-labelledby="search-mode-name" aria-describedby="search-mode-help" onKeyDown={onKey}>
-        {SEARCH_MODES.map((m) => (
-          <button key={m} ref={(el) => { refs.current[m] = el; }} type="button" role="radio" aria-checked={m === mode} tabIndex={m === mode ? 0 : -1}
-            className={m === mode ? "on" : ""} data-mode={m} onClick={() => onChange(m)}>{MODE_LABEL[m]}</button>
-        ))}
+    <div className={`search-mode ${help ? "help-open" : ""}`.trim()}>
+      <div className="search-mode-row">
+        <span className="search-mode-name" id="search-mode-name">Search by</span>
+        <div className="search-mode-choices" role="radiogroup" aria-labelledby="search-mode-name" aria-describedby="search-mode-help" onKeyDown={onKey}>
+          {SEARCH_MODES.map((m) => {
+            const Icon = MODE_ICON[m];
+            return (
+              <button key={m} ref={(el) => { refs.current[m] = el; }} type="button" role="radio" aria-checked={m === mode} tabIndex={m === mode ? 0 : -1}
+                className={m === mode ? "on" : ""} data-mode={m} onClick={() => onChange(m)}><Icon size={14} aria-hidden="true" />{MODE_LABEL[m]}</button>
+            );
+          })}
+        </div>
+        <p className="search-mode-line" aria-hidden="true">{modeLine(mode, provider)}</p>
+        <button type="button" className="search-mode-more" aria-expanded={help} aria-controls="search-mode-help" onClick={() => setHelp(!help)}>
+          <CircleHelp size={14} aria-hidden="true" />How this works
+        </button>
       </div>
-      <ul className="search-mode-help" id="search-mode-help">
+      {outside && <p className="search-mode-outside">With Meaning and Both, what you type is sent to Google Cloud to be compared.</p>}
+      <ul className="search-mode-help" id="search-mode-help" hidden={!help}>
         <li><b>Words</b> finds what contains every word you type.</li>
         <li className="search-mode-meaning" data-provider={provider ?? "unknown"}><b>Meaning</b> {meaningHelp(provider)}</li>
         <li><b>Both</b> shows what either finds, the best of each first.</li>
-        {outside && <li className="search-mode-outside">With Meaning and Both, what you type is sent to Google Cloud to be compared.</li>}
       </ul>
     </div>
   );
@@ -162,6 +174,11 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   // the server sent only the closest of more that matched: the counts are "at least"
   const truncated = plan.truncated && plan.show !== "words" && plan.show !== "none";
 
+  // the tabs: how many results each kind gives with everything else as chosen
+  const tab = typeTab(filters);
+  const kindCount = (k: string) => out.options.type.find((o) => o.value === k)?.count ?? 0;
+  const tabCounts = { "": kindCount("process") + kindCount("standard"), process: kindCount("process"), standard: kindCount("standard") };
+
   const [open, setOpen] = useState(false); // the filters on a narrow screen
   const results = useRef<HTMLElement>(null);
   const n = out.results.length;
@@ -200,11 +217,14 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   return (
     <div className="page search-page">
       <h1 className="sr-only">Search processes and standards</h1>
-      <SearchBox value={text} onChange={type} onSubmit={submit} autoFocus={!q && !chosen.length} />
-      {offered && <SearchModeSwitch mode={mode} onChange={setMode} outside={!!me.search?.outside} provider={providerOf(me.search?.provider)} />}
+      <div className="search-head">
+        <SearchBox big value={text} onChange={type} onSubmit={submit} autoFocus={!q && !chosen.length} />
+        {offered && <SearchModeSwitch mode={mode} onChange={setMode} outside={!!me.search?.outside} provider={providerOf(me.search?.provider)} />}
+      </div>
 
       <div className="list-layout">
         <div className="list-head">
+          <TypeTabs value={tab} counts={tabCounts} atLeast={truncated} onChange={(t) => setFilters(withTypeTab(filters, t))} />
           <ResultsBar page={page} noun={{ one: "result", many: "results" }} panelId="search-filters" open={open} onOpen={setOpen}
             chosen={chosen.length} size={size} onSize={changeSize} extra={summary}
             sort={sort} onSort={changeSort} searched={!!shownQ.trim()}
@@ -242,6 +262,7 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
           )}
           {plan.show === "none" || (plan.busy && n === 0) ? null : n === 0 ? (
             <div className="list-empty search-empty">
+              <span className="list-empty-icon" aria-hidden="true"><SearchX size={22} /></span>
               <h2>Nothing found</h2>
               {processes.length + standards.length === 0 ? <p className="muted">There are no processes or standards yet.</p> : (
                 <>

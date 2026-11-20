@@ -2,20 +2,23 @@ import { useState } from "react";
 import { CircleAlert, LogIn } from "lucide-react";
 import type { Me } from "../types";
 import { devLogin } from "../lib/store";
+import { useLook } from "../lib/theme";
+import { BrandLogo } from "./Brand";
 
 const LABEL = { entra: "Sign in with Microsoft", google: "Sign in with Google", dev: "" };
 
 /** Shown instead of the app until the visitor is signed in. */
 export function Login({ me, onSignedIn }: { me: Me; onSignedIn: () => void }) {
   const [error, setError] = useState(() => new URLSearchParams(window.location.search).get("signin_error"));
+  const { look, name } = useLook();
   const pick = async (email: string) => {
     try { await devLogin(email); onSignedIn(); } catch (e) { setError((e as Error).message); }
   };
   return (
     <main className="login">
       <div className="login-card">
-        <span className="logo big"><svg viewBox="0 0 32 32" width="26" height="26"><path d="M5 9h9v5H5zM18 18h9v5h-9z" fill="currentColor" /><path d="M14 11.5h6.5V18" stroke="currentColor" strokeWidth="2.2" fill="none" /></svg></span>
-        <h1>Process Manager</h1>
+        <BrandLogo look={look} big />
+        <h1>{name}</h1>
         <p className="lead">How to get things done on the platform, step by step.</p>
         {error && <div className="check bad"><CircleAlert size={16} /><span>Sign-in did not work: {error}</span></div>}
 

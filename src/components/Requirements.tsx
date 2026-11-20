@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import { ArrowDown, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Eye, Flag, Plus, Trash2, Workflow, X } from "lucide-react";
+import { Bot, Check, ChevronDown, ChevronRight, Eye, Flag, Plus, Trash2, Workflow, X } from "lucide-react";
 import type { Feedback, Issue, Level, Process, Requirement, Severity, Standard, VerificationMethod } from "../types";
 import { go } from "../lib/store";
 import { standardTarget } from "./Feedback";
@@ -138,14 +138,22 @@ function IdField({ id, taken, onRename }: { id: string; taken: string[]; onRenam
   );
 }
 
-/** The fields of one requirement on the editing screen, directly editable. */
+/** The fields of one requirement on the editing screen, directly editable: the rule first, the rest folded with a line saying what is set. */
 export function RequirementFields({ r, standard, processes, feedback, issues, onChange, onRename, onDelete, onMove, onAddAfter }: {
   r: Requirement; standard: Standard; processes: Process[]; feedback: Feedback[]; issues: Issue[];
-  onChange: (patch: Partial<Requirement>) => void; onRename: (id: string) => void; onDelete: () => void; onMove: (dir: -1 | 1) => void; onAddAfter: () => void;
+  onChange: (patch: Partial<Requirement>) => void; onRename: (id: string) => void; onDelete: () => void;
+  /** Puts it before another requirement, or (null) at the end. */
+  onMove: (before: string | null) => void; onAddAfter: () => void;
 }) {
   const index = standard.requirements.findIndex((x) => x.id === r.id);
   const review = r.review ?? { lookFor: [] };
   const setReview = (patch: Partial<NonNullable<Requirement["review"]>>) => onChange({ review: { ...review, ...patch } });
+  // a folded group opens by itself when the checker has something to say about a field in it
+  const flagged = new Set(issues.map((i) => i.path.match(/^requirements\[\d+\]\.([A-Za-z]+)/)?.[1]).filter(Boolean) as string[]);
+  const has = (...keys: string[]) => keys.some((k) => flagged.has(k));
+  const good = r.examples?.good?.length ?? 0, bad = r.examples?.bad?.length ?? 0;
+  const narrowed = !!(r.tiers?.length || r.languages?.length || r.environments?.length);
+  const none = <span className="muted">Nothing yet</span>;
   return (
     <div className={`edit-fields-inner req-fields ${r.level}`}>
       <FieldsHead icon={<span className={`level big ${r.level}`}>{LEVEL[r.level].label}</span>}
@@ -154,30 +162,35 @@ export function RequirementFields({ r, standard, processes, feedback, issues, on
         tools={<>
           <button className="btn small ghost" onClick={onAddAfter}><Plus size={14} />Add requirement after</button>
           <span className="spacer" />
-          <button className="icon-btn" title="Move up" aria-label="Move up" disabled={index === 0} onClick={() => onMove(-1)}><ArrowUp size={16} /></button>
-          <button className="icon-btn" title="Move down" aria-label="Move down" disabled={index === standard.requirements.length - 1} onClick={() => onMove(1)}><ArrowDown size={16} /></button>
+          <span className="fields-move">
+          {standard.requirements.length > 1 && (
+            <select className="move-select" value="" aria-label="Move this requirement" title="Put this requirement somewhere else in the list"
+              onChange={(e) => { const v = e.target.value; if (v) onMove(v === "__end" ? null : v); }}>
+              <option value="">Move to…</option>
+              {standard.requirements.map((x, i) => (x.id === r.id || standard.requirements[i - 1]?.id === r.id ? null
+                : <option key={x.id} value={x.id}>Before {x.id} {x.title}</option>))}
+              {index !== standard.requirements.length - 1 && <option value="__end">To the end</option>}
+            </select>
+          )}
           <button className="icon-btn danger" title="Delete requirement" aria-label="Delete requirement" disabled={standard.requirements.length === 1} onClick={onDelete}><Trash2 size={16} /></button>
+          </span>
         </>} />
       <ItemIssues issues={issues} />
       <ItemFeedback feedback={feedback.filter((f) => f.itemId === r.id && !f.resolved)} target={standardTarget(standard)} noun="requirement" />
-      <EditSection title="The rule">
-        <div className="grid2">
-          <IdField id={r.id} taken={standard.requirements.filter((x) => x !== r).map((x) => x.id)} onRename={onRename} />
-          <div className="field">
-            <span className="field-label">Level<em>{LEVEL[r.level].hint}</em></span>
-            <div className="chips" role="group" aria-label="Level">
-              {(Object.keys(LEVEL) as Level[]).map((l) => <button key={l} className={`chip ${r.level === l ? "on" : ""}`} aria-pressed={r.level === l} title={LEVEL[l].hint} onClick={() => onChange({ level: l })}>{LEVEL[l].label}</button>)}
-            </div>
+      <div className="step-core form">
+        <div className="field">
+          <span className="field-label">Level<em>{LEVEL[r.level].hint}</em></span>
+          <div className="chips level-chips" role="group" aria-label="Level">
+            {(Object.keys(LEVEL) as Level[]).map((l) => <button key={l} className={`chip lvl-${l} ${r.level === l ? "on" : ""}`} aria-pressed={r.level === l} title={LEVEL[l].hint} onClick={() => onChange({ level: l })}>{LEVEL[l].label}</button>)}
           </div>
         </div>
         <Field label="Short name" hint="A few words that name the rule"><input value={r.title} maxLength={80} onChange={(e) => onChange({ title: e.target.value })} /></Field>
         <Field label="The rule" hint="One or two sentences that can be checked"><textarea rows={3} maxLength={600} value={r.statement} onChange={(e) => onChange({ statement: e.target.value })} /></Field>
         <Field label="Why" hint="The risk it removes"><textarea rows={2} maxLength={600} value={r.rationale ?? ""} onChange={(e) => onChange({ rationale: e.target.value })} /></Field>
-      </EditSection>
+        <IdField id={r.id} taken={standard.requirements.filter((x) => x !== r).map((x) => x.id)} onRename={onRename} />
+      </div>
       <EditSection title="How to comply">
         <Rows label="Steps to comply" hint="One action per item" items={r.guidance ?? []} onChange={(guidance) => onChange({ guidance })} placeholder="Use the logging library's redaction list." />
-        <Rows label="Good examples" items={r.examples?.good ?? []} onChange={(good) => onChange({ examples: { ...r.examples, good } })} placeholder="code or text that complies" code />
-        <Rows label="Bad examples" items={r.examples?.bad ?? []} onChange={(bad) => onChange({ examples: { ...r.examples, bad } })} placeholder="code or text that violates the rule" code />
         <Field label="Process that helps to comply">
           <select value={r.processId ?? ""} onChange={(e) => onChange({ processId: e.target.value || undefined })}>
             <option value="">None</option>
@@ -185,7 +198,13 @@ export function RequirementFields({ r, standard, processes, feedback, issues, on
           </select>
         </Field>
       </EditSection>
-      <EditSection title="How it is checked">
+      <EditSection title="Good and bad examples" folded={!has("examples")}
+        summary={good || bad ? `${good} good, ${bad} bad` : none}>
+        <Rows label="Good examples" items={r.examples?.good ?? []} onChange={(g) => onChange({ examples: { ...r.examples, good: g } })} placeholder="code or text that complies" code />
+        <Rows label="Bad examples" items={r.examples?.bad ?? []} onChange={(b) => onChange({ examples: { ...r.examples, bad: b } })} placeholder="code or text that violates the rule" code />
+      </EditSection>
+      <EditSection title="How it is checked" folded={!has("verification")}
+        summary={<>{METHOD[r.verification.method]}{r.verification.description ? ` · ${r.verification.description}` : ""}</>}>
         <div className="field">
           <span className="field-label">Checked</span>
           <div className="chips" role="group" aria-label="How it is checked">
@@ -196,7 +215,10 @@ export function RequirementFields({ r, standard, processes, feedback, issues, on
         </div>
         <Field label="By what"><input value={r.verification.description ?? ""} maxLength={300} placeholder="Secret scanner in the build pipeline" onChange={(e) => onChange({ verification: { ...r.verification, description: e.target.value } })} /></Field>
       </EditSection>
-      <EditSection title="For reviewers" hint="Feeds the review agent that checks pull requests against this standard.">
+      <EditSection title="For reviewers" hint="Feeds the review agent that checks pull requests against this standard." folded={!has("review")}
+        summary={review.lookFor.length
+          ? `${review.lookFor.length} sign${review.lookFor.length === 1 ? "" : "s"} of a violation · ${review.paths?.length ? `${review.paths.length} file pattern${review.paths.length === 1 ? "" : "s"}` : "any file"} · ${review.severity ?? defaultSeverity(r.level)}`
+          : <span className="muted">Not checked in pull requests</span>}>
         <Rows label="Signs of a violation in a pull request" hint="Leave empty if it cannot be seen in a change" items={review.lookFor} onChange={(lookFor) => setReview({ lookFor })}
           placeholder="A variable named like password or token passed to a log call" />
         <Rows line max={10} label="Files" hint="One pattern per row; leave empty for all files" items={review.paths ?? []} onChange={(paths) => setReview({ paths })} placeholder="**/*.{ts,tsx}" />
@@ -207,7 +229,8 @@ export function RequirementFields({ r, standard, processes, feedback, issues, on
           </select>
         </Field>
       </EditSection>
-      <EditSection title="Applies only to" hint="Narrower than the standard. Leave as it is when the requirement applies wherever the standard does.">
+      <EditSection title="Applies only to" hint="Narrower than the standard. Leave as it is when the requirement applies wherever the standard does." folded={!has("tiers", "languages", "environments")}
+        summary={narrowed ? <DimTags doc={r} compact /> : <span className="muted">Wherever the standard applies</span>}>
         <DimsEditor narrow value={r} onChange={onChange} />
       </EditSection>
     </div>

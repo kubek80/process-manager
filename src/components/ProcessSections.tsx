@@ -1,10 +1,11 @@
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
-import type { Process, Standard } from "../types";
-import { slugify, uniqueId } from "../lib/edit";
+import type { Issue, Process, Standard } from "../types";
+import { EXAMPLE, slugify, uniqueId } from "../lib/edit";
+import { RIGOUR_LABEL } from "../lib/search";
 import { useCatalog } from "../lib/catalog";
 import { Field } from "./ui";
 import { ResourceEditor } from "./Resources";
-import { BelongsEditor, DimsEditor, ReviewEditor } from "./Governance";
+import { BelongsEditor, DimsEditor, DimTags, ReviewEditor } from "./Governance";
 import { EditSection } from "./EditFrame";
 
 /**
@@ -13,14 +14,61 @@ import { EditSection } from "./EditFrame";
  */
 type Set = (patch: Partial<Process>) => void;
 
-/** Name, summary, owner, what it belongs to, where it applies, tags, lead time and review rhythm. */
-export function ProcessAbout({ process, saved, all, set }: { process: Process; saved: Process; all: Process[]; set: Set }) {
+/** The first part of each path the checker complains about: "category", "tiers", "review"… */
+const flaggedKeys = (issues: Issue[]) => new Set(issues.map((i) => i.path.match(/^([A-Za-z]+)/)?.[1]).filter(Boolean) as string[]);
+
+/**
+ * The parts of About that a process and a standard share: what it belongs to, where it applies,
+ * the review rhythm. Folded, each says in a line what is set; each opens by itself when the
+ * checker has a problem in it.
+ */
+export function GovernedSections<T extends Process | Standard>({ kind, doc, saved, others, set, issues }: {
+  kind: "process" | "standard"; doc: T; saved: T; others: { id: string; title: string }[]; set: (patch: Partial<T>) => void; issues: Issue[];
+}) {
+  const { catalog } = useCatalog();
+  const flagged = flaggedKeys(issues);
+  const has = (...keys: string[]) => keys.some((k) => flagged.has(k));
+  const nameIn = (list: { id: string; name: string }[], id?: string) => (id ? list.find((x) => x.id === id)?.name ?? id : "");
+  const belongs = [
+    nameIn(catalog.categories, doc.category), nameIn(catalog.platforms, doc.platform), nameIn(catalog.practices, doc.practice),
+    kind === "process" && (doc as Process).rigour ? RIGOUR_LABEL[(doc as Process).rigour!] : "",
+  ].filter(Boolean);
+  const where = !!(doc.tiers?.length || doc.languages?.length || doc.environments?.length);
+  const tags = (doc.tags ?? []).filter(Boolean);
+  const none = (text: string) => <span className="muted">{text}</span>;
+  return (
+    <>
+      <EditSection title="What it belongs to" hint="How readers find it, and who besides the editors may change it." folded={!has("category", "platform", "practice", "rigour")}
+        summary={belongs.length ? belongs.join(" · ") : none("Nothing chosen yet")}>
+        <BelongsEditor kind={kind} doc={doc} saved={saved} onChange={set as (p: Partial<Process | Standard>) => void} />
+      </EditSection>
+      <EditSection title="Where it applies" hint={kind === "process" ? "Nothing selected means everywhere. Readers who describe their application only see what applies to it." : "Nothing selected means everywhere. A requirement can narrow this further."}
+        folded={!has("tiers", "languages", "environments", "tags")}
+        summary={<>{where ? <DimTags doc={doc} compact /> : none("Everywhere")}{tags.length > 0 && <span className="fold-tags"> · {tags.length} tag{tags.length === 1 ? "" : "s"}</span>}</>}>
+        <DimsEditor value={doc} onChange={set as (p: Partial<Process | Standard>) => void} />
+        <Field label="Tags" hint="Words readers might search for, separated by commas">
+          <input value={(doc.tags ?? []).join(", ")} onChange={(e) => set({ tags: e.target.value.split(",").map((t) => t.trimStart().slice(0, 30)).slice(0, 12) } as Partial<T>)} />
+        </Field>
+      </EditSection>
+      <EditSection title="Review" folded={!has("review", "replacedBy")}
+        summary={doc.review?.intervalMonths
+          ? <>Every {doc.review.intervalMonths} months{doc.review.lastReviewedAt ? ` · last reviewed ${doc.review.lastReviewedAt}` : ""}</>
+          : <span className="fold-warn">Never reviewed (not recommended)</span>}>
+        <ReviewEditor doc={doc} others={others} onChange={set as (p: Partial<Process | Standard>) => void} />
+      </EditSection>
+    </>
+  );
+}
+
+/** Name, summary, owner and lead time; then what it belongs to, where it applies and the review rhythm, folded. */
+export function ProcessAbout({ process, saved, all, set, issues }: { process: Process; saved: Process; all: Process[]; set: Set; issues: Issue[] }) {
   const { catalog } = useCatalog();
   return (
     <>
       <EditSection title="Name and summary">
         <Field label="Name" hint="Start with a verb: “Request a GCP project”"><input value={process.title} maxLength={80} onChange={(e) => set({ title: e.target.value })} /></Field>
-        <Field label="Summary" hint="What the reader has at the end, in a sentence or two"><textarea rows={3} maxLength={400} value={process.summary} onChange={(e) => set({ summary: e.target.value })} /></Field>
+        <Field label="Summary" hint="What the reader has at the end, in a sentence or two"><textarea rows={3} maxLength={400} value={process.summary} data-field="summary" onChange={(e) => set({ summary: e.target.value })}
+          onFocus={(e) => { if (process.summary === EXAMPLE.processSummary) e.target.select(); }} /></Field>
         <div className="grid2">
           <Field label="Owning team" hint="Reviews it and answers feedback">
             <select value={process.owner ?? ""} onChange={(e) => set({ owner: e.target.value || undefined })}>
@@ -32,18 +80,7 @@ export function ProcessAbout({ process, saved, all, set }: { process: Process; s
           <Field label="Typical lead time" hint="From the first step to the result"><input value={process.estimatedDuration ?? ""} maxLength={40} placeholder="3-5 working days" onChange={(e) => set({ estimatedDuration: e.target.value })} /></Field>
         </div>
       </EditSection>
-      <EditSection title="What it belongs to" hint="How readers find it, and who besides the editors may change it.">
-        <BelongsEditor kind="process" doc={process} saved={saved} onChange={set} />
-      </EditSection>
-      <EditSection title="Where it applies" hint="Nothing selected means everywhere. Readers who describe their application only see what applies to it.">
-        <DimsEditor value={process} onChange={set} />
-        <Field label="Tags" hint="Words readers might search for, separated by commas">
-          <input value={(process.tags ?? []).join(", ")} onChange={(e) => set({ tags: e.target.value.split(",").map((t) => t.trimStart().slice(0, 30)).slice(0, 12) })} />
-        </Field>
-      </EditSection>
-      <EditSection title="Review">
-        <ReviewEditor doc={process} others={all} onChange={set} />
-      </EditSection>
+      <GovernedSections kind="process" doc={process} saved={saved} others={all} set={set} issues={issues} />
     </>
   );
 }

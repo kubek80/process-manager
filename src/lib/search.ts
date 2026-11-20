@@ -414,3 +414,24 @@ export function excerpt(text: string, words: string[], room = 70): string {
   if (end < t.length) { const sp = t.lastIndexOf(" ", end); if (sp > first[1]) end = sp; }
   return `${start > 0 ? "…" : ""}${t.slice(start, end)}${end < t.length ? "…" : ""}`;
 }
+
+// ---------- the type as tabs: all, processes, standards
+
+export type TypeTab = "" | TargetKind;
+/** The tab a choice of types is: one kind, or all (none chosen, or both). */
+export function typeTab(f: Filters): TypeTab {
+  const t = (f.type ?? []).filter((x): x is TargetKind => KINDS.includes(x as TargetKind));
+  return t.length === 1 ? t[0] : "";
+}
+/** The filters with the type set to one tab. */
+export function withTypeTab(f: Filters, tab: TypeTab): Filters {
+  const out = { ...f };
+  if (tab) out.type = [tab]; else delete out.type;
+  return out;
+}
+
+/** What "My application" says when folded: the chosen tier, environment and language, or that none is chosen. */
+export function appSummary(options: Partial<Record<ProfileKey, Option[]>>): string {
+  const on = PROFILE_KEYS.flatMap((k) => (options[k] ?? []).filter((o) => o.chosen && o.value !== "").map((o) => o.label));
+  return on.length ? on.join(" · ") : "Not chosen";
+}

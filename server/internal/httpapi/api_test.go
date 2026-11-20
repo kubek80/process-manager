@@ -279,7 +279,7 @@ func TestEverythingNeedsASession(t *testing.T) {
 		{"GET", "/api/engagement"}, {"POST", "/api/views/process/x"}, {"PUT", "/api/bookmarks/process/x"}, {"DELETE", "/api/bookmarks/process/x"},
 		{"PUT", "/api/upvotes/process/x"}, {"DELETE", "/api/upvotes/process/x"}, {"GET", "/api/requests"}, {"POST", "/api/requests"},
 		{"PUT", "/api/requests/1/vote"}, {"DELETE", "/api/requests/1/vote"}, {"PUT", "/api/requests/1/state"}, {"DELETE", "/api/requests/1"},
-		{"GET", "/api/admin/statistics"}, {"GET", "/api/admin/statistics.csv"},
+		{"GET", "/api/admin/statistics"}, {"GET", "/api/admin/statistics.csv"}, {"GET", "/api/admin/theme"}, {"PUT", "/api/admin/theme"},
 	} {
 		if status, body := c.do(req[0], req[1], map[string]string{}); status != 401 {
 			t.Errorf("%s %s: %d %v", req[0], req[1], status, body)

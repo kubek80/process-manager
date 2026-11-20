@@ -1,7 +1,11 @@
-:root {
+/* The tokens of the light and the dark theme. The brand colour (--accent…) is the default look;
+   a look set in Admin > Theming replaces it through --theme-light-… and --theme-dark-…, which
+   src/lib/theme.ts works out and sets on the root element. .look-light and .look-dark give an
+   element inside the page the tokens of one theme (the preview in Admin > Theming). */
+:root, .look-light {
   --bg: #f4f5f9; --surface: #ffffff; --surface-2: #f8f9fc; --line: #e3e6ee; --line-strong: #cfd4e0;
   --text: #171a26; --text-2: #4c5368; --text-3: #666e84;
-  --accent: #4f46e5; --accent-ink: #ffffff; --accent-soft: #eef0ff;
+  --accent: var(--theme-light-accent, #4f46e5); --accent-ink: var(--theme-light-accent-ink, #ffffff); --accent-soft: var(--theme-light-accent-soft, #eef0ff);
   --good: #15803d; --good-bg: #e9f7ee; --warn: #b45309; --warn-bg: #fdf3e1; --bad: #be123c; --bad-bg: #fdecef;
   --shadow-1: 0 1px 2px rgba(20, 24, 40, .06), 0 1px 1px rgba(20, 24, 40, .04);
   --shadow-2: 0 6px 20px -6px rgba(20, 24, 40, .16), 0 2px 6px rgba(20, 24, 40, .06);
@@ -10,10 +14,10 @@
   --json-key: #4338ca; --json-string: #0f766e; --json-number: #b45309; --json-atom: #be123c;
   color-scheme: light;
 }
-:root[data-theme="dark"] {
+:root[data-theme="dark"], .look-dark {
   --bg: #0f1118; --surface: #181b25; --surface-2: #1e222e; --line: #2a2f3e; --line-strong: #3a4052;
   --text: #eceef5; --text-2: #b1b7c9; --text-3: #838aa0;
-  --accent: #8b8cf8; --accent-ink: #11121c; --accent-soft: #23264a;
+  --accent: var(--theme-dark-accent, #8b8cf8); --accent-ink: var(--theme-dark-accent-ink, #11121c); --accent-soft: var(--theme-dark-accent-soft, #23264a);
   --good: #4ade80; --good-bg: #14291d; --warn: #fbbf24; --warn-bg: #2e2412; --bad: #fb7185; --bad-bg: #33161d;
   --shadow-1: 0 1px 2px rgba(0, 0, 0, .4);
   --shadow-2: 0 8px 24px -8px rgba(0, 0, 0, .6);
@@ -21,6 +25,8 @@
   --json-key: #a5b4fc; --json-string: #5eead4; --json-number: #fbbf24; --json-atom: #fda4af;
   color-scheme: dark;
 }
+/* the brand colour on a surface that is dark in both themes (the editing bar) */
+:root { --accent-on-dark: var(--theme-dark-accent, #8b8cf8); --accent-on-dark-ink: var(--theme-dark-accent-ink, #11121c); }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { background: var(--bg); color: var(--text); font: 14px/1.5 "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }

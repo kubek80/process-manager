@@ -184,6 +184,12 @@ func New(d Deps) http.Handler {
 	mux.Handle("POST /api/icons", user(a.uploadIcon))
 	mux.Handle("GET /api/icons/{id}", user(a.getIcon))
 
+	// the look of the portal: read before signing in (the sign-in page shows it), set by admins
+	mux.HandleFunc("GET /api/theme", a.getTheme)
+	mux.HandleFunc("GET /api/theme/logo", a.getThemeLogo)
+	mux.Handle("GET /api/admin/theme", admin(a.getAdminTheme))
+	mux.Handle("PUT /api/admin/theme", admin(a.putTheme))
+
 	// who belongs to which team, platform and practice
 	mux.Handle("GET /api/members", user(a.listMembers))
 

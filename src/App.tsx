@@ -21,6 +21,12 @@ import { MinePage } from "./components/MinePage";
 import { myGroups, responsibilities, urgent } from "./lib/responsibilities";
 import { platformName, practiceName } from "./lib/catalog";
 import { confirmDialog, ErrorBoundary, Field, LoadError, Loading, Modal, Notices, notify, useLayer } from "./components/ui";
+import { BrandLogo } from "./components/Brand";
+import { chooseDark, refreshLook, startLook, useLook } from "./lib/theme";
+import "./theme.css";
+
+// the last look (Admin › Theming) and light or dark, before anything is drawn: no flash of the default look
+startLook();
 
 // loaded when first opened: most visits never need them
 const AdminPage = lazy(() => import("./components/AdminPage").then((m) => ({ default: m.AdminPage })));
@@ -31,18 +37,6 @@ const RequestsPage = lazy(() => import("./components/RequestsPage").then((m) => 
 const EditProcessPage = lazy(() => import("./components/EditProcessPage").then((m) => ({ default: m.EditProcessPage })));
 const EditStandardPage = lazy(() => import("./components/EditStandardPage").then((m) => ({ default: m.EditStandardPage })));
 const AiDialog = lazy(() => import("./components/AiDialog").then((m) => ({ default: m.AiDialog }))) as typeof import("./components/AiDialog").AiDialog;
-
-function useTheme() {
-  const [dark, setDark] = useState(() => {
-    try { const s = localStorage.getItem("pm:theme"); if (s) return s === "dark"; } catch { /* ignore */ }
-    return window.matchMedia("(prefers-color-scheme: dark)").matches;
-  });
-  useEffect(() => {
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
-    try { localStorage.setItem("pm:theme", dark ? "dark" : "light"); } catch { /* ignore */ }
-  }, [dark]);
-  return [dark, setDark] as const;
-}
 
 /** An editing screen for something that is not there (deleted, or never existed). */
 function NotFound({ noun, id }: { noun: "process" | "standard"; id: string }) {
@@ -57,13 +51,15 @@ function NotFound({ noun, id }: { noun: "process" | "standard"; id: string }) {
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useTheme();
+  const { name } = useLook();
   const refresh = useCallback(() => { setError(null); loadMe().then(setMe).catch((e) => setError(e.message)); }, []);
   useEffect(refresh, [refresh]);
-  useEffect(() => { if (!me?.authenticated) document.title = "Process Manager"; }, [me]);
+  // the look as it is now: also before signing in, for the sign-in page
+  useEffect(() => { void refreshLook(); }, []);
+  useEffect(() => { if (!me?.authenticated) document.title = name; }, [me, name]);
 
   let body;
-  if (error) body = <main className="login"><div className="login-card"><h1>Process Manager</h1><LoadError what="The portal could not be opened." error={error} onRetry={refresh} /></div></main>;
+  if (error) body = <main className="login"><div className="login-card"><h1>{name}</h1><LoadError what="The portal could not be opened." error={error} onRetry={refresh} /></div></main>;
   else if (!me) body = null;
   else if (!me.authenticated) body = <Login me={me} onSignedIn={refresh} />;
   else body = <MeContext.Provider value={me}><EngagementProvider key={me.user!.email}><Shell key={me.user!.email} me={me} onSignedOut={refresh} /></EngagementProvider></MeContext.Provider>;
@@ -231,7 +227,7 @@ function SignedOutDialog({ me, onBack, onOther }: { me: Me; onBack: () => void; 
 function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const route = useRoute(mayLeave);
   const perms = usePerms();
-  const [dark, setDark] = useTheme();
+  const { look, name, dark } = useLook();
   const [processes, setProcesses] = useState<Process[] | null>(null);
   const [standards, setStandards] = useState<Standard[]>([]);
   // the version of every process and standard, and of the lists: a save says which one it started from
@@ -461,16 +457,16 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const on = (...pages: string[]) => (pages.includes(route.page) ? "on" : "");
   const current = (...pages: string[]) => (pages.includes(route.page) ? "page" as const : undefined);
 
-  const title = pageTitle(route, { process: process?.title, standard: standard?.title, loading: !processes });
+  const title = pageTitle(route, { process: process?.title, standard: standard?.title, loading: !processes }, name);
   useEffect(() => { document.title = title; }, [title]);
 
   return (
     <CatalogContext.Provider value={catalogApi}>
     <FeedbackContext.Provider value={actions}>
       {!editing && <header className="topbar">
-        <a className="brand" href="#/" aria-label="Process Manager">
-          <span className="logo"><svg viewBox="0 0 32 32" width="18" height="18" aria-hidden="true"><path d="M5 9h9v5H5zM18 18h9v5h-9z" fill="currentColor" /><path d="M14 11.5h6.5V18" stroke="currentColor" strokeWidth="2.2" fill="none" /></svg></span>
-          <span className="brand-name">Process Manager</span>
+        <a className="brand" href="#/" aria-label={name} title={name}>
+          <BrandLogo look={look} />
+          <span className="brand-name">{name}</span>
         </a>
         <nav className="nav" aria-label="Main">
           <a className={`nav-link ${on("home", "search")}`} aria-current={current("home", "search")} href={href({ page: "home" })} aria-label="Home" title="Home: search processes and standards"><Search size={15} /><span>Home</span></a>
@@ -488,7 +484,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
           {canOpenAdmin(perms) && <a className={`nav-link ${on("admin")}`} aria-current={current("admin")} href={href({ page: "admin", section: perms.admin ? "access" : "lists" })} aria-label="Admin" title="Admin"><Settings2 size={15} /><span>Admin</span></a>}
         </nav>
         <span className="spacer" />
-        <button className="icon-btn" onClick={() => setDark(!dark)} aria-label={dark ? "Switch to the light theme" : "Switch to the dark theme"}>{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
+        <button className="icon-btn" onClick={() => chooseDark(!dark)} aria-label={dark ? "Switch to the light theme" : "Switch to the dark theme"}>{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
         <UserMenu me={me} onSignedOut={onSignedOut} />
       </header>}
 

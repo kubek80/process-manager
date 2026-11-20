@@ -6,6 +6,7 @@ import { completePerms } from "./rights";
 import { parseRequestsQuery, requestsQuery, type DocRequest, type NewRequest, type RequestState, type RequestsView } from "./requests";
 import type { Period, Statistics } from "./statistics";
 import type { AdminUser, UserRole } from "./users";
+import { portalName, type Look } from "./theme";
 
 export class ApiError extends Error {
   /** Set when a save was refused because somebody else saved (or deleted) first. */
@@ -177,6 +178,12 @@ export const loadAudit = (limit = 100, before = 0) => call<{ entries: AuditEntry
 export interface SystemInfo { provider: string; baseUrl: string; notify: string; processes: number; standards: number; skills: number; assignments: number; openFeedback: number }
 export const loadSystem = () => call<SystemInfo>("GET", "/api/admin/system");
 
+// The look of the portal (Admin › Theming). Everyone reads it through lib/theme.ts; admins read who
+// changed it last and save it on top of the revision their changes were made from.
+export interface SavedLook { look: Look; revision: number; updatedAt?: string; updatedBy?: string; updatedByName?: string }
+export const loadAdminLook = () => call<SavedLook>("GET", "/api/admin/theme");
+export const saveLook = (look: Look, rev: number) => call<SavedLook>("PUT", `/api/admin/theme?rev=${rev}`, look);
+
 // requests for a process or standard that does not exist yet
 export const loadRequests = async () => (await call<{ requests?: DocRequest[] }>("GET", "/api/requests")).requests ?? [];
 export const createRequest = (r: NewRequest) => call<DocRequest>("POST", "/api/requests", r);
@@ -229,7 +236,7 @@ export function useProgress(processId: string) {
 /** "json": an older address of the text of a document; it now opens the editing screen. */
 export type Tab = "flow" | "list" | "feedback" | "skills" | "json";
 export type StandardTab = "doc" | "feedback" | "skills" | "json";
-export type AdminSection = "access" | "lists" | "skills" | "health" | "activity" | "statistics" | "system";
+export type AdminSection = "access" | "lists" | "skills" | "health" | "activity" | "statistics" | "theming" | "system";
 /** `item` is the step or the requirement that is open, so that a link can point at one. */
 export type Route =
   | { page: "home" } | ({ page: "search" } & SearchState)
@@ -317,7 +324,7 @@ const parse = (h: string = location.hash): Route => {
   if (h.startsWith("#/standards")) return { page: "standards" };
   const requests = h.match(/^#\/requests(?:\?(.*))?$/);
   if (requests) return { page: "requests", ...parseRequestsQuery(requests[1] ?? "") };
-  const admin = h.match(/^#\/admin(?:\/(access|lists|skills|health|activity|statistics|system))?/);
+  const admin = h.match(/^#\/admin(?:\/(access|lists|skills|health|activity|statistics|theming|system))?/);
   if (admin) return { page: "admin", section: (admin[1] as AdminSection) ?? "access" };
   const es = h.match(/^#\/s\/([a-z0-9-]+)\/(?:edit(?:\/([A-Z][A-Z0-9-]*))?|json)/);
   if (es) return { page: "edit-standard", id: es[1], ...(es[2] ? { item: es[2] } : {}) };
@@ -346,6 +353,7 @@ const placesOf = (r: Route): string[] => {
     const doc = `${r.page === "edit-process" ? "process" : "standard"}/${r.id}`;
     return [doc, `${doc}#json`];
   }
+  if (r.page === "admin" && r.section === "theming") return ["theme"];
   return r.page === "admin" && r.section === "lists" ? ["catalog"] : [];
 };
 
@@ -479,9 +487,9 @@ export const href = (r: Route): string => {
  */
 export const go = (r: Route, opts: { replace?: boolean } = {}) => { void moveTo(href(r), opts.replace); };
 
-/** What the browser tab says for a page: the thing being read first, the product last. */
-export function pageTitle(r: Route, names: { process?: string; standard?: string; loading?: boolean } = {}): string {
-  const APP = "Process Manager";
+/** What the browser tab says for a page: the thing being read first, the portal's name (Admin › Theming) last. */
+export function pageTitle(r: Route, names: { process?: string; standard?: string; loading?: boolean } = {}, app = portalName()): string {
+  const APP = app;
   const of = (name: string | undefined, missing: string) => name ?? (names.loading ? "" : missing);
   let here: string;
   switch (r.page) {

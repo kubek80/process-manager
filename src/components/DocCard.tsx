@@ -1,16 +1,16 @@
 import { Fragment } from "react";
-import { CircleAlert, MessageSquare, MessageSquarePlus, PencilLine, ShieldCheck, Workflow } from "lucide-react";
+import { CircleAlert, Clock3, Code2, Compass, CornerDownRight, Layers, ListChecks, MessageSquare, MessageSquarePlus, PencilLine, Server, ShieldCheck, UserCheck, Users, Workflow, type LucideIcon } from "lucide-react";
 import type { DocMeta, Process, Rigour, Standard, TargetKind } from "../types";
 import { useCatalog } from "../lib/catalog";
-import { cardLines, tiersText } from "../lib/cardLines";
+import { cardGroups, cardLines, rigourParts, shortFact, tiersText, type CardLine } from "../lib/cardLines";
 import { statusOf } from "../lib/lifecycle";
 import { author } from "../lib/editing";
-import { matchRanges, NO_CATEGORY_LABEL, type Hit } from "../lib/search";
+import { matchRanges, NO_CATEGORY_LABEL, RIGOUR_LABEL, type Hit } from "../lib/search";
 import { href } from "../lib/store";
 import { BookmarkButton, UpvoteButton } from "./Engage";
 import { EntryIcon } from "./EntryIcon";
 import { useEngagement } from "../lib/engagement";
-import { engagementKnown } from "./Lists";
+import { engagementKnown, RigourPips } from "./Lists";
 import "../lists.css";
 
 /** The text with the searched words marked; built as elements, never as HTML. */
@@ -33,8 +33,14 @@ export const KIND: Record<TargetKind, { word: string; Icon: typeof Workflow }> =
   standard: { word: "Standard", Icon: ShieldCheck },
 };
 const HIT_WORD: Record<Hit["where"], string> = { step: "Step", requirement: "Requirement", prerequisite: "Before you start", scope: "Scope", summary: "Summary" };
-/** Where a result was found, when it was searched for both ways. */
+/** Where a result was found, when it was searched for both ways: the heading of the place where it was found. */
 const FOUND_BY: Record<string, string> = { words: "Found by words", meaning: "Found by meaning", "meaning,words": "Found by words and by meaning" };
+
+/** The icon of each fact on the card; the name of the fact is its tooltip and is read out. */
+const FACT_ICON: Record<string, LucideIcon> = {
+  owner: Users, platform: Layers, practice: Compass, environments: Server, languages: Code2,
+  lead: Clock3, steps: UserCheck, rules: ListChecks, usedBy: CornerDownRight,
+};
 
 /** Where a process or standard opens; somebody who may fix a broken one gets its editing screen. */
 export const docHref = (kind: TargetKind, id: string, fix = false) =>
@@ -72,16 +78,18 @@ export interface DocCardProps {
 }
 
 /**
- * One process or standard in a list: what it is, what it says, then one fact per line. The title
- * is the link; it covers the whole card for the mouse, while the links and buttons inside stay
- * separate and reachable with the keyboard (no link inside a link).
+ * One process or standard in a list: what it is (the kind mark, the category, the tiers), what
+ * needs attention (marks), the title and summary, then two rows of facts - first what to compare
+ * (how binding, how long, how much is yours), then who looks after it and where it applies - and,
+ * after a search, where inside it was found. The title is the link; it covers the whole card for
+ * the mouse, while the links and buttons inside stay separate and reachable with the keyboard.
  */
 export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openFeedback, mayEdit, manages, meta, broken, usedBy, level = 2, foundBy }: DocCardProps) {
   const { catalog } = useCatalog();
   const known = engagementKnown(useEngagement());
   const status = statusOf(doc);
   const fix = !!broken && mayEdit;
-  const lines = cardLines({ kind, doc, catalog, rigour, rules, mayEdit: mayEdit || !!manages, usedBy });
+  const groups = cardGroups(cardLines({ kind, doc, catalog, rigour, rules, mayEdit: mayEdit || !!manages, usedBy }));
   const changes = !!meta?.draft && status !== "draft";
   const { word, Icon } = KIND[kind];
   const title = typeof doc.title === "string" && doc.title ? doc.title : doc.id;
@@ -89,6 +97,9 @@ export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openF
   const tiers = tiersText(doc, catalog);
   const H = level === 2 ? "h2" : "h3";
   const feedbackHref = kind === "process" ? href({ page: "process", id: doc.id, tab: "feedback" }) : href({ page: "standard", id: doc.id, tab: "feedback" });
+  const by = foundBy && foundBy.length > 0 ? [...foundBy].sort() : [];
+  // a place that says only "Summary" or "Scope", with nothing of its text, tells nothing: left out
+  const places = hits.filter((h) => (h.where !== "summary" && h.where !== "scope") || h.snippet);
   return (
     <li className={`card ${status === "deprecated" ? "retired" : ""} ${status === "draft" ? "draft" : ""}`.trim()} data-kind={kind} data-id={doc.id}>
       <div className="card-top">
@@ -100,43 +111,49 @@ export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openF
           <span className="sr-only">Applies to: </span>{tiers}
         </span>
       </div>
-      {(status !== "active" || fix || changes) && (
+      {(status !== "active" || fix || changes || groups.attention.length > 0) && (
         <div className="card-marks">
           {status === "draft" && <span className="card-mark draft">Draft</span>}
           {status === "deprecated" && <span className="card-mark retired">Retired</span>}
           {changes && <span className="card-mark changes" title={`Saved by ${author(meta!.draft).name}, not yet published`}><PencilLine size={12} aria-hidden="true" />Unpublished changes</span>}
           {fix && <span className="card-mark bad"><CircleAlert size={12} aria-hidden="true" />Needs fixing</span>}
+          {groups.attention.map((l) => (
+            <span key={l.key} className="card-mark warn" data-line={l.key}><span className="sr-only">{l.name}: </span>{l.key === "review" ? `Review ${l.value.charAt(0).toLowerCase()}${l.value.slice(1)}` : l.value}</span>
+          ))}
         </div>
       )}
       <H className="card-title"><a className="card-link" href={docHref(kind, doc.id, fix)}><Marked text={title} words={words} /></a></H>
       {doc.summary && <p className="card-summary"><Marked text={doc.summary} words={words} /></p>}
-      {lines.length > 0 && (
-        <dl className="card-lines">
-          {lines.map((l) => (
-            <div key={l.key} className={`card-line ${l.warn ? "warn" : ""}`.trim()} data-line={l.key}>
-              <dt>{l.name}:</dt>
-              <dd>{l.items?.some((x) => x.icon) ? l.items.map((x, i) => (
-                <Fragment key={i}><span className="card-entry"><EntryIcon icon={x.icon} size={14} />{x.name}{i < l.items!.length - 1 && ","}</span>{" "}</Fragment>
-              )) : l.value}</dd>
-            </div>
-          ))}
+      {groups.key.length > 0 && (
+        <dl className="card-lines card-key">
+          {(kind === "standard" ? [...groups.key].sort((a, b) => Number(b.key === "rules") - Number(a.key === "rules")) : groups.key)
+            .map((l) => <Fact key={l.key} line={l} kind={kind} rigour={rigour} />)}
         </dl>
       )}
-      {foundBy && foundBy.length > 0 && (
-        <p className={`card-found-by ${foundBy.length > 1 ? "both" : foundBy[0]}`}>{FOUND_BY[[...foundBy].sort().join(",")]}</p>
+      {groups.who.length > 0 && (
+        <dl className="card-lines card-who">
+          {groups.who.map((l) => <Fact key={l.key} line={l} kind={kind} rigour={rigour} />)}
+        </dl>
       )}
-      {hits.length > 0 && (
-        <ul className="card-hits" aria-label={`Found in ${title}`}>
-          {hits.map((h, i) => (
-            <li key={`${h.where}:${h.item ?? i}`}>
-              <a href={hitHref(kind, doc.id, h)}>
-                <span className="card-hit-where">{HIT_WORD[h.where]}{h.where === "requirement" && h.item ? ` ${h.item}` : ""}</span>
-                {h.where !== "scope" && h.where !== "summary" && <span className="card-hit-label"><Marked text={h.label} words={words} /></span>}
-              </a>
-              {h.snippet && <span className="card-hit-snippet"><Marked text={h.snippet} words={words} /></span>}
-            </li>
-          ))}
-        </ul>
+      {(places.length > 0 || by.length > 0) && (
+        <div className="card-found">
+          {by.length > 0 && (
+            <p className={`card-found-by ${by.length > 1 ? "both" : by[0]}`}>{FOUND_BY[by.join(",")]}</p>
+          )}
+          {places.length > 0 && (
+            <ul className="card-hits" aria-label={`Found in ${title}`}>
+              {places.map((h, i) => (
+                <li key={`${h.where}:${h.item ?? i}`}>
+                  <a href={hitHref(kind, doc.id, h)}>
+                    <span className="card-hit-where">{HIT_WORD[h.where]}{h.where === "requirement" && h.item ? ` ${h.item}` : ""}</span>
+                    {h.where !== "scope" && h.where !== "summary" && <span className="card-hit-label"><Marked text={h.label} words={words} /></span>}
+                  </a>
+                  {h.snippet && <span className="card-hit-snippet"><Marked text={h.snippet} words={words} /></span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
       {openFeedback > 0 && <p className="card-feedback"><MessageSquare size={14} aria-hidden="true" />{openFeedback} open feedback</p>}
       <div className="card-foot">
@@ -148,5 +165,45 @@ export function DocCard({ kind, doc, rigour, rules, hits = [], words = [], openF
         </span>
       </div>
     </li>
+  );
+}
+
+/**
+ * One fact of the card: its icon (or, for the rigour, its marks) and the value. The name of the
+ * fact is read out before the value and shows as a tooltip; it is not printed, so that the card is
+ * not a table of labels.
+ */
+function Fact({ line: l, kind, rigour }: { line: CardLine; kind: TargetKind; rigour: Partial<Record<Rigour, number>> }) {
+  if (l.key === "rigour") {
+    const parts = rigourParts(rigour);
+    return (
+      <div className="card-line card-fact rigour" data-line="rigour" title={`Rigour: ${l.value}`}>
+        <dt className="sr-only">{l.name}:</dt>
+        <dd>
+          {parts.map((p, i) => (
+            <span key={p.rigour} className="rigour-part">
+              <RigourPips rigour={p.rigour} />
+              {kind === "process" ? RIGOUR_LABEL[p.rigour]
+                : <>{p.n}<span className="sr-only">{` ${RIGOUR_LABEL[p.rigour].toLowerCase()}${i < parts.length - 1 ? "," : ""}`}</span></>}
+            </span>
+          )).flatMap((el, i) => (i ? [" ", el] : [el]))}
+        </dd>
+      </div>
+    );
+  }
+  const Icon = FACT_ICON[l.key];
+  const items = l.items?.some((x) => x.icon) ? l.items : undefined;
+  return (
+    <div className={`card-line card-fact ${l.warn ? "warn" : ""}`.trim()} data-line={l.key} title={`${l.name}: ${l.value}`}>
+      <dt className="sr-only">{l.name}:</dt>
+      <dd>
+        {!items && Icon && <Icon size={14} aria-hidden="true" className="card-fact-icon" />}
+        {items ? items.map((x, i) => (
+          <Fragment key={i}>
+            <span className="card-entry"><EntryIcon icon={x.icon} size={14} fallback={<Code2 size={14} aria-hidden="true" className="card-fact-icon" />} />{x.name}{i < items.length - 1 && ","}</span>{" "}
+          </Fragment>
+        )) : shortFact(l, kind)}
+      </dd>
+    </div>
   );
 }

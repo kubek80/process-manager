@@ -65,3 +65,44 @@ export function useRememberedSort(list: string, email?: string): [SortKey, (k: S
 function read(key: string): SortKey {
   try { return sortOf(localStorage.getItem(key)); } catch { return ""; }
 }
+
+// ---------- what Home shows: recently updated, most viewed
+
+interface Listed extends Sortable { doc: { id: string; title?: unknown; status?: unknown } }
+
+/**
+ * Only what everybody may see on Home's short lists: published and in use (no draft, never
+ * published or not; nothing retired).
+ */
+export const shownOnHome = (r: Listed) => r.doc.status === undefined || r.doc.status === "active";
+
+/** The `n` most recently updated, newest first; what has no date is left out. */
+export function recentlyUpdated<T extends Listed>(results: T[], meta: MetaByKind | undefined, n: number): { item: T; at: string }[] {
+  return results.filter(shownOnHome)
+    .map((r) => ({ item: r, at: updatedAt(meta?.[r.kind]?.[r.doc.id]) }))
+    .filter((x) => Number.isFinite(Date.parse(x.at)))
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || title(a.item).localeCompare(title(b.item)))
+    .slice(0, n);
+}
+
+/** The `n` most viewed, most first; what nobody opened yet is left out. */
+export function mostViewed<T extends Listed>(results: T[], views: (r: T) => number, n: number): { item: T; views: number }[] {
+  return results.filter(shownOnHome)
+    .map((r) => ({ item: r, views: views(r) }))
+    .filter((x) => x.views > 0)
+    .sort((a, b) => b.views - a.views || title(a.item).localeCompare(title(b.item)))
+    .slice(0, n);
+}
+
+/** When something was updated, in words: "today", "yesterday", "3 days ago", "2 weeks ago", else the date. */
+export function agoText(at: string, now: Date = new Date()): string {
+  const t = Date.parse(at);
+  if (!Number.isFinite(t)) return "";
+  const day = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const days = Math.round((day(now) - day(new Date(t))) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 14) return `${days} days ago`;
+  if (days < 56) return `${Math.floor(days / 7)} weeks ago`;
+  return new Date(t).toISOString().slice(0, 10);
+}

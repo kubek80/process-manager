@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import type { DocMeta, Feedback, Process, Standard } from "../types";
-import { addRequirement, deleteRequirement, moveRequirement, tidyStandard, today, updateRequirement } from "../lib/edit";
+import { addRequirement, appendRequirement, deleteRequirement, EXAMPLE, moveRequirementTo, tidyStandard, today, updateRequirement } from "../lib/edit";
 import { issueTarget, issuesByPlace, issuesFor, selectionKey, STANDARD_SECTIONS, standardOutline, type Selection, type StandardSection } from "../lib/editing";
 import { isDrawableStandard, standardSchema, validateStandard } from "../lib/validate";
 import { useSelectedItem } from "../lib/selection";
@@ -14,7 +14,7 @@ import { openCount } from "./Feedback";
 import { EditFrame, EditSection, ItemIssues, Outline } from "./EditFrame";
 import { EditSession, type Session } from "./EditSession";
 import { NoRight } from "./EditProcessPage";
-import { BelongsEditor, DimsEditor, ReviewEditor } from "./Governance";
+import { GovernedSections } from "./ProcessSections";
 import { RequirementCard, RequirementFields } from "./Requirements";
 import { ResourceEditor, Resources } from "./Resources";
 import { standardAiSpec, StandardIntro } from "./StandardPage";
@@ -95,7 +95,7 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
         if (!await confirmDialog({ title: `Delete ${current.id}?`, body: <>The requirement “{current.title}” is removed from the draft. Undo brings it back; readers see nothing until you publish.</>, confirmLabel: "Delete requirement", danger: true })) return;
         setDraft((x) => deleteRequirement(x, current.id)); selectReq(null); setSection("requirements");
       }}
-      onMove={(dir) => setDraft(moveRequirement(draft, current.id, dir))}
+      onMove={(before) => setDraft(moveRequirementTo(draft, current.id, before))}
       onAddAfter={() => add(current.id)} />;
   } else {
     const head = <h2 className="fields-section-title">{sectionLabel}</h2>;
@@ -105,7 +105,8 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
         <>
           <EditSection title="Name and summary">
             <Field label="Name" hint="What it is about, in a few words"><input value={draft.title} maxLength={80} onChange={(e) => set({ title: e.target.value })} /></Field>
-            <Field label="Summary" hint="What it protects or achieves"><textarea rows={3} maxLength={400} value={draft.summary} onChange={(e) => set({ summary: e.target.value })} /></Field>
+            <Field label="Summary" hint="What it protects or achieves"><textarea rows={3} maxLength={400} value={draft.summary} onChange={(e) => set({ summary: e.target.value })}
+              onFocus={(e) => { if (draft.summary === EXAMPLE.standardSummary) e.target.select(); }} /></Field>
             <Field label="Issued by" hint="The team that reviews it, answers feedback and grants exceptions">
               <select value={draft.owner} onChange={(e) => set({ owner: e.target.value })}>
                 {catalog.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -113,16 +114,7 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
               </select>
             </Field>
           </EditSection>
-          <EditSection title="What it belongs to" hint="How readers find it, and who besides the editors may change it.">
-            <BelongsEditor kind="standard" doc={draft} saved={d.saved} onChange={set} />
-          </EditSection>
-          <EditSection title="Where it applies" hint="Nothing selected means everywhere. A requirement can narrow this further.">
-            <DimsEditor value={draft} onChange={set} />
-            <Field label="Tags" hint="Words readers might search for, separated by commas">
-              <input value={(draft.tags ?? []).join(", ")} onChange={(e) => set({ tags: e.target.value.split(",").map((t) => t.trimStart().slice(0, 30)).slice(0, 12) })} />
-            </Field>
-          </EditSection>
-          <EditSection title="Review"><ReviewEditor doc={draft} others={all} onChange={set} /></EditSection>
+          <GovernedSections kind="standard" doc={draft} saved={d.saved} others={all} set={set} issues={own} />
         </>
       ),
       scope: (
@@ -139,6 +131,7 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
       requirements: (
         <div className="empty-hint">
           <p>{draft.requirements.length} requirement{draft.requirements.length === 1 ? "" : "s"}. Select one in the outline or in the middle to change it.</p>
+          <p>To add several, type their names one after the other under <b>Add a requirement</b> at the end of the outline.</p>
           <button className="btn small" onClick={() => add()}><Plus size={14} />Add a requirement at the end</button>
         </div>
       ),
@@ -154,10 +147,10 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
 
   const middle = s.json ? s.jsonView : (
     <div className="edit-preview standard-doc">
-      <p className="preview-label">What readers will see</p>
-      <button className={`preview-head ${sel.section === "about" ? "on" : ""}`} onClick={() => choose({ section: "about" })}>
+      <button className={`preview-head ${sel.section === "about" ? "on" : ""}`} onClick={() => choose({ section: "about" })} aria-label={`About: ${draft.title || "(no name yet)"}`}>
+        <span className="preview-label">What readers will see</span>
         <h2>{draft.title || <span className="muted">(no name yet)</span>}</h2>
-        <p>{draft.summary || <span className="muted">No summary yet. Say what it protects or achieves.</span>}</p>
+        <p>{draft.summary && draft.summary !== EXAMPLE.standardSummary ? draft.summary : <span className="muted">No summary yet. Say what it protects or achieves.</span>}</p>
       </button>
       <div className={`preview-part clickable ${sel.section === "scope" ? "on" : ""}`} onClick={() => choose({ section: "scope" })}>
         <StandardIntro standard={draft} processes={processes} helpers={helpers} />
@@ -183,8 +176,13 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
         outline={drawable ? <Outline label="Outline of the standard" entries={standardOutline(draft)} selected={selectionKey(sel)} issues={byPlace}
           feedback={(id) => openCount(feedback, id)}
           onSelect={(e) => choose({ section: e.section, item: e.item })}
-          onAdd={{ section: "requirements", label: "Add a requirement at the end", run: () => add() }}
-          onMove={(id, dir) => setDraft(moveRequirement(draft, id, dir))} /> : null}
+          onAdd={{ section: "requirements", label: "Add a requirement", placeholder: "Short name of the rule", run: (name) => { const r = appendRequirement(draft, name); setDraft(r.standard); selectReq(r.id); } }}
+          onMove={(id, before) => setDraft(moveRequirementTo(draft, id, before))}
+          onNudge={(id, dir) => {
+            const ids = draft.requirements.map((r) => r.id), i = ids.indexOf(id);
+            if (dir === -1 && i > 0) setDraft(moveRequirementTo(draft, id, ids[i - 1]));
+            if (dir === 1 && i >= 0 && i < ids.length - 1) setDraft(moveRequirementTo(draft, id, ids[i + 2] ?? null));
+          }} /> : null}
         middle={middle} fields={<div className="edit-fields-body">{fields}</div>} fieldsLabel={fieldsLabel}
         panel={s.panel} setPanel={s.setPanel} json={s.json} />
       {s.dialogs}

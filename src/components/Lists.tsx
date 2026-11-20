@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Lightbulb, Search, SlidersHorizontal, X } from "lucide-react";
-import type { TargetKind } from "../types";
+import { AppWindow, ChevronDown, ChevronLeft, ChevronRight, Lightbulb, Search, ShieldCheck, SlidersHorizontal, Workflow, X } from "lucide-react";
+import type { Rigour, TargetKind } from "../types";
 import { href } from "../lib/store";
 import type { Profile } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
-import { countText, countWords, emptyFilterText, FILTER_LABEL, PROFILE_HINT, PROFILE_KEYS, PROFILE_LABEL, type FilterKey, type Option, type ProfileKey } from "../lib/search";
+import { appSummary, countText, countWords, emptyFilterText, FILTER_LABEL, PROFILE_HINT, PROFILE_KEYS, PROFILE_LABEL, type FilterKey, type Option, type ProfileKey, type TypeTab } from "../lib/search";
+import { useRemembered } from "../lib/profile";
 import { SORT_KEYS, sortLabel, sortOf, type SortKey } from "../lib/sorting";
 import { pageNumbers, PAGE_SIZES, showingText, storedPage, type Page, type StoredPage } from "../lib/paging";
 import "../lists.css";
@@ -50,6 +51,16 @@ export function SearchBox({ value, onChange, onSubmit, big, autoFocus, live, pla
         aria-label={label} enterKeyHint="search" autoComplete="off" spellCheck={false} />
       {!live && <button type="submit" className="btn primary">Search</button>}
     </form>
+  );
+}
+
+/** How binding: three marks, as many filled as it binds (mandatory 3, recommended 2, optional 1). */
+const PIPS: Record<Rigour, number> = { mandatory: 3, recommended: 2, optional: 1 };
+export function RigourPips({ rigour }: { rigour: Rigour }) {
+  return (
+    <span className="rigour-pips" data-rigour={rigour} aria-hidden="true">
+      {[0, 1, 2].map((i) => <i key={i} className={i < PIPS[rigour] ? "on" : ""} />)}
+    </span>
   );
 }
 
@@ -101,13 +112,11 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast, single
     else if (e.key === "End") { e.preventDefault(); focusAt(all.length - 1); }
   };
   return (
-    <div className={`filter-dd ${open ? "open" : ""} ${n ? "chosen" : ""} ${dead ? "empty" : ""}`.trim()} data-filter={name}>
+    <div className={`filter-dd ${open ? "open" : ""} ${n ? "chosen" : ""} ${dead ? "nothing" : ""}`.trim()} data-filter={name}>
       <button ref={button} type="button" className="filter-dd-button" aria-expanded={open} aria-controls={`${id}-list`}
         aria-label={`${title}: ${summary}`} onClick={() => setOpen(!open)} onKeyDown={onButtonKey}>
-        <span className="filter-dd-text">
-          <span className="filter-dd-name">{title}</span>
-          <span className="filter-dd-value">{summary}</span>
-        </span>
+        <span className="filter-dd-name">{title}</span>
+        <span className="filter-dd-value">{summary}</span>
         {n > 1 && <span className="filter-dd-n" aria-hidden="true">{n}</span>}
         <ChevronDown size={16} aria-hidden="true" className="filter-dd-chevron" />
       </button>
@@ -121,7 +130,7 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast, single
               <label key={o.value} className={`filter-option ${o.chosen ? "on" : ""} ${off ? "off" : ""}`.trim()}>
                 <input type={single ? "radio" : "checkbox"} name={single ? id : undefined} checked={o.chosen} disabled={off} onChange={() => onToggle(o.value)}
                   aria-label={`${o.label}, ${countWords(o.count, atLeast)}`} />
-                <span className="filter-option-name">{o.label}</span>
+                <span className="filter-option-name">{name === "rigour" && o.value in PIPS && <RigourPips rigour={o.value as Rigour} />}{o.label}</span>
                 <span className="filter-option-count" aria-hidden="true">{countText(o.count, atLeast)}</span>
               </label>
             );
@@ -168,10 +177,16 @@ export function FilterPanel({ id, open, keys, labels, options, onToggle, flags, 
     if (v) p[k] = v; else delete p[k];
     onProfile(p);
   };
+  const hasApp = PROFILE_KEYS.some((k) => (profileOptions[k] ?? []).length > 0);
+  const appChosen = PROFILE_KEYS.some((k) => !!profile[k]);
+  const [appOpen, setAppOpen] = useRemembered("pm:filters:application", appChosen);
+  const appId = useId();
+  const shownKeys = keys.filter((k) => options[k].length > 0);
   return (
     <aside id={id} className={`filter-panel ${open ? "open" : ""}`.trim()} aria-label="Filters">
       {flags.length > 0 && (
-        <div className="filter-group filter-flags">
+        <div className="filter-group filter-flags" role="group" aria-labelledby={`${id}-show`}>
+          <p className="filter-group-title" id={`${id}-show`}>Show only</p>
           {flags.map((f) => (
             <label key={f.key} className={`filter-option flag ${f.on ? "on" : ""} ${f.unknown && !f.on ? "off" : ""}`.trim()} data-flag={f.key}>
               <input type="checkbox" checked={f.on} disabled={!!f.unknown && !f.on} onChange={(e) => f.onChange(e.target.checked)}
@@ -182,21 +197,82 @@ export function FilterPanel({ id, open, keys, labels, options, onToggle, flags, 
           ))}
         </div>
       )}
-      <div className="filter-group filter-dds">
-        {keys.map((k) => (
-          <FilterDropdown key={k} name={k} label={labels?.[k]} options={options[k]} onToggle={(v) => onToggle(k, v)} atLeast={atLeast}
-            empty={emptyFilterText(k, subject, total)} />
-        ))}
-        {PROFILE_KEYS.map((k) => (
-          <FilterDropdown key={k} name={k} label={PROFILE_LABEL[k]} options={profileOptions[k] ?? []} single hint={PROFILE_HINT[k]}
-            onToggle={(v) => setProfile(k, v)} atLeast={atLeast} empty={emptyFilterText(k, subject, total)} />
-        ))}
-      </div>
-      {PROFILE_KEYS.some((k) => (profileOptions[k] ?? []).length > 0) && (
-        <p className="filter-profile-note">Tier, environment and language show only what applies to your application, here and on every process and standard.</p>
+      {shownKeys.length > 0 && (
+        <div className="filter-group filter-dds" role="group" aria-labelledby={`${id}-narrow`}>
+          <p className="filter-group-title" id={`${id}-narrow`}>Narrow down</p>
+          <div className="filter-rows">
+            {shownKeys.map((k) => (
+              <FilterDropdown key={k} name={k} label={labels?.[k]} options={options[k]} onToggle={(v) => onToggle(k, v)} atLeast={atLeast}
+                empty={emptyFilterText(k, subject, total)} />
+            ))}
+          </div>
+        </div>
+      )}
+      {hasApp && (
+        <div className={`filter-group filter-app ${appOpen ? "open" : ""} ${appChosen ? "chosen" : ""}`.trim()}>
+          <button type="button" className="filter-app-toggle" aria-expanded={appOpen} aria-controls={appId} onClick={() => setAppOpen(!appOpen)}>
+            <AppWindow size={15} aria-hidden="true" className="filter-app-icon" />
+            <span className="filter-app-text">
+              <span className="filter-group-title">My application</span>
+              <span className="filter-app-summary">{appSummary(profileOptions)}</span>
+            </span>
+            <ChevronDown size={16} aria-hidden="true" className="filter-dd-chevron" />
+          </button>
+          {appOpen && (
+            <div id={appId} className="filter-app-body">
+              <p className="filter-profile-note">Shows only what applies to your application, here and on every process and standard. Remembered in this browser.</p>
+              <div className="filter-rows">
+                {PROFILE_KEYS.map((k) => (
+                  <FilterDropdown key={k} name={k} label={PROFILE_LABEL[k]} options={profileOptions[k] ?? []} single hint={PROFILE_HINT[k]}
+                    onToggle={(v) => setProfile(k, v)} atLeast={atLeast} empty={emptyFilterText(k, subject, total)} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
       {done && <button type="button" className="btn primary filter-done" onClick={done.onClick}>{done.label}</button>}
     </aside>
+  );
+}
+
+const TAB_ICON = { process: Workflow, standard: ShieldCheck } as const;
+const TAB_LABEL: Record<TypeTab, string> = { "": "All", process: "Processes", standard: "Standards" };
+
+/**
+ * Above the results: All, Processes, Standards, each with how many results it gives. One choice of
+ * three, like radio buttons: the arrow keys move the choice, Tab leaves the group.
+ */
+export function TypeTabs({ value, counts, onChange, atLeast }: {
+  value: TypeTab; counts: Record<TypeTab, number>; onChange: (t: TypeTab) => void; atLeast?: boolean;
+}) {
+  const tabs: TypeTab[] = ["", "process", "standard"];
+  const refs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const onKey = (e: KeyboardEvent) => {
+    const at = tabs.indexOf(value);
+    const to = e.key === "ArrowRight" || e.key === "ArrowDown" ? (at + 1) % tabs.length
+      : e.key === "ArrowLeft" || e.key === "ArrowUp" ? (at + tabs.length - 1) % tabs.length
+      : e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    onChange(tabs[to]);
+    refs.current[tabs[to]]?.focus();
+  };
+  return (
+    <div className="type-tabs" role="radiogroup" aria-label="Show" onKeyDown={onKey}>
+      {tabs.map((t) => {
+        const Icon = t ? TAB_ICON[t] : null;
+        return (
+          <button key={t || "all"} ref={(el) => { refs.current[t] = el; }} type="button" role="radio" aria-checked={t === value} tabIndex={t === value ? 0 : -1}
+            className={`type-tab ${t || "all"} ${t === value ? "on" : ""}`.trim()} data-type={t || "all"} onClick={() => onChange(t)}
+            aria-label={`${TAB_LABEL[t]}, ${countWords(counts[t], atLeast)}`}>
+            {Icon && <span className={`type-tab-mark ${t}`} aria-hidden="true"><Icon size={12} /></span>}
+            <span className="type-tab-name">{TAB_LABEL[t]}</span>
+            <span className="type-tab-count" aria-hidden="true">{countText(counts[t], atLeast)}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

@@ -157,6 +157,108 @@ export function moveStep(p: Process, id: string, dir: -1 | 1): Process {
   return { ...p, steps };
 }
 
+/**
+ * Why a step cannot be moved to another place in the flow, or "" when it can. A step with several
+ * paths (a decision) keeps its branches: cutting it out would have to drop all but one of them.
+ */
+export function flowMoveBlocked(p: Process, id: string): string {
+  const s = p.steps.find((x) => x.id === id);
+  if (!s) return "This step no longer exists.";
+  if (s.next.length > 1) return "A step with several paths keeps its branches, so it cannot be moved as a whole. Change where its paths go instead.";
+  return "";
+}
+
+/** Puts `step` right after `afterId` in the flow (as insertStep does): it takes over what followed, or becomes a new branch of a decision. */
+function placeAfter(steps: Step[], afterId: string, step: Step): Step[] {
+  const after = steps.find((s) => s.id === afterId);
+  if (!after) return [...steps, step];
+  let patched: Step, placed: Step;
+  if (after.type === "decision" && after.next.length) {
+    patched = { ...after, next: [...after.next, { to: step.id, label: freeLabel("Other", after.next) }] };
+    placed = { ...step, next: [] };
+  } else {
+    patched = { ...after, next: [{ to: step.id }] };
+    placed = { ...step, next: after.next.filter((n) => n.to !== step.id) };
+  }
+  return steps.flatMap((s) => (s.id === afterId ? [patched, placed] : [s]));
+}
+
+/**
+ * Moves a step to another place in the flow - not only in the numbering: the steps around it are
+ * joined (as when it is deleted), then it goes on every arrow into `beforeId` and leads to it.
+ * `null` moves it to the end: after the last step in the list. The list order follows, so the
+ * numbers on the map read in the new order. A step with several paths is not moved (see
+ * flowMoveBlocked); nor is anything when the target is unknown or the step itself.
+ */
+export function moveStepInFlow(p: Process, id: string, beforeId: string | null): Process {
+  const moving = p.steps.find((s) => s.id === id);
+  if (!moving || flowMoveBlocked(p, id) || beforeId === id) return p;
+  if (beforeId !== null && !p.steps.some((s) => s.id === beforeId)) return p;
+  const rest = deleteStep(p, id).steps;
+  if (rest.length === p.steps.length) return p;
+  if (beforeId === null) {
+    const last = rest[rest.length - 1];
+    return { ...p, steps: placeAfter(rest, last.id, { ...moving, next: [] }) };
+  }
+  // the arrows that went into the target now go into the moved step, with their names
+  const redirected = rest.map((s) => (s.next.some((n) => n.to === beforeId) ? { ...s, next: s.next.map((n) => (n.to === beforeId ? { ...n, to: id } : n)) } : s));
+  const at = redirected.findIndex((s) => s.id === beforeId);
+  const moved: Step = { ...moving, next: [{ to: beforeId }] };
+  return { ...p, steps: [...redirected.slice(0, at), moved, ...redirected.slice(at)] };
+}
+
+/** Moves a step one place up (-1) or down (1) in the flow, as moveStepInFlow does: before the step listed before it, or after the one listed after it. */
+export function nudgeStep(p: Process, id: string, dir: -1 | 1): Process {
+  const i = p.steps.findIndex((s) => s.id === id);
+  if (i < 0) return p;
+  if (dir === -1) return i === 0 ? p : moveStepInFlow(p, id, p.steps[i - 1].id);
+  if (i >= p.steps.length - 1) return p;
+  return moveStepInFlow(p, id, i + 2 < p.steps.length ? p.steps[i + 2].id : null);
+}
+
+/**
+ * Adds a named step at the end of the list, after the last step (a new branch when that is a
+ * decision). Done by whoever did the last step. No example text: the name is the one typed.
+ */
+export function appendStep(p: Process, title: string): { process: Process; id: string } {
+  const last = p.steps[p.steps.length - 1];
+  const name = title.trim();
+  // a blank process: the first name typed replaces the example step it starts with
+  if (p.steps.length === 1 && last.title === EXAMPLE.firstStep && (last.instructions ?? []).every((i) => i === EXAMPLE.instruction)) {
+    const r = renameStepId({ ...p, steps: [{ ...last, title: name, instructions: undefined }] }, last.id, slugify(name) || last.id);
+    return r;
+  }
+  if (!last) {
+    const id = uniqueId(slugify(name) || "new-step", []);
+    return { process: { ...p, steps: [{ id, title: name, actor: p.actors[0]?.id ?? "me", type: "task", next: [] }] }, id };
+  }
+  return insertStep(p, { afterId: last.id }, { title: name, type: "task", actor: last.actor });
+}
+
+/**
+ * Changes the kind of a step. A step that becomes a decision gets two named paths where the flow
+ * offers them, as a new decision does: what followed becomes "Yes", "No" goes back to the step
+ * before it (a loop back to correct something), so it does not start life as a problem.
+ */
+export function setStepType(p: Process, id: string, type: StepType): Process {
+  const s = p.steps.find((x) => x.id === id);
+  if (!s || s.type === type) return p;
+  if (type !== "decision" || s.next.length > 1) return updateStep(p, id, { type });
+  const before = p.steps.find((x) => x.next.some((n) => n.to === id));
+  const next = before ? decisionPaths(s.next, before.id) : s.next;
+  return updateStep(p, id, { type, next });
+}
+
+/** A participant added by name from a step: a team of the lists when the name is one, else a role of its own. */
+export function addActor(p: Process, name: string, teams: { id: string; name: string; contact?: string }[]): { process: Process; id: string } {
+  const clean = name.trim();
+  const team = teams.find((t) => t.name.toLowerCase() === clean.toLowerCase());
+  const taken = p.actors.map((a) => a.id);
+  const id = uniqueId(team ? team.id : slugify(clean) || "participant", taken);
+  const actor = team ? { id, name: team.name, ...(team.contact ? { description: team.contact } : {}), teamId: team.id } : { id, name: clean };
+  return { process: { ...p, actors: [...p.actors, actor] }, id };
+}
+
 export function renameStepId(p: Process, oldId: string, wanted: string): { process: Process; id: string } {
   const id = uniqueId(wanted, p.steps.filter((s) => s.id !== oldId).map((s) => s.id));
   if (id === oldId) return { process: p, id };
@@ -278,6 +380,24 @@ export function moveRequirement(s: Standard, id: string, dir: -1 | 1): Standard 
   const requirements = [...s.requirements];
   [requirements[i], requirements[j]] = [requirements[j], requirements[i]];
   return { ...s, requirements };
+}
+
+/** Moves a requirement before another one, or (`null`) to the end. Its id stays. */
+export function moveRequirementTo(s: Standard, id: string, beforeId: string | null): Standard {
+  const r = s.requirements.find((x) => x.id === id);
+  if (!r || beforeId === id || (beforeId !== null && !s.requirements.some((x) => x.id === beforeId))) return s;
+  const rest = s.requirements.filter((x) => x.id !== id);
+  const at = beforeId === null ? rest.length : rest.findIndex((x) => x.id === beforeId);
+  return { ...s, requirements: [...rest.slice(0, at), r, ...rest.slice(at)] };
+}
+
+/**
+ * Adds a requirement with the name typed, at the end. Its rule and reason are still the example
+ * texts (they say what to write), to be replaced before publishing.
+ */
+export function appendRequirement(s: Standard, title: string): { standard: Standard; id: string } {
+  const r = addRequirement(s);
+  return { standard: updateRequirement(r.standard, r.id, { title: title.trim() || EXAMPLE.newRequirement }), id: r.id };
 }
 
 /** A new standard. Its id is made from the name it is given and never changes afterwards. */

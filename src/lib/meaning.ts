@@ -336,5 +336,17 @@ export function meaningHelp(provider: Provider): string {
   return "puts first what comes closest to what you type, even when not every word is in it.";
 }
 
+/**
+ * The one short line under the search box: what the chosen way of searching does. The full
+ * explanation of all three is behind "How this works".
+ */
+export function modeLine(mode: SearchMode, provider: Provider): string {
+  if (mode === "words") return "Finds what contains every word you type.";
+  if (mode === "both") return "Shows what words and meaning find, the best of each first.";
+  if (provider === "builtin") return "Shows the closest first, even when none is really close.";
+  if (provider === "vertex") return "Finds what is about what you type, even in other words.";
+  return "Puts first what comes closest to what you type.";
+}
+
 /** The sentence near the count when the server sent only the closest of more that matched. */
 export const truncatedText = (n: number) => `Showing the ${n} closest. Add words or choose a filter to narrow it down.`;

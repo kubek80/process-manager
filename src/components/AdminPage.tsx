@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Activity, CalendarCheck, ChartColumn, Flag, KeyRound, List, Search, Server, ShieldCheck, Sparkles, Workflow } from "lucide-react";
+import { Activity, CalendarCheck, ChartColumn, Flag, KeyRound, List, Palette, Search, Server, ShieldCheck, Sparkles, Workflow } from "lucide-react";
 import type { AuditEntry, FeedbackByTarget, Process, Skill, Standard } from "../types";
 import { teamName, useCatalog } from "../lib/catalog";
 import { reviewInfo, statusOf } from "../lib/lifecycle";
@@ -11,6 +11,7 @@ import { UsersSection } from "./UsersSection";
 import { openCount } from "./Feedback";
 import { SKILL_KIND, SkillPanel } from "./SkillPanel";
 import { StatisticsSection } from "./StatisticsPage";
+import { ThemeSection } from "./ThemeSection";
 import { LoadError, Loading } from "./ui";
 
 export { ROLES } from "../lib/users";
@@ -22,6 +23,7 @@ const SECTIONS: { id: AdminSection; label: string; icon: typeof List; admin?: bo
   { id: "health", label: "Health", icon: CalendarCheck, hint: "Reviews due and open feedback" },
   { id: "activity", label: "Activity", icon: Activity, admin: true, hint: "Who changed what" },
   { id: "statistics", label: "Statistics", icon: ChartColumn, admin: true, hint: "How much each process and standard is used" },
+  { id: "theming", label: "Theming", icon: Palette, admin: true, hint: "The name, logo and colours everyone sees" },
   { id: "system", label: "System", icon: Server, admin: true, hint: "How this installation is set up" },
 ];
 
@@ -139,6 +141,7 @@ const ACTION: Record<string, string> = {
   "feedback.delete": "deleted feedback on the",
   "content.convert": "brought stored content up to date for this version:",
   "request.create": "asked for something new:", "request.state": "changed the state of", "request.delete": "removed",
+  "theme.change": "changed the look of the portal",
 };
 
 function ActivitySection() {
@@ -227,6 +230,7 @@ export function AdminPage({ section, processes, standards, feedback }: {
         {current.id === "health" && <HealthSection processes={processes} standards={standards} feedback={feedback} />}
         {current.id === "activity" && <ActivitySection />}
         {current.id === "statistics" && <StatisticsSection />}
+        {current.id === "theming" && <ThemeSection />}
         {current.id === "system" && <SystemSection />}
       </main>
     </div>

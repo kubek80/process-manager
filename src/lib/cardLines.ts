@@ -80,3 +80,39 @@ export function cardLines(f: CardFacts): CardLine[] {
   if (f.mayEdit) add("review", "Review", reviewLine(doc, f.today), true);
   return out;
 }
+
+/**
+ * Where each line goes on the card: what to compare first (`key`: how binding it is, how long it
+ * takes, how much of it is the reader's), who looks after it and where it applies (`who`), and
+ * what an editor must act on (`attention`, shown as a mark at the top). Each group keeps the fixed
+ * order of `cardLines`.
+ */
+export type CardGroup = "key" | "who" | "attention";
+const GROUP: Record<string, CardGroup> = {
+  rigour: "key", lead: "key", steps: "key", rules: "key", usedBy: "key",
+  owner: "who", platform: "who", practice: "who", environments: "who", languages: "who",
+};
+export const groupOf = (l: CardLine): CardGroup => (l.warn ? "attention" : GROUP[l.key] ?? "who");
+export function cardGroups(lines: CardLine[]): Record<CardGroup, CardLine[]> {
+  const out: Record<CardGroup, CardLine[]> = { key: [], who: [], attention: [] };
+  for (const l of lines) out[groupOf(l)].push(l);
+  return out;
+}
+
+/** The parts of a rigour mark, strongest first: for a process its one rigour, for a standard how many requirements have each. */
+export interface RigourPart { rigour: Rigour; n: number }
+export function rigourParts(rigour: Partial<Record<Rigour, number>>): RigourPart[] {
+  return (["mandatory", "recommended", "optional"] as Rigour[]).filter((r) => (rigour[r] ?? 0) > 0).map((r) => ({ rigour: r, n: rigour[r]! }));
+}
+
+/** The short text of a key fact on the card: "5 of 10 steps are yours", "3 of 5 requirements apply". */
+export function shortFact(l: CardLine, kind: TargetKind): string {
+  if (l.key === "steps") return l.value.replace(/ are yours$/, " steps are yours");
+  if (l.key === "rules" && kind === "standard") {
+    const m = /^(\d+) of (\d+) apply/.exec(l.value);
+    if (m) return `${m[1]} of ${m[2]} requirements apply`;
+    return `${l.value} ${l.value === "1" ? "requirement" : "requirements"}`;
+  }
+  if (l.key === "usedBy") return `Used by ${l.value}`;
+  return l.value;
+}
