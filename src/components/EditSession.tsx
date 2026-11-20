@@ -12,7 +12,7 @@ import {
   ApiError, deleteWorkingDraft, go, guardLeaving, offerSaving, loadVersion, loadWorkingDraft, publishWorkingDraft, putWorkingDraft, type WorkingDraft,
 } from "../lib/store";
 import type { AiSpec } from "./AiDialog";
-import { BehindBanner, ChangeList, ConflictDialog, HistoryDialog, savedWhen } from "./Editing";
+import { BehindBanner, ChangeList, ConflictDialog, EditingBoundary, HistoryDialog, savedWhen } from "./Editing";
 import { type BarAction, type MenuItem, type Panel, PublishDialog } from "./EditFrame";
 import { useBelongsWarning } from "./Governance";
 import { confirmDialog, LoadError, Loading, Modal, notify } from "./ui";
@@ -458,7 +458,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
           <button className="btn small" onClick={() => d.raiseConflict({ exists: true, version: working.revision, updatedBy: working.updatedBy, updatedByName: working.updatedByName, updatedAt: working.updatedAt })}>Compare and decide</button>
         </div>
       )}
-      {!unpublished && working && !rebaseTo.current && baseBehindSentence(working.base, version) && (
+      {!unpublished && !isGone && working && !rebaseTo.current && baseBehindSentence(working.base, version) && (
         <div className="check info banner">
           <History size={16} /><span>{baseBehindSentence(working.base, version)}</span>
         </div>
@@ -466,7 +466,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
       {losing && <div className="check warn banner" role="alert"><TriangleAlert size={16} /><span>{losing}</span></div>}
     </>
   );
-  const hasBanners = (unpublished && d.behind && d.dirty && !d.conflict) || (!unpublished && d.behind && d.dirty && !!working) || (!!working && !rebaseTo.current && !!baseBehindSentence(working.base, version)) || !!losing;
+  const hasBanners = (unpublished && d.behind && d.dirty && !d.conflict) || (!unpublished && d.behind && d.dirty && !!working) || (!isGone && !!working && !rebaseTo.current && !!baseBehindSentence(working.base, version)) || !!losing;
 
   const replaceable = o.others.filter((x) => x.id !== id && x.status !== "draft" && x.status !== "deprecated");
   const dialogs = (
@@ -476,7 +476,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
           changes={unpublished ? [] : publishLines(kind, stored, d.clean, catalog)}
           onPublish={(note) => publish(note)} onClose={() => setDialog(null)} />
       )}
-      {dialog === "versions" && <HistoryDialog<T> kind={kind} id={id} title={stored.title} onClose={() => setDialog(null)}
+      {dialog === "versions" && <HistoryDialog<T> kind={kind} id={id} title={stored.title} onClose={() => setDialog(null)} draftKept={!unpublished}
         onRestore={(doc, v) => { d.change(keepStatus({ ...doc, id })); setDialog(null); notify.info(`Version ${v} is now in your draft. Save the draft or publish it to keep it; Undo takes it back.`); }} />}
       {dialog === "ai" && (
         <Suspense fallback={null}>
@@ -505,7 +505,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
           } catch (e) { notify.error("Their version could not be loaded.", e); }
         }} />}
       <ConflictDialog d={d} kind={kind} id={id} noun={`this ${noun}`} blocked={rightsBlock || jsonBlock || undefined}
-        onRestore={() => { markGone(); saveDraft(); }} wasPublished={!unpublished}
+        onRestore={() => { markGone(); saveDraft(); }} wasPublished={!unpublished} startedFrom={startBase.current}
         theirs={unpublished ? undefined : async () => (await loadWorkingDraft<T>(kind, id))?.doc} />
     </>
   );
@@ -519,7 +519,9 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
     </Suspense>
   ) : null;
 
-  return <>{children({
+  const back = () => go(kind === "process" ? { page: "process", id, tab: "flow" } : { page: "standard", id, tab: "doc" });
+  // a fault while showing the screen keeps the work: the draft lives here, above the boundary
+  return <EditingBoundary resetKey={d.draft} noun={noun} onUndo={d.canUndo ? d.undo : undefined} onSave={d.dirty ? saveDraft : undefined} onBack={back}>{children({
     d, draftKind, drawable, working, issues, json, jsonView, panel, setPanel, dialogs, focus, reveal,
     frame: {
       state, unsaved,
@@ -528,7 +530,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
       onNotice: () => setNotice(null),
       fixBefore: (i) => (unpublished && !isExampleIssue(i) ? "saving" : "publishing"),
       undo: { canUndo: d.canUndo, canRedo: d.canRedo, undo: d.undo, redo: d.redo, undoTitle: undoWhat ? `Undo: ${undoWhat.charAt(0).toLowerCase()}${undoWhat.slice(1)} (Ctrl+Z)` : undefined },
-      onBack: () => go(kind === "process" ? { page: "process", id, tab: "flow" } : { page: "standard", id, tab: "doc" }),
+      onBack: back,
       discard,
       save: { label: "Save draft", run: saveDraft, blocked: saveBlocked, busy: d.saving },
       publish: {
@@ -540,7 +542,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
       more,
       banners: hasBanners ? banners : undefined,
     },
-  })}</>;
+  })}</EditingBoundary>;
 }
 
 /** "Retire…": readers keep finding it, marked as retired, pointing to what replaces it. */

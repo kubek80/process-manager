@@ -220,7 +220,7 @@
 .pager-pages { display: flex; align-items: center; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .pager-num, .pager-step { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 36px; height: 36px; padding: 0 10px; border-radius: 9px; border: 1px solid transparent; color: var(--text-2); font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .pager-num:hover, .pager-step:hover:not(:disabled) { background: var(--surface-2); border-color: var(--line); color: var(--text); }
-.pager-num.on { background: var(--accent-fill, var(--accent)); border-color: transparent; color: var(--accent-ink); }
+.pager-num.on { background: var(--seg-on, var(--surface)); border-color: var(--seg-on-line, var(--line-strong)); color: var(--accent); font-weight: 700; }
 .pager-step { border-color: var(--line-strong); background: var(--surface); }
 .pager-step:disabled { opacity: .45; }
 .pager-gap { min-width: 20px; text-align: center; color: var(--text-3); }

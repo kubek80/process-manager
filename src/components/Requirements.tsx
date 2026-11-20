@@ -31,7 +31,7 @@ export function RequirementCard({ r, standard, processes, applies, flags, select
   if (!applies) {
     return (
       <li id={`req-${r.id}`} className="req na">
-        <span className="req-id">{r.id}</span><span className="req-title">{r.title}</span>
+        <span className="req-title">{r.title}</span><span className="req-id">{r.id}</span>
         <span className="req-na">Does not apply to your application</span>
       </li>
     );
@@ -39,9 +39,10 @@ export function RequirementCard({ r, standard, processes, applies, flags, select
   return (
     <li id={`req-${r.id}`} className={`req ${r.level} ${selected ? "selected" : ""} ${onSelect ? "selectable" : ""}`} onClick={onSelect}>
       <header className="req-head">
-        <span className="req-id">{r.id}</span>
         <LevelMark level={r.level} title={LEVEL[r.level].hint} className="req-level" />
         <h3 className="req-title">{onSelect ? <button className="req-select" aria-pressed={selected} onClick={(e) => { e.stopPropagation(); onSelect(); }}>{r.title || "(no name yet)"}</button> : r.title}</h3>
+        {/* the code after the name, quietly: people quote it in reviews and search by it */}
+        <span className="req-id">{r.id}</span>
         <span className="spacer" />
         {onReport
           ? <button className={`report ${flags ? "has" : ""}`} onClick={onReport} title={flags ? `${flags} open feedback` : "Something wrong or unclear? Tell us"}

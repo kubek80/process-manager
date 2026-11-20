@@ -7,6 +7,7 @@ import { canEdit, useMe, usePerms } from "../lib/session";
 import { agoText, mostViewed, recentlyUpdated, type MetaByKind } from "../lib/sorting";
 import { rememberedMode } from "../lib/meaning";
 import { go, href } from "../lib/store";
+import { formatDate } from "../lib/dates";
 import { NO_CATEGORY_LABEL, search, type FilterKey, type Result } from "../lib/search";
 import { SearchBox } from "./SearchPage";
 import { DocCard, docHref } from "./DocCard";
@@ -123,7 +124,7 @@ export function HomePage({ processes, standards, feedback, meta }: {
                   <ol className="home-rank">
                     {recent.map(({ item: r, at }) => (
                       <ShelfRow key={`${r.kind}:${r.doc.id}`} r={r} sub={subOf(r, catalog)}
-                        figure={<time dateTime={at} title={at.slice(0, 10)}>{agoText(at, now)}</time>} />
+                        figure={<time dateTime={at} title={formatDate(at)}>{agoText(at, now)}</time>} />
                     ))}
                   </ol>
                 </section>

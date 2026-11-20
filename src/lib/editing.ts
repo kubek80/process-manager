@@ -1,6 +1,7 @@
 import type { Catalog, Issue, Level, Process, Standard, Status, StepType, TargetKind } from "../types";
 import { cap, compare, describeChange, fieldName, itemWords, type Change, type FieldContext } from "./diff";
 import { EXAMPLE } from "./edit";
+import { formatDateTime } from "./dates";
 
 /**
  * The editing screen, as plain functions: which kind of draft a document has, what its state is
@@ -258,10 +259,10 @@ export function withoutEarlySuggestions(kind: TargetKind, doc: Process | Standar
 /** Whose field a checker path is about: "steps[2].title" is a step's, "requirements[0].title" a requirement's. */
 export function pathContext(path: string, kind?: TargetKind): FieldContext | undefined {
   const first = path.match(/^[A-Za-z$]+/)?.[0];
-  if (first === "steps") return /^steps\[\d+\]\./.test(path) ? "step" : kind;
-  if (first === "requirements") return /^requirements\[\d+\]\./.test(path) ? "requirement" : kind;
-  if (first === "actors" && /^actors\[\d+\]\./.test(path)) return "participant";
-  if (first === "prerequisites" && /^prerequisites\[\d+\]\./.test(path)) return "prerequisite";
+  if (first === "steps") return /^steps\[\d+\]/.test(path) ? "step" : kind;
+  if (first === "requirements") return /^requirements\[\d+\]/.test(path) ? "requirement" : kind;
+  if (first === "actors" && /^actors\[\d+\]/.test(path)) return "participant";
+  if (first === "prerequisites" && /^prerequisites\[\d+\]/.test(path)) return "prerequisite";
   return kind;
 }
 
@@ -448,17 +449,41 @@ export function savedByText(v: { savedBy: string; savedByName?: string }): strin
  * made them reads "You have unpublished changes (saved 02:09)"; other editors are told whose
  * they are. `when` is the time in words for others ("today at 02:09"), `clock` the short one.
  */
-export function unpublishedLine(draft: { updatedAt: string; updatedBy: string; updatedByName?: string }, myEmail: string | undefined, now = new Date()): string {
+export function unpublishedLine(draft: { updatedAt: string; updatedBy: string; updatedByName?: string }, myEmail: string | undefined): string {
   const who = author(draft, myEmail);
-  const d = new Date(draft.updatedAt);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const known = !Number.isNaN(d.getTime());
-  const day = known ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` : "";
-  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  const time = known ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : "";
-  if (who.you) return `You have unpublished changes${known ? ` (saved ${day === today ? time : `${day} ${time}`})` : ""}. Readers see the published version.`;
+  const at = formatDateTime(draft.updatedAt);
+  if (who.you) return `You have unpublished changes${at ? ` (saved ${at})` : ""}. Readers see the published version.`;
   const name = draft.updatedByName || draft.updatedBy || "an editor";
-  return `There are unpublished changes by ${name}${known ? ` from ${day === today ? "today" : `${day}`} at ${time}` : ""}. Readers see the published version.`;
+  return `There are unpublished changes by ${name}${at ? `, saved ${at}` : ""}. Readers see the published version.`;
+}
+
+/** "at 2026-11-20 14:02": when something was saved, for a sentence. "" when not known. */
+export function savedWhen(iso?: string): string {
+  const at = formatDateTime(iso);
+  return at ? `at ${at}` : "";
+}
+
+/** The newest entry of the list of versions, as far as the sentences below need it. */
+type Latest = { version: number; deleted: boolean; savedBy: string; savedByName?: string; savedAt: string };
+
+/** "Alex Editor deleted it at 2026-11-20 09:12, while you were editing." - by name where the versions say who. */
+export function deletedSentence(latest: Latest | undefined, myEmail?: string): string {
+  if (!latest?.deleted) return "Somebody else deleted it while you were editing.";
+  const who = author({ updatedBy: latest.savedBy, updatedByName: latest.savedByName }, myEmail);
+  const at = savedWhen(latest.savedAt);
+  return `${who.you ? "You deleted it in another window" : `${who.name} deleted it`}${at ? ` ${at}` : ""}, while you were editing.`;
+}
+
+/**
+ * Why the shared draft is gone: published as a new version (by whom, as which version), or
+ * discarded. Without a newer version than the one the changes started from, it was discarded.
+ */
+export function goneDraftSentence(latest: Latest | undefined, startedFrom: number | undefined, myEmail?: string): string {
+  if (!latest || latest.deleted || !startedFrom) return "The shared draft was published or discarded, perhaps in another window, while you were editing.";
+  if (latest.version <= startedFrom) return "The shared draft was discarded, perhaps in another window, while you were editing.";
+  const who = author({ updatedBy: latest.savedBy, updatedByName: latest.savedByName }, myEmail);
+  const at = savedWhen(latest.savedAt);
+  return `${who.you ? "You" : who.name} published it as version ${latest.version}${at ? ` ${at}` : ""}${who.you ? " in another window" : ""}, while you were editing.`;
 }
 
 /**

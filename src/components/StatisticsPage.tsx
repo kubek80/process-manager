@@ -219,7 +219,7 @@ function TrendChart({ weeks, period }: { weeks: StatWeek[]; period: string }) {
         })}
         <line className="stat-baseline" x1={left} x2={width - right} y1={top + plotH} y2={top + plotH} />
       </svg>
-      {weeks.some(partialWeek) && <p className="muted small stat-partial-note"><span className="stat-swatch partial" aria-hidden="true" />Lighter bars: weeks only partly inside the period (the first or the last).</p>}
+      {weeks.some(partialWeek) && <p className="muted small stat-partial-note"><span className="stat-swatch partial" aria-hidden="true" />Faint bars with a dashed edge: weeks only partly inside the period (the first or the last).</p>}
       <table className="stat-sr-only">
         <caption>Views per week</caption>
         <thead><tr><th>Week</th><th>Views</th><th>People</th><th>Skill downloads</th></tr></thead>

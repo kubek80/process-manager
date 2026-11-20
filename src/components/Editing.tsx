@@ -1,28 +1,21 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Check, GitCompare, History, PencilLine, Redo2, RotateCcw, Save, TriangleAlert, Undo2, Wrench } from "lucide-react";
 import type { DocMeta, DocVersion, Status, TargetKind } from "../types";
 import type { Draft } from "../lib/draft";
 import { compare, describeChange, summarize, type Change } from "../lib/diff";
 import { ApiError, loadHistory, loadVersion } from "../lib/store";
 import { useCatalog } from "../lib/catalog";
-import { author, savedByText, unpublishedLine } from "../lib/editing";
+import { author, deletedSentence, goneDraftSentence, savedByText, savedWhen, unpublishedLine } from "../lib/editing";
+import { formatDateTime } from "../lib/dates";
+import { cap } from "../lib/diff";
 import { useMe } from "../lib/session";
 import { LoadError, Modal } from "./ui";
 
 /** Shared by the pages that edit something: processes, standards and the lists. */
 
-const when = (iso?: string) => (iso ? iso.slice(0, 16).replace("T", " ") : "");
+const when = formatDateTime;
 
-/** "today at 14:02", "on 2026-11-17 at 09:30": when something was saved, in words. */
-export function savedWhen(iso?: string, now = new Date()): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  return `${day === today ? "today" : `on ${day}`} at ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+export { savedWhen };
 
 /**
  * On the reader's page: a never-published draft is marked as one, and its editors are told,
@@ -134,7 +127,7 @@ export function ChangeList({ changes }: { changes: Change[] }) {
  * Somebody else saved while this person was editing. Nothing is overwritten without a
  * decision: look at what they changed, then continue from their version or keep your own.
  */
-export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadTheirs, onRestore, wasPublished }: {
+export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadTheirs, onRestore, wasPublished, startedFrom }: {
   d: Draft<T>; kind: TargetKind | "catalog"; id: string; noun: string;
   /** Why saving is not possible right now, e.g. the checker found problems. */
   blocked?: string;
@@ -150,10 +143,13 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
   onRestore?: () => void;
   /** It was published before it was deleted: it comes back as a draft readers do not see. */
   wasPublished?: boolean;
+  /** The published version the unpublished changes were started from (to tell a publish from a discard). */
+  startedFrom?: number;
 }) {
   const c = d.conflict;
   const { catalog } = useCatalog();
-  const who = author(c ?? undefined, useMe().user?.email);
+  const myEmail = useMe().user?.email;
+  const who = author(c ?? undefined, myEmail);
   const [theirs, setTheirs] = useState<Change[] | "failed" | null>(null);
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -164,12 +160,14 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
     (loadTheirs ? loadTheirs() : loadVersion<unknown>(kind, id, c.version)).then((doc) => { if (live) setTheirs(compare(kind, d.saved, doc, catalog)); }, () => { if (live) setTheirs("failed"); });
     return () => { live = false; };
   }, [c?.version, c?.exists, kind, id, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  // who deleted it, or who published the shared draft, is in the list of versions
+  const latest = useLatestVersion(kind, id, !!c && !c.exists);
   if (!c) return null;
   const run = (fn: () => Promise<unknown>) => async () => { setBusy(true); try { await fn(); } finally { setBusy(false); } };
 
   if (!c.exists && c.draft) {
     return (
-      <Modal title="The unpublished changes are gone" subtitle="The shared draft was published or discarded, perhaps in another window, while you were editing." onClose={d.dismissConflict}
+      <Modal title="The unpublished changes are gone" subtitle={goneDraftSentence(latest, startedFrom, myEmail)} onClose={d.dismissConflict}
         footer={<><span className="spacer" /><button className="btn" onClick={d.dismissConflict}>Keep editing</button>
           <button className="btn primary" disabled={busy} onClick={run(() => d.keepMine())}>Save mine as a new draft</button></>}>
         <p>Your changes are still here and not saved. Saving starts a new draft with your changes. If something was published meanwhile, you are shown what changed and asked before yours is published over it.</p>
@@ -198,7 +196,7 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
   }
   if (!c.exists) {
     return (
-      <Modal title={`${noun[0].toUpperCase()}${noun.slice(1)} was deleted`} subtitle="Somebody else deleted it while you were editing." onClose={d.dismissConflict}
+      <Modal title={`${cap(noun)} was deleted`} subtitle={deletedSentence(latest, myEmail)} onClose={d.dismissConflict}
         footer={<><span className="spacer" /><button className="btn" onClick={d.dismissConflict}>Keep editing</button>
           <button className="btn primary" disabled={busy} onClick={onRestore ? () => { d.dismissConflict(); onRestore(); } : run(() => d.keepMine("Restored after it was deleted"))}>Save mine and bring it back</button></>}>
         <p>Your changes are still here. Saving brings {noun} back with your version; ask whoever deleted it first if you are not sure.</p>
@@ -229,12 +227,74 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
   );
 }
 
+/** The newest entry of the list of versions, once `enabled` (undefined while unknown or not loaded). */
+function useLatestVersion(kind: TargetKind | "catalog", id: string, enabled: boolean): DocVersion | undefined {
+  const [latest, setLatest] = useState<DocVersion | undefined>();
+  useEffect(() => {
+    setLatest(undefined);
+    if (!enabled || kind === "catalog") return;
+    let live = true;
+    loadHistory(kind, id).then((list) => { if (live) setLatest(list[0]); }, () => { /* said without a name */ });
+    return () => { live = false; };
+  }, [kind, id, enabled]);
+  return latest;
+}
+
+/**
+ * When a part of the editing screen fails to show (a fault in the app, not in the person's work),
+ * the work is not thrown away: the draft lives above this boundary. It offers Undo of the last
+ * change (which usually brings the screen back), trying again, and saving the draft. It starts
+ * afresh by itself whenever the draft changes.
+ */
+export class EditingBoundary extends Component<{
+  children: ReactNode; resetKey: unknown; noun: string;
+  onUndo?: () => void; onSave?: () => Promise<boolean>; onBack: () => void;
+}, { error: Error | null; key: unknown; saved: "" | "saving" | "saved" | "failed" }> {
+  state = { error: null as Error | null, key: this.props.resetKey, saved: "" as "" | "saving" | "saved" | "failed" };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  static getDerivedStateFromProps(props: { resetKey: unknown }, state: { key: unknown }) {
+    return props.resetKey !== state.key ? { error: null, key: props.resetKey, saved: "" } : null;
+  }
+  componentDidCatch(error: Error) { console.error(error); }
+  render() {
+    const { error, saved } = this.state;
+    if (!error) return this.props.children;
+    const { noun, onUndo, onSave, onBack } = this.props;
+    const save = async () => {
+      if (!onSave) return;
+      this.setState({ saved: "saving" });
+      const ok = await onSave().catch(() => false);
+      this.setState({ saved: ok ? "saved" : "failed" });
+    };
+    return (
+      <div className="edit-screen edit-failed" role="alert">
+        <div className="edit-failed-box">
+          <TriangleAlert size={22} aria-hidden="true" />
+          <h1>The editing screen could not show this</h1>
+          <p>This is a fault in the portal, not in your work. <b>Your changes are still here.</b> Undoing the last change usually brings the screen back; you can also try again or save the draft first.</p>
+          <div className="edit-failed-actions">
+            {onUndo && <button className="btn primary" onClick={onUndo}><Undo2 size={15} />Undo the last change</button>}
+            <button className={`btn ${onUndo ? "" : "primary"}`} onClick={() => this.setState({ error: null, saved: "" })}><RotateCcw size={15} />Try again</button>
+            {onSave && saved !== "saved" && <button className="btn" disabled={saved === "saving"} onClick={save}><Save size={15} />{saved === "saving" ? "Saving…" : "Save draft"}</button>}
+            <button className="btn ghost" onClick={onBack}><ArrowLeft size={15} />Back to reading this {noun}</button>
+          </div>
+          {saved === "saved" && <p className="check good"><Check size={15} />Your draft is saved.</p>}
+          {saved === "failed" && <p className="check warn"><TriangleAlert size={15} />The draft could not be saved yet. Undo the last change or try again, then save.</p>}
+          <details className="edit-failed-detail"><summary>What went wrong, for the people who run the portal</summary><code>{error.message}</code></details>
+        </div>
+      </div>
+    );
+  }
+}
+
 /**
  * Every save is a version. The list shows who saved what and when, with the note they left;
  * each version can be compared with the one before it, and editors can bring one back.
  */
-export function HistoryDialog<T>({ kind, id, title, onRestore, onClose }: {
+export function HistoryDialog<T>({ kind, id, title, onRestore, onClose, draftKept }: {
   kind: TargetKind; id: string; title: string; onRestore?: (doc: T, version: number) => void; onClose: () => void;
+  /** The changes are kept in a working draft, which is not one of the versions: say so. */
+  draftKept?: boolean;
 }) {
   const [versions, setVersions] = useState<DocVersion[] | null>(null);
   const [error, setError] = useState("");
@@ -276,7 +336,9 @@ export function HistoryDialog<T>({ kind, id, title, onRestore, onClose }: {
   };
   return (
     <Modal wide title={`Versions of “${title}”`}
-      subtitle={onRestore ? "Every save is a version. Restoring one puts it into your draft on this screen: nothing is kept until you save the draft, and readers see nothing until you publish." : "Every save is a version: who changed it, when, and what they said about it."}
+      subtitle={onRestore
+        ? `${draftKept ? "Every published version is listed here; your saved draft is not." : "Every save is a version."} Restoring one puts it into your draft on this screen: nothing is kept until you save the draft, and readers see nothing until you publish.`
+        : "Every save is a version: who changed it, when, and what they said about it."}
       onClose={onClose} footer={<><span className="spacer" /><button className="btn primary" onClick={onClose}>Close</button></>}>
       {error && (versions ? <div className="check bad">{error}</div> : <LoadError what="The versions could not be loaded." error={error} onRetry={load} />)}
       {!versions && !error && <p className="muted">Loading…</p>}

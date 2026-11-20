@@ -159,7 +159,7 @@ describe("what the Publish dialog lists", () => {
     short.summary = "Short now.";
     expect(publishLines("process", long, short)).toEqual(["Summary changed, now “Short now.”"]);
     expect(publishLines("process", short, long)).toEqual(["Summary changed"]);
-    expect(lines.find((l) => l.startsWith("Step “Approve it quickly” changed"))).toBe("Step “Approve it quickly” changed: name “Approve it” → “Approve it quickly”, instructions");
+    expect(lines.find((l) => l.startsWith("Step “Approve it quickly” changed"))).toBe("Step “Approve it quickly” changed: what happens “Approve it” → “Approve it quickly”, what to do");
   });
   it("leaves out the review dates the server keeps from the published version", () => {
     const a = base(), b = base();
@@ -177,8 +177,8 @@ describe("what the Publish dialog lists", () => {
     const lines = publishLines("process", a, b, catalog);
     expect(lines).toContain("Step “Ask for it” changed: who does it “You” → “Line manager”, tool nothing → “Azure portal”");
     const team = (id: string) => catalog.teams.find((t) => t.id === id)!.name;
-    expect(lines).toContain(`Owner changed from “${team("cloud-platform-team")}” to “${team("security")}”`);
-    expect(lines).toContain("Tiers: nothing → “Tier 0, Tier 1”");
+    expect(lines).toContain(`Owning team changed from “${team("cloud-platform-team")}” to “${team("security")}”`);
+    expect(lines).toContain("Application tiers: nothing → “Tier 0, Tier 1”");
     expect(lines.join(" ")).not.toMatch(/“(me|boss|security|tier-0|azure-portal)”/);
   });
   it("names a value by its list, and keeps one it does not know", () => {
@@ -257,17 +257,16 @@ describe("who saved a version, in the versions list", () => {
 });
 
 describe("the reader's line about unpublished changes", () => {
-  const now = new Date(2026, 10, 20, 15, 0);
   const at = new Date(2026, 10, 20, 2, 9).toISOString();
   const draft = { updatedAt: at, updatedBy: "alex@example.com", updatedByName: "Alex Editor" };
   it("tells the person who made them that they are theirs", () => {
-    expect(unpublishedLine(draft, "Alex@example.com", now)).toBe("You have unpublished changes (saved 02:09). Readers see the published version.");
-    expect(unpublishedLine({ ...draft, updatedAt: new Date(2026, 10, 17, 9, 30).toISOString() }, "alex@example.com", now))
+    expect(unpublishedLine(draft, "Alex@example.com")).toBe("You have unpublished changes (saved 2026-11-20 02:09). Readers see the published version.");
+    expect(unpublishedLine({ ...draft, updatedAt: new Date(2026, 10, 17, 9, 30).toISOString() }, "alex@example.com"))
       .toBe("You have unpublished changes (saved 2026-11-17 09:30). Readers see the published version.");
   });
   it("names the person to other editors", () => {
-    expect(unpublishedLine(draft, "jordan@example.com", now)).toBe("There are unpublished changes by Alex Editor from today at 02:09. Readers see the published version.");
-    expect(unpublishedLine({ ...draft, updatedByName: undefined }, undefined, now)).toBe("There are unpublished changes by alex@example.com from today at 02:09. Readers see the published version.");
+    expect(unpublishedLine(draft, "jordan@example.com")).toBe("There are unpublished changes by Alex Editor, saved 2026-11-20 02:09. Readers see the published version.");
+    expect(unpublishedLine({ ...draft, updatedByName: undefined }, undefined)).toBe("There are unpublished changes by alex@example.com, saved 2026-11-20 02:09. Readers see the published version.");
   });
 });
 
@@ -302,8 +301,8 @@ describe("what Undo and Redo say", () => {
   });
   it("for a changed step, a detail and a value", () => {
     const renamed = { ...p, steps: p.steps.map((s) => (s.id === "ask" ? { ...s, instructions: ["Another line."] } : s)) };
-    expect(steppedMessage("undo", main(renamed, p))).toBe("Step “Ask for it” is as it was: instructions.");
-    expect(steppedMessage("redo", main(p, renamed))).toBe("Step “Ask for it” is changed again: instructions.");
+    expect(steppedMessage("undo", main(renamed, p))).toBe("Step “Ask for it” is as it was: what to do.");
+    expect(steppedMessage("redo", main(p, renamed))).toBe("Step “Ask for it” is changed again: what to do.");
     const platform = { ...p, platform: "gcp" };
     const name = catalog.platforms.find((x) => x.id === "gcp")?.name ?? "gcp";
     expect(steppedMessage("redo", main(p, platform))).toBe(`Platform is “${name}” again.`);

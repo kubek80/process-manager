@@ -19,7 +19,7 @@ describe("what changed between two versions of a process", () => {
     after.steps.find((s) => s.id === "done")!.next = [{ to: "tell" }];
     const lines = compareProcesses(base(), after).map(describeChange);
     expect(lines).toEqual([
-      "Step “Approve it” changed: who does it, duration",
+      "Step “Approve it” changed: who does it, typical time",
       "Step “Approved?” changed: what comes next",
       "Step “Check the result” changed: what comes next",
       "Step “Tell the team” added",
@@ -35,12 +35,12 @@ describe("what changed between two versions of a process", () => {
     after.prerequisites = [{ title: "A cost centre" }];
     [after.steps[3], after.steps[4]] = [after.steps[4], after.steps[3]];
     expect(compareProcesses(base(), after).map(describeChange)).toEqual([
-      "Title changed", "Tiers changed", "Before you start “A cost centre” added", "Order of the steps changed",
+      "Name changed", "Application tiers changed", "Before you start “A cost centre” added", "Order of the steps changed",
     ]);
     const back = compareProcesses(after, base()).map(describeChange);
     expect(back).toContain("Before you start “A cost centre” removed");
     const edited = { ...after, prerequisites: [{ title: "A cost centre", description: "Ask finance." }] };
-    expect(compareProcesses(after, edited).map(describeChange)).toEqual(["Before you start “A cost centre” changed"]);
+    expect(compareProcesses(after, edited).map(describeChange)).toEqual(["Before you start “A cost centre” changed: why it is needed"]);
     expect(summarize(compareProcesses(base(), after))).toBe("1 added, details changed");
   });
 
@@ -61,7 +61,7 @@ describe("what changed between two versions of a standard", () => {
     after.scope = "Everything we run.";
     expect(compareStandards(baseStandard(), after).map(describeChange)).toEqual([
       "Scope changed",
-      "Requirement “DEMO-01 First rule” changed: level, how to comply",
+      "Requirement “DEMO-01 First rule” changed: level, steps to comply",
       "Requirement “DEMO-03 Third rule” added",
       "Requirement “DEMO-02 Second rule” removed",
     ]);
