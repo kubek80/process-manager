@@ -351,6 +351,7 @@
   .preview-head h2 { font-size: 19px; }
   /* a blank process: the button under its words */
   .start-here li { flex-wrap: wrap; row-gap: 6px; }
+  .start-here li .start-text { flex: 1 1 calc(100% - 44px); }
   .start-here li .btn { margin-left: 40px; }
   .start-here li.done .btn { display: none; }
 }
