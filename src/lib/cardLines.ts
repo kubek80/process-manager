@@ -46,13 +46,36 @@ export function tiersText(doc: { tiers?: unknown }, catalog: Pick<Catalog, "tier
   return names(catalog.tiers, doc.tiers) || "All tiers";
 }
 
-/** "Overdue since 2026-03-01" and the like; "" when there is nothing to do yet. */
+/** How long the tiers in the corner of a card may be before they are counted instead. */
+export const TIERS_MAX = 16;
+/**
+ * The tiers for the corner of a card, on one line: the names while they are short ("Tier 0, Tier 1",
+ * "All tiers"), else how many ("3 tiers"); `full` is the whole list, for the tooltip and screen readers.
+ */
+export function tiersShort(doc: { tiers?: unknown }, catalog: Pick<Catalog, "tiers">): { short: string; full: string } {
+  const full = tiersText(doc, catalog);
+  const n = (Array.isArray(doc.tiers) ? doc.tiers : []).filter((x) => typeof x === "string" && x).length;
+  return { full, short: full.length <= TIERS_MAX || n < 2 ? full : `${n} tiers` };
+}
+
+/** "Overdue since 2026-03-01", "Due 2026-12-01", "First review due 2026-12-01"; "" when there is nothing to do yet. */
 export function reviewLine(doc: Process | Standard, today?: string, dates?: Dates): string {
   const r = reviewOf(doc, dates, today);
   if (r.state === "overdue") return r.dueAt ? `Overdue since ${r.dueAt}` : r.label;
-  if (r.state === "soon") return `Due ${r.dueAt}`;
+  if (r.state === "soon") return r.first ? `First review due ${r.dueAt}` : `Due ${r.dueAt}`;
   return "";
 }
+
+/**
+ * The words of the review mark on a card, the same as on the page: "Review due …", "First review
+ * due …", "Review overdue since …" (a line that is a sentence already, such as "Never reviewed", as it is).
+ */
+export function reviewMarkText(value: string): string {
+  if (/^(Overdue|Due) /.test(value)) return `Review ${value.charAt(0).toLowerCase()}${value.slice(1)}`;
+  return value;
+}
+/** Whether the review mark is a problem (overdue) rather than a warning (due soon). */
+export const reviewOverdue = (value: string) => !/^(Due|First review due) /.test(value);
 
 /** The lines of a card, in their fixed order. */
 export function cardLines(f: CardFacts): CardLine[] {

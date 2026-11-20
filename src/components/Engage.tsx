@@ -43,7 +43,7 @@ export function BookmarkButton({ kind, id, title = "", size = "card", className 
       title={on === undefined ? `${unknownHint(eng.failed)} Click to bookmark.` : on ? "Bookmarked: click to remove" : "Bookmark: find it again under Bookmarks"}
       onClick={(e) => { stop(e); void eng.toggleBookmark(kind, id); }}>
       <Icon size={15} aria-hidden="true" fill={on ? "currentColor" : "none"} />
-      {size === "page" && <span>{on ? "Bookmarked" : "Bookmark"}</span>}
+      {size === "page" && <span className="engage-label">{on ? "Bookmarked" : "Bookmark"}</span>}
     </button>
   );
 }
@@ -59,21 +59,26 @@ export function UpvoteButton({ kind, id, title = "", size = "card", className = 
       onClick={(e) => { stop(e); void eng.toggleUpvote(kind, id); }}>
       <ThumbsUp size={15} aria-hidden="true" fill={on ? "currentColor" : "none"} />
       {count !== undefined && <span className="engage-count">{count}</span>}
-      {size === "page" && <>{count !== undefined && " "}<span className="engage-word">{count === undefined ? "Upvote" : count === 1 ? "upvote" : "upvotes"}</span></>}
+      {size === "page" && <>{count !== undefined && " "}<span className="engage-word engage-label">{count === undefined ? "Upvote" : count === 1 ? "upvote" : "upvotes"}</span></>}
     </button>
   );
 }
 
-const times = (n: number) => (n === 1 ? "once" : `${n.toLocaleString("en-GB")} times`);
-const people = (n: number) => `${n.toLocaleString("en-GB")} ${n === 1 ? "person" : "people"}`;
+const count = (n: number, one: string, many: string) => `${n.toLocaleString("en-GB")} ${n === 1 ? one : many}`;
 
-/** The numbers of a process or standard, in words for everyone. `handled` is left out while it is not known. */
-export function engagementLines(c: Counts, open: number, handled?: number): string[] {
-  const lines: string[] = [];
-  lines.push(c.views ? `Viewed ${times(c.views)} by ${people(Math.max(1, c.people))}` : "Not viewed yet");
-  lines.push(c.downloads ? `Skill downloaded ${times(c.downloads)}` : "Skill not downloaded yet");
-  lines.push(open ? `${open} ${open === 1 ? "piece" : "pieces"} of feedback open` : "No feedback open");
-  if (handled !== undefined) lines.push(`${handled} ${handled === 1 ? "piece" : "pieces"} of feedback handled`);
+export type EngagementLine = { key: "views" | "downloads" | "open" | "handled"; text: string };
+
+/**
+ * The numbers of a process or standard, in words for everyone, as short as they can be: what is
+ * zero and says nothing ("not downloaded yet", "0 handled") is left out; only the views are always
+ * there. `handled` is left out while it is not known.
+ */
+export function engagementLines(c: Counts, open: number, handled?: number): EngagementLine[] {
+  const lines: EngagementLine[] = [];
+  lines.push({ key: "views", text: c.views ? `${count(c.views, "view", "views")} by ${count(Math.max(1, c.people), "person", "people")}` : "No views yet" });
+  if (c.downloads) lines.push({ key: "downloads", text: count(c.downloads, "skill download", "skill downloads") });
+  if (open) lines.push({ key: "open", text: `${count(open, "piece", "pieces")} of feedback open` });
+  if (handled) lines.push({ key: "handled", text: `${count(handled, "piece", "pieces")} of feedback handled` });
   return lines;
 }
 
@@ -101,23 +106,22 @@ export function DocEngagement({ kind, id, title, summary, open, resolvedHere, on
   useEffect(() => { if (signedIn) eng.recordView(kind, id); }, [kind, id, signedIn]); // eslint-disable-line react-hooks/exhaustive-deps
   const first = useRef(true);
   useEffect(() => { if (first.current) { first.current = false; return; } eng.reload(); }, [resolvedHere]); // eslint-disable-line react-hooks/exhaustive-deps
-  const openLine = open ? `${open} ${open === 1 ? "piece" : "pieces"} of feedback open` : "No feedback open";
-  const [views, downloads, , handledLine] = engagementLines(c, open, c.handled);
+  const lines = engagementLines(c, open, eng.known ? c.handled : undefined);
+  const icon = { views: Eye, downloads: Download, open: Flag, handled: CircleCheck };
   return (
     <div className="doc-engage" aria-label="Use and feedback" role="group">
       <ul className="engage-stats" aria-busy={!eng.ready}>
-        {eng.known ? <>
-          <li><Eye size={14} aria-hidden="true" />{views}</li>
-          <li><Download size={14} aria-hidden="true" />{downloads}</li>
-        </> : <li className="engage-unknown">{eng.failed ? "The numbers are not available right now." : <span aria-label="Loading the numbers">–</span>}</li>}
-        <li className={open ? "engage-open has" : "engage-open"}><Flag size={14} aria-hidden="true" />{openLine}</li>
-        {eng.known && <li className="engage-handled"><CircleCheck size={14} aria-hidden="true" />{handledLine}</li>}
+        {lines.filter((l) => eng.known || l.key === "open").map((l) => {
+          const Icon = icon[l.key];
+          return <li key={l.key} className={`engage-${l.key} ${l.key === "open" ? "has" : ""}`.trim()}><Icon size={14} aria-hidden="true" />{l.text}</li>;
+        })}
+        {!eng.known && <li className="engage-unknown">{eng.failed ? "The numbers are not available right now." : <span aria-label="Loading the numbers">–</span>}</li>}
       </ul>
       <div className="engage-actions">
         <button type="button" className="btn small accent-soft give-feedback" onClick={onFeedback}><MessageSquarePlus size={15} />Give feedback</button>
         <UpvoteButton kind={kind} id={id} title={title} size="page" />
         <BookmarkButton kind={kind} id={id} title={title} size="page" />
-        <button type="button" className="btn small share-btn" onClick={() => setSharing(true)} aria-haspopup="dialog"><Share2 size={15} />Share</button>
+        <button type="button" className="btn small share-btn" onClick={() => setSharing(true)} aria-haspopup="dialog"><Share2 size={15} /><span className="engage-label">Share</span></button>
       </div>
       {sharing && <ShareDialog info={{ kind, id, title, summary }} onClose={() => setSharing(false)} />}
     </div>

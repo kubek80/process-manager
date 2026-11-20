@@ -102,7 +102,8 @@ describe("pass 2: the words of levels", () => {
     expect(rigourOptionLabel("mandatory", "process")).toBe("Mandatory");
     expect(rigourOptionLabel("recommended", "standard")).toBe("Should");
     expect(rigourOptionLabel("optional", "any")).toBe("Optional or may");
-    expect(rigourFilterName("standard")).toBe("Level");
+    expect(rigourFilterName("standard")).toBe("Rigour");
+    expect(rigourFilterName("process")).toBe("Rigour");
     expect(rigourFilterName("any")).toBe("Rigour");
   });
 });

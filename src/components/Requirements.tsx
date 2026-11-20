@@ -1,10 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Bot, Check, ChevronDown, ChevronRight, Eye, Flag, Plus, Trash2, Workflow, X } from "lucide-react";
+import { Bot, Check, ChevronDown, ChevronRight, Eye, Flag, Plus, Workflow, X } from "lucide-react";
 import type { Feedback, Issue, Level, Process, Requirement, Severity, Standard, VerificationMethod } from "../types";
 import { go } from "../lib/store";
 import { standardTarget } from "./Feedback";
 import { DimTags, DimsEditor } from "./Governance";
-import { EditSection, FieldsHead, ItemFeedback, ItemIssues, selectExample } from "./EditFrame";
+import { DeleteButton, EditSection, FieldsHead, ItemFeedback, ItemIssues, selectExample } from "./EditFrame";
 import { EXAMPLE } from "../lib/edit";
 import { Field } from "./ui";
 import { LevelBars, LevelMark } from "./marks";
@@ -189,7 +189,7 @@ export function RequirementFields({ r, standard, processes, feedback, issues, on
               {index !== standard.requirements.length - 1 && <option value="__end">To the end</option>}
             </select>
           )}
-          <button className="icon-btn danger" title="Delete requirement" aria-label="Delete requirement" disabled={standard.requirements.length === 1} onClick={onDelete}><Trash2 size={16} /></button>
+          <DeleteButton label="Delete requirement" disabled={standard.requirements.length === 1} onDelete={onDelete} />
           </span>
         </>} />
       <ItemIssues issues={issues} />

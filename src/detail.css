@@ -9,40 +9,61 @@
 .engage-count { font-variant-numeric: tabular-nums; }
 .engage-word { font-weight: 500; }
 
-/* the numbers and actions near the top of a process or standard: one compact line */
-.doc-engage { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
-.engage-stats { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; color: var(--text-2); font-size: 13px; }
+/* the numbers and actions of a process or standard: in the head's last line, beside the dates */
+.doc-engage { display: contents; }
+.engage-stats { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; color: var(--text-3); font-size: 12.5px; }
 .engage-stats li { display: inline-flex; align-items: center; gap: 6px; }
 .engage-stats svg { color: var(--text-3); flex: none; }
 .engage-stats .engage-open.has { color: var(--warn); font-weight: 600; }
 .engage-stats .engage-open.has svg { color: var(--warn); }
 .engage-stats .engage-unknown { color: var(--text-3); }
 .engage-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-@media (max-width: 520px) { .engage-actions { width: 100%; } }
+/* on a phone the actions stay on one line: Upvote, Bookmark and Share keep only their icon (and their name for screen readers) */
+@media (max-width: 520px) {
+  .engage-actions { width: 100%; flex-wrap: nowrap; margin-left: 0; }
+  .engage-actions .give-feedback { flex: 1 1 auto; justify-content: center; }
+  .engage-actions .engage-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .engage-actions .btn, .engage-actions .engage-btn { min-width: 44px; justify-content: center; }
+}
+@media (pointer: coarse) { .engage-actions .btn, .engage-actions .engage-btn { height: 44px; min-width: 44px; } }
 
 /* less room above the map: the tabs closer to the page head and to the map */
-.process-page > .tabs-row { margin: 18px 0 14px; }
+.process-page > .tabs-row { margin: 12px 0 10px; }
 
-/* "Before you start" on the map: open unless closed, one panel above the map */
-.before-panel { margin: 0 0 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-1); }
-.before-toggle { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; width: 100%; padding: 8px 14px; border-radius: 10px; color: var(--text-2); font-size: 13.5px; text-align: left; }
+/* "Before you start", the same compact panel on the map and the checklist: what is needed in one
+   row of small items, then the faster ways and the standards in one line of chips */
+.before-panel { margin: 0 0 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-1); }
+.before-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 24px; padding: 4px 14px 4px 4px; }
+.before-title { padding: 8px 10px; color: var(--text); font-size: 15px; font-weight: 650; }
+.before-toggle { display: inline-flex; align-items: center; gap: 6px 12px; min-height: 40px; padding: 6px 10px; border-radius: 10px; color: var(--text-2); font-size: 13.5px; text-align: left; }
 .before-toggle:hover { background: var(--surface-2); }
 .before-toggle > svg { color: var(--text-3); flex: none; }
 .before-toggle b { color: var(--text); font-size: 15px; font-weight: 650; }
 .before-toggle span { display: inline-flex; align-items: center; }
-.before-toggle span + span::before { content: "·"; margin-right: 12px; color: var(--text-3); }
 .before-toggle .all-ready { color: var(--good); font-weight: 600; }
-.before-toggle em { margin-left: auto; font-style: normal; font-weight: 600; color: var(--accent); }
-.before-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); gap: 10px 22px; padding: 2px 14px 12px; }
-.before-body.no-pre { grid-template-columns: minmax(0, 1fr); }
-@media (max-width: 900px) { .before-body { grid-template-columns: minmax(0, 1fr); } }
-.prereq-grid.compact { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
-.prereq-grid.compact .prereq { padding: 8px 10px; gap: 10px; }
-.prereq-grid.compact .prereq p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.before-side { min-width: 0; }
-.before-side h3 { margin: 0 0 6px; font-size: 12px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
-.before-side h3:not(:first-child) { margin-top: 12px; }
-.before-side .link-list.row { flex-direction: column; align-items: flex-start; }
+.before-toggle em { font-style: normal; font-weight: 600; color: var(--accent); padding-left: 4px; }
+.before-body { display: grid; gap: 10px; padding: 0 14px 12px; }
+.prereq-grid.compact { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.prereq-grid.compact .prereq { align-items: center; padding: 7px 10px; gap: 9px; min-width: 0; }
+.prereq-grid.compact .prereq > div { min-width: 0; }
+/* one line each: the whole text is the item's tooltip */
+.prereq-grid.compact .prereq strong, .prereq-grid.compact .prereq p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prereq-grid.compact .prereq p { margin-top: 1px; }
+.prereq-grid.compact .prereq-link, .prereq-grid.compact .prereq a { margin-top: 1px; display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.prereq-grid.compact .prereq-link > svg, .prereq-grid.compact .prereq a > svg { display: inline; vertical-align: -2px; margin-right: 4px; }
+@media (max-width: 520px) { .prereq-grid.compact { grid-template-columns: minmax(0, 1fr); } }
+.before-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 24px; min-width: 0; }
+.before-group { display: flex; align-items: center; gap: 6px 10px; min-width: 0; }
+.before-group > ul { flex: 0 1 auto; min-width: 0; }
+.before-group h3 { flex: none; margin: 0; font-size: 11.5px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.before-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.before-chips a { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 30px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; }
+.before-chips a:hover { border-color: var(--text-3); }
+.before-chips a > svg { flex: none; color: var(--text-3); }
+.before-chips li.skill a { border-color: color-mix(in srgb, var(--good) 45%, var(--line)); background: var(--good-bg); }
+.before-chips li.skill a > svg:first-child { color: var(--good); }
+.before-group .link-list.row a { height: 30px; font-size: 13px; }
+@media (pointer: coarse) { .before-chips a, .before-group .link-list.row a { height: 44px; } }
 
 /* the map: a hint, dragging to move around */
 .map-hint { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 0 auto; padding: 0 2px 10px; color: var(--text-2); font-size: 13px; }
@@ -65,12 +86,17 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
 .block-report:hover, .block-report:focus-visible { background: var(--bad); border-color: var(--bad); color: #fff; }
 :root[data-theme="dark"] .block-report:hover, :root[data-theme="dark"] .block-report:focus-visible { color: #1a0a0e; }
 @media (hover: none) { .block-report { opacity: 1; } }
+/* on a touch screen the flag can be hit with a finger: 44 pixels on the screen whatever the zoom, the visible flag stays small */
+@media (pointer: coarse) {
+  .block-report { position: relative; }
+  .block-report::after { content: ""; position: absolute; inset: calc((24px - 44px / var(--z, 1)) / 2); border-radius: 50%; }
+}
 .step-report .muted { margin: 0 0 10px; }
 
 /* a decision is a diamond: the arrows meet its corners */
 .block.decision { background: transparent; border: none; box-shadow: none; }
 .block.decision::before { display: none; }
-.block.decision:hover { box-shadow: none; }
+.block.decision:hover, .block.decision.selected, .block.decision.mine { box-shadow: none; border: none; }
 .diamond { position: absolute; inset: 0; overflow: visible; pointer-events: none; filter: drop-shadow(0 1px 1.5px rgb(16 24 40 / .10)); }
 .diamond-shape { fill: color-mix(in srgb, var(--c) 6%, var(--surface)); stroke: color-mix(in srgb, var(--c) 60%, var(--line-strong)); stroke-width: 1.5; transition: stroke .15s; }
 .block.decision:hover .diamond-shape { stroke: var(--c); }
@@ -93,14 +119,8 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
 .fb-new { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
 .fb-new h2 { font-size: 17px; }
 
-/* beside the prerequisites the links are short: kind and name (the Checklist shows them in full) */
-.before-side .resources a { padding: 7px 10px; gap: 9px; }
-.before-side .res-text > span { display: none; }
-.before-side .res-icon { width: 28px; height: 28px; }
-@media (max-width: 520px) { .before-toggle span + span::before { content: none; } .before-toggle { gap: 4px 12px; } }
-
 /* the reader's page: the calm line about drafts */
-.draft-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 0 0 14px; padding: 9px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--text-2); font-size: 13.5px; }
+.draft-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin: 10px 0 0; padding: 6px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--text-2); font-size: 13.5px; }
 .draft-line svg { flex: none; color: var(--accent); }
 .draft-line span { flex: 1 1 260px; }
 .draft-line a { font-weight: 600; }
@@ -114,15 +134,21 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
 .flow-viewport::after { right: 0; background: linear-gradient(to left, var(--surface), transparent); }
 .flow-viewport.fade-left::before, .flow-viewport.fade-right::after { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .flow-viewport::before, .flow-viewport::after { transition: none; } }
-/* the lane names are a column of their own beside the zoomed drawing: the same size at every zoom */
-.flow-stage { position: relative; display: flex; }
-.flow-lanes { position: sticky; left: 0; z-index: 4; flex: none; }
-.lane-label { position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--line); background: var(--surface); }
+/* the lane names are a column of their own beside the scrolled drawing, outside its scrolling box
+   (nothing of the drawing passes under them): the same size at every zoom, narrower when the drawing is small */
+.flow-viewport { display: flex; align-items: stretch; }
+.flow-viewport > .flow-scroll { flex: 1 1 auto; min-width: 0; }
+.flow-lanes { position: relative; z-index: 4; flex: none; overflow: hidden; border-right: 1px solid var(--line); background: var(--surface); }
+.flow-lanes-inner { position: absolute; top: 0; left: 0; right: 0; will-change: transform; }
+.lane-label { position: absolute; left: 0; right: 0; overflow: hidden; border-bottom: 1px solid var(--line); background: var(--surface); }
 .lane-label.even { background: var(--surface-2); }
 .lane-label.me { background: color-mix(in srgb, var(--lane) 6%, var(--surface)); }
-.flow-lanes .lane-head { position: static; width: 100%; height: 100%; }
-.lane-label.short .lane-text span { display: none; }
-.flow-draw { position: relative; flex: none; overflow: hidden; }
+.flow-lanes .lane-head { position: static; width: 100%; height: 100%; padding: 0 10px 0 14px; border-right: 0; }
+.flow-lanes .lane-text strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--lines, 2); line-clamp: var(--lines, 2); overflow: hidden; }
+.lane-label.small .lane-head { padding: 0 8px 0 12px; }
+.lane-label.small .lane-text strong { font-size: 11.5px; line-height: 1.15; }
+.flow-stage { position: relative; }
+.flow-draw { position: relative; overflow: hidden; }
 .flow-draw > .flow-canvas { min-width: 0; }
 /* step numbers and the + buttons keep their size whatever the zoom */
 .flow-canvas .block-num { transform: scale(calc(1 / var(--z, 1))); }
@@ -145,22 +171,31 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
    The same parts as the cards: the kind tag, the category and owner in plain words, the marks for
    what needs attention, then the facts as icon lines (Fact, LevelMark). */
 .doc-head { display: grid; gap: 0; }
-.doc-head .back { justify-self: start; margin-bottom: 12px; }
-.doc-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; }
-.doc-head-text { flex: 1 1 520px; min-width: 0; display: grid; gap: 8px; }
-.doc-head-text h1 { overflow-wrap: anywhere; }
-.doc-head-text .lead { margin-top: 0; }
+/* the way back, the kind and who owns it share the first line: no row of their own for each */
 .doc-kicker { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; min-height: 26px; color: var(--text-2); font-size: 13.5px; font-weight: 550; }
+.doc-kicker .back { margin: 0 4px 0 0; padding-right: 14px; border-right: 1px solid var(--line); }
 .doc-marks { display: inline-flex; flex-wrap: wrap; gap: 6px; }
-.doc-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; margin-top: 14px; font-size: 14px; color: var(--text-2); }
-.doc-facts.doc-where { margin-top: 8px; font-size: 13.5px; }
+.doc-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px 24px; flex-wrap: wrap; margin-top: 8px; }
+.doc-head-text { flex: 1 1 520px; min-width: 0; display: grid; gap: 6px; }
+.doc-head-text h1 { overflow-wrap: anywhere; }
+.doc-head-text .lead { margin-top: 0; max-width: 92ch; }
+.doc-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; margin-top: 10px; font-size: 14px; color: var(--text-2); }
 .doc-facts .fact { max-width: 40ch; }
-.doc-when { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 12px; color: var(--text-3); font-size: 12.5px; }
+/* the quiet last line: dates and version, how much it is used, and what a reader can do */
+.doc-foot { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 20px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.doc-foot > .doc-when, .doc-foot .engage-stats { grid-column: 1; }
+.doc-foot .engage-actions { grid-column: 2; grid-row: 1 / span 2; }
+@media (max-width: 760px) { .doc-foot { grid-template-columns: minmax(0, 1fr); } .doc-foot .engage-actions { grid-column: 1; grid-row: auto; margin: 6px 0 0; } }
+.doc-when { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0; color: var(--text-3); font-size: 12.5px; }
 .doc-when .review-tag { display: inline-flex; align-items: center; gap: 5px; }
 .doc-when .version-tag { height: 22px; font-size: 12px; }
 .doc-head .head-actions { padding-top: 2px; }
 @media (max-width: 520px) {
   .doc-facts { gap: 6px 14px; }
   .doc-head .head-actions { width: 100%; }
+  .before-group { flex-wrap: wrap; }
 }
 
+
+/* on touch screens the small ticks of "Before you start" answer to a 44 px area */
+@media (pointer: coarse) { .prereq button.tick { position: relative; } .prereq button.tick::after { content: ""; position: absolute; inset: -11px; } }

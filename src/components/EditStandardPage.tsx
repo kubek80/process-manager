@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import type { DocMeta, Feedback, Process, Standard } from "../types";
-import { addRequirement, appendRequirement, deleteRequirement, EXAMPLE, moveRequirementTo, tidyStandard, today, updateRequirement } from "../lib/edit";
+import { addRequirement, appendRequirement, deleteRequirement, EXAMPLE, moveRequirementTo, shortName, tidyStandard, today, updateRequirement } from "../lib/edit";
 import { issueTarget, issuesByPlace, issuesFor, selectionKey, STANDARD_SECTIONS, standardOutline, withoutEarlySuggestions, type Selection, type StandardSection } from "../lib/editing";
 import { isDrawableStandard, standardSchema, validateStandard } from "../lib/validate";
 import { useSelectedItem } from "../lib/selection";
@@ -11,7 +11,7 @@ import { useCatalog } from "../lib/catalog";
 import { statusOf } from "../lib/lifecycle";
 import { href } from "../lib/store";
 import { openCount } from "./Feedback";
-import { EditFrame, EditSection, ItemIssues, Outline } from "./EditFrame";
+import { EditFrame, EditSection, focusSelectedInOutline, ItemIssues, Outline } from "./EditFrame";
 import { EditSession, type Session } from "./EditSession";
 import { NoRight } from "./EditProcessPage";
 import { GovernedSections, WhereSection } from "./ProcessSections";
@@ -116,9 +116,10 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
         const at = draft.requirements.indexOf(current);
         const next = deleteRequirement(draft, current.id);
         setDraft(next);
-        notify.info(`Requirement ${current.id} “${current.title}” deleted.`, { label: "Undo", run: () => d.undo() });
+        notify.info(`Requirement ${current.id} “${shortName(current.title)}” deleted.`, { label: "Undo", run: () => d.undo() });
         const neighbour = next.requirements[Math.min(at, next.requirements.length - 1)];
         if (neighbour) selectReq(neighbour.id); else { selectReq(null); setSection("requirements"); }
+        focusSelectedInOutline();
       }}
       onMove={(before) => setDraft(moveRequirementTo(draft, current.id, before))}
       onAddAfter={() => add(current.id)} />;

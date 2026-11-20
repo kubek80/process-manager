@@ -1,10 +1,10 @@
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft, BookOpen, ChevronDown, Lightbulb, ChevronRight, CircleAlert, CircleCheck, Crosshair, Flag, GripVertical, Info, Link2, ListChecks, ListTree, MoreHorizontal,
-  PanelLeftClose, PanelLeftOpen, PanelRight, Plus, Redo2, Send, ShieldCheck, TriangleAlert, Undo2, Users, Workflow, X, type LucideIcon,
+  PanelLeftClose, PanelLeftOpen, PanelRight, Plus, Redo2, Send, ShieldCheck, Trash2, TriangleAlert, Undo2, Users, Workflow, X, type LucideIcon,
 } from "lucide-react";
 import type { Feedback, Issue } from "../types";
-import { checkerSummary, dropBefore, isExampleIssue, issueText, outlineCollapsed, outlineKey, type EditState, type IssueCount, type OutlineEntry } from "../lib/editing";
+import { checkerSummary, deleteReady, dropBefore, isExampleIssue, issueText, outlineCollapsed, outlineKey, type EditState, type IssueCount, type OutlineEntry } from "../lib/editing";
 import { useMe } from "../lib/session";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import type { Notice } from "./EditSession";
@@ -48,6 +48,31 @@ export function EditSection({ title, hint, children, summary, folded }: { title:
       {open && <div className="edit-section-body form">{children}</div>}
     </section>
   );
+}
+
+/**
+ * The delete button of a step or a requirement. It ignores presses for a moment after it appears
+ * (the fields of each item are their own, so that is when the selection changed): after a delete
+ * the next item is selected under the same pointer, and a second click or Enter must not delete
+ * it too.
+ */
+export function DeleteButton({ label, disabled, onDelete }: { label: string; disabled?: boolean; onDelete: () => void }) {
+  const shown = useRef(performance.now());
+  return (
+    <button className="icon-btn danger" title={label} aria-label={label} disabled={disabled}
+      onClick={() => { if (deleteReady(shown.current, performance.now())) onDelete(); }}><Trash2 size={16} /></button>
+  );
+}
+
+/**
+ * After a delete: the keyboard goes to the item now selected in the outline (not left on the
+ * delete button of the next one). Nothing happens while the outline is not on screen.
+ */
+export function focusSelectedInOutline() {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const item = document.querySelector<HTMLElement>('.edit-outline .outline-item[aria-current="true"]');
+    if (item && item.offsetParent !== null && item.getClientRects().length) item.focus({ preventScroll: false });
+  }));
 }
 
 /** The heading of the fields panel: what is selected, and what can be done with it as a whole. */
@@ -481,12 +506,12 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
   const noun = kind === "process" ? "process" : "standard";
   // on a phone the bar has two rows: Undo, Redo and Discard move into More
   const phone = useNarrow();
-  // the outline as a narrow rail, to give the map the width (a laptop); remembered per person
+  // the outline as a narrow rail, to give the map the width: only when the person chose it (remembered per person)
   const email = useMe().user?.email;
   const [rail, setRail] = useState(() => {
     let stored: string | null = null;
     try { stored = localStorage.getItem(outlineKey(email)); } catch { /* not available */ }
-    return outlineCollapsed(stored, typeof window !== "undefined" ? window.innerWidth : 1440);
+    return outlineCollapsed(stored);
   });
   const chooseRail = (next: boolean) => {
     setRail(next);

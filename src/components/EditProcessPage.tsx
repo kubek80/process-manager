@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ListPlus, PenLine, Plus, Send, UserRound } from "lucide-react";
 import type { DocMeta, Feedback, Process, Standard, Step } from "../types";
-import { answerChanges, appendStep, deleteStep, EXAMPLE, flowMoveBlocked, insertStep, moveStepInFlow, nudgeStep, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
+import { appendStep, deleteStep, EXAMPLE, flowMoveBlocked, insertStep, moveStepInFlow, nudgeStep, renameStepId, restructureNotice, shortName, slugify, tidy, today, updateStep } from "../lib/edit";
 import { issueTarget, issuesByPlace, issuesFor, PROCESS_SECTIONS, processOutline, selectionKey, withoutEarlySuggestions, type ProcessSection, type Selection } from "../lib/editing";
 import { isDrawableProcess, processSchema, validateProcess } from "../lib/validate";
 import { useSelectedItem } from "../lib/selection";
@@ -10,7 +10,7 @@ import { usePerms } from "../lib/session";
 import { useCatalog } from "../lib/catalog";
 import { href } from "../lib/store";
 import { openCount } from "./Feedback";
-import { EditFrame, ItemIssues, Outline } from "./EditFrame";
+import { EditFrame, focusSelectedInOutline, ItemIssues, Outline } from "./EditFrame";
 import { EditSession } from "./EditSession";
 import { FlowView } from "./FlowView";
 import { BeforeYouStart, processAiSpec } from "./ProcessPage";
@@ -110,11 +110,10 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
   const toast = useRef<number | null>(null);
   useEffect(() => { if (toast.current !== null) { notify.dismiss(toast.current); toast.current = null; } }, [d.stepped?.n]);
   const restructure = (next: Process, done?: string) => {
-    const changes = answerChanges(draft, next);
+    const said = restructureNotice(draft, next, done);
     setDraft(next);
-    const text = [done, ...changes.map((c) => `${c}.`)].filter(Boolean).join(" ");
     if (toast.current !== null) notify.dismiss(toast.current);
-    toast.current = text ? notify.info(text, { label: "Undo", run: () => d.undo() }) : null;
+    toast.current = said ? notify.info(said.title, { label: "Undo", run: () => d.undo() }, said.detail) : null;
   };
 
   const byPlace = useMemo(() => (drawable ? issuesByPlace("process", draft, issues) : new Map()), [drawable, draft, issues]);
@@ -151,9 +150,10 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
         // no question: it is deleted at once, and the message offers Undo
         const at = draft.steps.indexOf(step);
         const next = deleteStep(draft, step.id);
-        restructure(next, `Step “${step.title || "(no name yet)"}” deleted.`);
+        restructure(next, `Step “${shortName(step.title || "(no name yet)")}” deleted.`);
         const neighbour = next.steps[Math.min(at, next.steps.length - 1)];
         if (neighbour) selectStep(neighbour.id); else { selectStep(null); setSection("steps"); }
+        focusSelectedInOutline();
       }}
       onMove={(before) => restructure(moveStepInFlow(draft, step.id, before))}
       onAddAfter={(name) => { const r = insertStep(draft, { afterId: step.id }, { title: name, type: "task", actor: step.actor }); setDraft(r.process); selectStep(r.id); }} />;
@@ -197,7 +197,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
             <BeforeYouStart process={draft} all={all} standards={standards} open={beforeOpen} onToggle={() => setBeforeOpen(!beforeOpen)} />
           </div>
         : <button className="preview-empty" onClick={() => choose({ section: "before" })}>Nothing needed before step 1 yet. <b>Add what readers must have in place</b></button>}
-      <FlowView editable legend={false} fitMin={0.4} openMin={0.6} follow process={draft} selectedId={stepId} done={NONE} feedback={feedback}
+      <FlowView editable legend={false} openMin={0.6} follow process={draft} selectedId={stepId} done={NONE} feedback={feedback}
         onSelect={(id) => choose({ section: "steps", item: id })}
         onInsert={(at, spec) => { const r = insertStep(draft, at, spec); setDraft(r.process); selectStep(r.id); }}
         onMoveToLane={(id, actor) => setDraft(updateStep(draft, id, { actor }))} />

@@ -115,11 +115,12 @@
 .card.retired { background: var(--surface-2); }
 .card.retired .card-title, .card.retired .card-summary { color: var(--text-3); }
 
-/* the kind (where kinds are mixed) and the category on the left, the tiers on the right; the category wraps, it is never cut */
-.card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 4px 12px; }
-.card-eyebrow { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; line-height: 22px; }
-.card-cat { min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--text-2); overflow-wrap: anywhere; }
-.card-tiers { flex: none; font-size: 12px; font-weight: 600; color: var(--text-2); text-align: right; line-height: 22px; white-space: nowrap; }
+/* one line: the kind (where kinds are mixed) and the category on the left, the tiers on the right;
+   a long category ends in "…" (the whole name is its tooltip), a long list of tiers is counted */
+.card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 22px; }
+.card-eyebrow { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; min-width: 0; line-height: 22px; }
+.card-cat { min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-tiers { flex: none; max-width: 45%; font-size: 12px; font-weight: 600; color: var(--text-2); text-align: right; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .card-marks { display: flex; flex-wrap: wrap; gap: 6px; }
 .card-mark { display: inline-flex; align-items: center; gap: 4px; min-height: 22px; padding: 0 8px; border-radius: 6px; font-size: 11.5px; font-weight: 650; background: var(--surface-2); color: var(--text-2); }
@@ -135,7 +136,8 @@
 /* the title's link covers the card for the mouse; the links and buttons inside sit above it */
 .card-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
 .card:hover .card-link { color: var(--accent); }
-.card-summary { margin-top: -2px; color: var(--text-2); font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-head { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.card-summary { color: var(--text-2); font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* the facts: those to compare first, then who looks after it, flowing on at most two lines; a fact
    that does not fit is left out whole (never cut to a fragment); the full list is read out */
@@ -173,6 +175,21 @@
 .card-engage.pending { visibility: hidden; }
 .card > :nth-last-child(2) { margin-bottom: 2px; }
 
+/* a row of cards shares its lines: every part of a card (the top line, the marks, the title with the
+   summary, the facts, the places found, the foot) sits in a row of the grid shared by the cards
+   beside it, so that titles, facts and feet start at the same height across the row */
+@supports (grid-template-rows: subgrid) {
+  .cards:not(.rows) { row-gap: 0; }
+  .cards:not(.rows) > .card { display: grid; grid-template-rows: subgrid; grid-row: span 6; row-gap: 0; margin-bottom: 14px; }
+  .cards:not(.rows) > .card > * { grid-column: 1; min-width: 0; }
+  .cards:not(.rows) > .card > .card-top { grid-row: 1; }
+  .cards:not(.rows) > .card > .card-marks { grid-row: 2; align-self: end; margin-top: 6px; }
+  .cards:not(.rows) > .card > .card-head { grid-row: 3; align-self: start; margin-top: 6px; }
+  .cards:not(.rows) > .card > .card-facts { grid-row: 4; align-self: start; margin-top: 8px; }
+  .cards:not(.rows) > .card > .card-found { grid-row: 5; align-self: start; margin-top: 8px; }
+  .cards:not(.rows) > .card > .card-foot { grid-row: 6; align-self: end; margin-top: 8px; margin-bottom: 0; }
+}
+
 /* ---------- rows: one line each, for scanning many ---------- */
 .cards.rows { display: flex; flex-direction: column; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow-1); overflow: hidden; }
 /* the kind column has one width for both tags, so that every title starts at the same x */
@@ -188,7 +205,7 @@
 .row-hit:hover { color: var(--accent); }
 .card.row .card-marks { grid-column: main; grid-row: 2; }
 .row-level { grid-area: level; display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; white-space: nowrap; }
-.row-owner { grid-area: owner; min-width: 0; font-size: 12.5px; }
+.row-owner { grid-area: owner; display: flex; align-items: center; min-width: 0; font-size: 12.5px; }
 .card.row .card-engage { grid-area: act; }
 
 /* ---------- pages ---------- */
@@ -283,4 +300,30 @@
   .card.row > .kind-tag { display: none; }
   .row-main { flex-direction: column; gap: 2px; align-items: stretch; }
   .card.row .card-marks { display: none; }
+}
+
+/* ---------- touch screens: every control is at least 44 px to press (the look stays compact on a mouse) ---------- */
+@media (pointer: coarse) {
+  .card-foot { gap: 4px; padding-top: 4px; }
+  .card-give { width: 44px; height: 44px; }
+  .card-engage { gap: 4px; }
+  .card-engage .engage-btn { height: 44px; min-width: 44px; justify-content: center; }
+  .card-engage .engage-btn.bookmark-btn.engage-card { width: 44px; }
+  .card-feedback { min-height: 44px; }
+  .card-hits-more { display: inline-flex; align-items: center; min-height: 44px; }
+  .view-switch .seg-item { height: 44px; min-width: 44px; padding: 0 12px; }
+  .results-bar .btn.filter-toggle, .page-size select, .sort-by select, .list-hero .hero-actions .btn { height: 44px; }
+  .ask-for-it a { min-height: 44px; }
+  /* the places found are lines of text: more room between them, and each line taller to press */
+  .card-hits { gap: 8px; }
+  .card-hits a { padding: 6px 0; }
+  .tabs > .tab.type-tab { height: 44px; }
+  .filter-dd-button { min-height: 44px; }
+  .filter-option { min-height: 44px; }
+  .filter-app-toggle { min-height: 44px; }
+  .filter-chip, .filter-clear { min-height: 44px; }
+  .pager.compact .pager-num, .pager.compact .pager-step, .pager-num, .pager-step { min-width: 44px; height: 44px; }
+  .search-box .btn, .search-box.big .btn { height: 44px; }
+  .search-box, .search-box.big { height: 54px; }
+  .card.row .card-engage .engage-btn { height: 44px; }
 }

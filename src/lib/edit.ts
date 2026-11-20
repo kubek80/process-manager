@@ -232,19 +232,45 @@ export function moveStepInFlow(p: Process, id: string, beforeId: string | null):
  */
 export function answerChanges(before: Process, after: Process): string[] {
   const title = (q: Process, id: string) => q.steps.find((s) => s.id === id)?.title || id;
-  const out: string[] = [];
+  return changedAnswers(before, after).map(({ step: s, answer: n }) => {
+    const also = s.next.filter((x) => x !== n && x.to === n.to).map((x) => `“${x.label}”`);
+    return `“${n.label}” of “${s.title}” now leads to “${title(after, n.to)}”${also.length ? `, as ${also.join(" and ")} does` : ""}`;
+  });
+}
+
+/** The named answers of decisions that are new or lead to another step than before. */
+function changedAnswers(before: Process, after: Process): { step: Step; answer: Step["next"][number] }[] {
+  const out: { step: Step; answer: Step["next"][number] }[] = [];
   for (const s of after.steps) {
     const was = before.steps.find((x) => x.id === s.id);
     if (!was || s.type !== "decision") continue;
     for (const n of s.next) {
       if (!n.label) continue;
       const old = was.next.find((x) => x.label === n.label);
-      if (old && old.to === n.to) continue;
-      const also = s.next.filter((x) => x !== n && x.to === n.to).map((x) => `“${x.label}”`);
-      out.push(`“${n.label}” of “${s.title}” now leads to “${title(after, n.to)}”${also.length ? `, as ${also.join(" and ")} does` : ""}`);
+      if (!old || old.to !== n.to) out.push({ step: s, answer: n });
     }
   }
   return out;
+}
+
+/** A name in a short message: cut to `max` characters, with an ellipsis. */
+export const shortName = (t: string, max = 36) => (t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t);
+
+/**
+ * The message after a delete or a move, at most two short lines: what was done (or, for a move,
+ * the first answer that now leads elsewhere), and one line about the answers of decisions that
+ * now lead elsewhere. Where exactly each leads is in the fields of the decision. Null: nothing to say.
+ */
+export function restructureNotice(before: Process, after: Process, done?: string): { title: string; detail?: string } | null {
+  const changed = changedAnswers(before, after).map((c) => ({ decision: c.step.title, answer: c.answer.label ?? "" }));
+  if (!done && !changed.length) return null;
+  const decisions = [...new Set(changed.map((c) => c.decision))];
+  const answers = changed.map((c) => `“${shortName(c.answer, 16)}”`);
+  const line = !changed.length ? undefined
+    : decisions.length > 1 ? `Answers of ${decisions.length} decisions now lead elsewhere.`
+    : `${answers.length === 1 ? answers[0] : answers.length === 2 ? answers.join(" and ") : `${answers.length} answers`} of “${shortName(decisions[0], 28)}” now ${answers.length === 1 ? "leads" : "lead"} elsewhere.`;
+  if (done) return { title: done, ...(line ? { detail: line } : {}) };
+  return { title: line! };
 }
 
 /** Moves a step one place up (-1) or down (1) in the flow, as moveStepInFlow does: before the step listed before it, or after the one listed after it. */

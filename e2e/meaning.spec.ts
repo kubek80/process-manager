@@ -244,29 +244,35 @@ test("by meaning the filters and their counts work on what was found", async ({ 
   const all = await results(page).count();
   expect(all).toBeGreaterThan(2);
   await expect(count(page)).toHaveText(`${all} results for “cloud”`);
-  for (const key of ["type", "platform", "practice", "owner"]) {
+  // the tabs count what was found of each kind, and add up
+  const tabs = page.getByRole("radiogroup", { name: "Show" });
+  const tabN = async (name: string) => Number((await tabs.getByRole("radio", { name: new RegExp(`^${name},`) }).getAttribute("aria-label"))!.match(/(\d+) results?$/)![1]);
+  const [np, ns] = [await tabN("Processes"), await tabN("Standards")];
+  expect(np + ns, "processes and standards add up").toBe(all);
+  expect(await tabN("All")).toBe(all);
+  await tabs.getByRole("radio", { name: /^Processes,/ }).click();
+  await expect(results(page)).toHaveCount(np);
+  await tabs.getByRole("radio", { name: /^All,/ }).click();
+  await expect(results(page)).toHaveCount(all);
+  for (const key of ["platform", "practice", "owner"]) {
     const g = page.locator(`.filter-dd[data-filter="${key}"]`);
     await g.locator("button.filter-dd-button").click();
     const options = g.locator("label.filter-option:not(.off)");
     const n = await options.count();
     expect(n, `options of ${key}`).toBeGreaterThan(0);
-    let sum = 0;
     for (let i = 0; i < n; i++) {
       const option = options.nth(i);
       const expected = Number((await option.locator(".filter-option-count").innerText()).match(/\d+/)![0]);
-      sum += expected;
       await option.getByRole("checkbox").check();
       await expect(results(page), `${key}: ${await option.innerText()}`).toHaveCount(expected);
       await expect(count(page)).toHaveText(`${expected} ${expected === 1 ? "result" : "results"} for “cloud” with 1 filter`);
       await option.getByRole("checkbox").uncheck();
       await expect(results(page)).toHaveCount(all);
     }
-    if (key === "type") expect(sum, "processes and standards add up").toBe(all);
     await g.locator("button.filter-dd-button").click();
   }
-  // the order stays the server's when a filter is chosen
-  await page.locator('.filter-dd[data-filter="type"] button.filter-dd-button').click();
-  await page.getByRole("checkbox", { name: /^Processes, \d+ results?$/ }).check();
+  // the order stays the server's when a kind is chosen
+  await tabs.getByRole("radio", { name: /^Processes, \d+ results?$/ }).click();
   await expect(results(page).first()).toHaveAttribute("data-id", "request-gcp-project");
   await expect(page).toHaveURL(/#\/search\?q=cloud&type=process&mode=meaning$/);
 });
@@ -503,18 +509,15 @@ test("when the server sent only the closest of more, the page says so and the co
     expect(n).toBeGreaterThan(1);
     await expect(page.locator("p.search-truncated")).toHaveText(`Showing the ${n} closest. Add words or choose a filter to narrow it down.`);
     // a count that is not zero is at least that many; a zero stays a zero
-    const type = page.locator('.filter-dd[data-filter="type"]');
-    await type.locator("button.filter-dd-button").click();
-    const processes = type.locator("label.filter-option", { hasText: "Processes" });
+    const processes = page.getByRole("radiogroup", { name: "Show" }).locator('.type-tab[data-type="process"]');
     const p = await results(page).and(page.locator('[data-kind="process"]')).count();
-    await expect(processes.locator(".filter-option-count")).toHaveText(`${p}+`);
-    await expect(processes.getByRole("checkbox")).toHaveAccessibleName(`Processes, at least ${p} ${p === 1 ? "result" : "results"}`);
-    await type.locator("button.filter-dd-button").click();
+    await expect(processes.locator(".tab-count")).toHaveText(`${p}+`);
+    await expect(processes).toHaveAccessibleName(`Processes, at least ${p} ${p === 1 ? "result" : "results"}`);
     const rigour = page.locator('.filter-dd[data-filter="rigour"]');
     await rigour.locator("button.filter-dd-button").click();
     const optional = rigour.locator("label.filter-option", { hasText: "Optional" });
     await expect(optional.locator(".filter-option-count")).toHaveText("0");
-    await expect(optional.getByRole("checkbox")).toHaveAccessibleName("Optional, 0 results");
+    await expect(optional.getByRole("checkbox")).toHaveAccessibleName("Optional or may, 0 results");
     await rigour.locator("button.filter-dd-button").click();
     const mine = page.locator('label.filter-option[data-flag="bookmarked"]');
     await expect(mine.locator(".filter-option-count")).toHaveText("1+");
@@ -585,13 +588,25 @@ test("when the filters hide what was found, dropping them is offered first", asy
   await open(page, "/search?q=gcp&mode=meaning&type=standard");
   const empty = page.locator(".search-empty");
   await expect(empty.getByRole("heading", { name: "Nothing found" })).toBeVisible();
-  await expect(empty).toContainText("Nothing matches “gcp” with these filters. Without the filters there are 2 results.");
-  await expect(empty.getByRole("button").first()).toHaveText("Without Type: Standards");
-  await expect(empty.getByRole("button").nth(1)).toHaveText("Clear all filters");
+  // the kind chosen with the tabs is what hides them: said so, and all kinds offered first
+  await expect(empty).toContainText("No standard matches “gcp”. All kinds together give 2 results.");
+  await expect(empty).not.toContainText("Nothing close to");
+  await expect(empty.getByRole("button").first()).toHaveText("Show all kinds");
   await expect(empty.locator(".search-try-other")).toHaveCount(0);
-  await empty.getByRole("button", { name: "Without Type: Standards" }).click();
+  await expect(page.getByRole("radiogroup", { name: "Show" }).getByRole("radio", { name: "All, 2 results" })).toBeVisible();
+  await empty.getByRole("button", { name: "Show all kinds" }).click();
   await expect(results(page)).toHaveCount(2);
   await expect(page).toHaveURL(/#\/search\?q=gcp&mode=meaning$/);
+
+  // a filter that hides them: each filter can be dropped, or all
+  await open(page, "/search?q=gcp&mode=meaning&practice=security");
+  await expect(empty.getByRole("heading", { name: "Nothing found" })).toBeVisible();
+  await expect(empty).toContainText("Nothing matches “gcp” with these filters. Without the filters there are 2 results.");
+  await expect(empty.getByRole("button").first()).toHaveText("Without Practice: Cyber security");
+  await expect(empty.getByRole("button").nth(1)).toHaveText("Clear all filters");
+  await expect(empty.locator(".search-try-other")).toHaveCount(0);
+  await empty.getByRole("button", { name: "Without Practice: Cyber security" }).click();
+  await expect(results(page)).toHaveCount(2);
 
   // nothing close at all, and no filter: the other way of searching is offered
   await open(page, "/search?q=zzqx&mode=meaning");

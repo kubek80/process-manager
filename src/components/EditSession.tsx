@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { ArrowLeft, Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash2, TriangleAlert, Undo2 } from "lucide-react";
 import type { DocMeta, Issue, Process, Standard, TargetKind } from "../types";
 import { conflictOf, useDraft, type Conflict, type Draft } from "../lib/draft";
-import { author, baseBehindSentence, clock, draftKindOf, draftSaveBase, saveCallOf, editState, exampleIssues, isExampleIssue, issueText, publishLines, statusChangeBlocked, type DraftKind } from "../lib/editing";
+import { author, baseBehindSentence, clock, draftKindOf, draftSaveBase, saveCallOf, editState, exampleIssues, isExampleIssue, issueText, publishLines, statusChangeBlocked, steppedMessage, type DraftKind } from "../lib/editing";
 import { compare, describeChange, type Change } from "../lib/diff";
 import { belongsRefused } from "../lib/rights";
 import { useMe, usePerms } from "../lib/session";
@@ -237,19 +237,19 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
   useEffect(() => { setNotice(null); }, [d.draft]);
   // Undo and Redo say what they did, and what they brought back is selected
   const items = (doc: T) => ((doc as Process).steps ?? (doc as Standard).requirements ?? []) as { id: string }[];
-  const describe = (a: T | undefined, b: T | undefined) => {
-    if (!a || !b) return "";
-    // a step or requirement that came or went says the most about a change
-    try { const c = compare(kind, a, b, catalog); const main = c.find((x) => x.kind !== "changed") ?? c[0]; return main ? describeChange(main) : ""; } catch { return ""; }
+  // a step or requirement that came or went says the most about a change
+  const mainChange = (a: T | undefined, b: T | undefined): Change | undefined => {
+    if (!a || !b) return undefined;
+    try { const c = compare(kind, a, b, catalog); return c.find((x) => x.kind !== "changed") ?? c[0]; } catch { return undefined; }
   };
+  const describe = (a: T | undefined, b: T | undefined) => { const c = mainChange(a, b); return c ? describeChange(c) : ""; };
   const undoWhat = useMemo(() => describe(d.previous, d.draft), [d.previous, d.draft]); // eslint-disable-line react-hooks/exhaustive-deps
   const [reveal, setReveal] = useState<{ item: string; n: number } | null>(null);
   useEffect(() => {
     const st = d.stepped;
     if (!st) return;
-    // what the undone (or redone) change did: from what Undo brings back to what was on screen
-    const what = st.dir === "undo" ? describe(st.to, st.from) : describe(st.from, st.to);
-    notify.info(`${st.dir === "undo" ? "Undone" : "Done again"}: ${what ? `${what[0].toLowerCase()}${what.slice(1)}` : "the last change"}.`);
+    // said as what is true now: from what was on screen to what is on screen ("Step “Approve” is back.")
+    notify.info(steppedMessage(st.dir, mainChange(st.from, st.to)));
     const before = new Map(items(st.from).map((x) => [x.id, JSON.stringify(x)]));
     const touched = items(st.to).find((x) => !before.has(x.id)) ?? items(st.to).find((x) => before.get(x.id) !== JSON.stringify(x));
     if (touched) setReveal((r) => ({ item: touched.id, n: (r?.n ?? 0) + 1 }));

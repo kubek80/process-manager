@@ -49,6 +49,17 @@ export function reviewInfo(p: Pick<Governed, "status" | "review">, today = new D
   return { state: "ok", dueAt, days, label: first ? `First review due ${dueAt}` : `Next review ${dueAt}`, ...extra };
 }
 
+/**
+ * The review in the page's quiet line (under the facts): when it was last confirmed, the date of
+ * the first review while that is not near, and otherwise "Not reviewed yet" - a review that is due
+ * or overdue is already a mark at the top, which says when.
+ */
+export function quietReview(review: ReviewInfo, lastReviewedAt?: string): string {
+  if (lastReviewedAt) return `Reviewed ${lastReviewedAt}`;
+  if (review.first && review.state === "ok") return review.label;
+  return "Not reviewed yet";
+}
+
 /** What the lists say about when a document came about (`DocMeta`). */
 export interface Dates { publishedAt?: string; createdAt?: string }
 

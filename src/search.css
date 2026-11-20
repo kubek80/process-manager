@@ -128,3 +128,12 @@
 .search-try-other { margin-top: 12px; }
 .list-results[aria-busy="true"] .cards { opacity: .6; transition: opacity .2s; }
 .search-truncated { margin: 0 0 8px; font-size: 13px; color: var(--text-2); }
+
+/* touch screens: at least 44 px to press */
+@media (pointer: coarse) {
+  .search-mode-choices .seg-item, .search-mode-more { height: 44px; min-width: 44px; }
+  .search-mode-more { justify-content: center; }
+  .home-links .chip { height: 44px; }
+  .home-links-more { min-height: 44px; }
+  .search-empty .btn { min-height: 44px; }
+}

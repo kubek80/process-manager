@@ -5,7 +5,7 @@ import { categoryName, environmentLabel, languageLabel, platformName, practiceNa
 import { belongsChoice, belongsRefused, wouldLoseEdit, type Belongs, type BelongsField } from "../lib/rights";
 import { usePerms } from "../lib/session";
 import type { Profile } from "../lib/edit";
-import { statusOf, type ReviewInfo } from "../lib/lifecycle";
+import { quietReview, statusOf, type ReviewInfo } from "../lib/lifecycle";
 import { Field } from "./ui";
 import { Fact, KindTag } from "./marks";
 import { VersionTag } from "./Editing";
@@ -113,8 +113,8 @@ export function ReviewTag({ doc, review }: { doc: Governed; review: ReviewInfo }
   const last = doc.review?.lastReviewedAt;
   const by = doc.review?.reviewedBy ? ` by ${doc.review.reviewedBy}` : "";
   return (
-    <span className="review-tag" title={last ? `Last reviewed ${last}${by}` : review.first ? "Not reviewed yet: the first review is counted from when it was published" : "Never reviewed"}>
-      <CalendarCheck size={13} aria-hidden="true" />{last ? `Reviewed ${last}` : review.first && review.state === "ok" ? review.label : "Never reviewed"}
+    <span className="review-tag" title={last ? `Last reviewed ${last}${by}` : review.first ? "Not reviewed yet: the first review is counted from when it was published" : "Not reviewed yet"}>
+      <CalendarCheck size={13} aria-hidden="true" />{quietReview(review, last)}
     </span>
   );
 }
@@ -154,33 +154,34 @@ export function DocHead({ kind, doc, meta, review, facts, actions, onBack, onHis
   const status = statusOf(doc);
   return (
     <header className="doc-head">
-      <button className="back" onClick={onBack}><ArrowLeft size={16} />All {kind === "process" ? "processes" : "standards"}</button>
+      <div className="doc-kicker">
+        <button className="back" onClick={onBack}><ArrowLeft size={16} />All {kind === "process" ? "processes" : "standards"}</button>
+        <KindTag kind={kind} />
+        {(doc.category || doc.owner) && <span className="doc-owner">{[doc.category ? categoryName(catalog, doc.category) : "", doc.owner ? `${kind === "process" ? "Owned by" : "Issued by"} ${teamName(catalog, doc.owner)}` : ""].filter(Boolean).join(" · ")}</span>}
+        {(status !== "active" || review.state === "soon" || review.state === "overdue") && (
+          <span className="doc-marks">
+            {status === "draft" && <span className="card-mark draft">Draft</span>}
+            {status === "deprecated" && <span className="card-mark retired">Retired</span>}
+            <ReviewMark review={review} />
+          </span>
+        )}
+      </div>
       <div className="doc-head-row">
         <div className="doc-head-text">
-          <div className="doc-kicker">
-            <KindTag kind={kind} />
-            {(doc.category || doc.owner) && <span className="doc-owner">{[doc.category ? categoryName(catalog, doc.category) : "", doc.owner ? `${kind === "process" ? "Owned by" : "Issued by"} ${teamName(catalog, doc.owner)}` : ""].filter(Boolean).join(" · ")}</span>}
-            {(status !== "active" || review.state === "soon" || review.state === "overdue") && (
-              <span className="doc-marks">
-                {status === "draft" && <span className="card-mark draft">Draft</span>}
-                {status === "deprecated" && <span className="card-mark retired">Retired</span>}
-                <ReviewMark review={review} />
-              </span>
-            )}
-          </div>
           <h1>{doc.title}</h1>
           {doc.summary && <p className="lead">{doc.summary}</p>}
         </div>
         {actions && <div className="head-actions">{actions}</div>}
       </div>
-      <div className="doc-facts">{facts}</div>
-      <div className="doc-facts doc-where"><WhereFacts doc={doc} /></div>
-      <p className="doc-when">
-        {doc.updatedAt && <span>Updated {doc.updatedAt}</span>}
-        <ReviewTag doc={doc} review={review} />
-        <VersionTag meta={meta} onOpen={onHistory} />
-      </p>
-      {children}
+      <div className="doc-facts">{facts}<WhereFacts doc={doc} /></div>
+      <div className="doc-foot">
+        <p className="doc-when">
+          {doc.updatedAt && <span>Updated {doc.updatedAt}</span>}
+          <ReviewTag doc={doc} review={review} />
+          <VersionTag meta={meta} onOpen={onHistory} />
+        </p>
+        {children}
+      </div>
     </header>
   );
 }

@@ -20,8 +20,9 @@ export function Library({ processes, standardIds, onNew, onAi, feedback, meta }:
         </div>
         {editor && (
           <div className="hero-actions">
-            <button className="btn primary" onClick={onAi}><Sparkles size={16} />Create from text with AI</button>
-            <button className="btn" onClick={onNew}><Plus size={16} />Blank process</button>
+            {/* the usual way is a blank one; writing it from a text with AI is the other choice */}
+            <button className="btn" onClick={onAi}><Sparkles size={16} />Create from text with AI</button>
+            <button className="btn primary" onClick={onNew}><Plus size={16} />New process</button>
           </div>
         )}
       </section>

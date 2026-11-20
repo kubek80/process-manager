@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { answer, CASEY, CSRF, editState, fields, JORDAN, more, open, openEditor, outline, publish, publishChange, putDoc, putWorkingDraft, readProcess, readStandard, readWorkingDraft, refusal, RILEY, SAM, serverToday, signIn, versionOf } from "./helpers";
+import { answer, CASEY, CSRF, editState, fields, JORDAN, more, open, openEditor, outline, publish, publishChange, putDoc, putWorkingDraft, readProcess, readStandard, readWorkingDraft, refusal, RILEY, SAM, serverToday, signIn, unfold, versionOf } from "./helpers";
 
 // Jordan is an ordinary reader who is Platform owner of Google Cloud and Practice owner of
 // Engineering: he may change what belongs to them, and nothing else. Where the app hides a
@@ -79,6 +79,7 @@ test("moving a document away from his platform is warned about, blocked, and ref
   await signIn(page, JORDAN);
   await openEditor(page, "process", GCP);
   await outline(page, "About");
+  await unfold(page, "What it belongs to");
   const modal = fields(page);
   const platform = modal.getByLabel(/^Platform/);
   // he is offered only his own platform and practice
@@ -122,6 +123,7 @@ test("a platform that is not his stays as it is on a document of his practice", 
   expect(library).toMatchObject({ practice: "engineering", platform: "github" });
   await openEditor(page, "process", LIBRARY);
   await outline(page, "About");
+  await unfold(page, "What it belongs to");
   const modal = fields(page);
   const platform = modal.getByLabel(/^Platform/);
   await expect(platform).toBeDisabled();

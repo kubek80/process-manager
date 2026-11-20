@@ -4,7 +4,7 @@ import type { Feedback, Process, StepType } from "../types";
 import { diamondPoints, L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import { toolName, useCatalog } from "../lib/catalog";
-import { fitZoom, hiddenEdges, isZoomWheel, scrollForZoom, scrollToShow, wheelZoom, clampZoom, zoomKey, ZOOM_MIN } from "../lib/zoom";
+import { fitWhole, hiddenEdges, isZoomWheel, laneColumn, laneLabel, openingZoom, scrollForZoom, scrollToCentre, stepZoom, wheelZoom, zoomKey } from "../lib/zoom";
 import { openCount } from "./Feedback";
 import { EntryIcon } from "./EntryIcon";
 import { scrollBehavior, TypeIcon } from "./ui";
@@ -20,15 +20,13 @@ const NO_PAN = "button:not(.block-main), a, input, select, textarea, label, .qui
 /** How far the pointer moves before a press becomes a drag of the map (and no longer a click). */
 const PAN_START = 5;
 
-export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, editable = true, bare, fitMin, openMin, follow, legend = true }: {
+export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, editable = true, bare, openMin, follow = !bare, legend = true }: {
   editable?: boolean; bare?: boolean;
   /** The legend of the kinds of steps. The editing screen leaves it out: every block names its kind, and the map needs the room. */
   legend?: boolean;
-  /** The smallest zoom "Fit" goes down to (40%): the whole flow in view. */
-  fitMin?: number;
-  /** The smallest zoom the map opens at (60%): names stay readable, a wider flow scrolls sideways. */
+  /** The smallest zoom the map opens at (60%): names stay readable, a wider flow scrolls sideways. "Fit" shows the whole flow, whatever zoom that takes. */
   openMin?: number;
-  /** Bring the selected step into view whenever it changes or moves (the editing screen). */
+  /** Bring the selected step to the middle of the map whenever it changes or moves (every map but the guide's pictures). */
   follow?: boolean;
   /** Opens the report form for one step, without opening the step. */
   onReport?: (stepId: string) => void;
@@ -40,11 +38,13 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const { catalog } = useCatalog();
   const L = bare ? L_COMPACT : L_FULL;
   const layout = useMemo(() => layoutProcess(process, L), [process, L]);
-  // The lane names are a column of their own that keeps its size at every zoom; the drawing is
-  // zoomed beside it. HEADW is that column, in pixels.
+  // The lane names are a column of their own beside the scrolled drawing, outside it: nothing of
+  // the drawing passes under it. Its text keeps its size at every zoom; the column gets narrower
+  // when the drawing is small. HEADW is that column, in pixels.
   const narrow = useNarrowScreen();
-  const HEADW = bare ? 136 : narrow ? 96 : 156;
+  const column = (z: number) => (bare ? 136 : laneColumn(z, narrow));
   const [zoom, setZoomState] = useState(1);
+  const HEADW = column(zoom);
   // the zoom as the last event left it: several wheel events can arrive before the next render
   const zoomNow = useRef(1);
   const setZoom = (z: number) => { zoomNow.current = z; setZoomState(z); };
@@ -118,43 +118,81 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
       if (to === from) return;
       const box = el.getBoundingClientRect();
       const scroll = scrollTo.current ?? { left: el.scrollLeft, top: el.scrollTop };
-      scrollTo.current = scrollForZoom(from, to, { x: e.clientX - box.left, y: e.clientY - box.top }, scroll, HEADW);
+      scrollTo.current = scrollForZoom(from, to, { x: e.clientX - box.left, y: e.clientY - box.top }, scroll);
       zoomNow.current = to;
       setZoomState(to);
     };
     el.addEventListener("wheel", wheel, { passive: false });
     return () => el.removeEventListener("wheel", wheel);
   }, [bare]);
+  // the lane names follow the drawing up and down (they are outside its scrolling box)
+  const lanesBox = useRef<HTMLDivElement>(null);
+  const syncLanes = () => {
+    const el = scroller.current, lanes = lanesBox.current;
+    if (el && lanes) lanes.style.transform = `translateY(${-el.scrollTop}px)`;
+  };
   useLayoutEffect(() => {
     const el = scroller.current, to = scrollTo.current;
-    if (!el || !to) return;
-    scrollTo.current = null;
-    el.scrollLeft = to.left;
-    el.scrollTop = to.top;
-  }, [zoom]);
+    if (!el) return;
+    if (to) {
+      scrollTo.current = null;
+      el.scrollLeft = to.left;
+      el.scrollTop = to.top;
+    }
+    syncLanes();
+  }, [zoom]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const el = scroller.current, lanes = lanesBox.current?.parentElement;
+    if (!el) return;
+    el.addEventListener("scroll", syncLanes, { passive: true });
+    // a scroll over the lane names scrolls the map, as it would over the drawing
+    const wheel = (e: WheelEvent) => {
+      if (isZoomWheel(e) || el.scrollHeight <= el.clientHeight) return;
+      const top = el.scrollTop;
+      el.scrollTop += e.deltaY * (e.deltaMode === 1 ? 16 : 1);
+      if (el.scrollTop !== top) e.preventDefault();
+    };
+    lanes?.addEventListener("wheel", wheel, { passive: false });
+    return () => { el.removeEventListener("scroll", syncLanes); lanes?.removeEventListener("wheel", wheel); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // One rule for the editing map and the reader's map: open as large as fits the width, but not
-  // below where a step's name can be read (60%); "Fit" shows the whole flow, down to 40%, from its start.
-  const floor = fitMin ?? (bare ? 0.6 : ZOOM_MIN);
-  const opening = openMin ?? (bare ? 0.6 : 0.6);
+  // below where a step's name can be read (60%); "Fit" shows the whole flow, whatever zoom that takes.
+  const opening = openMin ?? 0.6;
   const drawW = layout.width - L.HEADER;
-  const fitWidth = (min: number) => {
-    const w = scroller.current?.clientWidth ?? 0;
-    return w ? fitZoom(w - HEADW, drawW, min) : 1;
-  };
+  const viewWidth = () => scroller.current?.parentElement?.clientWidth ?? 0;
+  const wrapBox = useRef<HTMLDivElement>(null);
   const fit = () => {
     const el = scroller.current;
     if (!el) return;
-    // the height left on the screen below the top of the map
-    const room = Math.max(160, window.innerHeight - el.getBoundingClientRect().top - 16);
-    const z = Math.max(floor, Math.min(fitWidth(floor), fitZoom(room, layout.height, floor)));
+    // the height the map can have: its own limit, and what is left of the screen below its top
+    const max = parseFloat(getComputedStyle(el).maxHeight);
+    const room = roomBelow(el) - el.getBoundingClientRect().top - 8;
+    const limit = Number.isFinite(max) ? max : room;
+    const height = room >= Math.min(limit, 240) ? Math.min(limit, room) : limit;
+    const z = fitWhole({ width: viewWidth(), height }, { width: drawW, height: layout.height }, column);
     scrollTo.current = { left: 0, top: 0 };
     setZoom(z);
     el.scrollTo({ left: 0, top: 0 });
+    // a map lower on the page is brought up so that the whole of it is on the screen
+    requestAnimationFrame(() => {
+      const box = wrapBox.current?.getBoundingClientRect();
+      if (box && box.bottom > window.innerHeight) window.scrollBy({ top: Math.min(box.bottom - window.innerHeight + 16, box.top - 72), behavior: scrollBehavior() });
+    });
   };
-  useLayoutEffect(() => { setZoom(fitWidth(opening)); scroller.current?.scrollTo({ left: 0, top: 0 }); }, [process.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the zoom is chosen once, when the map opens (and when another process is shown in the same
+  // place): never again because something around the map changed its size
+  const opened = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    if (opened.current === process.id || (opened.current !== null && editable)) return;
+    opened.current = process.id;
+    const z = openingZoom(viewWidth(), drawW, opening, column);
+    setZoom(z);
+    scroller.current?.scrollTo({ left: 0, top: 0 });
+  }, [process.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // the selected step is brought fully into view inside the map (never the page), beside the lane
-  // names: when it is chosen and when it moves (added, reordered, another lane), also on opening
+  // the selected step is brought to the middle of the map (never the page scrolls), with room for
+  // where it leads: when it is chosen and when it moves (added, reordered, another lane)
   const node = follow && selectedId ? layout.nodes.find((n) => n.step.id === selectedId) : undefined;
   const nodeAt = node ? `${node.x},${node.y}` : "";
   useEffect(() => {
@@ -162,8 +200,9 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
     if (!el || !node) return;
     const frame = requestAnimationFrame(() => {
       const z = zoomNow.current;
-      const box = { x: HEADW + (node.x - L.HEADER) * z, y: node.y * z, w: L.W * z, h: L.H * z };
-      const to = scrollToShow(box, 1, { left: el.scrollLeft, top: el.scrollTop, width: el.clientWidth, height: el.clientHeight }, 24, HEADW);
+      const box = { x: (node.x - L.HEADER) * z, y: node.y * z, w: L.W * z, h: L.H * z };
+      const view = { left: el.scrollLeft, top: el.scrollTop, width: el.clientWidth, height: el.clientHeight };
+      const to = scrollToCentre(box, view, { width: el.scrollWidth, height: el.scrollHeight });
       if (to) el.scrollTo({ ...to, behavior: scrollBehavior() });
     });
     return () => cancelAnimationFrame(frame);
@@ -195,9 +234,9 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   });
   const height = Math.max(layout.height, adding ? adding.y + POP_H + 12 : 0);
 
-  const step = (dir: 1 | -1) => setZoom(clampZoom(+(zoomNow.current + dir * 0.1).toFixed(1)));
+  const step = (dir: 1 | -1) => setZoom(stepZoom(zoomNow.current, dir));
   return (
-    <div className={`flow-wrap ${bare ? "bare" : ""}`}>
+    <div className={`flow-wrap ${bare ? "bare" : ""}`} ref={wrapBox}>
       <div className="flow-head">
         {legend ? (
           <div className="legend" role="group" aria-label="Kinds of steps">
@@ -223,28 +262,31 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
         </div>}
       </div>
       <div className={`flow-viewport ${edges.left ? "fade-left" : ""} ${edges.right ? "fade-right" : ""}`} style={{ "--head": `${HEADW}px` } as React.CSSProperties}>
-      <div className={`flow-scroll ${bare ? "" : "pannable"} ${panning ? "panning" : ""}`} ref={scroller}>
-        <div className="flow-stage" style={{ width: HEADW + drawW * zoom, height: height * zoom }}>
-          {/* the lane names, at the same size at every zoom, staying at the left while the map scrolls */}
-          <div className="flow-lanes" style={{ width: HEADW, height: height * zoom }}>
+        {/* the lane names, at the same size at every zoom, beside the drawing and outside its scrolling box */}
+        <div className="flow-lanes" style={{ width: HEADW }}>
+          <div className="flow-lanes-inner" ref={lanesBox} style={{ height: height * zoom }}>
             {layout.lanes.map((lane, k) => {
               const actor = process.actors[lane.actorIndex];
               const count = process.steps.filter((s) => s.actor === actor.id).length;
               const color = LANE_COLORS[lane.actorIndex % LANE_COLORS.length];
+              const fits = laneLabel(lane.h * zoom, HEADW);
               return (
-                <div key={actor.id} className={`lane-label ${lane.actorIndex === 0 ? "me" : ""} ${k % 2 ? "even" : ""} ${lane.h * zoom < 52 ? "short" : ""}`}
-                  style={{ top: lane.y * zoom, height: lane.h * zoom, "--lane": color } as React.CSSProperties}>
+                <div key={actor.id} className={`lane-label ${lane.actorIndex === 0 ? "me" : ""} ${k % 2 ? "even" : ""} ${fits.small ? "small" : ""}`}
+                  style={{ top: lane.y * zoom, height: lane.h * zoom, "--lane": color, "--lines": fits.lines } as React.CSSProperties} title={`${actor.name}: ${count} ${count === 1 ? "step" : "steps"}`}>
                   <div className="lane-head">
-                    <span className="lane-avatar">{lane.actorIndex === 0 ? <User size={16} /> : actor.name.slice(0, 1).toUpperCase()}</span>
+                    {fits.avatar && <span className="lane-avatar">{lane.actorIndex === 0 ? <User size={16} /> : actor.name.slice(0, 1).toUpperCase()}</span>}
                     <div className="lane-text">
                       <strong>{actor.name}</strong>
-                      <span>{count} {count === 1 ? "step" : "steps"}</span>
+                      {fits.count && <span>{count} {count === 1 ? "step" : "steps"}</span>}
                     </div>
                   </div>
                 </div>
               );
             })}
           </div>
+        </div>
+      <div className={`flow-scroll ${bare ? "" : "pannable"} ${panning ? "panning" : ""}`} ref={scroller}>
+        <div className="flow-stage" style={{ width: drawW * zoom, height: height * zoom }}>
           <div className="flow-draw" style={{ width: drawW * zoom, height: height * zoom }}>
         <div className={`flow-canvas ${drag ? "dragging" : ""}`} style={{ width: layout.width, height, zoom, marginLeft: -L.HEADER, "--z": zoom } as React.CSSProperties} onMouseDown={() => setAdding(null)}>
           {layout.lanes.map((lane) => {
@@ -376,6 +418,19 @@ function LegendButton({ types }: { types: StepType[] }) {
       )}
     </div>
   );
+}
+
+/** Where the room for the map ends: the bottom of the screen, or of the column that scrolls it, inside its padding. */
+function roomBelow(el: HTMLElement): number {
+  let bottom = window.innerHeight;
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const st = getComputedStyle(p);
+    if (/(auto|scroll)/.test(st.overflowY) && p.scrollHeight >= p.clientHeight) {
+      bottom = Math.min(bottom, p.getBoundingClientRect().bottom - parseFloat(st.paddingBottom || "0") - parseFloat(st.borderBottomWidth || "0"));
+      break;
+    }
+  }
+  return bottom;
 }
 
 /** A phone: the lane names get a narrower column. */

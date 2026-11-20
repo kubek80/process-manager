@@ -44,7 +44,8 @@ test("every publish is a version with a note, and everyone can see what changed"
   await expect(versions.locator("li").first()).toContainText("Version 2");
   await expect(versions.locator("li").first()).toContainText("current");
   await expect(versions.locator("li").first()).toContainText("Plainer wording for the first step");
-  await expect(versions.locator("li").first()).toContainText(ALEX);
+  await expect(versions.locator("li").first()).toContainText("Alex Editor"); // the name, not the address
+  await expect(versions.locator("li").first()).not.toContainText(ALEX);
   await versions.locator("li").first().getByRole("button", { name: "What changed" }).click();
   await expect(versions.locator(".history-detail")).toContainText("Step “Ask for a namespace” changed: title");
   // the reader's page restores nothing: that is done on the editing screen
@@ -114,32 +115,70 @@ test("leaving the editing screen with unsaved changes asks first, whichever way 
   await page.getByRole("link", { name: "Edit", exact: true }).click();
   await renameFirstStep(page, "Not saved yet");
   const mine = firstBlock(page);
+  const ask = page.getByRole("dialog", { name: "Save your changes before you leave?" });
 
   // moving around inside the editing screen keeps the changes and does not ask
   await outline(page, "About");
   await outline(page, /^2 /);
   await expect(mine).toContainText("Not saved yet");
-  await expect(page.getByRole("dialog", { name: "Leave without saving?" })).toHaveCount(0);
+  await expect(ask).toHaveCount(0);
 
+  // three choices; saving is the main one, and has the focus
   await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
-  await answer(page, "Leave without saving?", "Stay");
+  await expect(ask).toContainText("Your changes to this process are not saved yet. Save them as a draft, or leave and lose them.");
+  await expect(ask.locator(".modal-foot button")).toHaveText(["Leave without saving", "Stay", "Save draft and leave"]);
+  await expect(ask.getByRole("button", { name: "Save draft and leave" })).toBeFocused();
+  await answer(page, "Save your changes before you leave?", "Stay");
   await expect(page).toHaveURL(/#\/p\/leave-demo\/edit/);
   await expect(mine).toContainText("Not saved yet");
 
   // the browser's Back button: the steps chosen inside the screen first, then out of it, which asks
-  for (let i = 0; i < 5 && !(await page.getByRole("dialog", { name: "Leave without saving?" }).isVisible()); i++) {
+  for (let i = 0; i < 5 && !(await ask.isVisible()); i++) {
     await page.goBack();
     await page.waitForTimeout(200);
   }
-  await answer(page, "Leave without saving?", "Stay");
+  await answer(page, "Save your changes before you leave?", "Stay");
   await expect(page).toHaveURL(/#\/p\/leave-demo\/edit/);
   await expect(mine).toContainText("Not saved yet");
 
   await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
-  await answer(page, "Leave without saving?", "Leave without saving");
+  await answer(page, "Save your changes before you leave?", "Leave without saving");
   await expect(page).toHaveURL(/#\/p\/leave-demo\/flow/);
   expect((await readProcess(page, "leave-demo"))!.steps[0].title).toBe("Request a registry namespace");
   expect(await readWorkingDraft(page, "process", "leave-demo")).toBeUndefined(); // nothing was kept behind the reader's back
+});
+
+test("“Save draft and leave” saves the changes as a draft and leaves; a save that is refused stays", async ({ page }) => {
+  await signIn(page, ALEX);
+  await copyOf(page, "leave-save-demo", "Leave save demo");
+  await openEditor(page, "process", "leave-save-demo");
+  await renameFirstStep(page, "Kept in the draft");
+  await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
+  await answer(page, "Save your changes before you leave?", "Save draft and leave");
+  await expect(page).toHaveURL(/#\/p\/leave-save-demo\/flow/);
+  await expect(page.locator(".draft-line")).toContainText("You have unpublished changes");
+  expect((await readWorkingDraft(page, "process", "leave-save-demo"))!.doc.steps[0].title).toBe("Kept in the draft");
+  expect((await readProcess(page, "leave-save-demo"))!.steps[0].title).toBe("Request a registry namespace"); // readers: as it was
+
+  // a never-published draft with something to fix cannot be saved: leaving with saving keeps the person there
+  await copyOf(page, "leave-blank-demo", "Leave blank demo", "draft");
+  try {
+    await openEditor(page, "process", "leave-blank-demo");
+    await renameFirstStep(page, "x"); // too short: something to fix before it can be saved
+    await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
+    const ask = page.getByRole("dialog", { name: "Save your changes before you leave?" });
+    // only when everything can be saved is saving offered
+    if (await ask.getByRole("button", { name: "Save draft and leave" }).count()) {
+      await ask.getByRole("button", { name: "Save draft and leave" }).click();
+      await expect(refusal(page)).toContainText("This draft cannot be saved yet");
+    } else await answer(page, "Save your changes before you leave?", "Stay");
+    await expect(page).toHaveURL(/#\/p\/leave-blank-demo\/edit/);
+    await expect(firstBlock(page)).toContainText("x");
+    expect((await readProcess(page, "leave-blank-demo"))!.steps[0].title).toBe("Request a registry namespace");
+  } finally {
+    await page.request.delete("/api/processes/leave-blank-demo", { headers: CSRF });
+    await page.request.delete("/api/processes/leave-save-demo", { headers: CSRF });
+  }
 });
 
 test("changes can be undone step by step, including a deleted step and Discard changes", async ({ page }) => {
@@ -339,12 +378,12 @@ test("Back with unsaved changes leaves the history as it was, whatever the answe
   await fields(page).getByLabel(/^Summary/).fill("Changed and not saved, to see what Back does.");
 
   await page.goBack();
-  await answer(page, "Leave without saving?", "Stay");
+  await answer(page, "Save your changes before you leave?", "Stay");
   await expect(page).toHaveURL(/#\/p\/history-demo\/edit/);
   await expect(page.locator(".edit-preview .preview-head p")).toHaveText("Changed and not saved, to see what Back does.");
   // the same Back again asks again, and leaving goes exactly one step back - not further, not nowhere
   await page.goBack();
-  await answer(page, "Leave without saving?", "Leave without saving");
+  await answer(page, "Save your changes before you leave?", "Leave without saving");
   await expect(page).toHaveURL(/#\/p\/history-demo\/flow/);
   await page.goBack();
   await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();

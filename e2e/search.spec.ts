@@ -228,7 +228,10 @@ test("a draft is found only by the people who may see it (its editors and its te
   try {
     await signIn(page, SAM);
     await open(page, "/search?q=zebra");
-    await expect(page.locator(".search-empty h2")).toHaveText("Nothing found");
+    await expect(count(page)).toHaveText("No results for “zebra”");
+    // words find nothing; the closest by meaning never include a draft (drafts are not searched by meaning)
+    await expect(page.locator(".search-closest-line").or(page.locator(".search-empty h2")).first()).toBeVisible();
+    await expect(page.locator('li.card[data-id="search-draft-demo"]')).toHaveCount(0);
 
     // Jordan is Owner of the team, so the draft reaches him: he looks after it, and finds it marked as a draft
     await signIn(page, JORDAN);
@@ -265,10 +268,11 @@ for (const width of [390, 360]) {
 
     await toggle.click();
     await expect(page.locator("#search-filters")).toBeVisible();
-    await openGroup(page, "type");
-    await group(page, "type").getByRole("checkbox", { name: /^Standards, / }).check();
+    const option = (await openGroup(page, "platform")).locator("label.filter-option:not(.off)").first();
+    const expected = await numberOf(option);
+    await option.getByRole("checkbox").check();
     await expect(toggle).toHaveText("Filters (1)");
-    await expect(results(page)).toHaveCount(1);
+    await expect(results(page)).toHaveCount(expected);
     expect(await sideways(page), `results with the filters open at ${width}px`).toBe(0);
     for (const el of [page.locator(".filter-chosen button.filter-chip"), page.locator(".filter-clear")])
       await expect(el).toBeInViewport({ ratio: 1 });
@@ -277,6 +281,11 @@ for (const width of [390, 360]) {
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await expect(page.locator("#search-filters")).toBeHidden();
     await expect(results(page).first().locator("h2 a")).toBeInViewport({ ratio: 1 });
+    // the kinds are tabs above the results, on a phone too
+    await open(page, "/search?q=gcp");
+    await page.getByRole("radiogroup", { name: "Show" }).getByRole("radio", { name: /^Standards,/ }).click();
+    await expect(results(page).first()).toHaveAttribute("data-kind", "standard");
+    expect(await sideways(page), `the kind tabs at ${width}px`).toBe(0);
 
     await open(page, "/search?q=gcp&platform=azure&type=standard");
     await expect(page.locator(".search-empty h2")).toBeVisible();

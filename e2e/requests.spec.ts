@@ -65,7 +65,7 @@ test("Sam asks for a process: checked as he types, similar titles offered, then 
   const mine = item(page, title("Request a GCP project folder"));
   await expect(mine).toHaveClass(/state-open/);
   await expect(mine.locator(".req-mine")).toHaveText("Yours");
-  await expect(mine.locator(".req-kind")).toHaveText("Process");
+  await expect(mine.locator(".kind-tag.process .card-kind")).toHaveText("Process");
   await expect(mine.locator(".req-votes")).toHaveText("0");
   await expect(mine.getByRole("button", { name: `Vote for ${title("Request a GCP project folder")}, 0 votes` })).toHaveAttribute("aria-pressed", "false");
   await expect(mine.locator(".req-meta")).toContainText("Asked by Sam Consumer on");
@@ -275,7 +275,7 @@ test("the state and kind filters and the address agree", async ({ page, request 
   await kinds.getByRole("button", { name: "Standards", exact: true }).click();
   await expect(page).toHaveURL(/#\/requests\?kind=standard$/);
   await expect(item(page, std.title)).toBeVisible();
-  for (const s of await page.locator("li.req-item .req-kind").allTextContents()) expect(s).toBe("Standard");
+  for (const s of await page.locator("li.req-item .kind-tag .card-kind").allTextContents()) expect(s).toBe("Standard");
   await states.getByRole("button", { name: /^Declined/ }).click();
   await expect(page).toHaveURL(/#\/requests\?state=declined&kind=standard$/);
   await page.reload();

@@ -66,7 +66,7 @@ async function statistics(page: Page) {
   await page.locator(".nav").getByRole("link", { name: "Admin" }).click();
   await page.locator(".admin-nav").getByRole("link", { name: "Statistics" }).click();
   await expect(page).toHaveURL(/#\/admin\/statistics$/);
-  await expect(page.locator(".admin-main > header h2")).toHaveText("Statistics");
+  await expect(page.locator(".admin-main > header.admin-head h1")).toHaveText("Statistics");
 }
 
 test("only an admin sees the statistics; the server refuses everybody else", async ({ page }) => {
@@ -78,7 +78,7 @@ test("only an admin sees the statistics; the server refuses everybody else", asy
   await signIn(page, ALEX);
   await open(page, "/admin/statistics");
   await expect(page.locator(".admin-nav")).not.toContainText("Statistics");
-  await expect(page.locator(".admin-main > header h2")).toHaveText("Lists");
+  await expect(page.locator(".admin-main > header.admin-head h1")).toHaveText("Lists");
   await expect(page.locator(".stat-table")).toHaveCount(0);
 });
 

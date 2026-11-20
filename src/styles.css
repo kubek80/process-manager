@@ -63,16 +63,38 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
 .nav-link { display: inline-flex; align-items: center; gap: 7px; flex: none; height: 32px; padding: 0 11px; border-radius: 8px; font-weight: 550; font-size: 13px; color: var(--text-2); white-space: nowrap; }
 .nav-link:hover, .nav-link.on { background: var(--surface-2); color: var(--text); }
 /* Narrower screens, in this order: the name of the person goes, the portal's name gives way first (cut with "…",
-   the full name in the link's tooltip) and goes below 1200, then the words of the navigation (the links keep their
-   name for screen readers), then the spacing. The logo always stays. The widths fit the longest top bar: an admin
-   who also answers for something, with eight links. */
+   the full name in the link's tooltip) and goes below 1200, then the spacing. Below 1120 the places no longer fit
+   with their names: they move into the menu (a labelled button and a sheet), and the portal's name comes back while
+   there is room. The logo always stays. The widths fit the longest top bar: an admin who also answers for something,
+   with eight links. */
 @media (max-width: 1440px) { .user-name { display: none; } .user-btn { padding: 0 3px; } }
 @media (max-width: 1199px) { .brand-name { display: none; } }
 @media (max-width: 1320px) { .topbar { gap: 10px; } .nav-link { padding: 0 8px; } }
-@media (max-width: 1120px) { .nav-link span { display: none; } .nav-link { padding: 0 10px; } }
-@media (max-width: 520px) { .topbar { gap: 6px; padding: 0 10px; } .nav { margin-left: 0; gap: 0; } .nav-link { padding: 0 7px; } }
-@media (max-width: 440px) { .topbar { gap: 4px; padding: 0 8px; } .nav-link { padding: 0 6px; } .brand .logo { width: 26px; height: 26px; } }
-@media (max-width: 390px) { .topbar { gap: 3px; padding: 0 6px; } .nav-link { padding: 0 4px; min-width: 24px; justify-content: center; } }
+.menu-box { display: none; }
+@media (max-width: 1119px) {
+  .topbar > .nav { display: none; }
+  .menu-box { display: block; flex: none; }
+  .brand-name { display: inline; max-width: 22ch; }
+  .topbar .icon-btn { width: 44px; height: 44px; }
+  .topbar .user-btn { height: 44px; min-width: 44px; justify-content: center; }
+  .topbar .brand { min-height: 44px; min-width: 44px; }
+}
+@media (max-width: 599px) { .brand-name { display: none; } .topbar { gap: 6px; padding: 0 10px; } .brand .logo { width: 26px; height: 26px; } }
+/* the menu: a labelled button that also says where the person is, and a sheet with the places by name */
+.menu-btn { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-weight: 600; font-size: 14px; }
+.menu-btn:hover, .menu-btn[aria-expanded="true"] { background: var(--surface-2); border-color: var(--line-strong); }
+.menu-btn > svg { flex: none; color: var(--text-2); }
+.menu-here { padding-left: 8px; border-left: 1px solid var(--line); color: var(--text-2); font-weight: 550; max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 359px) { .menu-here { display: none; } }
+.menu-shade { position: fixed; inset: 56px 0 0; z-index: 28; background: rgba(15, 17, 24, .4); }
+.menu-sheet { position: fixed; z-index: 29; top: 56px; left: 0; right: 0; max-height: calc(100dvh - 56px); overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px; padding: 10px 12px 14px; background: var(--surface); border-bottom: 1px solid var(--line); box-shadow: var(--shadow-3); animation: menu-in .14s ease-out; }
+.menu-sheet .nav-link { height: 48px; padding: 0 14px; gap: 12px; border-radius: 10px; font-size: 15px; color: var(--text); }
+.menu-sheet .nav-link > svg { color: var(--text-3); }
+.menu-sheet .nav-link.on { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+.menu-sheet .nav-link.on > svg { color: var(--accent); }
+.menu-sheet .nav-link .nav-count { margin-left: auto; }
+@keyframes menu-in { from { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .menu-sheet { animation: none; } }
 
 /* ---------- buttons ---------- */
 .btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 13px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--surface); font-weight: 550; font-size: 13.5px; white-space: nowrap; box-shadow: var(--shadow-1); transition: background .12s, border-color .12s, transform .05s; }
@@ -121,7 +143,13 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
 /* ---------- process and standard page ----------
    The same container as the lists (.page): the same left edge and h1. With the side panel open the
    page keeps its left edge and makes room on the right. */
-@media (min-width: 1100px) { .process-page.with-drawer { max-width: none; margin-left: max(0px, calc((100% - 1360px) / 2)); margin-right: 440px; } }
+.process-page { padding-top: 20px; }
+/* a standard is read like a document: the whole page, head and requirements, in one narrower column */
+.standard-page { max-width: 1080px; }
+@media (min-width: 1100px) {
+  .process-page.with-drawer { max-width: none; margin-left: max(0px, calc((100% - 1360px) / 2)); margin-right: 440px; }
+  .standard-page.with-drawer { margin-left: max(0px, calc((100% - 1080px) / 2)); }
+}
 .back { display: inline-flex; align-items: center; gap: 6px; color: var(--text-3); font-weight: 550; font-size: 13px; margin-bottom: 14px; }
 .back:hover { color: var(--text); }
 .head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
@@ -196,7 +224,6 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
 .block:not(.mine) { background: color-mix(in srgb, var(--surface) 70%, var(--surface-2)); }
 .block:hover { box-shadow: var(--shadow-2); transform: translateY(-1px); }
 .block.selected { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent), var(--shadow-2); }
-.block.decision { border-style: dashed; border-width: 1.5px; }
 .block.done .block-title { color: var(--text-3); }
 .block-main { display: flex; align-items: flex-start; gap: 10px; width: 100%; height: 100%; padding: 12px 10px 9px 13px; border-radius: inherit; }
 .block-text { min-width: 0; flex: 1; display: flex; flex-direction: column; height: 100%; }
@@ -604,7 +631,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
    red. The bars are one 4px bar and two shadows of it. Prefer <LevelMark level=… /> in new code. */
 /* a requirement's level at the head of its fields: the level mark (controls.css) in a box */
 .level-mark.big { height: 44px; padding: 0 12px; border-radius: 12px; flex: none; font-size: 13px; background: var(--surface-2); border: 1px solid var(--line); }
-.standard-doc { max-width: 1000px; display: grid; gap: 18px; }
+.standard-doc { display: grid; gap: 18px; }
 .standard-intro { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
 .standard-intro > div { padding: 14px 16px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); }
 .standard-intro h2, .standard-doc .prereqs h2 { font-size: 12px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
@@ -702,7 +729,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
   .admin-nav-title { display: none; }
   .admin-nav a { flex: none; padding: 0 10px; }
 }
-.admin-main { min-width: 0; display: grid; gap: 18px; align-content: start; }
+.admin-main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-content: start; }
 .admin-head { display: grid; gap: 4px; padding-top: 8px; }
 .admin-head .lead { margin-top: 0; font-size: 15px; }
 .admin-card > .seg, .admin-section > .seg, .cat-list > .seg { justify-self: start; }
@@ -735,6 +762,12 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 /* an icon's id is 64 characters without a space: it wraps instead of widening the page */
 .activity code { overflow-wrap: anywhere; }
 .admin .catalog-page > .tabs.cat-kinds { margin-top: 0; }
+/* in Admin the eight lists share a narrower column: no icons, and a second row rather than a cut-off strip */
+@media (min-width: 861px) {
+  .admin .catalog-page > .tabs.cat-kinds { flex-wrap: wrap; overflow: visible; }
+  .admin .cat-kinds > .tab { padding: 0 10px; }
+  .admin .cat-kinds > .tab > svg { display: none; }
+}
 .skills-split { grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); }
 .skills-split .cat-detail > * { max-width: none; }
 .guide-table.roles td:first-child { white-space: nowrap; }

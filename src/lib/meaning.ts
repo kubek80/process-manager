@@ -357,3 +357,32 @@ export const truncatedText = (n: number) => `Showing the ${n} closest. Add words
 export function closestWanted(o: { mode: SearchMode; offered: boolean; asked: string; submitted: string; wordHits: number }): boolean {
   return o.offered && o.mode === "words" && !!o.asked.trim() && o.asked.trim() === o.submitted.trim() && o.wordHits === 0;
 }
+
+/** What became of looking for the closest by meaning after words found nothing. */
+export type ClosestOutcome = "found" | "nothing" | "problem" | "waiting" | "not-tried";
+
+/**
+ * The sentence of the empty state when words found nothing (no filters chosen). Once the closest
+ * by meaning was looked for and nothing came close, it says so, so that nobody is offered the same
+ * search again; when it could not be looked for, that is said too.
+ */
+export function noWordsText(q: string, nWords: number, closest: ClosestOutcome): string {
+  const tip = nWords > 1 ? "Every word must be found, so try fewer words." : "Check the spelling, or try another word.";
+  if (closest === "nothing") return `Nothing matches “${q}”, and nothing comes close by meaning either. ${nWords > 1 ? "Try fewer or other words." : "Try another word."}`;
+  if (closest === "problem") return `Nothing matches “${q}”. ${tip} The closest by meaning could not be looked for: search by meaning is not available right now.`;
+  return `Nothing matches “${q}”. ${tip}`;
+}
+
+/**
+ * The other way of searching the empty state offers, if any: by words after a search by meaning
+ * found nothing; the closest by meaning after words found nothing while typing (it is looked for
+ * by itself once the search is run with Enter or Search, so it is not offered again then); and,
+ * when filters are chosen (the closest is not looked for then), a search by meaning with them.
+ */
+export function otherWay(o: { offered: boolean; q: string; show: Plan["show"]; mode: SearchMode; filtered: boolean; closest: ClosestOutcome }): "words" | "closest" | "meaning" | null {
+  if (!o.offered || !o.q.trim()) return null;
+  if (o.show === "meaning") return "words";
+  if (o.mode !== "words") return null;
+  if (o.filtered) return "meaning";
+  return o.closest === "not-tried" ? "closest" : null;
+}

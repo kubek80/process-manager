@@ -52,7 +52,13 @@ test("the registry lists every skill and review agent; extra guidance survives r
   await open(page, "/admin/skills");
   const items = page.locator(".cat-item");
   await expect(items.filter({ hasText: "Process: Request a GCP project" })).toBeVisible();
-  await page.locator(".skill-kinds .chip", { hasText: "Review agents" }).click();
+  const kinds = page.getByRole("group", { name: "Kind" });
+  await expect(kinds.locator("button.seg-item")).toHaveCount(3);
+  await expect(kinds.getByRole("button", { name: /^All/ })).toHaveAttribute("aria-pressed", "true");
+  const agents = kinds.getByRole("button", { name: /^Review agents/ });
+  await agents.click();
+  await expect(agents).toHaveAttribute("aria-pressed", "true");
+  await expect(agents).toHaveClass(/\bon\b/);
   await expect(items.filter({ hasText: "Review: Infrastructure as code" })).toBeVisible();
   await expect(items.filter({ hasText: "Process:" })).toHaveCount(0);
   await page.getByPlaceholder("Search skills").fill("infrastructure");

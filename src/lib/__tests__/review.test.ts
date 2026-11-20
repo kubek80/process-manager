@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstPublished, needsReview, reviewInfo, reviewOf } from "../lifecycle";
+import { firstPublished, needsReview, quietReview, reviewInfo, reviewOf } from "../lifecycle";
 import { reviewLine } from "../cardLines";
 import { savedMeta } from "../store";
 import { responsibilities, urgent } from "../responsibilities";
@@ -88,5 +88,19 @@ describe("what the app knows after a save", () => {
   it("a new document saved straight as published", () => {
     expect(savedMeta(undefined, { version: 1, updatedAt: "2026-11-20T10:00:00Z", updatedBy: "alex" }, {}))
       .toMatchObject({ createdAt: "2026-11-20T10:00:00Z", publishedAt: "2026-11-20T10:00:00Z" });
+  });
+});
+
+describe("the page's quiet line about the review", () => {
+  it("says when it was last confirmed", () => {
+    expect(quietReview(reviewInfo({ ...base(), review: { intervalMonths: 6, lastReviewedAt: "2026-10-01" } }, TODAY), "2026-10-01")).toBe("Reviewed 2026-10-01");
+  });
+  it("names the first review while it is not near", () => {
+    expect(quietReview(reviewInfo(never(), TODAY, "2026-11-20"))).toBe("First review due 2027-05-20");
+  });
+  it("never says \"Never reviewed\" beside a mark that already says the review is due or overdue", () => {
+    expect(quietReview(reviewInfo(never(), TODAY, "2026-06-01"))).toBe("Not reviewed yet");
+    expect(quietReview(reviewInfo(never(), TODAY, "2026-05-01"))).toBe("Not reviewed yet");
+    expect(quietReview(reviewInfo(never(), TODAY))).toBe("Not reviewed yet");
   });
 });

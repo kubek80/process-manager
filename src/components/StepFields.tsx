@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, CornerUpLeft, GitBranch, Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, CornerUpLeft, GitBranch, Plus, X } from "lucide-react";
 import type { Feedback, Issue, NextLink, Process, Step, StepType } from "../types";
 import { addActor, EXAMPLE, flowMoveBlocked, setStepType, slugify, uniqueId } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
@@ -8,7 +8,7 @@ import { STEP_META, STEP_TYPES, stepHelp } from "../lib/stepMeta";
 import { processTarget } from "./Feedback";
 import { ResourceEditor } from "./Resources";
 import { EntryIcon } from "./EntryIcon";
-import { EditSection, FieldsHead, ItemFeedback, ItemIssues, selectExample } from "./EditFrame";
+import { DeleteButton, EditSection, FieldsHead, ItemFeedback, ItemIssues, selectExample } from "./EditFrame";
 import { Field, TypeIcon, notify, useLayer } from "./ui";
 
 /** The fields of a step that most steps do without: offered as "+ Tool", "+ Typical time"… until they have a value. */
@@ -74,7 +74,7 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
               {index !== process.steps.length - 1 && <option value="__end">To the end</option>}
             </select>
           )}
-          <button className="icon-btn danger" title="Delete step" aria-label="Delete step" disabled={process.steps.length === 1} onClick={onDelete}><Trash2 size={16} /></button>
+          <DeleteButton label="Delete step" disabled={process.steps.length === 1} onDelete={onDelete} />
           </span>
         </>} />
       {naming && <NameNew label={step.type === "decision" ? "Name of the step on the new branch" : "Name of the step after this one"}

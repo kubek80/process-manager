@@ -172,7 +172,7 @@ function push(n: Omit<Notice, "id">): number {
 /** Small messages in the corner of the screen. `detail` may be the error that was caught. */
 export const notify = {
   error: (title: string, detail?: unknown, action?: NoticeAction) => push({ kind: "error", title, detail: messageOf(detail), action }),
-  info: (text: string, action?: NoticeAction) => push({ kind: "info", title: text, action }),
+  info: (text: string, action?: NoticeAction, detail?: string) => push({ kind: "info", title: text, action, detail }),
   dismiss,
 };
 

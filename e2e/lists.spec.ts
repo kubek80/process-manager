@@ -267,7 +267,7 @@ test("About: an editor says what a process belongs to and its rigour; readers se
     await expect(card.locator('[data-line="platform"]')).toHaveText("Platform:Azure");
     await expect(card.locator('[data-line="practice"]')).toHaveText("Practice:Service management");
     await expect(card.locator('[data-line="rigour"]')).toContainText("Mandatory");
-    await expect(card.locator(".card-lines")).not.toContainText("service-management");
+    await expect(card.locator(".card-facts")).not.toContainText("service-management");
     await pickFilter(page, "Category", "Network");
     await expect(page.locator(".card", { hasText: "Details demo" })).toBeVisible();
     await expect(page.locator(".card", { hasText: "Request a GCP project" })).toHaveCount(0);

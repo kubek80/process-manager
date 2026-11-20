@@ -7,7 +7,7 @@ import { pageOf, sizeOf, useListView, usePageSize } from "../lib/paging";
 import { useProfile, useRemembered } from "../lib/profile";
 import { canEdit, canManage, useMe, usePerms } from "../lib/session";
 import { sortOf, sortResults, type MetaByKind, type SortKey } from "../lib/sorting";
-import { closestWanted, contentStamp, fromMeaning, fuse, markedWords, meaningHelp, modeLine, modeOf, needsServer, planOf, providerOf, rememberMode, SEARCH_MODES, truncatedText, typingMovesAddress, useMeaningSearch, type Found, type Provider, type SearchMode } from "../lib/meaning";
+import { closestWanted, noWordsText, otherWay, type ClosestOutcome, contentStamp, fromMeaning, fuse, markedWords, meaningHelp, modeLine, modeOf, needsServer, planOf, providerOf, rememberMode, SEARCH_MODES, truncatedText, typingMovesAddress, useMeaningSearch, type Found, type Provider, type SearchMode } from "../lib/meaning";
 import { go, href, type SearchState } from "../lib/store";
 import { countText, FILTER_LABEL, filterCount, filtersOf, profileOptions, rigourOptionLabel, search, toggleFilter, typeTab, withTypeTab, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
 import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
@@ -186,10 +186,12 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   // nothing of the chosen kind, but something of the other: the tab is what hides it
   const otherKind = tab && out.results.length === 0 ? tabCounts[""] : 0;
 
-  // words found nothing (whatever the filters): on a search asked for on purpose, the closest by meaning
-  const wordHits = plan.show === "words" && asked ? search({ processes, standards, catalog, q: asked, drafts, profile }).results.length : -1;
-  // (with filters chosen, it is the filters that hide what words find: the empty state says so)
-  const wantClosest = closestWanted({ mode, offered, asked, submitted, wordHits }) && !anyChosen;
+  // words found nothing (whatever the filters and "My application"): on a search asked for on purpose, the closest by meaning
+  const wordHits = plan.show === "words" && asked ? search({ processes, standards, catalog, q: asked, drafts }).results.length : -1;
+  // (with filters chosen, it is the filters that hide what words find: the empty state says so;
+  // "My application" is kept for good, so it does not stop the closest from being looked for)
+  const filtered = filterCount(filters) > 0 || bookmarked || due;
+  const wantClosest = closestWanted({ mode, offered, asked, submitted, wordHits }) && !filtered;
   const closestState = useMeaningSearch(asked, wantClosest, attempt, stamp);
   const closest = useMemo(() => {
     if (!wantClosest || closestState.for !== asked || closestState.loading || !closestState.answer || closestState.answer.query !== asked) return null;
@@ -197,6 +199,7 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
     return search({ processes, standards, catalog, drafts, profile, found: fromMeaning(closestState.answer.results, (k, id) => byKey.get(`${k}:${id}`)) }).results;
   }, [wantClosest, closestState, asked, processes, standards, catalog, drafts, profile]);
   const closestWords = useMemo(() => markedWords(wordsOf(asked)), [asked]);
+  const closestOutcome: ClosestOutcome = !wantClosest ? "not-tried" : closestState.problem ? "problem" : closest === null ? "waiting" : closest.length ? "found" : "nothing";
 
   const [view, setView] = useListView(me.user?.email);
   const [open, setOpen] = useState(false); // the filters on a narrow screen
@@ -236,6 +239,7 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   const bare = n === 0 && !anyChosen && !plan.busy;
   // nothing found: nothing to order or page through (the chosen filters stay, with a way to remove them)
   const noTools = n === 0 && !plan.busy;
+  const other = otherWay({ offered, q: shownQ, show: plan.show, mode, filtered, closest: closestOutcome });
   const summary = <>{shownQ.trim() ? <> for “{shownQ.trim()}”</> : null}{chosen.length ? <> with {plural(chosen.length, "filter")}</> : null}</>;
 
   return (
@@ -289,7 +293,7 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
               )}
             </div>
           )}
-          {wantClosest && n === 0 && !closestState.problem && (closest === null || closest.length > 0) ? (
+          {n === 0 && (closestOutcome === "waiting" || closestOutcome === "found") ? (
             <div className="search-closest" role="status" aria-live="polite">
               {closest === null ? (
                 <p className="search-busy"><span className="search-spinner" aria-hidden="true" />Nothing contains all these words. Looking for the closest by meaning…</p>
@@ -326,10 +330,10 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
                   )}
                   {otherKind === 0 && <p className="muted">
                     {chosen.length ? (shownQ.trim() ? `Nothing matches “${shownQ.trim()}” with these filters.` : "Nothing matches these filters.")
-                      : plan.show === "meaning" ? `Nothing close to “${shownQ.trim()}” was found.` : `Nothing matches “${shownQ.trim()}”.`}
+                      : plan.show === "meaning" ? `Nothing close to “${shownQ.trim()}” was found.`
+                      : plan.show === "words" ? noWordsText(shownQ.trim(), words.length, closestOutcome) : `Nothing matches “${shownQ.trim()}”.`}
                     {chosen.length > 0 && withoutFilters > 0 && ` Without the filters there ${withoutFilters === 1 ? "is 1 result" : `are ${withoutFilters} results`}.`}
-                    {!chosen.length && plan.show === "words" && words.length > 1 && " Every word must be found, so try fewer words."}
-                    {!chosen.length && plan.show === "words" && words.length <= 1 && " Check the spelling, or try another word."}
+                    {chosen.length > 0 && !withoutFilters && closestOutcome === "nothing" && " Nothing comes close by meaning either."}
                   </p>}
                   {chosen.length > 0 && otherKind === 0 && (
                     <div className="btn-row">
@@ -339,11 +343,11 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
                       <button type="button" className="btn small primary" onClick={clear}>Clear all filters</button>
                     </div>
                   )}
-                  {/* the other way of searching, unless it is the filters that hide what was found */}
-                  {offered && shownQ.trim() && (plan.show === "meaning" || mode === "words") && !(chosen.length > 0 && withoutFilters > 0) && otherKind === 0 && (
+                  {/* the other way of searching, unless it is the filters that hide what was found; never the search just made */}
+                  {other && !(chosen.length > 0 && withoutFilters > 0) && otherKind === 0 && (
                     <p className="search-try-other">
-                      <button type="button" className="btn small accent-soft" onClick={() => setMode(plan.show === "meaning" ? "words" : "meaning")}>
-                        {plan.show === "meaning" ? "Search by words instead" : "Search by meaning instead"}
+                      <button type="button" className="btn small accent-soft" onClick={() => (other === "closest" ? submit() : setMode(other))}>
+                        {other === "words" ? "Search by words instead" : other === "closest" ? "Show the closest by meaning" : "Search by meaning instead"}
                       </button>
                     </p>
                   )}

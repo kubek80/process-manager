@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import { CircleAlert, Clock3, Code2, Compass, CornerDownRight, Layers, ListChecks, MessageSquare, MessageSquarePlus, PencilLine, Server, UserCheck, Users } from "lucide-react";
 import type { DocMeta, Process, Rigour, Standard, TargetKind } from "../types";
 import { useCatalog } from "../lib/catalog";
-import { cardGroups, cardLines, rigourParts, shortFact, tiersText, type CardLine } from "../lib/cardLines";
+import { cardGroups, cardLines, reviewMarkText, reviewOverdue, rigourParts, shortFact, tiersShort, type CardLine } from "../lib/cardLines";
 import { statusOf } from "../lib/lifecycle";
 import { author } from "../lib/editing";
 import { matchRanges, NO_CATEGORY_LABEL, RIGOUR_LEVEL, type Hit } from "../lib/search";
@@ -114,7 +114,7 @@ export function DocCard(props: DocCardProps) {
   const changes = !!meta?.draft && status !== "draft";
   const title = typeof doc.title === "string" && doc.title ? doc.title : doc.id;
   const category = doc.category ? catalog.categories.find((c) => c.id === doc.category)?.name ?? doc.category : NO_CATEGORY_LABEL;
-  const tiers = tiersText(doc, catalog);
+  const tiers = tiersShort(doc, catalog);
   const H = level === 2 ? "h2" : "h3";
   const feedbackHref = kind === "process" ? href({ page: "process", id: doc.id, tab: "feedback" }) : href({ page: "standard", id: doc.id, tab: "feedback" });
   const by = foundBy && foundBy.length > 0 ? [...foundBy].sort() : [];
@@ -131,8 +131,8 @@ export function DocCard(props: DocCardProps) {
       {changes && <span className="card-mark changes" title={`Saved by ${author(meta!.draft).name}, not yet published`}><PencilLine size={12} aria-hidden="true" />Unpublished changes</span>}
       {fix && <span className="card-mark bad"><CircleAlert size={12} aria-hidden="true" />Needs fixing</span>}
       {groups.attention.map((l) => (
-        <span key={l.key} className={`card-mark ${l.key === "review" && l.value.startsWith("Overdue") ? "bad" : "warn"}`} data-line={l.key}>
-          <span className="sr-only">{l.name}: </span>{l.key === "review" ? `Review ${l.value.charAt(0).toLowerCase()}${l.value.slice(1)}` : l.value}
+        <span key={l.key} className={`card-mark ${l.key === "review" && reviewOverdue(l.value) ? "bad" : "warn"}`} data-line={l.key}>
+          <span className="sr-only">{l.name}: </span>{l.key === "review" ? reviewMarkText(l.value) : l.value}
         </span>
       ))}
     </div>
@@ -172,15 +172,21 @@ export function DocCard(props: DocCardProps) {
       <div className="card-top">
         <span className="card-eyebrow">
           {showKind && <KindTag kind={kind} />}
-          <span className="card-cat">{category}</span>
+          <span className="card-cat" title={category}>{category}</span>
         </span>
-        <span className="card-tiers" title="Application tiers it applies to">
-          <span className="sr-only">Applies to: </span>{tiers}
+        {/* one line: a long list of tiers is counted ("3 tiers"), the full list is the tooltip and is read out */}
+        <span className="card-tiers" title={`Applies to ${tiers.full}`}>
+          {tiers.short === tiers.full
+            ? <><span className="sr-only">Applies to: </span>{tiers.full}</>
+            : <><span className="sr-only">Applies to: {tiers.full}</span><span aria-hidden="true">{tiers.short}</span></>}
         </span>
       </div>
       {marks}
-      <H className="card-title"><a className="card-link" href={docHref(kind, doc.id, fix)}><Marked text={title} words={words} /></a></H>
-      {doc.summary && <p className="card-summary"><Marked text={doc.summary} words={words} /></p>}
+      {/* the title and the summary are one part, so that the titles of a row of cards start at the same height */}
+      <div className="card-head">
+        <H className="card-title"><a className="card-link" href={docHref(kind, doc.id, fix)}><Marked text={title} words={words} /></a></H>
+        {doc.summary && <p className="card-summary"><Marked text={doc.summary} words={words} /></p>}
+      </div>
       {(key.length > 0 || groups.who.length > 0) && (
         <div className="card-facts">
           {key.length > 0 && (

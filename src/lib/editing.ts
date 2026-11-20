@@ -1,5 +1,5 @@
 import type { Catalog, Issue, Level, Process, Standard, Status, StepType, TargetKind } from "../types";
-import { compare, describeChange, fieldName } from "./diff";
+import { compare, describeChange, fieldName, type Change } from "./diff";
 import { EXAMPLE } from "./edit";
 
 /**
@@ -173,18 +173,15 @@ export interface OutlineEntry {
   level?: Level;
 }
 
-/** The width from which the outline of the editing screen is open by default; narrower, it starts as a rail. */
-export const OUTLINE_OPEN_FROM = 1440;
 /** Where the outline's choice (open or collapsed) is remembered, per person, in this browser. */
 export const outlineKey = (email?: string) => `pm:outline:${email ?? ""}`;
 /**
- * Whether the outline shows as a narrow rail (numbers and kind icons only): as the person last
- * left it ("rail" / "open"), else collapsed below `OUTLINE_OPEN_FROM` pixels and open from there.
+ * Whether the outline shows as a narrow rail (numbers and kind icons only): only when the person
+ * chose it ("rail", remembered); open, with the names, at every desktop width otherwise. (Below
+ * 1280 pixels the outline slides over the screen and is never a rail.)
  */
-export function outlineCollapsed(stored: string | null | undefined, width: number): boolean {
-  if (stored === "rail") return true;
-  if (stored === "open") return false;
-  return width < OUTLINE_OPEN_FROM;
+export function outlineCollapsed(stored: string | null | undefined): boolean {
+  return stored === "rail";
 }
 
 /** What the outline of a process lists, in order: its sections, and every step under "Steps". */
@@ -433,4 +430,34 @@ export function clock(iso?: string, now = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   const day = (x: Date) => `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`;
   return day(d) === day(now) ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : `on ${day(d)}`;
+}
+
+/**
+ * What Undo or Redo did, said as what is true now: "Step “Approve” is back." after undoing its
+ * delete, "Step “Approve” is deleted again." after redoing it. `change`: the main difference from
+ * what was on screen to what is on screen now (compare(kind, before, now)); `kind` of it "added"
+ * means it came back. Without one, a plain "Undone." / "Done again.".
+ */
+export function steppedMessage(dir: "undo" | "redo", change?: Change): string {
+  if (!change) return dir === "undo" ? "Undone." : "Done again.";
+  const Label = cap(change.label);
+  if (change.what === "Details") {
+    if (change.from !== undefined || change.to !== undefined) return change.to ? `${Label} is “${change.to}” again.` : `${Label} is empty again.`;
+    return dir === "undo" ? `${Label} is as it was.` : `${Label} is changed again.`;
+  }
+  const thing = `${change.what} “${change.label}”`;
+  if (change.kind === "added") return dir === "undo" ? `${thing} is back.` : `${thing} is added again.`;
+  if (change.kind === "removed") return dir === "undo" ? `${thing} is removed again.` : `${thing} is deleted again.`;
+  const parts = change.details?.length ? `: ${change.details.join(", ")}` : "";
+  return dir === "undo" ? `${thing} is as it was${parts}.` : `${thing} is changed again${parts}.`;
+}
+
+/**
+ * The delete button of a step or requirement ignores presses for a moment after the selection
+ * changed: after a delete the next item is selected under the same pointer, and a second click
+ * (or Enter) must not delete it as well. True when a press may delete.
+ */
+export const DELETE_PAUSE = 700;
+export function deleteReady(selectedAt: number, now: number, pause = DELETE_PAUSE): boolean {
+  return now - selectedAt >= pause;
 }

@@ -7,7 +7,7 @@ import { go, useProgress, type Tab } from "../lib/store";
 import { useSelectedItem } from "../lib/selection";
 import { canEdit, canManage } from "../lib/rights";
 import { reviewOf, statusOf } from "../lib/lifecycle";
-import { Resources } from "./Resources";
+import { RESOURCE_KINDS } from "./Resources";
 import { FeedbackForm, FeedbackTab, openCount, processTarget } from "./Feedback";
 import { DocEngagement } from "./Engage";
 import { useMe, usePerms } from "../lib/session";
@@ -85,8 +85,6 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
 
   const mine = renderable ? doc.steps.filter((s) => s.actor === "me").length : 0;
   const hasExtras = renderable && (doc.prerequisites.length > 0 || !!doc.resources?.length || !!doc.standards?.length);
-  // the checklist shows "Before you start" in full; on the map it is a panel of its own
-  const showExtras = renderable && view === "list";
   const readyCount = renderable ? doc.prerequisites.filter((_, i) => hasPre(i)).length : 0;
 
   if (!renderable) return <NotShown kind="process" title={doc.title || process.id} editHref={editor ? editHref : undefined} back={back}
@@ -116,7 +114,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
 
       <div className="tabs-row">
         <div className="tabs" role="tablist">
-          {([["flow", "Map", Workflow], ["list", "Checklist", ListChecks], ["feedback", "Feedback", Flag], ["skills", "Skill", Bot]] as const).map(([id, label, Icon]) => (
+          {([["flow", "Map", Workflow], ["list", "Checklist", ListChecks], ["feedback", "Feedback", Flag], ["skills", "Skills", Bot]] as const).map(([id, label, Icon]) => (
             <button key={id} role="tab" aria-selected={view === id} className={`tab ${view === id ? "on" : ""}`}
               onClick={() => go({ page: "process", id: process.id, tab: id, ...(selected && (id === "flow" || id === "list") ? { item: selected } : {}) })}><Icon size={16} />{label}{id === "feedback" && openCount(feedback) > 0 && <span className="tab-count">{openCount(feedback)}</span>}</button>
           ))}
@@ -134,30 +132,11 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
         <div className="check bad banner"><CalendarCheck size={16} /><span><b>{review.label}.</b> Read it through{editor ? ", correct what changed on the editing screen," : ""} then press “Mark as reviewed”.</span></div>
       )}
 
-      {view === "flow" && hasExtras && (
+      {(view === "flow" || view === "list") && hasExtras && (
         <BeforeYouStart process={doc} all={all} standards={standards} open={extras} hasPre={hasPre} tickPre={tickPre} readyCount={readyCount}
           onToggle={() => { const next = !extras; setExtras(next); try { localStorage.setItem(BEFORE_KEY, next ? "open" : "closed"); } catch { /* ignore */ } }} />
       )}
-
-      {showExtras && doc.prerequisites.length > 0 && (
-        <section className="prereqs">
-          <h2>Before you start <span>{readyCount}/{doc.prerequisites.length} ready</span></h2>
-          <PrereqGrid process={doc} all={all} hasPre={hasPre} tickPre={tickPre} />
-        </section>
-      )}
-      {showExtras && !!doc.resources?.length && (
-        <section className="prereqs">
-          <h2>Do it faster <span>self-service skills and useful links</span></h2>
-          <Resources list={doc.resources} />
-        </section>
-      )}
-      {showExtras && !!doc.standards?.length && (
-        <section className="prereqs">
-          <h2>Standards this helps to meet</h2>
-          <StandardLinks ids={doc.standards} standards={standards} />
-        </section>
-      )}
-      {view === "flow" && <FlowView editable={false} process={doc} selectedId={selected} done={done} feedback={feedback} onSelect={select} onReport={setFlagging} />}
+      {view === "flow" && <FlowView editable={false} follow process={doc} selectedId={selected} done={done} feedback={feedback} onSelect={select} onReport={setFlagging} />}
       {view === "list" && <ListView process={doc} all={all} done={done} toggle={toggle} reset={reset} selectedId={selected} onSelect={select}
         feedback={feedback} onReport={(id) => { setSelected(id); setReporting(true); }} />}
       {view === "feedback" && <FeedbackTab target={processTarget(doc)} feedback={feedback} onSelect={select} focus={focusFeedback} onFocused={() => setFocusFeedback(false)} />}
@@ -192,13 +171,13 @@ export function PrereqGrid({ process, all, hasPre, tickPre, compact }: {
         const src = q.processId ? all.find((p) => p.id === q.processId) : undefined;
         const on = !!hasPre?.(i);
         return (
-          <div key={keys[i]} className={`prereq ${on ? "on" : ""}`}>
+          <div key={keys[i]} className={`prereq ${on ? "on" : ""}`} title={compact ? [q.title, q.description, q.processId && src ? `Don’t have it? ${src.title}` : ""].filter(Boolean).join("\n") : undefined}>
             {tickPre
               ? <button className={`tick ${on ? "on" : ""}`} onClick={() => tickPre(i)} aria-pressed={on} aria-label={`I have this: ${q.title}`}><Check size={14} strokeWidth={3} /></button>
               : <span className="tick" aria-hidden="true" />}
             <div>
               <strong>{q.title || "(no name yet)"}</strong>
-              {q.description && <p>{q.description}</p>}
+              {q.description && !(compact && q.processId) && <p>{q.description}</p>}
               {q.url && <a href={q.url} target="_blank" rel="noreferrer">More information<ArrowUpRight size={13} /></a>}
               {q.processId && (
                 <button className="prereq-link" onClick={() => src && go({ page: "process", id: src.id, tab: "flow" })} disabled={!src || !tickPre}>
@@ -224,29 +203,56 @@ export function StandardLinks({ ids, standards }: { ids: string[]; standards: St
   );
 }
 
-/** The panel above the map: what is needed, ways to do it faster, the standards it helps to meet. */
+/**
+ * "Before you start", the same compact panel on the map and on the checklist. Its first line: the
+ * fold, then the ways to do it faster and the standards it helps to meet (always visible); folded
+ * out, what is needed in one row of small items with ticks for the reader. Descriptions that do
+ * not fit are the item's tooltip.
+ */
 export function BeforeYouStart({ process, all, standards, open, onToggle, hasPre, tickPre, readyCount }: {
   process: Process; all: Process[]; standards: Standard[]; open: boolean; onToggle: () => void;
   hasPre?: (i: number) => boolean; tickPre?: (i: number) => void; readyCount?: number;
 }) {
   const pre = process.prerequisites;
+  const res = [...(process.resources ?? [])].sort((a, b) => Number(b.kind === "skill") - Number(a.kind === "skill"));
+  const links = (res.length > 0 || !!process.standards?.length) && (
+    <div className="before-links">
+      {res.length > 0 && <div className="before-group">
+        <h3>Do it faster</h3>
+        <ul className="before-chips">
+          {res.map((r, i) => {
+            const K = RESOURCE_KINDS[r.kind ?? "other"];
+            return (
+              <li key={i} className={r.kind === "skill" ? "skill" : ""}>
+                <a href={r.url} target="_blank" rel="noreferrer" title={r.description ? `${K.label}: ${r.description}` : K.label}>
+                  <K.icon size={14} aria-hidden="true" /><span className="sr-only">{K.label}: </span>{r.title}<ArrowUpRight size={13} aria-hidden="true" />
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </div>}
+      {!!process.standards?.length && <div className="before-group"><h3>Helps to meet</h3><StandardLinks ids={process.standards} standards={standards} /></div>}
+    </div>
+  );
+  // with nothing needed there is nothing to fold: the links are the panel
+  const foldable = pre.length > 0;
   return (
-    <section className={`before-panel ${open ? "open" : ""}`} aria-label="Before you start">
-      <button className="before-toggle" aria-expanded={open} aria-controls="before-body" onClick={onToggle}>
-        {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-        <b>Before you start</b>
-        {pre.length > 0 && <span className={readyCount === pre.length ? "all-ready" : ""}>{tickPre ? `${readyCount}/${pre.length} ready` : `${pre.length} needed`}</span>}
-        {!!process.resources?.length && <span>{process.resources.length} useful link{process.resources.length > 1 ? "s" : ""}</span>}
-        {!!process.standards?.length && <span>{process.standards.length} standard{process.standards.length > 1 ? "s" : ""}</span>}
-        <em>{open ? "Hide" : "Show"}</em>
-      </button>
-      {open && (
-        <div id="before-body" className={`before-body ${pre.length ? "" : "no-pre"}`}>
-          {pre.length > 0 && <div className="before-main"><PrereqGrid compact process={process} all={all} hasPre={hasPre} tickPre={tickPre} /></div>}
-          {(!!process.resources?.length || !!process.standards?.length) && <div className="before-side">
-            {!!process.resources?.length && <><h3>Do it faster</h3><Resources list={process.resources} compact /></>}
-            {!!process.standards?.length && <><h3>Standards this helps to meet</h3><StandardLinks ids={process.standards} standards={standards} /></>}
-          </div>}
+    <section className={`before-panel ${open && foldable ? "open" : ""}`} aria-label="Before you start">
+      <div className="before-head">
+        {foldable
+          ? <button className="before-toggle" aria-expanded={open} aria-controls="before-body" onClick={onToggle}>
+            {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <b>Before you start</b>
+            <span className={readyCount === pre.length ? "all-ready" : ""}>{tickPre ? `${readyCount}/${pre.length} ready` : `${pre.length} needed`}</span>
+            <em>{open ? "Hide" : "Show"}</em>
+          </button>
+          : <b className="before-title">Before you start</b>}
+        {links}
+      </div>
+      {open && foldable && (
+        <div id="before-body" className="before-body">
+          <PrereqGrid compact process={process} all={all} hasPre={hasPre} tickPre={tickPre} />
         </div>
       )}
     </section>

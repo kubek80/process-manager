@@ -251,16 +251,14 @@ describe("the reader's line about unpublished changes", () => {
 });
 
 describe("the outline as a narrow rail", () => {
-  it("is collapsed by default below 1440 pixels and open from there", () => {
-    expect(outlineCollapsed(null, 1366)).toBe(true);
-    expect(outlineCollapsed(null, 1439)).toBe(true);
-    expect(outlineCollapsed(null, 1440)).toBe(false);
-    expect(outlineCollapsed(undefined, 1920)).toBe(false);
+  it("is open, with the names, at every desktop width until the person narrows it", () => {
+    expect(outlineCollapsed(null)).toBe(false);
+    expect(outlineCollapsed(undefined)).toBe(false);
+    expect(outlineCollapsed("open")).toBe(false);
+    expect(outlineCollapsed("something else")).toBe(false);
   });
-  it("follows what the person chose last, at any width", () => {
-    expect(outlineCollapsed("open", 1366)).toBe(false);
-    expect(outlineCollapsed("rail", 1920)).toBe(true);
-    expect(outlineCollapsed("something else", 1366)).toBe(true);
+  it("stays a rail once the person chose it", () => {
+    expect(outlineCollapsed("rail")).toBe(true);
   });
   it("is remembered per person", () => {
     expect(outlineKey("alex@example.com")).toBe("pm:outline:alex@example.com");

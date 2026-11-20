@@ -152,6 +152,7 @@ test("Back and reload return to the page the person left; a new browser starts o
   const bottom = pager(page, "Pages of processes, at the end");
   await bottom.getByRole("button", { name: "Page 2" }).click();
   await expect(count(page)).toHaveText(`Showing 13–24 of ${TOTAL} processes`);
+  await expect(page).toHaveURL(/#\/processes\?(.*&)?page=2(&|$)/); // the page is in the address
   const first = page.locator("li.card").first();
   const title = (await first.locator(".card-title").textContent())!.trim();
   await first.locator(".card-link").click();
@@ -161,11 +162,14 @@ test("Back and reload return to the page the person left; a new browser starts o
   await expect(bottom.getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
   await page.reload();
   await expect(count(page)).toHaveText(`Showing 13–24 of ${TOTAL} processes`);
-  // the Standards list keeps a page of its own
-  await open(page, "/standards");
+  // the Standards list keeps a page of its own; Back returns to the page of processes
+  await page.locator(".nav").getByRole("link", { name: "Standards" }).click();
   await expect(page.locator("p.list-count")).toHaveText("3 standards");
-  await open(page, "/processes");
+  await page.goBack();
   await expect(count(page)).toHaveText(`Showing 13–24 of ${TOTAL} processes`);
+  // the list opened afresh starts at the beginning
+  await page.locator(".nav").getByRole("link", { name: "Processes" }).click();
+  await expect(count(page)).toHaveText(`Showing 1–12 of ${TOTAL} processes`);
 
   // another browser (a new tab session) starts at the beginning
   const other = await browser.newContext({ baseURL: "http://127.0.0.1:8090" });

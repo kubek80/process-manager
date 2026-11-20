@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitZoom, hiddenEdges, scrollToShow, clampZoom, isZoomWheel, scrollForZoom, wheelZoom, zoomKey, ZOOM_MAX, ZOOM_MIN } from "../zoom";
+import { fitWhole, hiddenEdges, laneColumn, laneLabel, openingZoom, scrollToCentre, stepZoom, clampZoom, isZoomWheel, scrollForZoom, wheelZoom, zoomKey, ZOOM_FLOOR, ZOOM_MAX, ZOOM_MIN } from "../zoom";
 
 describe("Ctrl + scroll on the map", () => {
   it("scrolling up zooms in, down zooms out, by about a tenth per notch of a mouse wheel", () => {
@@ -44,32 +44,96 @@ describe("Ctrl + scroll on the map", () => {
 });
 
 
-describe("fitting the map", () => {
-  it("fits the column in steps of 5%, never above 100% and never below the floor", () => {
-    expect(fitZoom(1000, 800, 0.6)).toBe(1);
-    expect(fitZoom(700, 1000, 0.6)).toBe(0.7);
-    expect(fitZoom(700, 1040, 0.6)).toBe(0.65);
-    // a long flow: readable on opening (60%), the whole of it on request (40%)
-    expect(fitZoom(700, 2400, 0.6)).toBe(0.6);
-    expect(fitZoom(700, 2400, 0.4)).toBe(0.4);
-    expect(fitZoom(700, 1600, 0.4)).toBe(0.4);
-    expect(fitZoom(0, 1600, 0.4)).toBe(1);
+describe("opening the map", () => {
+  it("is as large as fits the width beside the lane names, in steps of 5%, never above 100% nor below the floor", () => {
+    expect(openingZoom(1000, 800, 0.6)).toBe(1);
+    expect(openingZoom(700, 1000, 0.6)).toBe(0.7);
+    expect(openingZoom(700, 1040, 0.6)).toBe(0.65);
+    // a long flow stays readable (60%) and scrolls sideways
+    expect(openingZoom(700, 2400, 0.6)).toBe(0.6);
+    expect(openingZoom(0, 1600, 0.6)).toBe(1);
+    // the lane column takes its share of the width
+    expect(openingZoom(856, 1000, 0.6, laneColumn)).toBe(0.7);
   });
 });
 
-describe("bringing a selected step into view", () => {
-  const view = { left: 0, top: 0, width: 600, height: 400 };
-  it("leaves a block that is fully visible alone", () => {
-    expect(scrollToShow({ x: 100, y: 50, w: 200, h: 90 }, 1, view)).toBeNull();
+describe("Fit: the whole flow", () => {
+  it("fits width and height together, in whole percents, never above 100%", () => {
+    expect(fitWhole({ width: 1000, height: 600 }, { width: 800, height: 300 })).toBe(1);
+    expect(fitWhole({ width: 700, height: 600 }, { width: 1000, height: 300 })).toBe(0.7);
+    // the height decides
+    expect(fitWhole({ width: 2000, height: 300 }, { width: 1000, height: 600 })).toBe(0.5);
   });
-  it("scrolls just far enough for a block to the right or below, with a margin", () => {
-    expect(scrollToShow({ x: 900, y: 50, w: 200, h: 90 }, 1, view)).toEqual({ left: 1100 + 24 - 600, top: 0 });
-    expect(scrollToShow({ x: 100, y: 500, w: 200, h: 90 }, 1, view)).toEqual({ left: 0, top: 590 + 24 - 400 });
+  it("goes below the usual 40% when a long flow needs it: the release process at 1366 px", () => {
+    // 14 steps, 3287 px of drawing at 100%, 450 px high, in a map 888 px wide and 420 px high
+    const z = fitWhole({ width: 888, height: 420 }, { width: 3287, height: 450 }, laneColumn);
+    expect(z).toBeLessThan(ZOOM_MIN);
+    expect(laneColumn(z) + 3287 * z).toBeLessThanOrEqual(888);
+    expect(laneColumn(z + 0.01) + 3287 * (z + 0.01)).toBeGreaterThan(888);
+    // never smaller than a picture of boxes
+    expect(fitWhole({ width: 100, height: 100 }, { width: 100000, height: 100 })).toBe(ZOOM_FLOOR);
   });
-  it("scrolls back for a block to the left, and counts the zoom", () => {
-    expect(scrollToShow({ x: 100, y: 50, w: 200, h: 90 }, 1, { ...view, left: 500 })).toEqual({ left: 76, top: 0 });
-    // at 60% the block at x 1000 starts at 600 on screen
-    expect(scrollToShow({ x: 1000, y: 0, w: 200, h: 90 }, 0.6, view)).toEqual({ left: 1200 * 0.6 + 24 - 600, top: 0 });
+  it("counts the lane column at the width it has at that zoom", () => {
+    expect(laneColumn(1)).toBe(156);
+    expect(laneColumn(0.5)).toBe(124);
+    expect(laneColumn(0.2)).toBe(104);
+    expect(laneColumn(0.5, true)).toBe(80);
+    const z = fitWhole({ width: 600, height: 1000 }, { width: 2000, height: 100 }, laneColumn);
+    expect(laneColumn(z) + 2000 * z).toBeLessThanOrEqual(600);
+  });
+});
+
+describe("the zoom buttons", () => {
+  it("go a tenth at a time, within the limits", () => {
+    expect(stepZoom(0.6, 1)).toBe(0.7);
+    expect(stepZoom(0.65, 1)).toBe(0.7);
+    expect(stepZoom(0.6, -1)).toBe(0.5);
+    expect(stepZoom(0.4, -1)).toBe(ZOOM_MIN);
+    expect(stepZoom(ZOOM_MAX, 1)).toBe(ZOOM_MAX);
+  });
+  it("after a Fit below 40%: zooming out goes no further, zooming in works", () => {
+    expect(stepZoom(0.22, -1)).toBe(0.22);
+    expect(stepZoom(0.22, 1)).toBe(0.3);
+    expect(clampZoom(0.1, 0.22)).toBe(0.22);
+    expect(wheelZoom(0.22, 100)).toBe(0.22);
+    expect(wheelZoom(0.22, -100)).toBeGreaterThan(0.22);
+  });
+});
+
+describe("the lane names", () => {
+  it("show what the lane has room for", () => {
+    expect(laneLabel(90, 156)).toEqual({ avatar: true, count: true, lines: 3, small: false });
+    expect(laneLabel(64, 156)).toEqual({ avatar: true, count: true, lines: 2, small: false });
+    // narrower column: no round mark
+    expect(laneLabel(64, 124).avatar).toBe(false);
+    // a low lane: the name alone, in smaller type
+    expect(laneLabel(40, 124)).toEqual({ avatar: false, count: false, lines: 2, small: true });
+    expect(laneLabel(26, 104)).toEqual({ avatar: false, count: false, lines: 1, small: true });
+  });
+});
+
+describe("a selected step", () => {
+  const view = { left: 0, top: 0, width: 800, height: 400 };
+  const content = { width: 3000, height: 400 };
+  it("is left where it is when it is well inside the view", () => {
+    expect(scrollToCentre({ x: 300, y: 50, w: 125, h: 56 }, view, content)).toBeNull();
+  });
+  it("is brought to the middle when it is near an edge or out of view, not just inside the edge", () => {
+    // near the right edge: its branches would be cut
+    expect(scrollToCentre({ x: 700, y: 50, w: 125, h: 56 }, view, content)).toEqual({ left: Math.round(762.5 - 400), top: 0 });
+    // far out of view
+    expect(scrollToCentre({ x: 2000, y: 50, w: 125, h: 56 }, { ...view, left: 0 }, content)).toEqual({ left: Math.round(2062.5 - 400), top: 0 });
+    // to the left
+    expect(scrollToCentre({ x: 1000, y: 50, w: 125, h: 56 }, { ...view, left: 1500 }, content)).toEqual({ left: Math.round(1062.5 - 400), top: 0 });
+  });
+  it("at the very end of the flow, as far as the map scrolls", () => {
+    expect(scrollToCentre({ x: 2900, y: 50, w: 90, h: 56 }, view, content)).toEqual({ left: 2200, top: 0 });
+  });
+  it("scrolls nowhere on an axis where the whole flow fits", () => {
+    expect(scrollToCentre({ x: 700, y: 300, w: 90, h: 56 }, view, { width: 800, height: 400 })).toBeNull();
+  });
+  it("is also centred up and down in a tall map", () => {
+    expect(scrollToCentre({ x: 300, y: 900, w: 125, h: 56 }, view, { width: 800, height: 2000 })).toEqual({ left: 0, top: Math.round(928 - 200) });
   });
 });
 
@@ -82,17 +146,9 @@ describe("the fade at the edges of the map", () => {
   });
 });
 
-describe("the lane names at the left of the map", () => {
-  it("hide what is under them: a step there is scrolled out from under them", () => {
-    // step 1 at 160-368 px, the names take 156 px, the map is scrolled 192 px: it is under the names
-    const to = scrollToShow({ x: 160, y: 20, w: 208, h: 94 }, 1, { left: 192, top: 0, width: 800, height: 400 }, 24, 156);
-    expect(to).toEqual({ left: 0, top: 0 });
-    // already beside the names: nothing to do
-    expect(scrollToShow({ x: 400, y: 20, w: 208, h: 94 }, 1, { left: 0, top: 0, width: 800, height: 400 }, 24, 156)).toBeNull();
-  });
-  it("keep their place when zooming around the pointer", () => {
-    // the point under the pointer stays where it is; the names do not zoom
-    expect(scrollForZoom(1, 0.5, { x: 556, y: 0 }, { left: 0, top: 0 }, 156)).toEqual({ left: 0, top: 0 });
-    expect(scrollForZoom(0.5, 1, { x: 356, y: 0 }, { left: 0, top: 0 }, 156).left).toBe(200);
+describe("zooming around the pointer", () => {
+  it("keeps the point under the pointer in place at any zoom", () => {
+    expect(scrollForZoom(1, 0.5, { x: 400, y: 0 }, { left: 0, top: 0 })).toEqual({ left: 0, top: 0 });
+    expect(scrollForZoom(0.5, 1, { x: 200, y: 0 }, { left: 0, top: 0 }).left).toBe(200);
   });
 });

@@ -461,5 +461,5 @@ export function rigourOptionLabel(r: Rigour, subject: TargetKind | "any"): strin
   if (subject === "standard") return levelWord(RIGOUR_LEVEL[r]);
   return `${RIGOUR_LABEL[r]} or ${levelWord(RIGOUR_LEVEL[r]).toLowerCase()}`;
 }
-/** The name of the rigour filter: "Level" on the standards, else "Rigour". */
-export const rigourFilterName = (subject: TargetKind | "any") => (subject === "standard" ? "Level" : "Rigour");
+/** The name of the rigour filter: "Rigour" everywhere (its options say "Must" or "Mandatory" by the kind). */
+export const rigourFilterName = (_subject: TargetKind | "any") => "Rigour";

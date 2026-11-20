@@ -1,5 +1,6 @@
+import { createPortal } from "react-dom";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, ClipboardCheck, LayoutGrid, LogOut, Moon, Search, Settings2, ShieldCheck, Sun, Users } from "lucide-react";
+import { BookOpen, ClipboardCheck, LayoutGrid, LogOut, Menu, Moon, Search, Settings2, ShieldCheck, Sun, Users, X } from "lucide-react";
 import { Lightbulb } from "lucide-react";
 import type { Catalog, DocMeta, Feedback, FeedbackByTarget, Me, Process, Standard, TargetKind } from "./types";
 import {
@@ -101,6 +102,62 @@ function UserMenu({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         </AccountPop>
       )}
     </div>
+  );
+}
+
+/** A main place of the portal: in the top bar, and in the menu on small screens. */
+interface Place { key: string; pages: string[]; href: string; label: string; title: string; icon: typeof Search; count?: number; name?: string }
+
+function PlaceLink({ place: p, on, current, onGo }: { place: Place; on: string; current?: "page"; onGo?: () => void }) {
+  const Icon = p.icon;
+  return (
+    <a className={`nav-link ${on}`} aria-current={current} href={p.href} aria-label={p.name ?? p.label} title={p.title} onClick={onGo}>
+      <Icon size={onGo ? 18 : 15} aria-hidden="true" /><span>{p.label}</span>{!!p.count && <b className="nav-count">{p.count}</b>}
+    </a>
+  );
+}
+
+/**
+ * On small screens the main places are behind one labelled button: a sheet under the top bar
+ * lists them with their names, the current one marked. It closes on a choice, Escape, or a press
+ * outside it.
+ */
+function MenuButton({ places, on, current }: { places: Place[]; on: (...pages: string[]) => string; current: (...pages: string[]) => "page" | undefined }) {
+  const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const here = places.find((p) => on(...p.pages));
+  const waiting = places.reduce((n, p) => n + (p.count ?? 0), 0);
+  // going somewhere else (also with the browser's Back) closes it
+  useEffect(() => {
+    const close = () => setOpen(false);
+    window.addEventListener("hashchange", close);
+    return () => window.removeEventListener("hashchange", close);
+  }, []);
+  return (
+    <div className="menu-box">
+      <button ref={button} className="menu-btn" aria-expanded={open} aria-controls="main-menu" onClick={() => setOpen(!open)}
+        aria-label={waiting ? `Menu, ${waiting} waiting` : "Menu"} title="All places of the portal">
+        {open ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}<span className="menu-word">Menu</span>
+        {here && <span className="menu-here" aria-hidden="true">{here.label}</span>}
+        {waiting > 0 && <b className="nav-count" aria-hidden="true">{waiting}</b>}
+      </button>
+      {open && <MenuSheet onClose={() => setOpen(false)} returnFocus={() => button.current}>
+        {places.map((p) => <PlaceLink key={p.key} place={p} on={on(...p.pages)} current={current(...p.pages)} onGo={() => setOpen(false)} />)}
+      </MenuSheet>}
+    </div>
+  );
+}
+
+function MenuSheet({ onClose, returnFocus, children }: { onClose: () => void; returnFocus: () => HTMLElement | null; children: React.ReactNode }) {
+  const ref = useRef<HTMLElement>(null);
+  useLayer(ref, onClose, { modal: true, returnFocus });
+  // outside the top bar: its blur would make it the frame of anything fixed inside it
+  return createPortal(
+    <>
+      <div className="menu-shade" onClick={onClose} aria-hidden="true" />
+      <nav ref={ref} id="main-menu" className="menu-sheet" aria-label="Main">{children}</nav>
+    </>,
+    document.body,
   );
 }
 
@@ -473,6 +530,19 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const on = (...pages: string[]) => (pages.includes(route.page) ? "on" : "");
   const current = (...pages: string[]) => (pages.includes(route.page) ? "page" as const : undefined);
 
+  // the main places, in the top bar and, on small screens, in the menu
+  const places: Place[] = [
+    { key: "home", pages: ["home", "search"], href: href({ page: "home" }), label: "Home", title: "Home: search processes and standards", icon: Search },
+    { key: "library", pages: ["library", "process"], href: href({ page: "library" }), label: "Processes", title: "Processes", icon: LayoutGrid },
+    { key: "standards", pages: ["standards", "standard"], href: href({ page: "standards" }), label: "Standards", title: "Standards", icon: ShieldCheck },
+    { key: "requests", pages: ["requests"], href: href({ page: "requests" }), label: "Requests", title: "Requests: ask for a process or standard that is missing, vote for what others asked for", icon: Lightbulb },
+    ...(mine.length > 0 ? [{ key: "mine", pages: ["mine"], href: href({ page: "mine" }), label: "My responsibilities", title: "What you answer for: reviews to do, feedback to handle", icon: ClipboardCheck, count: waiting,
+      name: waiting ? `My responsibilities, ${waiting} waiting` : "My responsibilities" }] : []),
+    { key: "catalog", pages: ["catalog"], href: href({ page: "catalog" }), label: "Teams & tools", title: "Teams & tools", icon: Users },
+    { key: "guide", pages: ["guide"], href: href({ page: "guide" }), label: "Guide", title: "Guide", icon: BookOpen },
+    ...(canOpenAdmin(perms) ? [{ key: "admin", pages: ["admin"], href: href({ page: "admin", section: perms.admin ? "access" : "lists" }), label: "Admin", title: "Admin", icon: Settings2 }] : []),
+  ];
+
   const title = pageTitle(route, { process: process?.title, standard: standard?.title, loading: !processes }, name);
   useEffect(() => { document.title = title; }, [title]);
 
@@ -485,20 +555,9 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
           <span className="brand-name">{name}</span>
         </a>
         <nav className="nav" aria-label="Main">
-          <a className={`nav-link ${on("home", "search")}`} aria-current={current("home", "search")} href={href({ page: "home" })} aria-label="Home" title="Home: search processes and standards"><Search size={15} /><span>Home</span></a>
-          <a className={`nav-link ${on("library", "process")}`} aria-current={current("library", "process")} href={href({ page: "library" })} aria-label="Processes" title="Processes"><LayoutGrid size={15} /><span>Processes</span></a>
-          <a className={`nav-link ${on("standards", "standard")}`} aria-current={current("standards", "standard")} href={href({ page: "standards" })} aria-label="Standards" title="Standards"><ShieldCheck size={15} /><span>Standards</span></a>
-          <a className={`nav-link ${on("requests")}`} aria-current={current("requests")} href={href({ page: "requests" })} aria-label="Requests" title="Requests: ask for a process or standard that is missing, vote for what others asked for"><Lightbulb size={15} /><span>Requests</span></a>
-          {mine.length > 0 && (
-            <a className={`nav-link ${on("mine")}`} aria-current={current("mine")} href={href({ page: "mine" })}
-              aria-label={waiting ? `My responsibilities, ${waiting} waiting` : "My responsibilities"} title="What you answer for: reviews to do, feedback to handle">
-              <ClipboardCheck size={15} /><span>My responsibilities</span>{waiting > 0 && <b className="nav-count">{waiting}</b>}
-            </a>
-          )}
-          <a className={`nav-link ${on("catalog")}`} aria-current={current("catalog")} href={href({ page: "catalog" })} aria-label="Teams & tools" title="Teams & tools"><Users size={15} /><span>Teams &amp; tools</span></a>
-          <a className={`nav-link ${on("guide")}`} aria-current={current("guide")} href={href({ page: "guide" })} aria-label="Guide" title="Guide"><BookOpen size={15} /><span>Guide</span></a>
-          {canOpenAdmin(perms) && <a className={`nav-link ${on("admin")}`} aria-current={current("admin")} href={href({ page: "admin", section: perms.admin ? "access" : "lists" })} aria-label="Admin" title="Admin"><Settings2 size={15} /><span>Admin</span></a>}
+          {places.map((p) => <PlaceLink key={p.key} place={p} on={on(...p.pages)} current={current(...p.pages)} />)}
         </nav>
+        <MenuButton places={places} on={on} current={current} />
         <span className="spacer" />
         <button className="icon-btn" onClick={() => chooseDark(!dark)} aria-label={dark ? "Switch to the light theme" : "Switch to the dark theme"}>{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
         <UserMenu me={me} onSignedOut={onSignedOut} />
