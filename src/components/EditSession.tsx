@@ -12,7 +12,7 @@ import {
   ApiError, deleteWorkingDraft, go, guardLeaving, offerSaving, loadHistory, loadVersion, loadWorkingDraft, publishWorkingDraft, putWorkingDraft, type WorkingDraft,
 } from "../lib/store";
 import type { AiSpec } from "./AiDialog";
-import { BehindBanner, ChangeList, ConflictDialog, EditingBoundary, HistoryDialog, savedWhen } from "./Editing";
+import { BehindBanner, ChangeList, ConflictDialog, editNotice, EditingBoundary, HistoryDialog, savedWhen } from "./Editing";
 import { type BarAction, type MenuItem, type Panel, PublishDialog } from "./EditFrame";
 import { useBelongsWarning } from "./Governance";
 import { confirmDialog, LoadError, Loading, Modal, notify } from "./ui";
@@ -244,7 +244,14 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
   };
   // words for a tooltip: never a reason for the screen to fail
   const describe = (a: T | undefined, b: T | undefined) => { try { const c = mainChange(a, b); return c ? describeChange(c) : ""; } catch { return ""; } };
-  const undoWhat = useMemo(() => describe(d.previous, d.draft), [d.previous, d.draft]); // eslint-disable-line react-hooks/exhaustive-deps
+  // a move is named by the step or requirement that moved, not by a neighbour whose arrows changed with it
+  const undoWhat = useMemo(() => {
+    const it = moveOf(d.draft) ? items(d.draft).find((x) => x.id === moveOf(d.draft)) as { id: string; title?: string } | undefined : undefined;
+    if (it) return `Move of ${kind === "process" ? "step" : "requirement"} ${it.title?.trim() ? `“${it.title.trim()}”` : kind === "process" ? `${items(d.draft).indexOf(it) + 1}` : it.id}`;
+    return describe(d.previous, d.draft);
+  }, [d.previous, d.draft]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the screen's messages end when it is left
+  useEffect(() => () => editNotice.clear(), []);
   const [reveal, setReveal] = useState<{ item: string; n: number } | null>(null);
   useEffect(() => {
     const st = d.stepped;
@@ -259,7 +266,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
         ? movedMessage(st.dir, kind === "process" ? "Step" : "Requirement", kind === "process" ? it.title ?? "" : it.title?.trim() ? `${it.id} ${it.title}` : "", kind === "process" ? `Step ${items(st.to).indexOf(it) + 1}` : `Requirement ${it.id}`)
         : steppedMessage(st.dir, mainChange(st.from, st.to));
     } catch { /* the plain words */ }
-    notify.info(said);
+    editNotice.info(said);
     const before = new Map(items(st.from).map((x) => [x.id, JSON.stringify(x)]));
     const touched = items(st.to).find((x) => !before.has(x.id)) ?? items(st.to).find((x) => before.get(x.id) !== JSON.stringify(x));
     if (touched) setReveal((r) => ({ item: touched.id, n: (r?.n ?? 0) + 1 }));

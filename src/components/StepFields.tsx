@@ -94,7 +94,7 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
           setProcess(next);
           // a new decision whose second answer goes back: said at once, and shown where it is changed
           const said = newDecisionNotice(process, next, step.id);
-          if (said) { notify.info(said); markBackPath(); }
+          if (said) { editNotice.info(said); markBackPath(); }
         }} />
       </div>
 

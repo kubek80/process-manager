@@ -9,13 +9,31 @@ import { author, deletedSentence, goneDraftSentence, savedByText, savedWhen, unp
 import { formatDateTime } from "../lib/dates";
 import { cap } from "../lib/diff";
 import { useMe } from "../lib/session";
-import { LoadError, Modal } from "./ui";
+import { LoadError, Modal, notify, type NoticeAction } from "./ui";
 
 /** Shared by the pages that edit something: processes, standards and the lists. */
 
 const when = formatDateTime;
 
 export { savedWhen };
+
+/**
+ * The editing screen's own messages - what a delete, a move, Undo or Redo did: a new one replaces
+ * the one before (an old "Undo" would undo something else by now), and they end when the screen
+ * is left (`clear`, when the editing session closes).
+ */
+let editMessage: number | null = null;
+export const editNotice = {
+  info(text: string, action?: NoticeAction, detail?: string): number {
+    if (editMessage !== null) notify.dismiss(editMessage);
+    editMessage = notify.info(text, action, detail);
+    return editMessage;
+  },
+  clear() {
+    if (editMessage !== null) notify.dismiss(editMessage);
+    editMessage = null;
+  },
+};
 
 /**
  * On the reader's page: a never-published draft is marked as one, and its editors are told,

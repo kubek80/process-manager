@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, ListChecks, ListPlus, PenLine, Plus, Send, UserRound } from "lucide-react";
 import type { DocMeta, Feedback, Process, Standard, Step } from "../types";
-import { answerChanges, appendStep, deleteStep, EXAMPLE, flowMoveBlocked, insertStep, moveStepInFlow, newDecisionNotice, nudgeStep, renameStepId, restructureNotice, shortName, slugify, tidy, today, updateStep } from "../lib/edit";
+import { appendStep, deleteStep, EXAMPLE, flowMoveBlocked, insertStep, movedHead, moveStepInFlow, newDecisionNotice, nudgeStep, renameStepId, restructureNotice, shortName, slugify, tidy, today, updateStep } from "../lib/edit";
 import { issueTarget, issuesByPlace, noteMove, issuesFor, PROCESS_SECTIONS, processOutline, selectionKey, withoutEarlySuggestions, type ProcessSection, type Selection } from "../lib/editing";
 import { isDrawableProcess, processSchema, validateProcess } from "../lib/validate";
 import { useSelectedItem } from "../lib/selection";
@@ -12,11 +12,11 @@ import { href } from "../lib/store";
 import { openCount } from "./Feedback";
 import { EditFrame, focusSelectedInOutline, ItemIssues, Outline } from "./EditFrame";
 import { EditSession } from "./EditSession";
+import { editNotice } from "./Editing";
 import { FlowView } from "./FlowView";
 import { BeforeYouStart, processAiSpec } from "./ProcessPage";
 import { ProcessAbout, ProcessBefore, ProcessLinks, ProcessPeople, ProcessStandards } from "./ProcessSections";
 import { markBackPath, StepFields } from "./StepFields";
-import { notify } from "./ui";
 
 const stamp = (p: Process): Process => ({ ...p, updatedAt: today() });
 const NONE = new Set<string>();
@@ -104,21 +104,13 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
     ? withoutEarlySuggestions("process", draft, s.issues, (id) => !left.has(id) && !(d.saved.steps ?? []).some((x) => x.id === id))
     : s.issues), [drawable, draft, s.issues, left, d.saved]);
 
-  // a change of the structure says what it did to the answers of decisions, with Undo
-  // only the newest such message offers Undo: an older one would undo something else by now
-  const toast = useRef<number | null>(null);
-  useEffect(() => { if (toast.current !== null) { notify.dismiss(toast.current); toast.current = null; } }, [d.stepped?.n]);
-  // a move says what moved when it changed where answers of decisions lead
-  const moved = (id: string, next: Process) => {
-    if (!answerChanges(draft, next).length) return undefined;
-    const at = next.steps.findIndex((x) => x.id === id);
-    return `Step “${shortName(next.steps[at]?.title, 40) || "(no name yet)"}” is now step ${at + 1}.`;
-  };
-  const restructure = (next: Process, done?: string) => {
-    const said = restructureNotice(draft, next, done);
+  // a change of the structure says all it did to the flow, with Undo; a newer message replaces it
+  const moved = (id: string, next: Process) => movedHead(next, id);
+  const restructure = (next: Process, done: string | undefined, subject: string) => {
+    if (next === draft) return;
+    const said = restructureNotice(draft, next, done, subject);
     setDraft(next);
-    if (toast.current !== null) notify.dismiss(toast.current);
-    toast.current = said ? notify.info(said.title, { label: "Undo", run: () => d.undo() }, said.detail) : null;
+    if (said) editNotice.info(said.title, { label: "Undo", run: () => d.undo() }, said.detail);
   };
 
   const byPlace = useMemo(() => (drawable ? issuesByPlace("process", draft, issues) : new Map()), [drawable, draft, issues]);
@@ -157,12 +149,12 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
         // no question: it is deleted at once, and the message offers Undo
         const at = draft.steps.indexOf(step);
         const next = deleteStep(draft, step.id);
-        restructure(next, `Step “${shortName(step.title || "(no name yet)", 30)}” deleted.`);
+        restructure(next, `Step “${shortName(step.title || "(no name yet)", 30)}” deleted.`, step.id);
         const neighbour = next.steps[Math.min(at, next.steps.length - 1)];
         if (neighbour) selectStep(neighbour.id); else { selectStep(null); setSection("steps"); }
         focusSelectedInOutline(neighbour?.title);
       }}
-      onMove={(before) => { const next = moveStepInFlow(draft, step.id, before); noteMove(next, step.id); restructure(next, moved(step.id, next)); }}
+      onMove={(before) => { const next = moveStepInFlow(draft, step.id, before); noteMove(next, step.id); restructure(next, moved(step.id, next), step.id); }}
       onAddAfter={(name) => { const r = insertStep(draft, { afterId: step.id }, { title: name, type: "task", actor: step.actor }); setDraft(r.process); selectStep(r.id); }} />;
   } else {
     const head = <h2 className="fields-section-title">{sectionLabel}</h2>;
@@ -207,7 +199,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
           const r = insertStep(draft, at, spec);
           setDraft(r.process); selectStep(r.id);
           const said = newDecisionNotice(draft, r.process, r.id);
-          if (said) { notify.info(said); s.setPanel("fields"); markBackPath(); }
+          if (said) { editNotice.info(said); s.setPanel("fields"); markBackPath(); }
         }}
         onEnter={() => focusFields()}
         onMoveToLane={(id, actor) => setDraft(updateStep(draft, id, { actor }))} />
@@ -223,8 +215,8 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
           feedback={(id) => openCount(feedback, id)}
           onSelect={(e) => choose({ section: e.section, item: e.item }, !!e.item || e.depth === 0)}
           onAdd={{ section: "steps", label: "Add a step", placeholder: "Name of the next step", run: (name) => { const r = appendStep(draft, name); setDraft(r.process); selectStep(r.id); } }}
-          onMove={(id, before) => { const next = moveStepInFlow(draft, id, before); noteMove(next, id); restructure(next, moved(id, next)); }}
-          onNudge={(id, dir) => { const next = nudgeStep(draft, id, dir); noteMove(next, id); restructure(next, moved(id, next)); }}
+          onMove={(id, before) => { const next = moveStepInFlow(draft, id, before); noteMove(next, id); restructure(next, moved(id, next), id); }}
+          onNudge={(id, dir) => { const next = nudgeStep(draft, id, dir); noteMove(next, id); restructure(next, moved(id, next), id); }}
           onEnter={focusFields}
           moveBlocked={(id) => flowMoveBlocked(draft, id)} />}
         middle={middle} fields={<div className="edit-fields-body">{fields}</div>} fieldsLabel={fieldsLabel}
