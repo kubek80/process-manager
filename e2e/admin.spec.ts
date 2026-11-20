@@ -42,7 +42,7 @@ test("an admin gives someone a role and it takes effect at once", async ({ page,
   await signIn(page, DANA);
   await open(page, "/admin/access");
   const people = page.locator(".users-list > li");
-  await expect(people.filter({ hasText: "dana@example.com" })).toContainText("server settings");
+  await expect(people.filter({ hasText: "dana@example.com" })).toContainText("set where the portal is installed");
   await expect(people.filter({ hasText: "riley@example.com" })).toContainText("Practice owner for Cyber security");
   await expect(people.filter({ hasText: "jordan@example.com" })).toContainText("Platform owner for Google Cloud");
 
@@ -131,6 +131,12 @@ test("Health shows what needs attention; System shows how the installation is se
 
   await open(page, "/admin/system");
   await expect(page.locator(".admin-card")).toContainText("Local development (user picker)");
-  await expect(page.locator(".admin-card")).toContainText("Stored in the database");
+  await expect(page.locator(".admin-card")).toContainText("Kept by the portal. Every save is a version with a note");
+  // the settings' names are only behind the disclosure for the people who run the portal
+  const tech = page.locator("details.system-tech");
+  await expect(tech.locator("summary")).toHaveText("For the people who run the portal");
+  await expect(tech.getByText("PM_AUTH")).toBeHidden();
+  await tech.locator("summary").click();
+  await expect(tech.getByText("PM_AUTH")).toBeVisible();
   await expect(page.locator(".stat", { hasText: "standards" }).locator("strong")).not.toHaveText("0");
 });
