@@ -151,33 +151,33 @@ func Check(kind string, body []byte, l Lists) error {
 		p.belongs.check(l, add)
 		p.lifecycle.check(add)
 		if p.ReplacedBy != "" && p.ReplacedBy == p.ID {
-			add("replacedBy: a process cannot replace itself")
+			add("replacedBy: A process cannot replace itself: choose another one under “Use instead”.")
 		}
 		actors := map[string]bool{}
 		for i, a := range p.Actors {
 			if actors[a.ID] {
-				add("actors[%d].id: duplicate actor id %q", i, a.ID)
+				add("actors[%d].id: Two participants have the same id “%s”: repair it in the JSON.", i, a.ID)
 			}
 			actors[a.ID] = true
 		}
 		steps := map[string]bool{}
 		for i, s := range p.Steps {
 			if steps[s.ID] {
-				add("steps[%d].id: duplicate step id %q", i, s.ID)
+				add("steps[%d].id: Two steps have the same id “%s”: repair it in the JSON.", i, s.ID)
 			}
 			steps[s.ID] = true
 		}
 		for i, s := range p.Steps {
 			if !actors[s.Actor] {
-				add("steps[%d].actor: %q is not one of the participants", i, s.Actor)
+				add("steps[%d].actor: Who does it (“%s”) is not one of the participants: choose who does it.", i, s.Actor)
 			}
 			seen := map[string]bool{}
 			for j, n := range s.Next {
 				switch {
 				case !steps[n.To]:
-					add("steps[%d].next[%d].to: %q is not a step of this process", i, j, n.To)
+					add("steps[%d].next[%d].to: This way on leads to a step that does not exist (“%s”): choose where it goes.", i, j, n.To)
 				case n.To == s.ID:
-					add("steps[%d].next[%d].to: a step cannot point to itself", i, j)
+					add("steps[%d].next[%d].to: A step cannot lead to itself: choose another step.", i, j)
 				case seen[n.To]:
 					add("steps[%d].next[%d].to: Another answer already leads to this step: let each lead somewhere else.", i, j)
 				}
@@ -195,15 +195,15 @@ func Check(kind string, body []byte, l Lists) error {
 				}
 			}
 			if s.Type == "subprocess" && s.SubProcessID == "" {
-				add("steps[%d].subProcessId: a sub-process step must name the process", i)
+				add("steps[%d].subProcessId: A sub-process step needs the process it stands for: choose it under “Explained by sub-process”.", i)
 			}
 			if s.SubProcessID != "" && s.SubProcessID == p.ID {
-				add("steps[%d].subProcessId: a process cannot use itself as a sub-process", i)
+				add("steps[%d].subProcessId: A process cannot be its own sub-process.", i)
 			}
 		}
 		for i, q := range p.Prerequisites {
 			if q.ProcessID != "" && q.ProcessID == p.ID {
-				add("prerequisites[%d].processId: a process cannot be its own prerequisite", i)
+				add("prerequisites[%d].processId: A process cannot be needed before itself: choose another process that provides it.", i)
 			}
 		}
 	case Standard:
@@ -215,7 +215,7 @@ func Check(kind string, body []byte, l Lists) error {
 		s.belongs.check(l, add)
 		s.lifecycle.check(add)
 		if s.ReplacedBy != "" && s.ReplacedBy == s.ID {
-			add("replacedBy: a standard cannot replace itself")
+			add("replacedBy: A standard cannot replace itself: choose another one under “Use instead”.")
 		}
 		seen := map[string]bool{}
 		for i, r := range s.Requirements {

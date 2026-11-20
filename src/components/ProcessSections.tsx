@@ -162,20 +162,20 @@ export function ProcessPeople({ process, set }: { process: Process; set: Set }) 
               <input className="actor-name" value={a.name} maxLength={40} placeholder="Team or role" aria-label={`Name of participant ${i + 1}`} autoFocus={a.id === fresh}
                 onFocus={(e) => { if (a.id === fresh) { e.target.select(); setFresh(null); } }}
                 onChange={(e) => set({ actors: actors.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
-              {i > 0 && <>
-                <button className="icon-btn" disabled={i < 2} onClick={() => swap(i, i - 1)} aria-label={`Move participant ${i + 1} up`} title="Move up"><ArrowUp size={15} /></button>
-                <button className="icon-btn" disabled={i === actors.length - 1} onClick={() => swap(i, i + 1)} aria-label={`Move participant ${i + 1} down`} title="Move down"><ArrowDown size={15} /></button>
-              </>}
             </div>
             <div className="row indent">
-              <input value={a.description ?? ""} maxLength={200} placeholder={i === 0 ? "The person following this process" : "How to reach them"} aria-label={`About participant ${i + 1}`}
+              <textarea rows={1} className="grow" value={a.description ?? ""} maxLength={200} placeholder={i === 0 ? "The person following this process" : "How to reach them"} aria-label={`About participant ${i + 1}`}
                 onChange={(e) => set({ actors: actors.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)) })} />
             </div>
             {i > 0 && (
               <div className="actor-foot">
                 <span className="muted small">{used(a.id) ? `${used(a.id)} step${used(a.id) === 1 ? "" : "s"}` : "No steps yet"}</span>
-                <button className="btn small ghost quiet-danger" disabled={used(a.id) > 0} title={used(a.id) ? "Has steps - give them to someone else first" : undefined} aria-label={`Remove participant ${i + 1}`}
-                  onClick={() => set({ actors: actors.filter((_, j) => j !== i) })}><X size={14} />Remove</button>
+                <span className="actor-tools">
+                  <button className="icon-btn" disabled={i < 2} onClick={() => swap(i, i - 1)} aria-label={`Move participant ${i + 1} up`} title="Move up (a lane higher on the map)"><ArrowUp size={15} /></button>
+                  <button className="icon-btn" disabled={i === actors.length - 1} onClick={() => swap(i, i + 1)} aria-label={`Move participant ${i + 1} down`} title="Move down (a lane lower on the map)"><ArrowDown size={15} /></button>
+                  <button className="btn small ghost quiet-danger" disabled={used(a.id) > 0} title={used(a.id) ? "Has steps - give them to someone else first" : undefined} aria-label={`Remove participant ${i + 1}`}
+                    onClick={() => set({ actors: actors.filter((_, j) => j !== i) })}><X size={14} />Remove</button>
+                </span>
               </div>
             )}
           </div>

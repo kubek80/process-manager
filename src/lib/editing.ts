@@ -537,3 +537,107 @@ export const DELETE_PAUSE = 700;
 export function deleteReady(selectedAt: number, now: number, pause = DELETE_PAUSE): boolean {
   return now - selectedAt >= pause;
 }
+
+/**
+ * The one item that moved between two orders of the same items (a step or requirement moved by
+ * dragging, the keys or "Move…"), so that Undo and Redo can name it rather than a neighbour whose
+ * arrows changed with it. Undefined when the items differ or more than one moved.
+ */
+export function movedItem(before: string[], after: string[]): string | undefined {
+  if (before.length !== after.length || before.join("\n") === after.join("\n")) return undefined;
+  const set = new Set(before);
+  if (after.some((x) => !set.has(x))) return undefined;
+  const without = (list: string[], id: string) => list.filter((x) => x !== id).join("\n");
+  return before.find((id) => without(before, id) === without(after, id));
+}
+
+/** What Undo or Redo says after it took back or did again a move: the item that moved, by name. */
+export function movedMessage(dir: "undo" | "redo", what: "Step" | "Requirement", label: string, unnamed: string): string {
+  return `${itemWords({ what, label, unnamed })} is ${dir === "undo" ? "back in its place" : "moved again"}.`;
+}
+
+/**
+ * Where the field a problem is about is on the editing screen, to bring the keyboard to it from
+ * the checker's list: CSS selectors to try in order (inside the fields panel), then the label the
+ * field has, to find it by. `kind`: a process or a standard.
+ */
+export function issueField(path: string, kind?: TargetKind): { selectors: string[]; label: string } {
+  const context = pathContext(path, kind);
+  const parts = [...path.matchAll(/([A-Za-z$]+)(?:\[(\d+)\])?/g)].map((m) => ({ key: m[1], i: m[2] === undefined ? undefined : Number(m[2]) }));
+  const last = parts[parts.length - 1] ?? { key: "", i: undefined };
+  const at = (key: string) => parts.find((p) => p.key === key)?.i;
+  const nth = (i: number | undefined) => (i === undefined ? "" : `:nth-child(${i + 1})`);
+  const label = fieldName(last.key, context);
+  const sel: string[] = [];
+  switch (last.key) {
+    case "instructions": sel.push(`.ins-rows > li${nth(last.i)} textarea`, ".ins-rows textarea", ".add-row"); break;
+    case "next": case "to": case "label": {
+      const j = at("next");
+      sel.push(last.key === "label" ? `.path-rows > li${nth(j)} .next-label` : `.path-rows > li${nth(j)} select`, ".path-rows .next-label", ".path-rows select", ".path-adds button"); break;
+    }
+    case "actor": sel.push(".step-core [aria-pressed=true]", ".step-core .chips button"); break;
+    case "type": sel.push(".kind-pick"); break;
+    case "title": case "name": case "description": case "processId": case "url":
+      if (parts[0]?.key === "prerequisites") sel.push(`[aria-label="${last.key === "title" ? `Prerequisite ${(at("prerequisites") ?? 0) + 1}` : last.key === "description" ? `About prerequisite ${(at("prerequisites") ?? 0) + 1}` : `Process that provides prerequisite ${(at("prerequisites") ?? 0) + 1}`}"]`);
+      else if (parts[0]?.key === "actors") sel.push(`[aria-label="${last.key === "description" ? "About" : "Name of"} participant ${(at("actors") ?? 0) + 1}"]`);
+      else if (parts[0]?.key === "resources") sel.push(`[aria-label="${last.key === "url" ? "Address of" : "Name of"} link ${(at("resources") ?? 0) + 1}"]`);
+      else if (context === "step" && last.key === "title") sel.push("input.step-title");
+      break;
+    case "lookFor": sel.push(".edit-fields [aria-label^='Signs of a violation']"); break;
+    case "actors": if (last.i !== undefined) { sel.push(`[aria-label="Name of participant ${last.i + 1}"]`); break; } // falls through
+    default: if (last.key) sel.push(`[data-field="${last.key}"]`);
+  }
+  return { selectors: sel, label };
+}
+
+/** A line of the Publish list; `undoes`: publishing it would take back a change published since the draft was started. */
+export interface PublishLine { text: string; undoes: boolean }
+
+/**
+ * Whether a change between the version readers see now (`current`) and the draft takes back
+ * something that was published after the draft was started from `base`: a three-way comparison.
+ * Nothing is merged; the Publish list only marks such a line.
+ */
+export function undoesPublished(kind: TargetKind, c: Change, base: Process | Standard, current: Process | Standard, draft: Process | Standard): boolean {
+  const o = (d: unknown) => (d && typeof d === "object" ? d as Record<string, unknown> : {});
+  const eq = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null) || ((a === undefined || a === "" || (Array.isArray(a) && !a.length)) && (b === undefined || b === "" || (Array.isArray(b) && !b.length)));
+  // a field: the draft still has what the base had, readers now have something else
+  const reverts = (k: string, b: Record<string, unknown>, cur: Record<string, unknown>, dr: Record<string, unknown>) => eq(dr[k], b[k]) && !eq(cur[k], b[k]);
+  const B = o(base), C = o(current), D = o(draft);
+  if (c.what === "Details") {
+    const key = [...new Set([...Object.keys(B), ...Object.keys(C), ...Object.keys(D)])].find((k) => fieldName(k, kind) === c.label);
+    return !!key && reverts(key, B, C, D);
+  }
+  if (c.what === "Before you start") {
+    const has = (d: Record<string, unknown>) => (Array.isArray(d.prerequisites) ? d.prerequisites as { title?: string }[] : []).some((q) => (q?.title ?? "") === c.label);
+    if (c.kind === "added") return has(B) && !has(C);   // they removed it, the draft brings it back
+    if (c.kind === "removed") return !has(B) && has(C); // they added it, the draft does not have it
+    return false;
+  }
+  const where = ITEMS[c.what];
+  if (!where || !c.id) return false;
+  const item = (d: Record<string, unknown>) => (Array.isArray(d[where.list]) ? (d[where.list] as Record<string, unknown>[]).find((x) => x?.id === c.id) : undefined);
+  const b = item(B), cur = item(C), dr = item(D);
+  if (c.kind === "added") return !!b && !cur;
+  if (c.kind === "removed") return !b && !!cur;
+  if (!b || !cur || !dr) return false;
+  return Object.keys({ ...b, ...cur, ...dr }).some((k) => c.details?.includes(fieldName(k, where.context)) && reverts(k, b, cur, dr));
+}
+
+/** The Publish list with the lines marked that would undo a change published since `base` (when it is older than `current`). */
+export function publishList(kind: TargetKind, current: Process | Standard, draft: Process | Standard, catalog?: Catalog, base?: Process | Standard): PublishLine[] {
+  const before = withoutReviewDates(current) as unknown as Record<string, unknown>;
+  const after = withoutReviewDates(draft) as unknown as Record<string, unknown>;
+  return compare(kind, before, after, catalog).map((c) => ({
+    text: publishLine(kind, c, before, after, catalog),
+    undoes: !!base && undoesPublished(kind, c, withoutReviewDates(base), before as unknown as Process, after as unknown as Process),
+  }));
+}
+
+/**
+ * Which item a move moved, remembered with the document the move made (Undo and Redo keep the very
+ * same object): a swap of two neighbours cannot tell by itself which of the two was moved.
+ */
+const movedBy = new WeakMap<object, string>();
+export const noteMove = (doc: object, id: string) => { movedBy.set(doc, id); };
+export const moveOf = (doc: unknown): string | undefined => (doc && typeof doc === "object" ? movedBy.get(doc) : undefined);

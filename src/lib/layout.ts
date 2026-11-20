@@ -1,6 +1,6 @@
 import type { Process, Step } from "../types";
 
-export const L = { W: 208, H: 94, GAPX: 64, GAPY: 30, PADY: 26, PADX: 44, HEADER: 172 };
+export const L = { W: 208, H: 94, GAPX: 64, GAPY: 30, PADY: 16, PADX: 44, HEADER: 172 };
 /** Tighter measures for the small charts in the guide. */
 export const L_COMPACT: typeof L = { W: 188, H: 88, GAPX: 44, GAPY: 26, PADY: 22, PADX: 32, HEADER: 136 };
 
@@ -146,7 +146,7 @@ export function layoutProcess(p: Process, L: Dims = DEFAULT): Layout {
   interface Plan { edge: number; text: string; max: number; spots: Pt[]; span: number; trunk?: string; toY?: number }
   // paths of one step that turn up or down in the same gap run together until each turns off to its target
   const trunks = new Map<string, number[]>();
-  const OFF = Math.min(15, L.PADY - LABEL_H / 2 - 1); // from the edge of a block to the middle of a label between two rows
+  const OFF = Math.min(15, L.PADY - 1); // from the edge of a block to the middle of a label between two rows (lanes only as tall as their blocks need)
   const rowTops = lanes.flatMap((lane, i) => Array.from({ length: laneRows[i] }, (_, r) => lane.y + L.PADY + r * (L.H + L.GAPY)));
   const maxInRow = L.GAPX + 20, maxBetweenRows = L.W / 2 + L.GAPX / 2 - 6;
   /** Along a vertical run from the source row: just outside the source's row, then just past every row it crosses. */

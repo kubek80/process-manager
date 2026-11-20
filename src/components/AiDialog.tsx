@@ -40,7 +40,7 @@ export function AiDialog<T extends { id: string; title: string }>({ spec, onImpo
       title={<><Sparkles size={18} className="accent" /> {title}</>}
       subtitle="Use any chat assistant you are allowed to use - Gemini, Copilot, ChatGPT or Claude. Nothing is sent anywhere by this app."
       footer={<>
-        <span className="muted small">{ok ? (current ? "The result replaces your draft (Undo brings it back). You still have to press Save."
+        <span className="muted small">{ok ? (current ? "The result replaces your draft (Undo brings it back). You still have to press Save draft."
           : replaces ? `A ${noun} “${result!.id}” exists already: this one is created next to it, as a draft that only editors see.`
             : `The ${noun} is created as a draft that only editors see.`) : ""}</span>
         <span className="spacer" />
@@ -65,7 +65,7 @@ export function AiDialog<T extends { id: string; title: string }>({ spec, onImpo
           <span className="ai-n">2</span>
           <div>
             <h4>Copy the prompt and paste it into your AI chat</h4>
-            <p className="muted small">The prompt contains the rules, the JSON schema, your teams, tools, tiers and environments, an example{current ? `, the current ${noun}` : ""} and your text. Send it as one message.</p>
+            <p className="muted small">The prompt contains the rules a {noun} follows, how it must be written down, your teams, tools, tiers and environments, an example{current ? `, the current ${noun}` : ""} and your text. Send it as one message.</p>
             <div className="btn-row">
               <CopyButton primary label="Copy prompt" text={() => spec.prompt(text)} />
               <button className="btn" onClick={() => download(`${noun}-prompt.md`, spec.prompt(text))}><Download size={16} />Download as file</button>
@@ -77,7 +77,7 @@ export function AiDialog<T extends { id: string; title: string }>({ spec, onImpo
           <span className="ai-n">3</span>
           <div>
             <h4>Paste the answer here</h4>
-            <p className="muted small">Paste the whole answer - the JSON is picked out and checked automatically.</p>
+            <p className="muted small">Paste the whole answer: the {noun} is picked out of it and checked automatically.</p>
             <textarea rows={7} className="mono" value={answer} aria-label="The answer of the AI chat" onChange={(e) => setAnswer(e.target.value)} placeholder="Paste the whole answer from the chat here." />
             {parsed?.error && (
               <div className="check bad"><CircleAlert size={16} /><span>{parsed.error}</span></div>
@@ -87,10 +87,10 @@ export function AiDialog<T extends { id: string; title: string }>({ spec, onImpo
                 <div className={`check ${ok ? "good" : "bad"}`}>
                   {ok ? <CircleCheck size={16} /> : <CircleAlert size={16} />}
                   <span>{ok
-                    ? <>Valid: <b>{result!.title}</b> - {spec.describe(result!)}{issues.length ? `, ${issues.length} hint(s)` : ""}.</>
-                    : <>{issues.filter((i) => i.level === "error").length} problem(s) found. Send the fix request to the same chat and paste the new answer.</>}</span>
+                    ? <>Valid: <b>{result!.title}</b> - {spec.describe(result!)}{issues.length ? `, ${issues.length} ${issues.length === 1 ? "suggestion" : "suggestions"}` : ""}.</>
+                    : <>{issues.filter((i) => i.level === "error").length} to fix. Send the fix request to the same chat and paste the new answer.</>}</span>
                 </div>
-                {idChanged && <div className="check warn"><TriangleAlert size={16} /><span>The AI changed the id. The current id “{current!.id}” is kept.</span></div>}
+                {idChanged && <div className="check warn"><TriangleAlert size={16} /><span>The answer changed the address of the {noun}. Its own (“{current!.id}”) is kept.</span></div>}
                 {issues.length > 0 && <IssueList issues={issues} />}
               </>
             )}

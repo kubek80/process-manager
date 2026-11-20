@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, CornerUpLeft, GitBranch, Plus, X } from "lucide-react";
 import type { Feedback, Issue, NextLink, Process, Step, StepType } from "../types";
-import { addActor, EXAMPLE, flowMoveBlocked, setStepType, slugify, uniqueId } from "../lib/edit";
+import { addActor, EXAMPLE, flowMoveBlocked, newDecisionNotice, setStepType, slugify, uniqueId } from "../lib/edit";
 import { useCatalog } from "../lib/catalog";
 import { usePerms } from "../lib/session";
 import { STEP_META, STEP_TYPES, stepHelp } from "../lib/stepMeta";
@@ -89,7 +89,13 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
             data-autofocus={step.title === EXAMPLE.newStep ? "" : undefined} onFocus={selectExample(EXAMPLE.newStep, EXAMPLE.firstStep)} />
         </Field>
         <WhoField process={process} step={step} onChange={onChange} setProcess={setProcess} />
-        <KindField type={step.type} onPick={(t) => setProcess(setStepType(process, step.id, t))} />
+        <KindField type={step.type} onPick={(t) => {
+          const next = setStepType(process, step.id, t);
+          setProcess(next);
+          // a new decision whose second answer goes back: said at once, and shown where it is changed
+          const said = newDecisionNotice(process, next, step.id);
+          if (said) { notify.info(said); markBackPath(); }
+        }} />
       </div>
 
       <EditSection title="What to do">
@@ -129,6 +135,24 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
       </EditSection>
     </div>
   );
+}
+
+/**
+ * Brings the answer of a decision that goes back into view in the fields, briefly marked (after a
+ * step became a decision, its "No" goes back to the step before).
+ */
+export function markBackPath() {
+  let tries = 20;
+  const attempt = () => {
+    const row = document.querySelector<HTMLElement>(".edit-fields .path-row.back");
+    if (!row) { if (tries-- > 0) requestAnimationFrame(attempt); return; }
+    row.scrollIntoView({ block: "center", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    row.classList.remove("flash");
+    void row.offsetWidth; // start the mark afresh
+    row.classList.add("flash");
+    setTimeout(() => row.classList.remove("flash"), 2600);
+  };
+  requestAnimationFrame(attempt);
 }
 
 /** A name for a new step, asked right where it is added: Enter adds it, Escape does not. */
@@ -281,7 +305,7 @@ function PathsField({ process, step, onChange }: { process: Process; step: Step;
         {nextFree && (decision
           ? <button className="btn small ghost" onClick={() => add(nextFree.id, spare(step.next.length === 0 ? "Yes" : step.next.length === 1 ? "No" : "Other"))}><GitBranch size={14} />Add a branch</button>
           : <button className="btn small ghost" onClick={() => add(nextFree.id)}><Plus size={14} />{step.next.length === 0 ? "Continue to a step" : "Add another way on"}</button>)}
-        {backTo && <button className="btn small ghost" title={`A loop: the flow goes back to “${backTo.title}”, for example to correct something`}
+        {backTo && <button className="btn small ghost" title={`A loop: the flow goes back to “${backTo.title || `step ${n(backTo.id)}`}”, for example to correct something`}
           onClick={() => add(backTo.id, decision ? spare("No") : undefined)}><CornerUpLeft size={14} />Go back to an earlier step</button>}
       </div>
     </div>

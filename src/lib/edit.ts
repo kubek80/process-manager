@@ -225,16 +225,24 @@ export function moveStepInFlow(p: Process, id: string, beforeId: string | null):
   return { ...p, steps: [...redirected.slice(0, at), moved, ...redirected.slice(at)] };
 }
 
+/** A step as the map numbers it: "9. Start the production deployment". */
+const numbered = (p: Process, id: string, max = 40) => {
+  const i = p.steps.findIndex((s) => s.id === id);
+  return i < 0 ? `“${shortName(id, max)}”` : `${i + 1}. ${shortName(p.steps[i].title, max) || "(no name yet)"}`;
+};
+/** An answer of a decision in a sentence: `“No” of “Is it a tier 0 service?”`. */
+const answerOf = (label: string | undefined, decision: Step, max = 40) =>
+  `${label?.trim() ? `“${shortName(label, 20)}”` : "An answer"} of “${shortName(decision.title, max) || "(no name yet)"}”`;
+
 /**
- * What a change did to the answers of decisions, in words: "“No” of “Release healthy?” now leads
- * to “Roll out to 10%”". Only named paths are reported; a path that is new, or that leads to
- * another step than before, is a change. Said right away after a move or a delete, with Undo.
+ * What a change did to the answers of decisions, in words, each answer with where it goes now:
+ * "“No” of “Release healthy?” now goes to 6. Roll out to 10%". Only named paths are reported; a
+ * path that is new, or that leads to another step than before, is a change.
  */
 export function answerChanges(before: Process, after: Process): string[] {
-  const title = (q: Process, id: string) => q.steps.find((s) => s.id === id)?.title || id;
   return changedAnswers(before, after).map(({ step: s, answer: n }) => {
     const also = s.next.filter((x) => x !== n && x.to === n.to).map((x) => `“${x.label}”`);
-    return `“${n.label}” of “${s.title}” now leads to “${title(after, n.to)}”${also.length ? `, as ${also.join(" and ")} does` : ""}`;
+    return `${answerOf(n.label, s)} now goes to ${numbered(after, n.to)}${also.length ? `, as ${also.join(" and ")} does` : ""}`;
   });
 }
 
@@ -253,35 +261,50 @@ function changedAnswers(before: Process, after: Process): { step: Step; answer: 
   return out;
 }
 
-/** A name in a short message: cut to `max` characters, with an ellipsis. */
+/** A name in a short message: cut to `max` characters, with an ellipsis. Nothing stays "". */
 export const shortName = (t: string | undefined, max = 36): string => {
   const text = typeof t === "string" ? t.trim() : "";
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
 };
 
+/** How many answers a message names one by one; the rest are counted ("and 2 more"). */
+export const NOTICE_ANSWERS = 2;
+
 /**
- * The message after a delete or a move, at most two short lines: what was done, and one line about
- * the answers of decisions that now lead elsewhere (where exactly each leads is in the fields of
- * the decision). A move that changed one answer says where it now leads. Null: nothing to say.
+ * The message after a delete or a move: what was done, then each answer of a decision that now
+ * leads elsewhere with where it goes (at most two, then "and N more"). A move says nothing when no
+ * answer changed. `all` holds every line, for a list of them all. Null: nothing to say.
  */
-export function restructureNotice(before: Process, after: Process, done?: string): { title: string; detail?: string } | null {
-  const all = changedAnswers(before, after);
-  const changed = all.map((c) => ({ decision: c.step.id, answer: c.answer.label ?? "" }));
-  if (!done && !changed.length) return null;
-  // a move that changed one answer says where it now leads, in one sentence
-  if (!done && all.length === 1) {
-    const { step, answer } = all[0];
-    const to = after.steps.find((x) => x.id === answer.to)?.title ?? answer.to;
-    return { title: `“${shortName(answer.label ?? "", 16)}” of “${shortName(step.title, 40)}” now leads to “${shortName(to, 40)}”.` };
-  }
-  const titleOf = (id: string) => after.steps.find((x) => x.id === id)?.title ?? id;
-  const decisions = [...new Set(changed.map((c) => c.decision))];
-  const answers = changed.map((c) => `“${shortName(c.answer, 16)}”`);
-  const line = !changed.length ? undefined
-    : decisions.length > 1 ? `Answers of ${decisions.length} decisions now lead elsewhere.`
-    : `${answers.length === 1 ? answers[0] : answers.length === 2 ? answers.join(" and ") : `${answers.length} answers`} of “${shortName(titleOf(decisions[0]), 28)}” now ${answers.length === 1 ? "leads" : "lead"} elsewhere.`;
-  if (done) return { title: done, ...(line ? { detail: line } : {}) };
-  return { title: line! };
+export function restructureNotice(before: Process, after: Process, done?: string): { title: string; detail?: string; all?: string[] } | null {
+  // a sentence ends with a full stop, unless the name it ends with already has its own mark
+  const lines = answerChanges(before, after).map((l) => (/[.?!…]$/.test(l) ? l : `${l}.`));
+  if (!done && !lines.length) return null;
+  const head = done ?? lines[0];
+  const rest = done ? lines : lines.slice(1);
+  const room = done ? NOTICE_ANSWERS : NOTICE_ANSWERS - 1;
+  const shown = rest.slice(0, room);
+  const more = rest.length - shown.length;
+  const detail = [...shown, ...(more ? [`And ${more} more ${more === 1 ? "answer" : "answers"}: see “What comes next” of ${more === 1 ? "that decision" : "those decisions"}.`] : [])].join("\n");
+  return { title: head, ...(detail ? { detail } : {}), ...(lines.length > 1 ? { all: lines } : {}) };
+}
+
+/**
+ * What the screen says when a step becomes a decision (or a new decision is added) and its second
+ * answer was made to go back to the step before: that it did, and where to change it. Null when
+ * no answer of it goes back.
+ */
+export function newDecisionNotice(before: Process, after: Process, id: string): string | null {
+  const s = after.steps.find((x) => x.id === id);
+  if (!s || s.type !== "decision") return null;
+  const was = before.steps.find((x) => x.id === id);
+  const at = after.steps.indexOf(s);
+  const back = s.next.find((n) => {
+    const i = after.steps.findIndex((x) => x.id === n.to);
+    return i >= 0 && i < at && !was?.next.some((o) => o.to === n.to && o.label === n.label && was.type === "decision");
+  });
+  if (!back) return null;
+  const to = after.steps.find((x) => x.id === back.to)!;
+  return `${back.label ? `“${shortName(back.label, 20)}”` : "One answer"} goes back to “${shortName(to.title, 40) || "(no name yet)"}”. Change it under “What comes next”.`;
 }
 
 /** Moves a step one place up (-1) or down (1) in the flow, as moveStepInFlow does: before the step listed before it, or after the one listed after it. */

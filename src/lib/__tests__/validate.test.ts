@@ -69,8 +69,8 @@ describe("rules the schema cannot express", () => {
   it("unknown next step", () => expect(find(check((p) => (p.steps[0].next[0].to = "nowhere")), "steps[0].next[0].to")).toHaveLength(1));
   it("step pointing to itself", () => expect(check((p) => (p.steps[0].next[0].to = "ask")).some((i) => i.message.includes("itself"))).toBe(true));
   it("same target twice", () => expect(check((p) => p.steps[0].next.push({ to: "approve" })).some((i) => i.message.includes("already leads to this step"))).toBe(true));
-  it("duplicate step id", () => expect(check((p) => (p.steps[3].id = "ask")).some((i) => i.message.includes('duplicate step id "ask"'))).toBe(true));
-  it("duplicate actor id", () => expect(check((p) => p.actors.push({ id: "boss", name: "Other" })).some((i) => i.message.includes("duplicate actor id"))).toBe(true));
+  it("duplicate step id", () => expect(check((p) => (p.steps[3].id = "ask")).some((i) => i.message.includes("Two steps have the same id “ask”"))).toBe(true));
+  it("duplicate actor id", () => expect(check((p) => p.actors.push({ id: "boss", name: "Other" })).some((i) => i.message.includes("Two participants have the same id"))).toBe(true));
   it("decision needs two paths", () => expect(check((p) => p.steps[2].next.pop()).some((i) => i.message.includes("at least two answers"))).toBe(true));
   it("decision paths need labels", () => expect(check((p) => delete p.steps[2].next[0].label).some((i) => i.message.includes("needs a name"))).toBe(true));
   it("subprocess needs a process", () => expect(find(check((p) => (p.steps[0].type = "subprocess")), "steps[0].subProcessId")[0].level).toBe("error"));
@@ -106,7 +106,7 @@ describe("rules the schema cannot express", () => {
     expect(find(check((p) => delete p.review), "review")[0].level).toBe("warning");
     expect(find(check((p) => delete p.owner), "owner")[0].level).toBe("warning");
     expect(check((p) => { p.status = "draft"; delete p.review; delete p.owner; })).toEqual([]);
-    expect(find(check((p) => (p.replacedBy = "request-gcp-project")), "replacedBy")[0].message).toContain("deprecated");
+    expect(find(check((p) => (p.replacedBy = "request-gcp-project")), "replacedBy")[0].message).toContain("only counts for a retired");
     expect(check((p) => { p.status = "deprecated"; p.replacedBy = "request-gcp-project"; })).toEqual([]);
     expect(hasErrors(check((p) => { p.status = "deprecated"; p.replacedBy = "demo"; }))).toBe(true);
     expect(find(check((p) => { p.status = "deprecated"; p.replacedBy = "gone"; }), "replacedBy")[0].level).toBe("warning");
@@ -116,13 +116,12 @@ describe("rules the schema cannot express", () => {
     for (const [field, list] of [["category", "categories"], ["practice", "practices"], ["platform", "platforms"]] as const) {
       const [issue] = find(check((p) => (p[field] = "nowhere")), field);
       expect(issue.level).toBe("error");
-      expect(issue.message).toContain(`"nowhere" is not a known ${field}`);
-      expect(issue.message).toContain(`Known ${list}: ${catalog[list].map((x) => x.id).join(", ")}`);
+      expect(issue.message).toContain(`“nowhere” is not one of the ${list}`);
     }
     expect(check((p) => { p.category = "cloud"; p.practice = "engineering"; p.platform = "google-cloud"; p.rigour = "recommended"; })).toEqual([]);
     // a team id is not a practice: the lists are separate
     expect(find(check((p) => (p.practice = "cloud-platform-team")), "practice")[0].level).toBe("error");
-    expect(find(check((p) => (p.category = "x"), { ...ctx, catalog: { ...catalog, categories: [] } }), "category")[0].message).toContain("Known categories: (none)");
+    expect(find(check((p) => (p.category = "x"), { ...ctx, catalog: { ...catalog, categories: [] } }), "category")[0].message).toContain("(the list is empty)");
   });
 
   it("rigour is one of three words", () => {
@@ -132,7 +131,7 @@ describe("rules the schema cannot express", () => {
 
   it("works with lists from an older file that has no practices, platforms or categories", () => {
     const old = { ...catalog, practices: undefined, platforms: undefined, categories: undefined } as never;
-    expect(find(check((p) => (p.platform = "azure"), { ...ctx, catalog: old }), "platform")[0].message).toContain("Known platforms: (none)");
+    expect(find(check((p) => (p.platform = "azure"), { ...ctx, catalog: old }), "platform")[0].message).toContain("(the list is empty)");
     expect(validateCatalog({ ...catalog, practices: undefined, platforms: undefined, categories: undefined })).toEqual([]);
   });
 });
@@ -215,15 +214,15 @@ describe("standards", () => {
     expect(check((s) => (s.requirements[0].review = { lookFor: [] }))[0].message).toContain("at least 1");
     expect(hasErrors(validateStandard("nope"))).toBe(true);
   });
-  it("requirement ids are unique", () => expect(check((s) => (s.requirements[1].id = "DEMO-01")).some((i) => i.message.includes('duplicate requirement id "DEMO-01"'))).toBe(true));
+  it("requirement ids are unique", () => expect(check((s) => (s.requirements[1].id = "DEMO-01")).some((i) => i.message.includes("Two requirements have the id DEMO-01"))).toBe(true));
   it("the owner is any team from the list", () => {
-    expect(find(check((s) => (s.owner = "ghost")), "owner")[0].message).toContain("not in the teams list");
+    expect(find(check((s) => (s.owner = "ghost")), "owner")[0].message).toContain("not in the list of teams");
     expect(find(check((s) => (s.owner = "ghost")), "owner")[0].level).toBe("warning");
     expect(check((s) => (s.owner = "dns-team"))).toEqual([]);
   });
   it("category, practice and platform must be in their lists", () => {
     expect(find(check((s) => (s.platform = "moon")), "platform")[0]).toMatchObject({ level: "error" });
-    expect(find(check((s) => (s.practice = "moon")), "practice")[0].message).toContain("Known practices: security, engineering");
+    expect(find(check((s) => (s.practice = "moon")), "practice")[0].message).toContain("“moon” is not one of the practices");
     expect(find(check((s) => (s.category = "moon")), "category")[0].level).toBe("error");
     expect(check((s) => { s.category = "security"; s.practice = "security"; s.platform = "github"; })).toEqual([]);
     expect(hasErrors(check((s) => (s.rigour = "mandatory")))).toBe(true); // a standard's rigour follows from its requirements
@@ -250,7 +249,7 @@ describe("standards", () => {
   it("life-cycle", () => {
     expect(find(check((s) => delete s.review), "review")[0].level).toBe("warning");
     expect(check((s) => { s.status = "draft"; delete s.review; })).toEqual([]);
-    expect(find(check((s) => (s.replacedBy = "secure-logging")), "replacedBy")[0].message).toContain("deprecated");
+    expect(find(check((s) => (s.replacedBy = "secure-logging")), "replacedBy")[0].message).toContain("only counts for a retired");
     expect(hasErrors(check((s) => { s.status = "deprecated"; s.replacedBy = "demo-standard"; }))).toBe(true);
     expect(check((s) => { s.status = "deprecated"; s.replacedBy = "secure-logging"; })).toEqual([]);
   });
@@ -274,7 +273,7 @@ describe("the generated checks", () => {
 describe("a review date has to be a date", () => {
   it("is an error in a process and in a standard", () => {
     const p = { ...base(), review: { intervalMonths: 6, lastReviewedAt: "2026-13-45" } };
-    expect(validateProcess(p).filter((i) => i.level === "error").map((i) => `${i.path}: ${i.message}`)).toEqual(['review.lastReviewedAt: "2026-13-45" is not a date']);
+    expect(validateProcess(p).filter((i) => i.level === "error").map((i) => `${i.path}: ${i.message}`)).toEqual(["review.lastReviewedAt: The date of the last review, “2026-13-45”, is not a date."]);
     const s = { ...baseStandard(), review: { intervalMonths: 12, lastReviewedAt: "2026-02-30" } };
     expect(validateStandard(s).filter((i) => i.level === "error").map((i) => i.path)).toEqual(["review.lastReviewedAt"]);
     expect(hasErrors(validateProcess(base()))).toBe(false);

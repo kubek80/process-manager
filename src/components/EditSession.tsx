@@ -2,14 +2,14 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { ArrowLeft, Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash2, TriangleAlert, Undo2 } from "lucide-react";
 import type { DocMeta, Issue, Process, Standard, TargetKind } from "../types";
 import { conflictOf, useDraft, type Conflict, type Draft } from "../lib/draft";
-import { author, baseBehindSentence, clock, draftKindOf, draftSaveBase, saveCallOf, editState, exampleIssues, isExampleIssue, issueText, publishLines, statusChangeBlocked, steppedMessage, type DraftKind } from "../lib/editing";
+import { author, baseBehindSentence, clock, draftKindOf, draftSaveBase, saveCallOf, editState, exampleIssues, isExampleIssue, issueText, statusChangeBlocked, steppedMessage, movedItem, movedMessage, moveOf, publishList, savedByText, type DraftKind } from "../lib/editing";
 import { compare, describeChange, type Change } from "../lib/diff";
 import { belongsRefused } from "../lib/rights";
 import { useMe, usePerms } from "../lib/session";
 import { useCatalog } from "../lib/catalog";
 import { statusOf } from "../lib/lifecycle";
 import {
-  ApiError, deleteWorkingDraft, go, guardLeaving, offerSaving, loadVersion, loadWorkingDraft, publishWorkingDraft, putWorkingDraft, type WorkingDraft,
+  ApiError, deleteWorkingDraft, go, guardLeaving, offerSaving, loadHistory, loadVersion, loadWorkingDraft, publishWorkingDraft, putWorkingDraft, type WorkingDraft,
 } from "../lib/store";
 import type { AiSpec } from "./AiDialog";
 import { BehindBanner, ChangeList, ConflictDialog, EditingBoundary, HistoryDialog, savedWhen } from "./Editing";
@@ -251,7 +251,14 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
     if (!st) return;
     // said as what is true now: from what was on screen to what is on screen ("Step “Approve” is back.")
     let said = st.dir === "undo" ? "Undone." : "Done again.";
-    try { said = steppedMessage(st.dir, mainChange(st.from, st.to)); } catch { /* the plain words */ }
+    try {
+      // a move is said by the item that moved, not by a neighbour whose arrows changed with it
+      const moved = moveOf(st.dir === "undo" ? st.from : st.to) ?? movedItem(items(st.from).map((x) => x.id), items(st.to).map((x) => x.id));
+      const it = moved ? (items(st.to).find((x) => x.id === moved) as { id: string; title?: string }) : undefined;
+      said = it
+        ? movedMessage(st.dir, kind === "process" ? "Step" : "Requirement", kind === "process" ? it.title ?? "" : it.title?.trim() ? `${it.id} ${it.title}` : "", kind === "process" ? `Step ${items(st.to).indexOf(it) + 1}` : `Requirement ${it.id}`)
+        : steppedMessage(st.dir, mainChange(st.from, st.to));
+    } catch { /* the plain words */ }
     notify.info(said);
     const before = new Map(items(st.from).map((x) => [x.id, JSON.stringify(x)]));
     const touched = items(st.to).find((x) => !before.has(x.id)) ?? items(st.to).find((x) => before.get(x.id) !== JSON.stringify(x));
@@ -265,6 +272,22 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
   const [dialog, setDialog] = useState<null | "publish" | "versions" | "ai" | "retire">(null);
   const [publishConflict, setPublishConflict] = useState<{ c: Conflict; note: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // publishing over a version published since these changes were started: the version they were
+  // started from, and who published since, to mark the lines that would undo their change
+  const [since, setSince] = useState<{ base: T; who: string } | null>(null);
+  const draftBase = working?.base ?? 0;
+  useEffect(() => {
+    setSince(null);
+    if (dialog !== "publish" || unpublished || !draftBase || draftBase >= version) return;
+    let live = true;
+    Promise.all([loadVersion<T>(kind, id, draftBase), loadHistory(kind, id).catch(() => [])]).then(([b, list]) => {
+      if (!live) return;
+      const newer = list.filter((v) => v.version > draftBase && !v.deleted && v.savedBy !== me);
+      const names = [...new Set(newer.map((v) => savedByText(v)))];
+      setSince({ base: b, who: names.length === 1 ? names[0] : names.length ? "somebody else" : "somebody else" });
+    }, () => { /* the list is shown without the marks */ });
+    return () => { live = false; };
+  }, [dialog, draftBase, version]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const losing = useBelongsWarning(kind, d.saved, d.draft);
   const refused = belongsRefused(perms, kind, d.saved, d.draft).length > 0;
@@ -473,7 +496,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
     <>
       {dialog === "publish" && (
         <PublishDialog noun={noun} first={unpublished} version={version} blocked={publishBlocked}
-          changes={unpublished ? [] : publishLines(kind, stored, d.clean, catalog)}
+          changes={unpublished ? [] : publishList(kind, stored, d.clean, catalog, since?.base)} since={since?.who}
           onPublish={(note) => publish(note)} onClose={() => setDialog(null)} />
       )}
       {dialog === "versions" && <HistoryDialog<T> kind={kind} id={id} title={stored.title} onClose={() => setDialog(null)} draftKept={!unpublished}

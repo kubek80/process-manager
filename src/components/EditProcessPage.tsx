@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ListPlus, PenLine, Plus, Send, UserRound } from "lucide-react";
+import { Check, ChevronDown, ListChecks, ListPlus, PenLine, Plus, Send, UserRound } from "lucide-react";
 import type { DocMeta, Feedback, Process, Standard, Step } from "../types";
-import { appendStep, deleteStep, EXAMPLE, flowMoveBlocked, insertStep, moveStepInFlow, nudgeStep, renameStepId, restructureNotice, shortName, slugify, tidy, today, updateStep } from "../lib/edit";
-import { issueTarget, issuesByPlace, issuesFor, PROCESS_SECTIONS, processOutline, selectionKey, withoutEarlySuggestions, type ProcessSection, type Selection } from "../lib/editing";
+import { answerChanges, appendStep, deleteStep, EXAMPLE, flowMoveBlocked, insertStep, moveStepInFlow, newDecisionNotice, nudgeStep, renameStepId, restructureNotice, shortName, slugify, tidy, today, updateStep } from "../lib/edit";
+import { issueTarget, issuesByPlace, noteMove, issuesFor, PROCESS_SECTIONS, processOutline, selectionKey, withoutEarlySuggestions, type ProcessSection, type Selection } from "../lib/editing";
 import { isDrawableProcess, processSchema, validateProcess } from "../lib/validate";
 import { useSelectedItem } from "../lib/selection";
 import { canEdit } from "../lib/rights";
@@ -15,7 +15,7 @@ import { EditSession } from "./EditSession";
 import { FlowView } from "./FlowView";
 import { BeforeYouStart, processAiSpec } from "./ProcessPage";
 import { ProcessAbout, ProcessBefore, ProcessLinks, ProcessPeople, ProcessStandards } from "./ProcessSections";
-import { StepFields } from "./StepFields";
+import { markBackPath, StepFields } from "./StepFields";
 import { notify } from "./ui";
 
 const stamp = (p: Process): Process => ({ ...p, updatedAt: today() });
@@ -73,9 +73,8 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
   const [section, setSection] = useState<ProcessSection>("about");
   const sel: Selection = stepId ? { section: "steps", item: stepId } : { section };
   const step = drawable && stepId ? draft.steps.find((x) => x.id === stepId) : undefined;
-  // "Before you start" opens when one of its parts is chosen; otherwise the map has the room
+  // "Before you start" is one line above the map; "Show" opens it as readers see it
   const [beforeOpen, setBeforeOpen] = useState(false);
-  useEffect(() => { if (!stepId && ["before", "links", "standards"].includes(section)) setBeforeOpen(true); }, [section, stepId]);
 
   const choose = (next: Selection, open = true) => {
     if (next.item) selectStep(next.item);
@@ -109,6 +108,12 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
   // only the newest such message offers Undo: an older one would undo something else by now
   const toast = useRef<number | null>(null);
   useEffect(() => { if (toast.current !== null) { notify.dismiss(toast.current); toast.current = null; } }, [d.stepped?.n]);
+  // a move says what moved when it changed where answers of decisions lead
+  const moved = (id: string, next: Process) => {
+    if (!answerChanges(draft, next).length) return undefined;
+    const at = next.steps.findIndex((x) => x.id === id);
+    return `Step “${shortName(next.steps[at]?.title, 40) || "(no name yet)"}” is now step ${at + 1}.`;
+  };
   const restructure = (next: Process, done?: string) => {
     const said = restructureNotice(draft, next, done);
     setDraft(next);
@@ -121,7 +126,9 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
   // Enter on an item of the outline: the focus goes to the first field of what it selected
   const focusFields = () => {
     s.setPanel("fields");
-    setTimeout(() => document.querySelector<HTMLElement>(".edit-fields-body :is(input, textarea, select):not([disabled])")?.focus(), 60);
+    // a step: its name ("What happens"), not the tools above it
+    setTimeout(() => (document.querySelector<HTMLElement>(".edit-fields-body input.step-title")
+      ?? document.querySelector<HTMLElement>(".edit-fields-body .step-core :is(input, textarea, select):not([disabled]), .edit-fields-body :is(input, textarea, select):not([disabled])"))?.focus(), 60);
   };
   // the line under the steps in the outline that adds one by its name
   const openAddLine = () => {
@@ -155,7 +162,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
         if (neighbour) selectStep(neighbour.id); else { selectStep(null); setSection("steps"); }
         focusSelectedInOutline(neighbour?.title);
       }}
-      onMove={(before) => restructure(moveStepInFlow(draft, step.id, before))}
+      onMove={(before) => { const next = moveStepInFlow(draft, step.id, before); noteMove(next, step.id); restructure(next, moved(step.id, next)); }}
       onAddAfter={(name) => { const r = insertStep(draft, { afterId: step.id }, { title: name, type: "task", actor: step.actor }); setDraft(r.process); selectStep(r.id); }} />;
   } else {
     const head = <h2 className="fields-section-title">{sectionLabel}</h2>;
@@ -192,14 +199,17 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
         choose({ section: "about" });
         setTimeout(() => document.querySelector<HTMLTextAreaElement>(".edit-fields [data-field=summary]")?.focus(), 50);
       }} onSteps={openAddLine} onFirst={() => draft.steps[0] && choose({ section: "steps", item: draft.steps[0].id })} />}
-      {(draft.prerequisites.length > 0 || !!draft.resources?.length || !!draft.standards?.length)
-        ? <div className={`preview-part ${["before", "links", "standards"].includes(sel.section) ? "on" : ""}`}>
-            <BeforeYouStart process={draft} all={all} standards={standards} open={beforeOpen} onToggle={() => setBeforeOpen(!beforeOpen)} />
-          </div>
-        : <button className="preview-empty" onClick={() => choose({ section: "before" })}>Nothing needed before step 1 yet. <b>Add what readers must have in place</b></button>}
+      <PreviewBefore process={draft} all={all} standards={standards} on={["before", "links", "standards"].includes(sel.section)} open={beforeOpen}
+        onToggle={() => setBeforeOpen(!beforeOpen)} onChoose={(section) => choose({ section })} />
       <FlowView editable legend={false} openMin={0.6} follow process={draft} selectedId={stepId} done={NONE} feedback={feedback}
         onSelect={(id) => choose({ section: "steps", item: id })}
-        onInsert={(at, spec) => { const r = insertStep(draft, at, spec); setDraft(r.process); selectStep(r.id); }}
+        onInsert={(at, spec) => {
+          const r = insertStep(draft, at, spec);
+          setDraft(r.process); selectStep(r.id);
+          const said = newDecisionNotice(draft, r.process, r.id);
+          if (said) { notify.info(said); s.setPanel("fields"); markBackPath(); }
+        }}
+        onEnter={() => focusFields()}
         onMoveToLane={(id, actor) => setDraft(updateStep(draft, id, { actor }))} />
     </div>
   );
@@ -213,14 +223,50 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
           feedback={(id) => openCount(feedback, id)}
           onSelect={(e) => choose({ section: e.section, item: e.item }, !!e.item || e.depth === 0)}
           onAdd={{ section: "steps", label: "Add a step", placeholder: "Name of the next step", run: (name) => { const r = appendStep(draft, name); setDraft(r.process); selectStep(r.id); } }}
-          onMove={(id, before) => restructure(moveStepInFlow(draft, id, before))}
-          onNudge={(id, dir) => restructure(nudgeStep(draft, id, dir))}
+          onMove={(id, before) => { const next = moveStepInFlow(draft, id, before); noteMove(next, id); restructure(next, moved(id, next)); }}
+          onNudge={(id, dir) => { const next = nudgeStep(draft, id, dir); noteMove(next, id); restructure(next, moved(id, next)); }}
           onEnter={focusFields}
           moveBlocked={(id) => flowMoveBlocked(draft, id)} />}
         middle={middle} fields={<div className="edit-fields-body">{fields}</div>} fieldsLabel={fieldsLabel}
         panel={s.panel} setPanel={s.setPanel} json={s.json} />
       {s.dialogs}
     </>
+  );
+}
+
+/**
+ * What readers see before step 1, folded to one line above the map (the map needs the height):
+ * what is needed, the links that make it faster, the standards it helps to meet - each a button
+ * to its fields. "Show" opens it as readers see it. A link without a name yet is not shown.
+ */
+function PreviewBefore({ process, all, standards, on, open, onToggle, onChoose }: {
+  process: Process; all: Process[]; standards: Standard[]; on: boolean; open: boolean; onToggle: () => void; onChoose: (section: ProcessSection) => void;
+}) {
+  const shown = { ...process, resources: (process.resources ?? []).filter((r) => typeof r.title === "string" && r.title.trim()) };
+  const pre = process.prerequisites.length, links = shown.resources.length, helps = process.standards?.length ?? 0;
+  const parts: { section: ProcessSection; text: string; none: string }[] = [
+    { section: "before", text: `${pre} needed`, none: "nothing needed" },
+    { section: "links", text: `${links} ${links === 1 ? "link" : "links"}`, none: "no links" },
+    { section: "standards", text: `${helps} ${helps === 1 ? "standard" : "standards"}`, none: "no standards" },
+  ];
+  const count = [pre, links, helps];
+  return (
+    <div className={`preview-before ${on ? "on" : ""} ${open ? "open" : ""}`}>
+      <div className="preview-before-line">
+        <ListChecks size={15} aria-hidden="true" />
+        <b>Before you start</b>
+        {parts.map((x, i) => (
+          <button key={x.section} className={`preview-before-part ${count[i] ? "" : "none"}`} onClick={() => onChoose(x.section)}
+            title={count[i] ? `Change: ${x.text}` : `Add: ${x.none}`}>{count[i] ? x.text : x.none}</button>
+        ))}
+        {(pre > 0 || links > 0 || helps > 0) && (
+          <button className="preview-before-show" aria-expanded={open} onClick={onToggle} title={open ? "Fold it away again" : "Show it as readers see it"}>
+            {open ? "Hide" : "Show"}<ChevronDown size={14} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+      {open && <BeforeYouStart process={shown} all={all} standards={standards} open onToggle={onToggle} />}
+    </div>
   );
 }
 
@@ -258,6 +304,6 @@ function StartHere({ process, onSummary, onSteps, onFirst }: { process: Process;
 /** The place a problem is about, in words: "About", "Step 3 “Approve”". */
 function placeOf(p: Process, path: string): string {
   const t = issueTarget("process", p, path);
-  if (t.item) { const i = p.steps.findIndex((x) => x.id === t.item); return `Step ${i + 1} “${p.steps[i]?.title ?? t.item}”`; }
+  if (t.item) { const i = p.steps.findIndex((x) => x.id === t.item); return p.steps[i]?.title?.trim() ? `Step ${i + 1} “${p.steps[i].title}”` : `Step ${i + 1} (no name yet)`; }
   return PROCESS_SECTIONS.find((x) => x.id === t.section)?.label ?? "About";
 }

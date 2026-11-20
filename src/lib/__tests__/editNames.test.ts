@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { compareProcesses, compareStandards, describeChange, fieldName, itemWords } from "../diff";
-import { deletedSentence, goneDraftSentence, issueText, pathContext, publishLines, savedWhen, steppedMessage } from "../editing";
+import { moveOf, noteMove, deletedSentence, goneDraftSentence, issueField, issueText, pathContext, publishList, publishLines, savedWhen, steppedMessage } from "../editing";
 import { deleteStep, moveStepInFlow, restructureNotice, shortName } from "../edit";
 import { base, baseStandard } from "./fixtures";
 import type { Process } from "../../types";
@@ -100,5 +100,63 @@ describe("who deleted it, who published the shared draft", () => {
     expect(goneDraftSentence(v6, 5)).toBe("Dana Admin published it as version 6 at 2026-11-20 09:12, while you were editing.");
     expect(goneDraftSentence(v6, 6)).toBe("The shared draft was discarded, perhaps in another window, while you were editing.");
     expect(goneDraftSentence(undefined, 5)).toMatch(/published or discarded/);
+  });
+});
+
+describe("the checker's list leads to the field", () => {
+  it("finds a field by where it is and by its own label", () => {
+    expect(issueField("steps[2].instructions[1]").selectors[0]).toBe(".ins-rows > li:nth-child(2) textarea");
+    expect(issueField("steps[2].next[1].to").selectors[0]).toBe(".path-rows > li:nth-child(2) select");
+    expect(issueField("steps[2].title")).toEqual({ selectors: ["input.step-title"], label: "what happens" });
+    expect(issueField("requirements[0].title").label).toBe("short name");
+    expect(issueField("prerequisites[1].title").selectors[0]).toBe('[aria-label="Prerequisite 2"]');
+    expect(issueField("actors[2]").selectors[0]).toBe('[aria-label="Name of participant 3"]');
+    expect(issueField("summary", "process").selectors[0]).toBe('[data-field="summary"]');
+    expect(issueField("owner", "standard").label).toBe("issued by");
+  });
+});
+
+describe("the Publish list marks what would undo a change published since", () => {
+  it("compares the version the draft started from, the version readers see and the draft", () => {
+    const base0 = { ...base(), estimatedDuration: "1-3 weeks" };
+    // somebody published: a shorter lead time, a renamed step, a new step
+    const current = structuredClone(base0);
+    current.estimatedDuration = "1-2 weeks";
+    current.steps[1] = { ...current.steps[1], title: "Approve it quickly" };
+    current.steps.push({ id: "tell", title: "Tell the team", actor: "me", type: "task", next: [] });
+    // the draft was started from base0 and changed only the summary
+    const draft = { ...structuredClone(base0), summary: "A summary of my own." };
+    const lines = publishList("process", current, draft, undefined, base0);
+    const marked = (start: string) => lines.find((l) => l.text.startsWith(start))?.undoes;
+    expect(marked("Typical lead time")).toBe(true);
+    expect(marked("Step “Approve it” changed")).toBe(true);
+    expect(marked("Step “Tell the team” removed")).toBe(true);
+    expect(marked("Summary")).toBe(false);
+    // without the version it started from nothing is marked
+    expect(publishList("process", current, draft).some((l) => l.undoes)).toBe(false);
+  });
+  it("does not mark a change the draft makes on purpose to something they also changed", () => {
+    const base0 = base(), current = { ...base(), estimatedDuration: "2 days" }, draft = { ...base(), estimatedDuration: "3 days" };
+    expect(publishList("process", current, draft, undefined, base0)[0]).toEqual({ text: "Typical lead time: “2 days” → “3 days”", undoes: false });
+  });
+});
+
+describe("a message about answers", () => {
+  it("does not end a question with a second mark", () => {
+    const p = base();
+    // "Yes" of "Approved?" now goes to the decision itself's neighbour named with a question mark
+    const q = { ...p, steps: p.steps.map((s) => (s.id === "ok" ? { ...s, next: s.next.map((n) => (n.label === "Yes" ? { ...n, to: "approve" } : n)) } : s.id === "approve" ? { ...s, title: "Is it approved?" } : s)) };
+    const said = restructureNotice({ ...p, steps: p.steps.map((s) => (s.id === "approve" ? { ...s, title: "Is it approved?" } : s)) }, q)!;
+    expect(said.title).toMatch(/now goes to \d+\. Is it approved\?$/);
+  });
+});
+
+describe("a move is remembered with the document it made", () => {
+  it("so a swap of two neighbours names the one that was moved", () => {
+    const doc = { steps: [] };
+    noteMove(doc, "fix");
+    expect(moveOf(doc)).toBe("fix");
+    expect(moveOf({ steps: [] })).toBeUndefined();
+    expect(moveOf(undefined)).toBeUndefined();
   });
 });

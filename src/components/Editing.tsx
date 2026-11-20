@@ -278,7 +278,7 @@ export class EditingBoundary extends Component<{
             {onSave && saved !== "saved" && <button className="btn" disabled={saved === "saving"} onClick={save}><Save size={15} />{saved === "saving" ? "Saving…" : "Save draft"}</button>}
             <button className="btn ghost" onClick={onBack}><ArrowLeft size={15} />Back to reading this {noun}</button>
           </div>
-          {saved === "saved" && <p className="check good"><Check size={15} />Your draft is saved.</p>}
+          {!onSave && <p className="check good"><Check size={15} />Everything is saved: nothing on this screen is lost.</p>}
           {saved === "failed" && <p className="check warn"><TriangleAlert size={15} />The draft could not be saved yet. Undo the last change or try again, then save.</p>}
           <details className="edit-failed-detail"><summary>What went wrong, for the people who run the portal</summary><code>{error.message}</code></details>
         </div>

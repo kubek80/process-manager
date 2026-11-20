@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitWhole, hiddenEdges, laneColumn, laneLabel, openingZoom, scrollToCentre, stepZoom, clampZoom, isZoomWheel, scrollForZoom, wheelZoom, zoomKey, ZOOM_FLOOR, ZOOM_MAX, ZOOM_MIN } from "../zoom";
+import { afterFit, laneChars, wrapWords, fitWhole, hiddenEdges, laneColumn, laneLabel, openingZoom, scrollToCentre, stepZoom, clampZoom, isZoomWheel, scrollForZoom, wheelZoom, zoomKey, ZOOM_FLOOR, ZOOM_MAX, ZOOM_MIN } from "../zoom";
 
 describe("Ctrl + scroll on the map", () => {
   it("scrolling up zooms in, down zooms out, by about a tenth per notch of a mouse wheel", () => {
@@ -75,8 +75,10 @@ describe("Fit: the whole flow", () => {
   });
   it("counts the lane column at the width it has at that zoom", () => {
     expect(laneColumn(1)).toBe(156);
-    expect(laneColumn(0.5)).toBe(124);
-    expect(laneColumn(0.2)).toBe(104);
+    expect(laneColumn(0.6)).toBe(120);
+    expect(laneColumn(0.5)).toBe(120);
+    expect(laneColumn(0.4)).toBe(108);
+    expect(laneColumn(0.2)).toBe(96);
     expect(laneColumn(0.5, true)).toBe(80);
     const z = fitWhole({ width: 600, height: 1000 }, { width: 2000, height: 100 }, laneColumn);
     expect(laneColumn(z) + 2000 * z).toBeLessThanOrEqual(600);
@@ -150,5 +152,34 @@ describe("zooming around the pointer", () => {
   it("keeps the point under the pointer in place at any zoom", () => {
     expect(scrollForZoom(1, 0.5, { x: 400, y: 0 }, { left: 0, top: 0 })).toEqual({ left: 0, top: 0 });
     expect(scrollForZoom(0.5, 1, { x: 200, y: 0 }, { left: 0, top: 0 }).left).toBe(200);
+  });
+});
+
+describe("Fit is temporary", () => {
+  it("returns to the working zoom when a step is selected or the process changes", () => {
+    expect(afterFit({ fitted: true, zoom: 0.22, working: 0.6 }, "select")).toEqual({ fitted: false, zoom: 0.6 });
+    expect(afterFit({ fitted: true, zoom: 0.22, working: 0.6 }, "edit")).toEqual({ fitted: false, zoom: 0.6 });
+  });
+  it("keeps a zoom the person chose with the buttons, and leaves an unfitted map alone", () => {
+    expect(afterFit({ fitted: true, zoom: 0.3, working: 0.6 }, "zoom")).toEqual({ fitted: false, zoom: 0.3 });
+    expect(afterFit({ fitted: false, zoom: 0.9, working: 0.6 }, "select")).toEqual({ fitted: false, zoom: 0.9 });
+  });
+});
+
+describe("lane names", () => {
+  it("wrap between words, never inside one", () => {
+    expect(wrapWords("Site Reliability team", 12, 3)).toEqual(["Site", "Reliability", "team"]);
+    expect(wrapWords("IT procurement", 12, 2)).toEqual(["IT", "procurement"]);
+    expect(wrapWords("Service Management", 20, 2)).toEqual(["Service Management"]);
+  });
+  it("end in “…” after a whole word when they need more lines than they have", () => {
+    expect(wrapWords("Site Reliability team", 12, 2)).toEqual(["Site", "Reliability…"]);
+    expect(wrapWords("Change advisory board members", 14, 1)).toEqual(["Change…"]);
+    expect(wrapWords("", 10, 2)).toEqual([]);
+  });
+  it("count the characters a column holds", () => {
+    expect(laneChars(120, false, false)).toBe(13);
+    expect(laneChars(156, false, true)).toBe(12);
+    expect(laneChars(80, true, false)).toBe(9);
   });
 });

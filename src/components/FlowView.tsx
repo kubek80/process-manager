@@ -4,7 +4,7 @@ import type { Feedback, Process, StepType } from "../types";
 import { diamondPoints, L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import { toolName, useCatalog } from "../lib/catalog";
-import { fitWhole, hiddenEdges, isZoomWheel, laneColumn, laneLabel, openingZoom, scrollForZoom, scrollToCentre, stepZoom, wheelZoom, zoomKey } from "../lib/zoom";
+import { afterFit, fitWhole, hiddenEdges, isZoomWheel, laneChars, laneColumn, laneLabel, openingZoom, scrollForZoom, scrollToCentre, stepZoom, wheelZoom, wrapWords, zoomKey } from "../lib/zoom";
 import { openCount } from "./Feedback";
 import { EntryIcon } from "./EntryIcon";
 import { scrollBehavior, TypeIcon } from "./ui";
@@ -20,7 +20,9 @@ const NO_PAN = "button:not(.block-main), a, input, select, textarea, label, .qui
 /** How far the pointer moves before a press becomes a drag of the map (and no longer a click). */
 const PAN_START = 5;
 
-export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, editable = true, bare, openMin, follow = !bare, legend = true }: {
+export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, onEnter, editable = true, bare, openMin, follow = !bare, legend = true }: {
+  /** Enter on a block: after selecting it (the editing screen moves the keyboard to its fields). */
+  onEnter?: (id: string) => void;
   editable?: boolean; bare?: boolean;
   /** The legend of the kinds of steps. The editing screen leaves it out: every block names its kind, and the map needs the room. */
   legend?: boolean;
@@ -162,10 +164,13 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const drawW = layout.width - L.HEADER;
   // the lanes reach the right edge of the map also when the drawing is narrower than it
   const [scrollerW, setScrollerW] = useState(0);
+  // the size of the visible map: when it changes (the step panel opens beside it, the screen
+  // turns), the selected step is brought back to the middle
+  const [viewSize, setViewSize] = useState("");
   useEffect(() => {
     const el = scroller.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => setScrollerW(el.clientWidth));
+    const ro = new ResizeObserver(() => { setScrollerW(el.clientWidth); setViewSize(`${el.clientWidth}x${el.clientHeight}`); });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -182,6 +187,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
     const height = room >= Math.min(limit, 240) ? Math.min(limit, room) : limit;
     const z = fitWhole({ width: viewWidth(), height }, { width: drawW, height: layout.height }, column);
     scrollTo.current = { left: 0, top: 0 };
+    fitted.current = true;
     setZoom(z);
     el.scrollTo({ left: 0, top: 0 });
     // a map lower on the page is brought up so that the whole of it is on the screen
@@ -193,17 +199,33 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   // the zoom is chosen once, when the map opens (and when another process is shown in the same
   // place): never again because something around the map changed its size
   const opened = useRef<string | null>(null);
+  // "Fit" is an overview on request: selecting a step or changing the process returns to the
+  // zoom the map opened at (the working zoom), with the step in the middle
+  const fitted = useRef(false);
+  const working = useRef(1);
+  const [recentre, setRecentre] = useState(0);
+  const leaveFit = (event: "select" | "edit" | "zoom") => {
+    if (!fitted.current) return;
+    const next = afterFit({ fitted: true, zoom: zoomNow.current, working: working.current }, event);
+    fitted.current = next.fitted;
+    if (next.zoom !== zoomNow.current) { setZoom(next.zoom); setRecentre((n) => n + 1); }
+  };
   useLayoutEffect(() => {
     if (opened.current === process.id || (opened.current !== null && editable)) return;
     opened.current = process.id;
     // a picture in the guide never scrolls: it gets as small as its column needs
     const z = openingZoom(viewWidth(), drawW, bare ? 0.3 : opening, column);
+    working.current = z;
+    fitted.current = false;
     setZoom(z);
     scroller.current?.scrollTo({ left: 0, top: 0 });
   }, [process.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => { if (selectedId) leaveFit("select"); }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (editable) leaveFit("edit"); }, [process]); // eslint-disable-line react-hooks/exhaustive-deps
   // the selected step is brought to the middle of the map (never the page scrolls), with room for
-  // where it leads: when it is chosen and when it moves (added, reordered, another lane)
+  // where it leads: when it is chosen and when it moves (added, reordered, another lane), and when
+  // the map gets another size or zoom
   const node = follow && selectedId ? layout.nodes.find((n) => n.step.id === selectedId) : undefined;
   const nodeAt = node ? `${node.x},${node.y}` : "";
   useEffect(() => {
@@ -217,7 +239,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
       if (to) el.scrollTo({ ...to, behavior: scrollBehavior() });
     });
     return () => cancelAnimationFrame(frame);
-  }, [selectedId, nodeAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedId, nodeAt, recentre, viewSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // where more of the flow is out of view, that edge fades out
   const [edges, setEdges] = useState({ left: false, right: false });
@@ -233,7 +255,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   }, [bare, zoom, layout.width]);
 
   const focus = hover ?? selectedId;
-  const titleOf = (id: string) => process.steps.find((s) => s.id === id)?.title ?? id;
+  const titleOf = (id: string) => { const i = process.steps.findIndex((s) => s.id === id); return i < 0 ? id : process.steps[i].title?.trim() || `step ${i + 1}`; };
   const Main = bare ? "div" : "button";
   const usedTypes = [...new Set(process.steps.map((s) => s.type))];
   const toolIcon = (id: string) => catalog.tools.find((t) => t.id === id)?.icon;
@@ -245,11 +267,38 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   });
   const height = Math.max(layout.height, adding ? adding.y + POP_H + 12 : 0);
 
-  const step = (dir: 1 | -1) => setZoom(stepZoom(zoomNow.current, dir));
+  const step = (dir: 1 | -1) => { leaveFit("zoom"); setZoom(stepZoom(zoomNow.current, dir)); };
+  // the blocks are one stop for Tab: the selected one (or the first); the arrow keys go from step
+  // to step in the order of their numbers, Enter opens the step
+  const order = layout.nodes.map((n) => n.step.id);
+  const tabStop = selectedId && order.includes(selectedId) ? selectedId : order[0];
+  const roam = (e: React.KeyboardEvent, id: string) => {
+    const at = order.indexOf(id);
+    const to = e.key === "ArrowRight" || e.key === "ArrowDown" ? at + 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? at - 1 : e.key === "Home" ? 0 : e.key === "End" ? order.length - 1 : null;
+    if (to !== null) {
+      e.preventDefault();
+      const target = order[Math.max(0, Math.min(order.length - 1, to))];
+      const el = scroller.current?.querySelector<HTMLElement>(`[data-step="${CSS.escape(target)}"] .block-main`);
+      el?.focus({ preventScroll: true });
+      // the step that has the keyboard is brought into view
+      const node = layout.nodes.find((n) => n.step.id === target);
+      const sc = scroller.current;
+      if (node && sc) {
+        const z = zoomNow.current;
+        const pos = scrollToCentre({ x: (node.x - L.HEADER) * z, y: node.y * z, w: L.W * z, h: L.H * z }, { left: sc.scrollLeft, top: sc.scrollTop, width: sc.clientWidth, height: sc.clientHeight }, { width: sc.scrollWidth, height: sc.scrollHeight });
+        if (pos) sc.scrollTo({ ...pos, behavior: scrollBehavior() });
+      }
+    } else if (e.key === "Enter" && onEnter) {
+      e.preventDefault();
+      leaveFit("select");
+      onSelect(id);
+      onEnter(id);
+    }
+  };
   return (
     <div className={`flow-wrap ${bare ? "bare" : ""}`} ref={wrapBox}>
       <div className="flow-head">
-        {legend ? (
+        {legend && narrow && !bare ? <LegendButton types={usedTypes} /> : legend ? (
           <div className="legend" role="group" aria-label="Kinds of steps">
             {usedTypes.map((t) => (
               <span key={t} className="legend-item"><TypeIcon type={t} size={20} />{STEP_META[t].label}</span>
@@ -281,13 +330,14 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
               const count = process.steps.filter((s) => s.actor === actor.id).length;
               const color = LANE_COLORS[lane.actorIndex % LANE_COLORS.length];
               const fits = laneLabel(lane.h * zoom, HEADW);
+              const lines = wrapWords(actor.name, laneChars(HEADW, fits.small, fits.avatar), fits.lines);
               return (
                 <div key={actor.id} className={`lane-label ${lane.actorIndex === 0 ? "me" : ""} ${k % 2 ? "even" : ""} ${fits.small ? "small" : ""}`}
                   style={{ top: lane.y * zoom, height: lane.h * zoom, "--lane": color, "--lines": fits.lines } as React.CSSProperties} title={`${actor.name}: ${count} ${count === 1 ? "step" : "steps"}`}>
                   <div className="lane-head">
-                    {fits.avatar && <span className="lane-avatar">{lane.actorIndex === 0 ? <User size={16} /> : actor.name.slice(0, 1).toUpperCase()}</span>}
+                    {fits.avatar && <span className="lane-avatar">{lane.actorIndex === 0 ? <User size={16} /> : (actor.name ?? "").trim().charAt(0).toUpperCase()}</span>}
                     <div className="lane-text">
-                      <strong>{actor.name}</strong>
+                      <strong aria-label={actor.name}>{lines.map((l, i) => <span key={i} className="lane-line" aria-hidden="true">{l}</span>)}</strong>
                       {fits.count && <span>{count} {count === 1 ? "step" : "steps"}</span>}
                     </div>
                   </div>
@@ -347,7 +397,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
             const flags = openCount(feedback, s.id);
             const decision = s.type === "decision";
             return (
-              <div key={s.id} draggable={editable}
+              <div key={s.id} data-step={s.id} draggable={editable}
                 onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", s.id); setDrag(s.id); setAdding(null); }}
                 onDragEnd={() => { setDrag(null); setDropLane(null); }}
                 className={`block ${n.lane === 0 ? "mine" : ""} ${selectedId === s.id ? "selected" : ""} ${done.has(s.id) ? "done" : ""} ${s.type === "decision" ? "decision" : ""} ${drag === s.id ? "dragged" : ""}`}
@@ -361,7 +411,10 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                   </svg>
                 )}
                 {/* in the guide a chart is a picture: nothing to open, so nothing to tab through */}
-                <Main className="block-main" {...(bare ? {} : { onClick: () => onSelect(s.id) })}>
+                <Main className="block-main" {...(bare ? {} : {
+                  onClick: () => { leaveFit("select"); onSelect(s.id); }, tabIndex: tabStop === s.id ? 0 : -1, onKeyDown: (e: React.KeyboardEvent) => roam(e, s.id),
+                  "aria-label": `${n.index + 1}. ${s.title || "(no name yet)"}, ${meta.label}${process.actors[n.lane] ? `, by ${process.actors[n.lane].name}` : ""}`,
+                })}>
                   {!decision && <TypeIcon type={s.type} size={bare ? 30 : 34} />}
                   <span className="block-text">
                     <span className="block-type">{meta.label}</span>
@@ -377,7 +430,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                 {(flags > 0 || (!bare && onReport)) && (
                   <span className="block-corner">
                     {!bare && onReport && (
-                      <button type="button" className="block-report" draggable={false} title="Report a problem with this step"
+                      <button type="button" className="block-report" draggable={false} title="Report a problem with this step" tabIndex={tabStop === s.id ? 0 : -1}
                         aria-label={`Report a problem with step ${n.index + 1}: ${s.title}`}
                         onMouseDown={(ev) => ev.stopPropagation()} onDragStart={(ev) => { ev.preventDefault(); ev.stopPropagation(); }}
                         onClick={(ev) => { ev.stopPropagation(); onReport(s.id); }}><Flag size={12} strokeWidth={2.5} /></button>
@@ -386,7 +439,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                   </span>
                 )}
                 {editable && <button className="block-add" title={s.type === "decision" ? "Add a branch" : "Add a step after this one"}
-                  aria-label={s.type === "decision" ? `Add a branch to “${s.title}”` : `Add a step after “${s.title}”`}
+                  aria-label={s.type === "decision" ? `Add a branch to “${titleOf(s.id)}”` : `Add a step after “${titleOf(s.id)}”`}
                   tabIndex={-1} onMouseDown={(ev) => ev.stopPropagation()} onClick={() => openAdd({ afterId: s.id }, n.x + L.W, n.y + L.H / 2)}><Plus size={14} /></button>}
               </div>
             );

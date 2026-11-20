@@ -47,7 +47,7 @@ function checkBelongs(doc: { category?: string; practice?: string; platform?: st
   const known = (list: { id: string }[] | undefined) => (list ?? []).map((x) => x.id);
   const one = (field: "category" | "practice" | "platform", list: { id: string }[] | undefined, noun: string, plural: string) => {
     const id = doc[field];
-    if (id && !known(list).includes(id)) err(field, `"${id}" is not a known ${noun}. Known ${plural}: ${known(list).join(", ") || "(none)"}`);
+    if (id && !known(list).includes(id)) err(field, `“${id}” is not one of the ${plural}${known(list).length ? "" : " (the list is empty)"}. Choose one of the list under “What it belongs to”.`);
   };
   one("category", cat.categories, "category", "categories");
   one("practice", cat.practices, "practice", "practices");
@@ -76,61 +76,60 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
   const warn = (path: string, message: string) => issues.push({ level: "warning", path, message });
   const known = ctx.processIds ? new Set(ctx.processIds) : null;
   const cat = ctx.catalog;
-  const ids = (list: { id: string }[]) => list.map((x) => x.id);
 
   if (cat) {
     if (p.owner && !cat.teams.some((t) => t.id === p.owner))
-      warn("owner", `"${p.owner}" is not in the teams list. Known teams: ${ids(cat.teams).join(", ") || "(none)"}`);
+      warn("owner", `The owning team “${p.owner}” is not in the list of teams. Choose one of the list.`);
     checkBelongs(p, cat, err);
     (p.tiers ?? []).forEach((tier, i) => {
-      if (!cat.tiers.some((t) => t.id === tier)) err(`tiers[${i}]`, `"${tier}" is not a known tier. Known tiers: ${ids(cat.tiers).join(", ") || "(none)"}`);
+      if (!cat.tiers.some((t) => t.id === tier)) err(`tiers[${i}]`, `“${tier}” is not one of the application tiers. Remove it under “Where it applies”.`);
     });
     (p.languages ?? []).forEach((lang, i) => {
-      if (!cat.languages.some((l) => l.id === lang)) err(`languages[${i}]`, `"${lang}" is not a known language. Known languages: ${ids(cat.languages).join(", ") || "(none)"}`);
+      if (!cat.languages.some((l) => l.id === lang)) err(`languages[${i}]`, `“${lang}” is not one of the languages. Remove it under “Where it applies”.`);
     });
     (p.environments ?? []).forEach((env, i) => {
-      if (!cat.environments.some((x) => x.id === env)) err(`environments[${i}]`, `"${env}" is not a known environment. Known environments: ${ids(cat.environments).join(", ") || "(none)"}`);
+      if (!cat.environments.some((x) => x.id === env)) err(`environments[${i}]`, `“${env}” is not one of the environments. Remove it under “Where it applies”.`);
     });
     p.actors.forEach((a, i) => {
-      if (a.teamId && !cat.teams.some((t) => t.id === a.teamId)) warn(`actors[${i}].teamId`, `"${a.teamId}" is not in the teams list`);
+      if (a.teamId && !cat.teams.some((t) => t.id === a.teamId)) warn(`actors[${i}].teamId`, `${a.name?.trim() || "A participant"} stands for a team that is no longer in the list of teams.`);
     });
   }
 
   if (p.replacedBy) {
-    if (p.replacedBy === p.id) err("replacedBy", "a process cannot replace itself");
-    else if (known && !known.has(p.replacedBy)) warn("replacedBy", `no process with id "${p.replacedBy}" exists yet`);
-    if (p.status !== "deprecated") warn("replacedBy", "replacedBy only makes sense when status is \"deprecated\"");
+    if (p.replacedBy === p.id) err("replacedBy", "A process cannot replace itself: choose another one under “Use instead”.");
+    else if (known && !known.has(p.replacedBy)) warn("replacedBy", "The process under “Use instead” does not exist (yet).");
+    if (p.status !== "deprecated") warn("replacedBy", "“Use instead” only counts for a retired process.");
   }
-  if ((p.status ?? "active") === "active" && !p.review) warn("review", "no review interval is set - the owner will never be asked to confirm this process is still correct");
-  if (p.review?.lastReviewedAt && !isDate(p.review.lastReviewedAt)) err("review.lastReviewedAt", `"${p.review.lastReviewedAt}" is not a date`);
-  if ((p.status ?? "active") === "active" && !p.owner) warn("owner", "an active process should have an owner team");
+  if ((p.status ?? "active") === "active" && !p.review) warn("review", "No review rhythm is set, so the owning team is never asked to confirm the process is still right.");
+  if (p.review?.lastReviewedAt && !isDate(p.review.lastReviewedAt)) err("review.lastReviewedAt", `The date of the last review, “${p.review.lastReviewedAt}”, is not a date.`);
+  if ((p.status ?? "active") === "active" && !p.owner) warn("owner", "Choose the owning team: it reviews the process and answers feedback.");
 
   const knownStandards = ctx.standardIds ? new Set(ctx.standardIds) : null;
   (p.standards ?? []).forEach((sid, i) => {
-    if (knownStandards && !knownStandards.has(sid)) warn(`standards[${i}]`, `no standard with id "${sid}" exists yet`);
+    if (knownStandards && !knownStandards.has(sid)) warn(`standards[${i}]`, `A standard it helps to meet (“${sid}”) does not exist (yet).`);
   });
 
   const actorIds = new Set<string>();
   p.actors.forEach((a, i) => {
-    if (actorIds.has(a.id)) err(`actors[${i}].id`, `duplicate actor id "${a.id}"`);
+    if (actorIds.has(a.id)) err(`actors[${i}].id`, `Two participants have the same id “${a.id}”: repair it in the JSON (More › JSON).`);
     actorIds.add(a.id);
   });
 
   const stepIds = new Set<string>();
   p.steps.forEach((s, i) => {
-    if (stepIds.has(s.id)) err(`steps[${i}].id`, `duplicate step id "${s.id}"`);
+    if (stepIds.has(s.id)) err(`steps[${i}].id`, `Two steps have the same id “${s.id}”: repair it in the JSON (More › JSON).`);
     stepIds.add(s.id);
   });
 
   const usedActors = new Set<string>();
   p.steps.forEach((s, i) => {
     const at = `steps[${i}]`;
-    if (!actorIds.has(s.actor)) err(`${at}.actor`, `"${s.actor}" is not an actor id. Known actors: ${[...actorIds].join(", ")}`);
+    if (!actorIds.has(s.actor)) err(`${at}.actor`, "Who does it is not one of the participants: choose who does it.");
     usedActors.add(s.actor);
     const targets = new Set<string>();
     s.next.forEach((n, j) => {
-      if (!stepIds.has(n.to)) err(`${at}.next[${j}].to`, `"${n.to}" is not a step id in this process`);
-      if (n.to === s.id) err(`${at}.next[${j}].to`, "a step cannot point to itself");
+      if (!stepIds.has(n.to)) err(`${at}.next[${j}].to`, "This way on leads to a step that does not exist: choose where it goes.");
+      if (n.to === s.id) err(`${at}.next[${j}].to`, "A step cannot lead to itself: choose another step.");
       if (targets.has(n.to)) err(`${at}.next[${j}].to`, "Another answer already leads to this step: let each lead somewhere else.");
       targets.add(n.to);
     });
@@ -139,23 +138,23 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
       if (s.next.some((n) => !n.label)) err(`${at}.next`, "Every answer of a decision needs a name, such as Approved or Rejected.");
     }
     if (cat && s.tool && !cat.tools.some((t) => t.id === s.tool))
-      warn(`${at}.tool`, `"${s.tool}" is not in the tools list. Known tools: ${ids(cat.tools).join(", ") || "(none)"}`);
-    if (s.type === "subprocess" && !s.subProcessId) err(`${at}.subProcessId`, "a subprocess step must name the process in subProcessId");
+      warn(`${at}.tool`, `The tool “${s.tool}” is not in the list of tools: choose one of the list.`);
+    if (s.type === "subprocess" && !s.subProcessId) err(`${at}.subProcessId`, "A sub-process step needs the process it stands for: choose it under “Explained by sub-process”.");
     if (s.subProcessId) {
-      if (s.subProcessId === p.id) err(`${at}.subProcessId`, "a process cannot use itself as a sub-process");
-      else if (known && !known.has(s.subProcessId)) warn(`${at}.subProcessId`, `no process with id "${s.subProcessId}" exists yet`);
+      if (s.subProcessId === p.id) err(`${at}.subProcessId`, "A process cannot be its own sub-process.");
+      else if (known && !known.has(s.subProcessId)) warn(`${at}.subProcessId`, "The sub-process does not exist (yet).");
     }
     if (s.actor === "me" && s.type !== "wait" && !s.instructions?.length && !s.subProcessId)
       warn(`${at}.instructions`, "Say exactly what the reader does in this step.");
   });
 
   p.prerequisites.forEach((q, i) => {
-    if (q.processId === p.id) err(`prerequisites[${i}].processId`, "a process cannot be its own prerequisite");
-    else if (q.processId && known && !known.has(q.processId)) warn(`prerequisites[${i}].processId`, `no process with id "${q.processId}" exists yet`);
+    if (q.processId === p.id) err(`prerequisites[${i}].processId`, "A process cannot be needed before itself: choose another process that provides it.");
+    else if (q.processId && known && !known.has(q.processId)) warn(`prerequisites[${i}].processId`, "The process that provides it does not exist (yet).");
   });
 
   p.actors.forEach((a, i) => {
-    if (!usedActors.has(a.id) && a.id !== "me") warn(`actors[${i}]`, `actor "${a.name}" has no steps`);
+    if (!usedActors.has(a.id) && a.id !== "me") warn(`actors[${i}]`, `${a.name?.trim() || `Participant ${i + 1}`} takes part but has no steps.`);
   });
 
   // reachability from the first step
@@ -169,9 +168,9 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
     for (const n of byId.get(id)?.next ?? []) if (byId.has(n.to)) stack.push(n.to);
   }
   p.steps.forEach((s, i) => {
-    if (!reached.has(s.id)) warn(`steps[${i}]`, `"${s.title}" cannot be reached from the first step`);
+    if (!reached.has(s.id)) warn(`steps[${i}]`, `${s.title?.trim() ? `“${s.title.trim()}”` : `Step ${i + 1}`} cannot be reached from the first step: let an earlier step lead to it.`);
   });
-  if (!p.steps.some((s) => s.next.length === 0)) warn("steps", "the process never ends - at least one step should have an empty next list");
+  if (!p.steps.some((s) => s.next.length === 0)) warn("steps", "The process never ends: let at least one step have nothing after it.");
 
   return issues;
 }
@@ -215,40 +214,39 @@ export function validateStandard(data: unknown, ctx: CheckContext = {}): Issue[]
   const cat = ctx.catalog;
   const processes = ctx.processIds ? new Set(ctx.processIds) : null;
   const standards = ctx.standardIds ? new Set(ctx.standardIds) : null;
-  const ids = (list: { id: string }[]) => list.map((x) => x.id);
   const active = (s.status ?? "active") === "active";
 
   // dims checks one of tiers / languages / environments, on the standard or on a requirement
   const dims = (at: string, holder: { tiers?: string[]; languages?: string[]; environments?: string[] }, parent?: Standard) => {
     (["tiers", "languages", "environments"] as const).forEach((key) => {
       (holder[key] ?? []).forEach((id, i) => {
-        if (cat && !cat[key].some((x) => x.id === id)) err(`${at}${key}[${i}]`, `"${id}" is not known. Known ${key}: ${ids(cat[key]).join(", ") || "(none)"}`);
-        else if (parent?.[key]?.length && !parent[key]!.includes(id)) warn(`${at}${key}[${i}]`, `"${id}" is outside what the standard itself applies to, so this requirement would never apply there`);
+        if (cat && !cat[key].some((x) => x.id === id)) err(`${at}${key}[${i}]`, `“${id}” is not one of the ${key === "tiers" ? "application tiers" : key}. Remove it under “Where it applies”.`);
+        else if (parent?.[key]?.length && !parent[key]!.includes(id)) warn(`${at}${key}[${i}]`, `“${cat?.[key].find((x) => x.id === id)?.name ?? id}” is outside where the standard itself applies, so this requirement would never apply there.`);
       });
     });
   };
   dims("", s);
 
   if (cat) {
-    if (!cat.teams.some((t) => t.id === s.owner)) warn("owner", `"${s.owner}" is not in the teams list. Known teams: ${ids(cat.teams).join(", ") || "(none)"}`);
+    if (!cat.teams.some((t) => t.id === s.owner)) warn("owner", `The team that issues it (“${s.owner}”) is not in the list of teams. Choose one of the list.`);
     checkBelongs(s, cat, err);
   }
   if (s.replacedBy) {
-    if (s.replacedBy === s.id) err("replacedBy", "a standard cannot replace itself");
-    else if (standards && !standards.has(s.replacedBy)) warn("replacedBy", `no standard with id "${s.replacedBy}" exists yet`);
-    if (s.status !== "deprecated") warn("replacedBy", "replacedBy only makes sense when status is \"deprecated\"");
+    if (s.replacedBy === s.id) err("replacedBy", "A standard cannot replace itself: choose another one under “Use instead”.");
+    else if (standards && !standards.has(s.replacedBy)) warn("replacedBy", "The standard under “Use instead” does not exist (yet).");
+    if (s.status !== "deprecated") warn("replacedBy", "“Use instead” only counts for a retired standard.");
   }
-  if (active && !s.review) warn("review", "no review interval is set - the owner team will never be asked to confirm this standard is still correct");
-  if (s.review?.lastReviewedAt && !isDate(s.review.lastReviewedAt)) err("review.lastReviewedAt", `"${s.review.lastReviewedAt}" is not a date`);
-  if (s.exceptionProcessId && processes && !processes.has(s.exceptionProcessId)) warn("exceptionProcessId", `no process with id "${s.exceptionProcessId}" exists yet`);
+  if (active && !s.review) warn("review", "No review rhythm is set, so the team that issues it is never asked to confirm the standard is still right.");
+  if (s.review?.lastReviewedAt && !isDate(s.review.lastReviewedAt)) err("review.lastReviewedAt", `The date of the last review, “${s.review.lastReviewedAt}”, is not a date.`);
+  if (s.exceptionProcessId && processes && !processes.has(s.exceptionProcessId)) warn("exceptionProcessId", "The process for asking for an exception does not exist (yet).");
 
   const seen = new Set<string>();
   s.requirements.forEach((r, i) => {
     const at = `requirements[${i}]`;
-    if (seen.has(r.id)) err(`${at}.id`, `duplicate requirement id "${r.id}"`);
+    if (seen.has(r.id)) err(`${at}.id`, `Two requirements have the id ${r.id}: give this one another id.`);
     seen.add(r.id);
     dims(`${at}.`, r, s);
-    if (r.processId && processes && !processes.has(r.processId)) warn(`${at}.processId`, `no process with id "${r.processId}" exists yet`);
+    if (r.processId && processes && !processes.has(r.processId)) warn(`${at}.processId`, "The process that helps to comply does not exist (yet).");
     if (r.verification.method === "review" && !r.review?.lookFor.length)
       warn(`${at}.review`, "Say what a reviewer should look for, or it cannot be checked in pull requests.");
     if (r.level === "must" && !r.rationale && !r.guidance?.length)

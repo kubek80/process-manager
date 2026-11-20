@@ -138,19 +138,22 @@ function IdField({ id, taken, onRename }: { id: string; taken: string[]; onRenam
   const [error, setError] = useState("");
   const errorId = useId();
   useEffect(() => { setValue(id); setError(""); }, [id]);
-  const commit = () => {
+  // `leaving`: the field is left - an id that cannot be used is put back to the one it keeps, so
+  // the field never shows an id the requirement does not have (the message says why)
+  const commit = (leaving: boolean) => {
     const next = value.trim().toUpperCase();
     if (next === id) { setValue(id); return setError(""); }
-    if (!REQUIREMENT_ID.test(next) || next.length > 30) return setError(`“${next}” cannot be used. An id is capital letters and digits in groups joined by dashes, like SEC-LOG-07. The requirement keeps ${id}.`);
-    if (taken.includes(next)) return setError(`${next} is already the id of another requirement. This one keeps ${id}.`);
+    const refuse = (why: string) => { setError(why); if (leaving) setValue(id); };
+    if (!REQUIREMENT_ID.test(next) || next.length > 30) return refuse(`“${next}” cannot be used: an id is capital letters and digits in groups joined by dashes, like SEC-LOG-07. The requirement keeps ${id}.`);
+    if (taken.includes(next)) return refuse(`${next} is already the id of another requirement, so this one keeps ${id}.`);
     setError(""); onRename(next);
   };
   return (
     <label className="field">
       <span className="field-label">Id<em>cited by people and tools</em></span>
       <input value={value} maxLength={30} aria-invalid={!!error} aria-describedby={error ? errorId : undefined}
-        onChange={(e) => { setValue(e.target.value.toUpperCase()); setError(""); }} onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }} />
+        onChange={(e) => { setValue(e.target.value.toUpperCase()); setError(""); }} onBlur={() => commit(true)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(false); } }} />
       {error && <span className="field-error" role="alert" id={errorId}>{error}</span>}
     </label>
   );

@@ -61,7 +61,48 @@ export function zoomKey(platform = typeof navigator !== "undefined" ? navigator.
  */
 export function laneColumn(zoom: number, narrowScreen = false): number {
   if (narrowScreen) return zoom >= 0.6 ? 96 : 80;
-  return zoom >= 0.6 ? 156 : zoom >= 0.35 ? 124 : 104;
+  // at the working zoom (60%) the drawing needs the width more than the names do
+  return zoom >= 0.75 ? 156 : zoom >= 0.5 ? 120 : zoom >= 0.35 ? 108 : 96;
+}
+
+/**
+ * A lane's name on the lines it has, broken between words: `perLine` characters fit a line. What
+ * does not fit ends in "…" after the last whole word that does; a single word longer than a line
+ * keeps a line of its own (the only place it may be cut).
+ */
+export function wrapWords(text: string, perLine: number, lines: number): string[] {
+  const words = (typeof text === "string" ? text : "").trim().split(/\s+/).filter(Boolean);
+  const out: string[] = [];
+  let i = 0;
+  while (i < words.length && out.length < lines) {
+    let line = words[i++];
+    while (i < words.length && line.length + 1 + words[i].length <= perLine) line += ` ${words[i++]}`;
+    out.push(line);
+  }
+  if (i < words.length && out.length) {
+    // the last line ends with "…" after a whole word, made room for if needed
+    let last = out[out.length - 1];
+    while (last.includes(" ") && last.length + 1 > perLine) last = last.slice(0, last.lastIndexOf(" "));
+    out[out.length - 1] = `${last}…`;
+  }
+  return out;
+}
+
+/** How many characters of a lane's name fit a line of a column `width` pixels wide (padding and the round mark taken off). */
+export function laneChars(width: number, small: boolean, avatar: boolean): number {
+  const room = width - 24 - (avatar ? 40 : 0);
+  return Math.max(4, Math.floor(room / (small ? 6.1 : 7.1)));
+}
+
+/**
+ * "Fit" is an overview on request: it lasts until a step is selected or the process is changed,
+ * which return to the working zoom (the one the map opened at); a press on the zoom buttons ends
+ * it where the person zoomed to. Returns the zoom to show, and whether the map is still fitted.
+ */
+export function afterFit(state: { fitted: boolean; zoom: number; working: number }, event: "select" | "edit" | "zoom"): { fitted: boolean; zoom: number } {
+  if (!state.fitted) return { fitted: false, zoom: state.zoom };
+  if (event === "zoom") return { fitted: false, zoom: state.zoom };
+  return { fitted: false, zoom: state.working };
 }
 
 /**
@@ -70,7 +111,7 @@ export function laneColumn(zoom: number, narrowScreen = false): number {
  * room below the name, the name on up to three lines, in smaller type in a low lane.
  */
 export function laneLabel(height: number, column: number): { avatar: boolean; count: boolean; lines: 1 | 2 | 3; small: boolean } {
-  const lines = height >= 76 ? 3 : height >= 30 ? 2 : 1;
+  const lines = height >= 70 ? 3 : height >= 30 ? 2 : 1;
   return { avatar: column >= 140 && height >= 60, count: height >= 60, lines, small: height < 44 };
 }
 

@@ -4,7 +4,7 @@ import {
   PanelLeftClose, PanelLeftOpen, PanelRight, Plus, Redo2, Send, ShieldCheck, Trash2, TriangleAlert, Undo2, Users, Workflow, X, type LucideIcon,
 } from "lucide-react";
 import type { Feedback, Issue } from "../types";
-import { checkerSummary, deleteReady, dropBefore, isExampleIssue, issueText, outlineCollapsed, outlineKey, type EditState, type IssueCount, type OutlineEntry } from "../lib/editing";
+import { type PublishLine, checkerSummary, DELETE_PAUSE, deleteReady, dropBefore, issueField, isExampleIssue, issueText, outlineCollapsed, outlineKey, type EditState, type IssueCount, type OutlineEntry } from "../lib/editing";
 import { useMe } from "../lib/session";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import type { Notice } from "./EditSession";
@@ -58,8 +58,13 @@ export function EditSection({ title, hint, children, summary, folded }: { title:
  */
 export function DeleteButton({ label, disabled, onDelete }: { label: string; disabled?: boolean; onDelete: () => void }) {
   const shown = useRef(performance.now());
+  // during the pause it looks unavailable, so a press that does nothing is never a mystery
+  const [ready, setReady] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setReady(true), DELETE_PAUSE); return () => clearTimeout(t); }, []);
+  const waiting = !ready && !disabled;
   return (
-    <button className="icon-btn danger" title={label} aria-label={label} disabled={disabled}
+    <button className={`icon-btn danger ${waiting ? "waiting" : ""}`} title={waiting ? `${label} (available in a moment)` : label} aria-label={label} disabled={disabled}
+      aria-disabled={waiting || undefined}
       onClick={() => { if (deleteReady(shown.current, performance.now())) onDelete(); }}><Trash2 size={16} /></button>
   );
 }
@@ -107,10 +112,47 @@ export const selectExample = (...texts: string[]) => (e: React.FocusEvent<HTMLIn
 
 /** Whether a problem has to be fixed before saving (a draft never published) or only before publishing. */
 const FixBefore = createContext<(i: Issue) => "saving" | "publishing">(() => "publishing");
+/** What is edited: a process and a standard call some of their fields otherwise ("Owning team", "Issued by"). */
+const KindOf = createContext<"process" | "standard" | undefined>(undefined);
+
+/**
+ * Brings the keyboard to the field a problem is about (after the checker's list closed and the
+ * fields of its place are shown), and marks it in the problem colour; `mark` keeps the element so
+ * the mark can go once the problem is fixed.
+ */
+function focusIssueField(issue: Issue, kind: "process" | "standard", mark: (el: HTMLElement | null) => void) {
+  const { selectors, label } = issueField(issue.path, kind);
+  let tries = 40;
+  const find = (): HTMLElement | null => {
+    const box = document.querySelector<HTMLElement>(".edit-fields");
+    if (!box) return null;
+    for (const sel of selectors) { const el = box.querySelector<HTMLElement>(sel); if (el && el.getClientRects().length) return el; }
+    // by the label the field has
+    const want = label.toLowerCase();
+    for (const f of box.querySelectorAll<HTMLElement>(".field")) {
+      const text = (f.querySelector(".field-label")?.firstChild?.textContent ?? "").trim().toLowerCase();
+      if (text && (text === want || text.endsWith(want) || want.endsWith(text))) {
+        const el = f.querySelector<HTMLElement>("input, textarea, select, button");
+        if (el) return el;
+      }
+    }
+    return null;
+  };
+  const attempt = () => {
+    const el = find();
+    if (!el) { if (tries-- > 0) setTimeout(attempt, 40); return; }
+    el.scrollIntoView({ block: "center" });
+    el.focus({ preventScroll: true });
+    mark(el);
+  };
+  // after the list has closed and given the keyboard back to its button
+  setTimeout(attempt, 60);
+}
 
 /** The checker's findings about what is selected, at the top of its fields. */
 export function ItemIssues({ issues }: { issues: Issue[] }) {
   const fixBefore = useContext(FixBefore);
+  const kind = useContext(KindOf);
   if (!issues.length) return null;
   const errors = issues.filter((i) => i.level === "error");
   const n = (list: Issue[], one: string, many: string) => `${list.length} ${list.length === 1 ? one : many}`;
@@ -129,7 +171,7 @@ export function ItemIssues({ issues }: { issues: Issue[] }) {
       {groups.filter((g) => g.list.length).map((g) => (
         <div key={g.title} className={`item-issues ${g.tone}`} role="status">
           <strong>{g.tone === "bad" ? <CircleAlert size={15} /> : g.tone === "warn" ? <TriangleAlert size={15} /> : <Lightbulb size={15} />}{g.title}</strong>
-          <ul>{g.list.map((i, k) => <li key={k} className={i.level}>{issueText(i)}</li>)}</ul>
+          <ul>{g.list.map((i, k) => <li key={k} className={i.level}>{issueText(i, kind)}</li>)}</ul>
         </div>
       ))}
     </>
@@ -418,8 +460,8 @@ function MenuPop({ items, onClose, onRun }: { items: MenuItem[]; onClose: () => 
  * the same list opens by itself with the reason at its top: an overlay, so nothing on the screen
  * moves.
  */
-function Checker({ issues, place, onPick, reason, onReason }: {
-  issues: Issue[]; place: (i: Issue) => string; onPick: (i: Issue) => void;
+function Checker({ issues, place, onPick, reason, onReason, kind, fixBefore }: {
+  issues: Issue[]; place: (i: Issue) => string; onPick: (i: Issue) => void; kind: "process" | "standard"; fixBefore: (i: Issue) => "saving" | "publishing";
   /** Why Save draft or Publish… did not happen. */
   reason?: Notice | null; onReason: () => void;
 }) {
@@ -440,12 +482,15 @@ function Checker({ issues, place, onPick, reason, onReason }: {
         title={issues.length ? "Show what is to fix" : "Nothing to fix"}>
         {sum.level === "bad" ? <CircleAlert size={15} /> : sum.level === "warn" ? <TriangleAlert size={15} /> : sum.level === "hint" ? <Lightbulb size={15} /> : <CircleCheck size={15} />}{sum.text}
       </button>
-      {open && <CheckerPop issues={issues} place={place} reason={reason} onClose={close} onPick={(i) => { close(); onPick(i); }} />}
+      {open && <CheckerPop issues={issues} place={place} reason={reason} kind={kind} fixBefore={fixBefore} onClose={close} onPick={(i) => { close(); onPick(i); }} />}
     </div>
   );
 }
 
-function CheckerPop({ issues, place, reason, onClose, onPick }: { issues: Issue[]; place: (i: Issue) => string; reason?: Notice | null; onClose: () => void; onPick: (i: Issue) => void }) {
+function CheckerPop({ issues, place, reason, onClose, onPick, kind, fixBefore }: {
+  issues: Issue[]; place: (i: Issue) => string; reason?: Notice | null; onClose: () => void; onPick: (i: Issue) => void;
+  kind: "process" | "standard"; fixBefore: (i: Issue) => "saving" | "publishing";
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useLayer(ref, onClose, { watch: reason });
   const fix = issues.filter((i) => i.level === "error"), hints = issues.filter((i) => i.level !== "error");
@@ -453,7 +498,7 @@ function CheckerPop({ issues, place, reason, onClose, onPick }: { issues: Issue[
     <li key={k}>
       <button className={i.level} onClick={() => onPick(i)}>
         {i.level === "error" ? (isExampleIssue(i) ? <TriangleAlert size={15} /> : <CircleAlert size={15} />) : <Lightbulb size={15} />}
-        <span><b>{place(i)}</b>{issueText(i)}</span>
+        <span><b>{place(i)}</b>{issueText(i, kind)}</span>
         <ChevronRight size={14} />
       </button>
     </li>
@@ -462,7 +507,8 @@ function CheckerPop({ issues, place, reason, onClose, onPick }: { issues: Issue[
     <div ref={ref} className="checker-pop" role="dialog" aria-label="What is to fix" tabIndex={-1}>
       {reason && <p className={`checker-reason ${reason.tone}`} role="alert"><CircleAlert size={16} /><span>{reason.text}</span></p>}
       {fix.length > 0 && <>
-        <h3 className="checker-head">To fix<span>stops publishing</span></h3>
+        {/* the heading says the strongest thing it lists: a never-published draft is not saved with these */}
+        <h3 className="checker-head">To fix<span>{fix.some((i) => fixBefore(i) === "saving") ? "stops saving" : "stops publishing"}</span></h3>
         <ul>{fix.map(entry)}</ul>
       </>}
       {hints.length > 0 && <>
@@ -533,6 +579,23 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
   // a new selection shows its fields from the top
   const fieldsBox = useRef<HTMLElement>(null);
   useEffect(() => { fieldsBox.current?.scrollTo({ top: 0 }); }, [selection]);
+  // the field the checker's list led to stays outlined until its problem is gone
+  const [marked, setMarked] = useState<{ el: HTMLElement; issue: Issue } | null>(null);
+  useEffect(() => {
+    if (!marked) return;
+    const still = issues.some((i) => i.path === marked.issue.path && i.message === marked.issue.message);
+    if (still && marked.el.isConnected) { marked.el.classList.add("needs-fix"); marked.el.setAttribute("aria-invalid", "true"); return; }
+    marked.el.classList.remove("needs-fix"); marked.el.removeAttribute("aria-invalid");
+    setMarked(null);
+  }, [issues, marked]);
+  const pickIssue = (i: Issue) => {
+    onPickIssue(i);
+    if (phone) setPanel("fields");
+    focusIssueField(i, kind, (el) => {
+      if (marked && marked.el !== el) { marked.el.classList.remove("needs-fix"); marked.el.removeAttribute("aria-invalid"); }
+      if (el) setMarked({ el, issue: i });
+    });
+  };
   return (
     <div className={`edit-screen panel-${panel ?? "none"} ${json ? "json" : ""} ${rail ? "outline-rail" : ""}`}>
       <header className={`edit-bar state-${state.key}`}>
@@ -554,7 +617,7 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
             <button {...off(!undo.canUndo)} onClick={() => undo.canUndo && undo.undo()} aria-label="Undo" title={undo.undoTitle ?? "Undo the last change (Ctrl+Z)"}><Undo2 size={17} /></button>
             <button {...off(!undo.canRedo)} onClick={() => undo.canRedo && undo.redo()} aria-label="Redo" title="Redo (Ctrl+Shift+Z)"><Redo2 size={17} /></button>
           </>}
-          <Checker issues={issues} place={place} onPick={onPickIssue} reason={notice} onReason={onNotice} />
+          <Checker issues={issues} place={place} onPick={pickIssue} reason={notice} onReason={onNotice} kind={kind} fixBefore={fixBefore} />
         </div>
         <div className="eb-actions">
           <MoreMenu items={items} />
@@ -593,7 +656,7 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
           requestAnimationFrame(() => item.focus());
         }}>
           <div className="panel-close"><button className="btn small ghost" onClick={() => setPanel(null)}><ArrowLeft size={16} />{kind === "process" ? "Back to the map" : "Back to the requirements"}</button></div>
-          <FixBefore.Provider value={fixBefore}>{fields}</FixBefore.Provider>
+          <KindOf.Provider value={kind}><FixBefore.Provider value={fixBefore}>{fields}</FixBefore.Provider></KindOf.Provider>
         </aside>
         {panel && <div className="panel-scrim" onClick={() => setPanel(null)} aria-hidden="true" />}
       </div>
@@ -621,12 +684,14 @@ function useNarrow() {
  * "Publish…": what changed since the published version, a note for the list of versions, and
  * what publishing means for readers. Blocked, with the reason, while the checker has errors.
  */
-export function PublishDialog({ noun, first, changes, version, blocked, onPublish, onClose }: {
+export function PublishDialog({ noun, first, changes, version, blocked, onPublish, onClose, since }: {
   noun: string;
   /** Never published before: says who will be able to see it. */
   first: boolean;
-  /** What readers will see differently, a line each (see publishLines). */
-  changes: string[]; version?: number; blocked?: string;
+  /** What readers will see differently, a line each (see publishList); some marked as undoing a newer change. */
+  changes: PublishLine[]; version?: number; blocked?: string;
+  /** Who published since these changes were started (for the marked lines). */
+  since?: string;
   onPublish: (note: string) => Promise<boolean>; onClose: () => void;
 }) {
   const [note, setNote] = useState("");
@@ -648,7 +713,12 @@ export function PublishDialog({ noun, first, changes, version, blocked, onPublis
           : <>
               <h3 className="mini-title">What readers will see differently</h3>
               {changes.length
-                ? <ul className="publish-changes">{changes.map((c, i) => <li key={i}>{c}</li>)}</ul>
+                ? <ul className="publish-changes">{changes.map((c, i) => (
+                    <li key={i} className={c.undoes ? "undoes" : undefined}>
+                      {c.text}
+                      {c.undoes && <span className="publish-undoes"><TriangleAlert size={13} aria-hidden="true" />This would undo a change {since ?? "somebody else"} published since you started</span>}
+                    </li>
+                  ))}</ul>
                 : <p className="muted">Nothing that readers see is different.</p>}
             </>}
         <label className="field">

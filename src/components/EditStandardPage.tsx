@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import type { DocMeta, Feedback, Process, Standard } from "../types";
 import { addRequirement, appendRequirement, deleteRequirement, EXAMPLE, moveRequirementTo, shortName, tidyStandard, today, updateRequirement } from "../lib/edit";
-import { issueTarget, issuesByPlace, issuesFor, selectionKey, STANDARD_SECTIONS, standardOutline, withoutEarlySuggestions, type Selection, type StandardSection } from "../lib/editing";
+import { issueTarget, issuesByPlace, issuesFor, noteMove, selectionKey, STANDARD_SECTIONS, standardOutline, withoutEarlySuggestions, type Selection, type StandardSection } from "../lib/editing";
 import { isDrawableStandard, standardSchema, validateStandard } from "../lib/validate";
 import { useSelectedItem } from "../lib/selection";
 import { canEdit } from "../lib/rights";
@@ -121,7 +121,7 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
         if (neighbour) selectReq(neighbour.id); else { selectReq(null); setSection("requirements"); }
         focusSelectedInOutline(neighbour?.title);
       }}
-      onMove={(before) => setDraft(moveRequirementTo(draft, current.id, before))}
+      onMove={(before) => { const next = moveRequirementTo(draft, current.id, before); noteMove(next, current.id); setDraft(next); }}
       onAddAfter={() => add(current.id)} />;
   } else {
     const head = <h2 className="fields-section-title">{sectionLabel}</h2>;
@@ -205,11 +205,12 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
           onSelect={(e) => choose({ section: e.section, item: e.item })}
           onEnter={() => { s.setPanel("fields"); setTimeout(() => document.querySelector<HTMLElement>(".edit-fields-body :is(input, textarea, select):not([disabled])")?.focus(), 60); }}
           onAdd={{ section: "requirements", label: "Add a requirement", placeholder: "Short name of the rule", run: (name) => { const r = appendRequirement(draft, name); setDraft(r.standard); selectReq(r.id); } }}
-          onMove={(id, before) => setDraft(moveRequirementTo(draft, id, before))}
+          onMove={(id, before) => { const next = moveRequirementTo(draft, id, before); noteMove(next, id); setDraft(next); }}
           onNudge={(id, dir) => {
             const ids = draft.requirements.map((r) => r.id), i = ids.indexOf(id);
-            if (dir === -1 && i > 0) setDraft(moveRequirementTo(draft, id, ids[i - 1]));
-            if (dir === 1 && i >= 0 && i < ids.length - 1) setDraft(moveRequirementTo(draft, id, ids[i + 2] ?? null));
+            const put = (before: string | null) => { const next = moveRequirementTo(draft, id, before); noteMove(next, id); setDraft(next); };
+            if (dir === -1 && i > 0) put(ids[i - 1]);
+            if (dir === 1 && i >= 0 && i < ids.length - 1) put(ids[i + 2] ?? null);
           }} /> : null}
         middle={middle} fields={<div className="edit-fields-body">{fields}</div>} fieldsLabel={fieldsLabel}
         panel={s.panel} setPanel={s.setPanel} json={s.json} />
