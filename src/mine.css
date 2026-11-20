@@ -8,4 +8,4 @@
 .mine-table .mine-name .kind-tag svg { color: inherit; }
 .mine-table .mine-name a { font-weight: 600; color: var(--text); }
 .mine-table .mine-name a:hover { color: var(--accent); }
-.mine-groups { max-width: 100%; overflow-x: auto; scrollbar-width: none; justify-self: start; }
+.mine-groups { justify-self: start; }

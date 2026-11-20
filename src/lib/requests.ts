@@ -35,7 +35,6 @@ export interface DocRequest {
 /** What somebody fills in to ask for something. */
 export interface NewRequest { kind: TargetKind; title: string; description: string; platform?: string; practice?: string }
 
-export const REQUEST_STATES: RequestState[] = ["open", "planned", "done", "declined"];
 export const REQUEST_FILTERS: RequestFilter[] = ["open", "planned", "done", "declined", "all"];
 export const STATE_LABEL: Record<RequestFilter, string> = { open: "Open", planned: "Planned", done: "Done", declined: "Declined", all: "All" };
 

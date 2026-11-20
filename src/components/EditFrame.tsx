@@ -1,9 +1,11 @@
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
-  ArrowLeft, ChevronDown, Lightbulb, ChevronRight, CircleAlert, CircleCheck, Flag, GripVertical, ListTree, MoreHorizontal, PanelRight, Plus, Redo2, Send, TriangleAlert, Undo2, X,
+  ArrowLeft, BookOpen, ChevronDown, Lightbulb, ChevronRight, CircleAlert, CircleCheck, Crosshair, Flag, GripVertical, Info, Link2, ListChecks, ListTree, MoreHorizontal,
+  PanelLeftClose, PanelLeftOpen, PanelRight, Plus, Redo2, Send, ShieldCheck, TriangleAlert, Undo2, Users, Workflow, X, type LucideIcon,
 } from "lucide-react";
 import type { Feedback, Issue } from "../types";
-import { checkerSummary, dropBefore, isExampleIssue, issueText, type EditState, type IssueCount, type OutlineEntry } from "../lib/editing";
+import { checkerSummary, dropBefore, isExampleIssue, issueText, outlineCollapsed, outlineKey, type EditState, type IssueCount, type OutlineEntry } from "../lib/editing";
+import { useMe } from "../lib/session";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import type { Notice } from "./EditSession";
 import { FeedbackItem, type FeedbackTarget } from "./Feedback";
@@ -141,6 +143,15 @@ export interface OutlineAdd {
   run: (name: string) => void;
 }
 
+/** The icon of each section, shown when the outline is a narrow rail. */
+const SECTION_ICON: Record<string, LucideIcon> = {
+  about: Info, before: ListChecks, people: Users, steps: Workflow, links: Link2, standards: ShieldCheck,
+  scope: Crosshair, requirements: ListChecks, background: BookOpen,
+};
+
+/** The outline is a narrow rail; `open` widens it (e.g. to type the name of a new step). */
+const Rail = createContext<{ rail: boolean; open: () => void }>({ rail: false, open: () => {} });
+
 export function Outline({ entries, selected, onSelect, issues, feedback, onAdd, onMove, onNudge, moveBlocked, label, onEnter }: {
   entries: OutlineEntry[];
   /** The key of what is selected: "about", "steps/<id>". */
@@ -251,9 +262,12 @@ export function Outline({ entries, selected, onSelect, issues, feedback, onAdd, 
               <button className={`outline-item ${(e.number?.length ?? 0) > 3 ? "long-n" : ""}`} aria-current={on ? "true" : undefined} onClick={() => onSelect(e)}
                 tabIndex={on || (!entries.some((x) => x.key === selected) && k === 0) ? 0 : -1}
                 onKeyDown={(ev) => { if (e.item) keyMove(ev, e.item); if (!ev.defaultPrevented) roam(ev, e); }}
-                title={e.who ? `${e.number}. ${e.label} - ${e.who}${e.type ? `, ${STEP_META[e.type].label}` : ""}` : undefined}
+                title={e.who ? `${e.number}. ${e.label} - ${e.who}${e.type ? `, ${STEP_META[e.type].label}` : ""}` : e.depth === 1 ? `${e.number ? `${e.number} ` : ""}${e.label}` : e.label}
                 aria-label={`${e.number && e.depth === 1 ? `${e.number} ` : ""}${e.label}${e.who ? `, by ${e.who}` : ""}${mark ? `, ${mark}` : ""}${flags ? `, ${flags} open feedback` : ""}`}>
+                {e.depth === 0 && SECTION_ICON[e.section] && <SectionIcon icon={SECTION_ICON[e.section]} />}
                 {e.depth === 1 && (e.type ? <span className="outline-kind" aria-hidden="true"><TypeIcon type={e.type} size={20} /></span> : <span className="outline-n">{e.number}</span>)}
+                {/* on the rail: the step number, or the position of the requirement */}
+                {e.depth === 1 && <span className="outline-short" aria-hidden="true">{e.type ? e.number : at + 1}</span>}
                 <span className="outline-label">
                   {e.depth === 1 && e.type && <span className="outline-num">{e.number}</span>}
                   {e.label}
@@ -274,7 +288,10 @@ export function Outline({ entries, selected, onSelect, issues, feedback, onAdd, 
 }
 
 /** "Add a step" at the end of the outline: type a name, Enter, type the next one. */
+const SectionIcon = ({ icon: Icon }: { icon: LucideIcon }) => <span className="outline-sec-icon" aria-hidden="true"><Icon size={17} /></span>;
+
 function OutlineAddLine({ add }: { add: OutlineAdd }) {
+  const rail = useContext(Rail);
   const [value, setValue] = useState("");
   const [open, setOpen] = useState(false);
   const field = useRef<HTMLInputElement>(null);
@@ -292,7 +309,8 @@ function OutlineAddLine({ add }: { add: OutlineAdd }) {
     // stay in the field for the next one
     requestAnimationFrame(() => field.current?.focus());
   };
-  if (!open) return <button ref={button} className="outline-add-line" onClick={() => setOpen(true)}><Plus size={15} />{add.label}</button>;
+  // on the rail there is no room to type: it opens the outline first
+  if (!open) return <button ref={button} className="outline-add-line" title={rail.rail ? add.label : undefined} onClick={() => { if (rail.rail) rail.open(); setOpen(true); }}><Plus size={15} /><span className="outline-add-text">{add.label}</span></button>;
   return (
     <form className="outline-add-form" onSubmit={(e) => { e.preventDefault(); commit(); }}>
       <input ref={field} value={value} maxLength={80} aria-label={add.label} placeholder={add.placeholder} onChange={(e) => setValue(e.target.value)}
@@ -463,6 +481,17 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
   const noun = kind === "process" ? "process" : "standard";
   // on a phone the bar has two rows: Undo, Redo and Discard move into More
   const phone = useNarrow();
+  // the outline as a narrow rail, to give the map the width (a laptop); remembered per person
+  const email = useMe().user?.email;
+  const [rail, setRail] = useState(() => {
+    let stored: string | null = null;
+    try { stored = localStorage.getItem(outlineKey(email)); } catch { /* not available */ }
+    return outlineCollapsed(stored, typeof window !== "undefined" ? window.innerWidth : 1440);
+  });
+  const chooseRail = (next: boolean) => {
+    setRail(next);
+    try { localStorage.setItem(outlineKey(email), next ? "rail" : "open"); } catch { /* not remembered */ }
+  };
   const items: MenuItem[] = phone
     ? [
         { label: "Undo", icon: <Undo2 size={16} />, run: undo.undo, blocked: undo.canUndo ? undefined : "Nothing to undo." },
@@ -475,7 +504,7 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
   const fieldsBox = useRef<HTMLElement>(null);
   useEffect(() => { fieldsBox.current?.scrollTo({ top: 0 }); }, [selection]);
   return (
-    <div className={`edit-screen panel-${panel ?? "none"} ${json ? "json" : ""}`}>
+    <div className={`edit-screen panel-${panel ?? "none"} ${json ? "json" : ""} ${rail ? "outline-rail" : ""}`}>
       <header className={`edit-bar state-${state.key}`}>
         <button className="eb-btn eb-back" aria-label="Back to reading" onClick={onBack} title={`Back to reading this ${noun}`}><ArrowLeft size={16} /><span className="eb-label eb-long">Back to reading</span><span className="eb-label eb-short" aria-hidden="true">Back</span></button>
         <div className="eb-title">
@@ -513,9 +542,15 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
         <button className="btn small fields-toggle" onClick={() => setPanel(panel === "fields" ? null : "fields")} aria-expanded={panel === "fields"}><PanelRight size={15} /><span>{fieldsLabel}</span></button>
       </div>
       <div className="edit-body">
-        <aside className="edit-outline" aria-label="Outline">
+        <aside id="edit-outline" className="edit-outline" aria-label="Outline">
           <div className="panel-close"><b>Outline</b><button className="icon-btn" onClick={() => setPanel(null)} aria-label="Close the outline"><X size={18} /></button></div>
-          {outline}
+          <div className="outline-head">
+            <button className="icon-btn outline-toggle" onClick={() => chooseRail(!rail)} aria-expanded={!rail} aria-controls="edit-outline"
+              aria-label={rail ? "Show the outline with names" : "Narrow the outline"} title={rail ? "Show the outline with names" : "Narrow the outline to give the map more room"}>
+              {rail ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+            </button>
+          </div>
+          <Rail.Provider value={{ rail, open: () => chooseRail(false) }}>{outline}</Rail.Provider>
         </aside>
         <main className="edit-middle" aria-label="What readers will see">{middle}</main>
         <aside ref={fieldsBox} className="edit-fields" aria-label={`Fields: ${fieldsLabel}`} onKeyDown={(e) => {

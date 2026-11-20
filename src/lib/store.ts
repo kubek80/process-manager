@@ -69,6 +69,17 @@ export function completeMeta(meta: Record<string, Partial<DocMeta>> | undefined)
   return out;
 }
 
+/**
+ * What the app knows about a document after a save: the server answers with the new version;
+ * when the first version was saved stays as it was, and a save that shows it to readers for the
+ * first time (`status` other than "draft") is when it was first published.
+ */
+export function savedMeta(before: DocMeta | undefined, saved: Partial<DocMeta> & { version: number }, doc: { status?: string }): DocMeta {
+  const createdAt = saved.createdAt || before?.createdAt || saved.updatedAt || "";
+  const publishedAt = saved.publishedAt || before?.publishedAt || (doc.status !== "draft" ? saved.updatedAt || undefined : undefined);
+  return { ...before, ...saved, createdAt, ...(publishedAt ? { publishedAt } : {}) } as DocMeta;
+}
+
 export async function loadProcesses(): Promise<{ docs: Process[]; meta: MetaById }> {
   const r = await call<{ processes: Process[]; meta?: MetaById }>("GET", "/api/processes");
   return { docs: r.processes, meta: completeMeta(r.meta) };
@@ -389,15 +400,38 @@ export function unsavedWork(to?: Route): string | null {
   return null;
 }
 
-// Asked before a move that would lose unsaved edits. Set by the app (useRoute).
-let confirmLeave: ((what: string) => Promise<boolean>) | undefined;
+// Where the edits can be saved from the question itself: the editing screen offers its own
+// "Save draft" (never a second way to save). Resolves to true once saved.
+type Saver = () => Promise<boolean>;
+const savers = new Map<string, Saver>();
+/** Offers `save` for the unsaved edits under `key` while the returned function is not called. */
+export function offerSaving(key: string, save: Saver): () => void {
+  savers.set(key, save);
+  return () => { if (savers.get(key) === save) savers.delete(key); };
+}
+/**
+ * How the edits lost by going to `to` (or by leaving the app) can be saved first: only when
+ * everything that would be lost can be (text with problems in the JSON cannot); null otherwise.
+ */
+export function unsavedSaver(to?: Route): Saver | null {
+  const staying = to ? placesOf(to) : [];
+  const lost = [...unsaved.keys()].filter((k) => !staying.includes(k));
+  if (!lost.length || !lost.every((k) => savers.has(k))) return null;
+  const all = lost.map((k) => savers.get(k)!);
+  return async () => { for (const save of all) if (!(await save())) return false; return true; };
+}
+
+/** Asked before a move that would lose unsaved edits; `save` when they can be saved first. True: go. */
+export type LeaveQuestion = (what: string, save?: Saver | null) => Promise<boolean>;
+// Set by the app (useRoute).
+let confirmLeave: LeaveQuestion | undefined;
 // An address the person agreed to move to although edits are lost.
 let agreed: string | null = null;
 
 /** Goes to `hash`, after asking when unsaved edits would be lost. */
 async function moveTo(hash: string, replace = false) {
   const lost = unsavedWork(parse(hash));
-  if (lost && confirmLeave && !(await confirmLeave(lost))) return;
+  if (lost && confirmLeave && !(await confirmLeave(lost, unsavedSaver(parse(hash))))) return;
   if (lost) agreed = hash;
   if (!replace) { location.hash = hash; return; }
   // the same place in the browser's history, under another address
@@ -414,7 +448,7 @@ type Mark = { pm?: number } | null;
  * to where it was while asking, and on "leave" the same move is made again - so the history
  * stays as it was either way.
  */
-export function useRoute(ask?: (what: string) => Promise<boolean>): Route {
+export function useRoute(ask?: LeaveQuestion): Route {
   const [route, setRoute] = useState<Route>(() => parse());
   confirmLeave = ask;
   useEffect(() => {
@@ -448,12 +482,12 @@ export function useRoute(ask?: (what: string) => Promise<boolean>): Route {
       const back = now !== undefined && index !== undefined ? index - now : fresh ? 0 : position - mark;
       if (back === 0) {
         history.replaceState(history.state, "", shown || "#/");
-        if (await confirmLeave(lost)) { agreed = target; location.hash = target; }
+        if (await confirmLeave(lost, unsavedSaver(parse(target)))) { agreed = target; location.hash = target; }
         return;
       }
       undoing++;
       history.go(back);
-      if (await confirmLeave(lost)) {
+      if (await confirmLeave(lost, unsavedSaver(parse(target)))) {
         agreed = target;
         history.go(-back);
       }

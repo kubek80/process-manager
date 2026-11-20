@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Activity, CalendarCheck, ChartColumn, Flag, KeyRound, List, Palette, Search, Server, ShieldCheck, Sparkles, Workflow } from "lucide-react";
 import type { AuditEntry, FeedbackByTarget, Process, Skill, Standard, TargetKind } from "../types";
 import { teamName, useCatalog } from "../lib/catalog";
-import { reviewInfo, statusOf } from "../lib/lifecycle";
+import { reviewOf, statusOf } from "../lib/lifecycle";
 import { usePerms } from "../lib/session";
 import { go, href, loadAudit, loadSkills, loadSystem, type AdminSection, type MetaById, type SystemInfo } from "../lib/store";
 import { KindTag } from "./marks";
@@ -90,7 +90,7 @@ function HealthSection({ processes, standards, feedback, meta }: { processes: Pr
   const rows = [
     ...processes.map((p) => ({ kind: "process" as const, doc: p, open: openCount(feedback.process[p.id]) })),
     ...standards.map((s) => ({ kind: "standard" as const, doc: s, open: openCount(feedback.standard[s.id]) })),
-  ].map((r) => ({ ...r, review: reviewInfo(r.doc, undefined, meta?.[r.kind]?.[r.doc.id]?.createdAt), status: statusOf(r.doc) }));
+  ].map((r) => ({ ...r, review: reviewOf(r.doc, meta?.[r.kind]?.[r.doc.id]), status: statusOf(r.doc) }));
   const due = rows.filter((r) => r.review.state === "overdue" || r.review.state === "soon").sort((a, b) => (a.review.days ?? -9999) - (b.review.days ?? -9999));
   const flagged = rows.filter((r) => r.open > 0).sort((a, b) => b.open - a.open);
   const drafts = rows.filter((r) => r.status === "draft");
@@ -211,7 +211,7 @@ function SystemSection() {
 
 export function AdminPage({ section, processes, standards, feedback, meta }: {
   section: AdminSection; processes: Process[]; standards: Standard[]; feedback: FeedbackByTarget;
-  /** When each was first saved (`meta[id].createdAt`): where the first review is counted from. */
+  /** When each was first published (`meta[id].publishedAt`): where the first review is counted from. */
   meta?: Partial<Record<TargetKind, MetaById>>;
 }) {
   const perms = usePerms();

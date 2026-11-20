@@ -4,7 +4,7 @@ import {
   standardIssueTarget, standardOutline, statusChangeBlocked,
 } from "../editing";
 import { validateProcess } from "../validate";
-import { author, baseBehindSentence, draftSaveBase, exampleIssues, publishLines, withoutReviewDates } from "../editing";
+import { author, outlineCollapsed, outlineKey, savedByText, unpublishedLine, baseBehindSentence, draftSaveBase, exampleIssues, publishLines, withoutReviewDates } from "../editing";
 import { blankProcess, blankStandard, addRequirement, addStepAfter, EXAMPLE } from "../edit";
 
 import { base, baseStandard, catalog } from "./fixtures";
@@ -223,5 +223,47 @@ describe("a new document's example texts read calmer than real problems", () => 
     const by = issuesByPlace("process", p, exampleIssues("process", p));
     expect(by.get("about")).toEqual({ errors: 1, warnings: 0, examples: 1 });
     expect(by.get("steps/first-step")).toEqual({ errors: 2, warnings: 0, examples: 2 });
+  });
+});
+
+describe("who saved a version, in the versions list", () => {
+  it("is the person's name where known, else the email, and a plain word for imports and the portal", () => {
+    expect(savedByText({ savedBy: "riley@example.com", savedByName: "Riley Security" })).toBe("Riley Security");
+    expect(savedByText({ savedBy: "riley@example.com" })).toBe("riley@example.com");
+    expect(savedByText({ savedBy: "import" })).toBe("Imported");
+    expect(savedByText({ savedBy: "system" })).toBe("Updated by the portal");
+  });
+});
+
+describe("the reader's line about unpublished changes", () => {
+  const now = new Date(2026, 10, 20, 15, 0);
+  const at = new Date(2026, 10, 20, 2, 9).toISOString();
+  const draft = { updatedAt: at, updatedBy: "alex@example.com", updatedByName: "Alex Editor" };
+  it("tells the person who made them that they are theirs", () => {
+    expect(unpublishedLine(draft, "Alex@example.com", now)).toBe("You have unpublished changes (saved 02:09). Readers see the published version.");
+    expect(unpublishedLine({ ...draft, updatedAt: new Date(2026, 10, 17, 9, 30).toISOString() }, "alex@example.com", now))
+      .toBe("You have unpublished changes (saved 2026-11-17 09:30). Readers see the published version.");
+  });
+  it("names the person to other editors", () => {
+    expect(unpublishedLine(draft, "jordan@example.com", now)).toBe("There are unpublished changes by Alex Editor from today at 02:09. Readers see the published version.");
+    expect(unpublishedLine({ ...draft, updatedByName: undefined }, undefined, now)).toBe("There are unpublished changes by alex@example.com from today at 02:09. Readers see the published version.");
+  });
+});
+
+describe("the outline as a narrow rail", () => {
+  it("is collapsed by default below 1440 pixels and open from there", () => {
+    expect(outlineCollapsed(null, 1366)).toBe(true);
+    expect(outlineCollapsed(null, 1439)).toBe(true);
+    expect(outlineCollapsed(null, 1440)).toBe(false);
+    expect(outlineCollapsed(undefined, 1920)).toBe(false);
+  });
+  it("follows what the person chose last, at any width", () => {
+    expect(outlineCollapsed("open", 1366)).toBe(false);
+    expect(outlineCollapsed("rail", 1920)).toBe(true);
+    expect(outlineCollapsed("something else", 1366)).toBe(true);
+  });
+  it("is remembered per person", () => {
+    expect(outlineKey("alex@example.com")).toBe("pm:outline:alex@example.com");
+    expect(outlineKey("alex@example.com")).not.toBe(outlineKey("sam@example.com"));
   });
 });

@@ -179,17 +179,17 @@ func Check(kind string, body []byte, l Lists) error {
 				case n.To == s.ID:
 					add("steps[%d].next[%d].to: a step cannot point to itself", i, j)
 				case seen[n.To]:
-					add("steps[%d].next[%d].to: %q is listed twice", i, j, n.To)
+					add("steps[%d].next[%d].to: Another answer already leads to this step: let each lead somewhere else.", i, j)
 				}
 				seen[n.To] = true
 			}
 			if s.Type == "decision" {
 				if len(s.Next) < 2 {
-					add("steps[%d].next: a decision needs at least two outgoing paths", i)
+					add("steps[%d].next: This decision needs at least two answers that lead somewhere.", i)
 				}
 				for _, n := range s.Next {
 					if n.Label == "" {
-						add("steps[%d].next: every path out of a decision needs a label", i)
+						add("steps[%d].next: Every answer of a decision needs a name, such as Approved or Rejected.", i)
 						break
 					}
 				}

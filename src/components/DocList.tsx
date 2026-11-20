@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { DocMeta, Feedback, Process, Standard, TargetKind } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { useEngagement } from "../lib/engagement";
-import { reviewInfo } from "../lib/lifecycle";
+import { needsReview } from "../lib/lifecycle";
 import { pageOf, sizeOf, useListView, usePageSize } from "../lib/paging";
 import { useProfile, useRemembered } from "../lib/profile";
 import { canEdit, canManage, useMe, usePerms } from "../lib/session";
@@ -17,9 +17,6 @@ import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel
 const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "owner"];
 const NOUN: Record<TargetKind, { one: string; many: string }> = { process: { one: "process", many: "processes" }, standard: { one: "standard", many: "standards" } };
 const PLACEHOLDER: Record<TargetKind, string> = { process: "Search processes: GCP, repository, Akamai…", standard: "Search standards: logging, Terraform, SEC-LOG-01…" };
-
-/** Whether the owner of a process or standard should confirm it soon (or should have already). */
-export const needsReview = (d: Process | Standard) => ["overdue", "soon"].includes(reviewInfo(d).state);
 
 /**
  * The list of all processes, or all standards: the filters on the left, the cards, the pages.
@@ -83,7 +80,7 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
   const flags: Record<string, Flag> = {
     // while the bookmarks are not known, "only my bookmarks" waits instead of showing nothing
     bookmarked: { on: bookmarked && known, test: (k, d) => eng.isBookmarked(k, d.id) },
-    review: { on: due, test: (_k: TargetKind, d: Process | Standard) => manages(d) && needsReview(d) },
+    review: { on: due, test: (_k: TargetKind, d: Process | Standard) => manages(d) && needsReview(d, meta?.[d.id]) },
   };
   // the server sends a never-published draft only to whoever may see it
   const input = {

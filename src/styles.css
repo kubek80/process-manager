@@ -178,7 +178,8 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
 .lane-head { position: sticky; left: 0; z-index: 4; height: 100%; display: flex; align-items: center; gap: 10px; padding: 0 14px 0 16px; background: inherit; border-right: 1px solid var(--line); box-shadow: inset 4px 0 0 var(--lane); }
 .lane-avatar { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 50%; font-weight: 700; font-size: 13px; color: color-mix(in srgb, var(--lane) 72%, #000); background: color-mix(in srgb, var(--lane) 15%, var(--surface)); }
 :root[data-theme="dark"] .lane-avatar { color: color-mix(in srgb, var(--lane) 55%, #fff); }
-.lane.me .lane-avatar { background: var(--lane); color: #fff; }
+/* the "You" lane follows the brand: a filled surface in its ink */
+.lane.me .lane-avatar { background: var(--accent-fill, var(--accent)); color: var(--accent-ink); }
 .lane-text { min-width: 0; display: flex; flex-direction: column; }
 .lane-text strong { font-size: 13.5px; font-weight: 650; line-height: 1.25; }
 .lane-text span { font-size: 12px; color: var(--text-3); }
@@ -291,7 +292,6 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
 .drawer-head { display: flex; gap: 12px; align-items: flex-start; padding: 18px 16px 14px 20px; border-top: 4px solid var(--c); }
 .drawer-title { flex: 1; min-width: 0; }
 .drawer-title h3 { font-size: 19px; line-height: 1.25; letter-spacing: -.01em; margin-top: 3px; overflow-wrap: anywhere; }
-.drawer-tools { display: flex; align-items: center; gap: 6px; padding: 0 16px 12px 20px; border-bottom: 1px solid var(--line); }
 .drawer-body { flex: 1; overflow: auto; padding: 4px 20px 28px; }
 .drawer-body.form { padding-top: 16px; }
 
@@ -314,7 +314,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .row { display: flex; align-items: center; gap: 6px; width: 100%; }
 .row.indent { padding-left: 28px; padding-right: 38px; }
 .row-n { flex: none; width: 22px; text-align: center; font-size: 12px; font-weight: 700; color: var(--text-3); }
-.row .w-name { flex: 0 0 34%; }
 .row .next-label { flex: 0 0 34%; }
 .prereq-edit { display: grid; gap: 6px; width: 100%; padding-bottom: 8px; }
 .type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
@@ -357,7 +356,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .json-side .check { margin: 0; }
 
 /* ---------- catalog, tiers ---------- */
-.card-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .tier-tag { display: inline-flex !important; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2); white-space: nowrap; }
 .tier-tag.some { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--accent); }
 .tier-tag.some svg { color: inherit; }
@@ -387,8 +385,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .quick-types button:hover { border-color: var(--line-strong); }
 .quick-types button.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, var(--surface)); }
 .quick-add .btn.primary { justify-content: center; margin-top: 4px; }
-.flow-hint { padding: 9px 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--text-3); background: var(--surface-2); }
-.flow-hint b { color: var(--text-2); font-weight: 600; }
 .kbd { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--line-strong); font-weight: 700; font-size: 11px; line-height: 1; color: var(--text-2); background: var(--surface); }
 
 /* ---------- feedback ---------- */
@@ -425,7 +421,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 /* Teams & tools: the lists are underline tabs (.tabs > .tab, controls.css); one line says what the chosen one is */
 .catalog-page > .tabs.cat-kinds { margin: 22px 0 0; }
 .cat-blurb { margin: 12px 0 14px; color: var(--text-2); font-size: 14px; }
-.cat-tab-icon, .cat-avatar { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 10px; font-weight: 700; font-size: 14px; color: var(--text-2); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+.cat-avatar { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 10px; font-weight: 700; font-size: 14px; color: var(--text-2); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
 .cat-split { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow-1); overflow: hidden; min-height: 520px; }
 @media (max-width: 860px) { .cat-split { grid-template-columns: 1fr; } .cat-list { border-right: 0 !important; border-bottom: 1px solid var(--line); max-height: 320px; } }
 .cat-list { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; background: var(--surface-2); }
@@ -535,10 +531,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .card.retired { opacity: .6; }
 .btn.review-due { border-color: var(--warn); color: var(--warn); background: var(--warn-bg); }
 .banner { margin: 0 0 14px; } .banner b { font-weight: 650; }
-.review-strip { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 14px; margin-bottom: 16px; border-radius: 12px; background: var(--warn-bg); color: var(--warn); font-size: 13.5px; }
-.review-strip span { color: var(--text); flex: 1; } .review-strip b { font-weight: 650; }
-.review-strip em { font-style: normal; font-weight: 600; text-decoration: underline; }
-.review-strip.on { box-shadow: inset 0 0 0 1.5px var(--warn); }
 .resources { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
 .resources.compact { grid-template-columns: 1fr; gap: 6px; max-width: 520px; }
 .resources a { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); height: 100%; }
@@ -553,7 +545,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .res-text span { font-size: 12.5px; color: var(--text-3); }
 .resources a > svg { color: var(--text-3); flex: none; }
 .res-kind { flex: 0 0 150px; }
-.row.indent-r { padding-right: 38px; }
 
 .step-rail { grid-row: 1 / span 2; }
 
@@ -611,11 +602,8 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 /* The level of a requirement written as a <span class="level must|should|may">: the same look as
    LevelMark (marks.tsx) - three bars as a lead-in, the word in strong neutral ink, never the problem
    red. The bars are one 4px bar and two shadows of it. Prefer <LevelMark level=… /> in new code. */
-.level { --b1: var(--text); --b2: var(--text); --b3: var(--text); display: inline-flex; align-items: center; height: 20px; font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
-.level::before { content: ""; flex: none; width: 4px; height: 11px; margin-right: 18px; border-radius: 2px; background: var(--b1); box-shadow: 6px 0 0 var(--b2), 12px 0 0 var(--b3); }
-.level.should { --b1: var(--text-2); --b2: var(--text-2); --b3: var(--line-strong); }
-.level.may { --b1: var(--text-3); --b2: var(--line-strong); --b3: var(--line-strong); color: var(--text-2); }
-.level.big { height: 44px; padding: 0 12px; border-radius: 12px; flex: none; background: var(--surface-2); border: 1px solid var(--line); }
+/* a requirement's level at the head of its fields: the level mark (controls.css) in a box */
+.level-mark.big { height: 44px; padding: 0 12px; border-radius: 12px; flex: none; font-size: 13px; background: var(--surface-2); border: 1px solid var(--line); }
 .standard-doc { max-width: 1000px; display: grid; gap: 18px; }
 .standard-intro { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
 .standard-intro > div { padding: 14px 16px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); }
@@ -657,7 +645,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .req-drawer .drawer-head { border-top-color: var(--line-strong); align-items: center; }
 .req-drawer-level { flex: none; display: inline-flex; align-items: center; height: 44px; padding: 0 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
 .req-drawer .drawer-body > .req-statement { margin-top: 12px; }
-.req-drawer .drawer-tools { padding-top: 0; }
 .drawer .rows .row textarea { flex: 1; }
 
 /* ---------- skills ---------- */
@@ -718,7 +705,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .admin-main { min-width: 0; display: grid; gap: 18px; align-content: start; }
 .admin-head { display: grid; gap: 4px; padding-top: 8px; }
 .admin-head .lead { margin-top: 0; font-size: 15px; }
-.admin-card > .seg, .admin-section > .seg, .cat-list > .seg { justify-self: start; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.admin-card > .seg, .admin-section > .seg, .cat-list > .seg { justify-self: start; }
 .admin-section { display: grid; gap: 16px; }
 .admin-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 20px; box-shadow: var(--shadow-1); display: grid; gap: 12px; min-width: 0; }
 .admin-card > h2 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
@@ -819,12 +806,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .skill-source { margin-left: 4px; }
 
 /* On the map, what to prepare is one line that opens, so the map itself is on the first screen */
-.extras-toggle { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; width: 100%; margin: 0 0 12px; padding: 9px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text-2); font-size: 13.5px; text-align: left; }
-.extras-toggle:hover { border-color: var(--accent); }
-.extras-toggle b { color: var(--text); font-weight: 650; }
-.extras-toggle span { display: inline-flex; align-items: center; }
-.extras-toggle span + span::before { content: "·"; margin-right: 12px; color: var(--text-3); }
-.extras-toggle em { margin-left: auto; font-style: normal; font-weight: 600; color: var(--accent); }
 .icon-btn.off { opacity: .35; cursor: default; }
 button.saved { border: 0; background: none; padding: 0 4px; height: 34px; cursor: default; font: inherit; font-size: 12.5px; }
 
@@ -869,12 +850,7 @@ button.saved { border: 0; background: none; padding: 0 4px; height: 34px; cursor
 .cat-members .person a { color: var(--text); overflow-wrap: anywhere; }
 .cat-members .person a:hover { color: var(--accent); }
 
-/* a count inside a segmented control (.seg, controls.css): "Open 2" */
-.seg-item .seg-n { margin-left: 1px; font-weight: 500; font-variant-numeric: tabular-nums; opacity: .72; }
-.seg-item .level-bars { margin-right: 1px; }
-.seg-item.on .level-bars i { background: color-mix(in srgb, var(--accent-ink) 35%, transparent); }
-.seg-item.on .level-bars i.on { background: var(--accent-ink); }
 
 /* Admin > Health: the kind of each row as the cards show it */
-.health .kind-tag { min-width: 96px; justify-content: center; }
+.health .kind-tag { min-width: 104px; justify-content: center; }
 .health li .kind-tag svg { color: inherit; }

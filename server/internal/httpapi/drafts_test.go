@@ -508,8 +508,29 @@ func TestListsSayWhenADocumentWasAddedAndWhoHasUnpublishedChanges(t *testing.T) 
 	if _, ok := meta(casey)[gcp]; !ok {
 		t.Fatal("casey does not see the process")
 	}
-	if st, raw, _ := e.as(sam).raw("GET", "/api/standards", nil, false); st != 200 || !strings.Contains(string(raw), `"createdAt"`) {
+	if st, raw, _ := e.as(sam).raw("GET", "/api/standards", nil, false); st != 200 || !strings.Contains(string(raw), `"createdAt"`) || !strings.Contains(string(raw), `"publishedAt"`) {
 		t.Fatalf("standards: %d %s", st, raw)
+	}
+
+	// when readers could first see it: none while it was never published, then the publishing save
+	const fresh = "brand-new-process"
+	draft := strings.ReplaceAll(e.asDraft(docs.Process, gcp, "Brand new"), `"id": "`+gcp+`"`, `"id": "`+fresh+`"`)
+	status, body := e.as(alex).do("PUT", "/api/processes/"+fresh+"?rev=0", draft)
+	wantStatus(t, status, 200, body)
+	m := meta(alex)
+	if _, has := m[fresh]["publishedAt"]; has || m[fresh]["createdAt"] == nil {
+		t.Fatalf("a never-published process: %v", m[fresh])
+	}
+	if m[gcp]["publishedAt"] == nil {
+		t.Fatalf("a published process: %v", m[gcp])
+	}
+	status, body = e.as(alex).do("PUT", "/api/processes/"+fresh+"?rev=1", strings.Replace(draft, `"status": "draft"`, `"status": "active"`, 1))
+	wantStatus(t, status, 200, body)
+	m = meta(alex)
+	created, _ := time.Parse(time.RFC3339Nano, fmt.Sprint(m[fresh]["createdAt"]))
+	published, err := time.Parse(time.RFC3339Nano, fmt.Sprint(m[fresh]["publishedAt"]))
+	if err != nil || !published.After(created) {
+		t.Fatalf("published at %v, created at %v", m[fresh]["publishedAt"], m[fresh]["createdAt"])
 	}
 }
 

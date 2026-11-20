@@ -247,6 +247,16 @@ func TestReviewState(t *testing.T) {
 	if r := reviewOf(e, now); r.State != "overdue" || r.Label != "Never reviewed" {
 		t.Fatalf("%+v", r)
 	}
+	// never reviewed: counted from when it was first published, as in the portal
+	e.published = time.Date(2026, 11, 18, 9, 0, 0, 0, time.UTC)
+	if r := reviewOf(e, now); r.State != "ok" || r.Overdue || r.DueAt != "2027-05-18" || r.Label != "First review due 2027-05-18" {
+		t.Fatalf("just published: %+v", r)
+	}
+	e.published = time.Date(2026, 5, 1, 9, 0, 0, 0, time.UTC)
+	if r := reviewOf(e, now); r.State != "overdue" || r.Label != "Review overdue since 2026-11-01" {
+		t.Fatalf("published long ago: %+v", r)
+	}
+	e.published = time.Time{}
 	e.c.Review.LastReviewedAt = "2026-05-17"
 	if r := reviewOf(e, now); r.State != "overdue" || !r.Overdue || r.DueAt != "2026-11-17" || r.Label != "Review overdue since 2026-11-17" {
 		t.Fatalf("%+v", r)

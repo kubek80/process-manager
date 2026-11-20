@@ -349,7 +349,6 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
       </div>
       </div>
 
-      {editable && legend && <p className="flow-hint"><b>Edit on the map:</b> press <span className="kbd">+</span> on an arrow to insert a step there · <span className="kbd">+</span> on a block to add one after it · drag a block to another lane to change who does it · select a block to change it.</p>}
     </div>
   );
 }

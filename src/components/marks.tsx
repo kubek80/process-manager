@@ -15,7 +15,7 @@ import "../controls.css";
  *   that holds one kind only. Classes: `.kind-tag.process|.standard` (`.kind-tag.md` bigger), the
  *   word in `.card-kind`.
  *
- * <LevelMark level="mandatory" | "recommended" | "optional" | "must" | "should" | "may" count?={n} />
+ * <LevelMark level="mandatory" | "recommended" | "optional" | "must" | "should" | "may" count?={n} title? />
  *   How binding something is: three bars as a small lead-in icon (3 filled for mandatory / must,
  *   2 for recommended / should, 1 for optional / may) and the word, always visible. A process is
  *   "Mandatory", "Recommended" or "Optional"; a requirement of a standard "Must", "Should" or
@@ -68,10 +68,10 @@ export function LevelBars({ level }: { level: AnyLevel }) {
   );
 }
 
-export function LevelMark({ level, count, className = "" }: { level: Rigour | Level; count?: number; className?: string }) {
+export function LevelMark({ level, count, className = "", title }: { level: Rigour | Level; count?: number; className?: string; title?: string }) {
   const word = levelWord(level);
   return (
-    <span className={`level-mark ${className}`.trim()} data-level={level} data-strength={STRENGTH[level]}>
+    <span className={`level-mark ${className}`.trim()} data-level={level} data-strength={STRENGTH[level]} title={title}>
       <LevelBars level={level} />
       {count === undefined ? word : `${count} ${word.toLowerCase()}`}
     </span>

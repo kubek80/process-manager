@@ -78,3 +78,25 @@ func TestUsesAndRemovedCoverTheNewLists(t *testing.T) {
 		t.Fatalf("removed: %v", removed)
 	}
 }
+
+// The checker's sentences about decisions are the app's (src/lib/validate.ts), word for word.
+func TestDecisionsAreCheckedInTheAppsWords(t *testing.T) {
+	l := listsOf(t, lists)
+	process := func(next string) []byte {
+		return []byte(`{"schemaVersion":"1.0","id":"p","title":"P","owner":"security","actors":[{"id":"me","name":"You"}],"steps":[` +
+			`{"id":"ask","title":"Ask","actor":"me","type":"decision","next":` + next + `},` +
+			`{"id":"yes","title":"Yes","actor":"me","type":"verify","next":[]},{"id":"no","title":"No","actor":"me","type":"verify","next":[]}]}`)
+	}
+	if err := docs.Check(docs.Process, process(`[{"to":"yes","label":"Yes"},{"to":"no","label":"No"}]`), l); err != nil {
+		t.Fatalf("a good decision: %v", err)
+	}
+	for next, want := range map[string]string{
+		`[{"to":"yes","label":"Yes"}]`:                           "steps[0].next: This decision needs at least two answers that lead somewhere.",
+		`[{"to":"yes","label":"Yes"},{"to":"no"}]`:               "steps[0].next: Every answer of a decision needs a name, such as Approved or Rejected.",
+		`[{"to":"yes","label":"Yes"},{"to":"yes","label":"No"}]`: "steps[0].next[1].to: Another answer already leads to this step: let each lead somewhere else.",
+	} {
+		if err := docs.Check(docs.Process, process(next), l); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: %v", next, err)
+		}
+	}
+}

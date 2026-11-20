@@ -128,6 +128,8 @@ type entry struct {
 	c       *common
 	process *rawProcess
 	std     *rawStandard
+	// published is when readers could first see it (zero: never published, or not known)
+	published time.Time
 }
 
 func (e *entry) status() string {
@@ -159,8 +161,12 @@ func (s *Server) load(ctx context.Context) (*library, error) {
 		if err != nil {
 			return nil, err
 		}
+		published, err := s.o.Docs.Published(ctx, kind)
+		if err != nil {
+			return nil, err
+		}
 		for _, d := range list {
-			e := &entry{kind: kind, doc: d}
+			e := &entry{kind: kind, doc: d, published: published[d.ID]}
 			if kind == docs.Process {
 				e.process = &rawProcess{}
 				if json.Unmarshal(d.Body, e.process) != nil {
@@ -323,11 +329,16 @@ func reviewOf(e *entry, now time.Time) Review {
 		return Review{State: "none", Label: "No review planned"}
 	}
 	out := Review{LastReviewedAt: r.LastReviewedAt, IntervalMonths: int(r.IntervalMonths)}
-	if r.LastReviewedAt == "" {
+	// never reviewed: the first review is counted from when it was first published
+	first := r.LastReviewedAt == ""
+	if first && e.published.IsZero() {
 		out.State, out.Overdue, out.Label = "overdue", true, "Never reviewed"
 		return out
 	}
 	last, err := time.Parse(time.DateOnly, r.LastReviewedAt)
+	if first {
+		last, err = time.Parse(time.DateOnly, e.published.UTC().Format(time.DateOnly))
+	}
 	if err != nil {
 		out.State, out.Overdue, out.Label = "overdue", true, "Review date cannot be read"
 		return out
@@ -343,6 +354,9 @@ func reviewOf(e *entry, now time.Time) Review {
 		out.State, out.Label = "soon", "Review due "+out.DueAt
 	default:
 		out.State, out.Label = "ok", "Next review "+out.DueAt
+	}
+	if first && out.State != "overdue" {
+		out.Label = "First review due " + out.DueAt
 	}
 	return out
 }

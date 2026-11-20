@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { forgetUnsaved, guardLeaving, hasUnsaved, href, parseRoute, unsavedWork, type Route } from "../store";
+import { forgetUnsaved, guardLeaving, hasUnsaved, href, offerSaving, parseRoute, unsavedSaver, unsavedWork, type Route } from "../store";
 import { blankProcess, blankStandard } from "../edit";
 
 describe("addresses", () => {
@@ -61,6 +61,34 @@ describe("unsaved work", () => {
     expect(unsavedWork({ page: "process", id: "demo", tab: "flow" })).toBe("the JSON of this process");
     json();
     expect(unsavedWork()).toBeNull();
+  });
+});
+
+describe("saving before leaving", () => {
+  it("is offered when the editing screen can save everything that would be lost", async () => {
+    const release = guardLeaving("process/demo", "this process");
+    expect(unsavedSaver({ page: "library" })).toBeNull(); // nothing offers to save it
+    const calls: string[] = [];
+    const withdraw = offerSaving("process/demo", async () => { calls.push("saved"); return true; });
+    expect(unsavedSaver({ page: "edit-process", id: "demo" })).toBeNull(); // staying loses nothing
+    const save = unsavedSaver({ page: "library" });
+    expect(save).not.toBeNull();
+    expect(await save!()).toBe(true);
+    expect(calls).toEqual(["saved"]);
+    expect(unsavedSaver()).not.toBeNull(); // signing out
+    // text with problems in the JSON cannot be saved: only the two plain choices
+    const json = guardLeaving("process/demo#json", "the JSON of this process");
+    expect(unsavedSaver({ page: "library" })).toBeNull();
+    json();
+    withdraw();
+    expect(unsavedSaver({ page: "library" })).toBeNull();
+    release();
+  });
+  it("says when the save was refused, so that the person stays", async () => {
+    const release = guardLeaving("standard/x", "this standard");
+    const withdraw = offerSaving("standard/x", async () => false);
+    expect(await unsavedSaver({ page: "guide" })!()).toBe(false);
+    withdraw(); release();
   });
 });
 

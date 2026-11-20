@@ -110,7 +110,7 @@ export function DocCard(props: DocCardProps) {
   const known = engagementKnown(useEngagement());
   const status = statusOf(doc);
   const fix = !!broken && mayEdit;
-  const groups = cardGroups(cardLines({ kind, doc, catalog, rigour, rules, mayEdit: mayEdit || !!manages, usedBy }));
+  const groups = cardGroups(cardLines({ kind, doc, catalog, rigour, rules, mayEdit: mayEdit || !!manages, usedBy, dates: meta }));
   const changes = !!meta?.draft && status !== "draft";
   const title = typeof doc.title === "string" && doc.title ? doc.title : doc.id;
   const category = doc.category ? catalog.categories.find((c) => c.id === doc.category)?.name ?? doc.category : NO_CATEGORY_LABEL;

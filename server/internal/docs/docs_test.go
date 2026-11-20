@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kubek80/process-manager/server/internal/db/dbtest"
 	"github.com/kubek80/process-manager/server/internal/docs"
@@ -113,6 +114,58 @@ func TestListGetDeleteAndHistory(t *testing.T) {
 		if _, err := s.VersionBody(ctx, docs.Process, "request-vpn", v); !errors.Is(err, docs.ErrNotFound) {
 			t.Errorf("version %d: %v", v, err)
 		}
+	}
+}
+
+func TestPublishedIsTheFirstVersionReadersCouldSee(t *testing.T) {
+	s := newStore(t)
+	draft := strings.Replace(vpn, `"owner"`, `"status":"draft","owner"`, 1)
+	saved := func(id string, version int) time.Time {
+		t.Helper()
+		h, err := s.History(ctx, docs.Process, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, v := range h {
+			if v.Version == version {
+				return v.SavedAt
+			}
+		}
+		t.Fatalf("%s has no version %d", id, version)
+		return time.Time{}
+	}
+	// saved twice as a draft, then published, then changed: published at version 3
+	s.Put(ctx, docs.Process, "request-vpn", []byte(draft), "alex")
+	s.Put(ctx, docs.Process, "request-vpn", []byte(strings.Replace(draft, "Raise it", "Raise", 1)), "alex")
+	s.Put(ctx, docs.Process, "request-vpn", []byte(vpn), "alex")
+	s.Put(ctx, docs.Process, "request-vpn", []byte(strings.Replace(vpn, "Raise it", "Raise", 1)), "alex")
+	// never published
+	s.Put(ctx, docs.Process, "only-draft", []byte(strings.Replace(draft, "request-vpn", "only-draft", 1)), "alex")
+	// published, deleted, saved again as a draft: not published since it came back
+	gone := strings.Replace(vpn, "request-vpn", "came-back", 1)
+	s.Put(ctx, docs.Process, "came-back", []byte(gone), "alex")
+	if err := s.Delete(ctx, docs.Process, "came-back", "dana"); err != nil {
+		t.Fatal(err)
+	}
+	s.Put(ctx, docs.Process, "came-back", []byte(strings.Replace(draft, "request-vpn", "came-back", 1)), "alex")
+	// a standard is another kind
+	s.Put(ctx, docs.Standard, "secure-logging", []byte(logging), "riley")
+
+	got, err := s.Published(ctx, docs.Process)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !got["request-vpn"].Equal(saved("request-vpn", 3)) {
+		t.Fatalf("published: %v, want only request-vpn at %v", got, saved("request-vpn", 3))
+	}
+	// published again after it came back: counted from then
+	s.Put(ctx, docs.Process, "came-back", []byte(gone), "alex")
+	got, _ = s.Published(ctx, docs.Process)
+	if len(got) != 2 || !got["came-back"].Equal(saved("came-back", 4)) {
+		t.Fatalf("after publishing again: %v", got)
+	}
+	if std, _ := s.Published(ctx, docs.Standard); len(std) != 1 {
+		t.Fatalf("standards: %v", std)
 	}
 }
 

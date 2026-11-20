@@ -64,8 +64,11 @@ type Version struct {
 	Version int       `json:"version"`
 	SavedAt time.Time `json:"savedAt"`
 	SavedBy string    `json:"savedBy"`
-	Note    string    `json:"note"` // what changed, in the words of whoever saved it
-	Deleted bool      `json:"deleted"`
+	// SavedByName is the name of whoever saved it, where the portal knows it (filled in by the
+	// API, not stored with the version).
+	SavedByName string `json:"savedByName,omitempty"`
+	Note        string `json:"note"` // what changed, in the words of whoever saved it
+	Deleted     bool   `json:"deleted"`
 	// What the document belonged to and its status in this version: who may see it follows
 	// from them (a version that was a draft stays with the people who work on the document).
 	Owner    string `json:"-"`
@@ -381,6 +384,32 @@ func (s *Store) History(ctx context.Context, kind, id string) ([]Version, error)
 			return nil, err
 		}
 		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// Published says when each document of one kind was first published, by id: the time of its
+// first stored version (since it was last deleted, if it ever was) whose status is not "draft",
+// the first one readers could see. A document never published is not in the map. One query for
+// a list.
+func (s *Store) Published(ctx context.Context, kind string) (map[string]time.Time, error) {
+	rows, err := s.Pool.Query(ctx, `select v.id, min(v.saved_at) from document_versions v
+		where v.kind = $1 and v.body is not null and coalesce(v.body->>'status', '') <> 'draft'
+		and v.version > coalesce((select max(d.version) from document_versions d
+			where d.kind = v.kind and d.id = v.id and d.body is null), 0)
+		group by v.id`, kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]time.Time{}
+	for rows.Next() {
+		var id string
+		var at time.Time
+		if err := rows.Scan(&id, &at); err != nil {
+			return nil, err
+		}
+		out[id] = at
 	}
 	return out, rows.Err()
 }

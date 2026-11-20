@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,11 +43,14 @@ var errDenied = errors.New("not allowed")
 // docMeta is what the app needs to know about a document besides its content. Draft says that
 // it has unpublished changes, and is only there for the people who may edit it.
 type docMeta struct {
-	Version   int             `json:"version"`
-	UpdatedAt time.Time       `json:"updatedAt"`
-	UpdatedBy string          `json:"updatedBy"`
-	CreatedAt time.Time       `json:"createdAt"`
-	Draft     *docs.DraftInfo `json:"draft,omitempty"`
+	Version   int       `json:"version"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	UpdatedBy string    `json:"updatedBy"`
+	CreatedAt time.Time `json:"createdAt"`
+	// PublishedAt is when readers could first see it (its first version that was not a draft);
+	// absent for a document never published.
+	PublishedAt *time.Time      `json:"publishedAt,omitempty"`
+	Draft       *docs.DraftInfo `json:"draft,omitempty"`
 }
 
 func metaOf(d docs.Doc) docMeta {
@@ -90,6 +94,12 @@ func (a *api) listDocs(kind, key string) http.HandlerFunc {
 			a.fail(w, r, err)
 			return
 		}
+		// when each was first published: one query for the whole list
+		published, err := a.Docs.Published(r.Context(), kind)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
 		s := who(r)
 		bodies := make([]json.RawMessage, 0, len(list))
 		meta := map[string]docMeta{}
@@ -99,6 +109,9 @@ func (a *api) listDocs(kind, key string) http.HandlerFunc {
 			}
 			bodies = append(bodies, d.Body)
 			m := metaOf(d)
+			if at, ok := published[d.ID]; ok {
+				m.PublishedAt = &at
+			}
 			if info, ok := drafts[d.ID]; ok && s.CanEdit(kind, belongsOf(d.Body)) {
 				m.Draft = &info
 			}
@@ -689,6 +702,21 @@ func (a *api) history(w http.ResponseWriter, r *http.Request) {
 	if len(shown) == 0 {
 		writeError(w, 404, "That does not exist.")
 		return
+	}
+	// who saved each, by name where it is known (an import or the portal itself has none)
+	var emails []string
+	for _, v := range shown {
+		if strings.Contains(v.SavedBy, "@") && !slices.Contains(emails, v.SavedBy) {
+			emails = append(emails, v.SavedBy)
+		}
+	}
+	names, err := a.names(r.Context(), emails)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	for i := range shown {
+		shown[i].SavedByName = names[shown[i].SavedBy]
 	}
 	writeJSON(w, 200, map[string]any{"versions": shown})
 }

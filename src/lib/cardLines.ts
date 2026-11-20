@@ -1,6 +1,6 @@
 import type { Catalog, Process, Rigour, Standard, TargetKind } from "../types";
 import { rigourLine } from "./search";
-import { reviewInfo } from "./lifecycle";
+import { reviewOf, type Dates } from "./lifecycle";
 
 export { rigourLine };
 
@@ -30,6 +30,8 @@ export interface CardFacts {
   mayEdit: boolean;
   /** How many processes use this process as a sub-process. */
   usedBy?: number;
+  /** When it was first published (`DocMeta`): where its first review is counted from. */
+  dates?: Dates;
   today?: string;
 }
 
@@ -45,8 +47,8 @@ export function tiersText(doc: { tiers?: unknown }, catalog: Pick<Catalog, "tier
 }
 
 /** "Overdue since 2026-03-01" and the like; "" when there is nothing to do yet. */
-export function reviewLine(doc: Process | Standard, today?: string): string {
-  const r = reviewInfo(doc, today);
+export function reviewLine(doc: Process | Standard, today?: string, dates?: Dates): string {
+  const r = reviewOf(doc, dates, today);
   if (r.state === "overdue") return r.dueAt ? `Overdue since ${r.dueAt}` : r.label;
   if (r.state === "soon") return `Due ${r.dueAt}`;
   return "";
@@ -77,7 +79,7 @@ export function cardLines(f: CardFacts): CardLine[] {
     const total = Array.isArray((doc as Standard).requirements) ? (doc as Standard).requirements.filter((r) => r && typeof r === "object").length : 0;
     add("rules", "Requirements", f.rules === total ? String(total) : `${f.rules} of ${total} apply to your application`);
   }
-  if (f.mayEdit) add("review", "Review", reviewLine(doc, f.today), true);
+  if (f.mayEdit) add("review", "Review", reviewLine(doc, f.today, f.dates), true);
   return out;
 }
 

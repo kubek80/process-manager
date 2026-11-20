@@ -6,7 +6,7 @@ import { isDrawableProcess, validateProcess } from "../lib/validate";
 import { go, useProgress, type Tab } from "../lib/store";
 import { useSelectedItem } from "../lib/selection";
 import { canEdit, canManage } from "../lib/rights";
-import { reviewInfo, statusOf } from "../lib/lifecycle";
+import { reviewOf, statusOf } from "../lib/lifecycle";
 import { Resources } from "./Resources";
 import { FeedbackForm, FeedbackTab, openCount, processTarget } from "./Feedback";
 import { DocEngagement } from "./Engage";
@@ -69,7 +69,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
   useEffect(() => {
     if (item && view === "list") document.getElementById(`step-${item}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
   }, [item, view]);
-  const review = reviewInfo(doc, undefined, meta?.createdAt);
+  const review = reviewOf(doc, meta);
   const status = statusOf(doc);
   const replacement = doc.replacedBy ? all.find((p) => p.id === doc.replacedBy) : undefined;
   const back = () => go({ page: "library" });

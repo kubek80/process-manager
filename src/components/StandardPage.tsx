@@ -5,7 +5,7 @@ import { teamName, useCatalog } from "../lib/catalog";
 import { appliesTo } from "../lib/edit";
 import { useSelectedItem } from "../lib/selection";
 import { useProfile } from "../lib/profile";
-import { reviewInfo, statusOf } from "../lib/lifecycle";
+import { reviewOf, statusOf } from "../lib/lifecycle";
 import { createStandardPrompt, modifyStandardPrompt } from "../lib/prompt";
 import { canEdit, canManage } from "../lib/rights";
 import { usePerms } from "../lib/session";
@@ -105,7 +105,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   const current = renderable ? doc.requirements.find((r) => r.id === selected) : undefined;
   const target = useMemo(() => standardTarget(doc), [doc]);
   const status = statusOf(doc);
-  const review = reviewInfo(doc, undefined, meta?.createdAt);
+  const review = reviewOf(doc, meta);
   const replacement = doc.replacedBy ? all.find((s) => s.id === doc.replacedBy) : undefined;
   const helpers = processes.filter((p) => p.standards?.includes(doc.id) && statusOf(p) === "active");
   const editHref = href({ page: "edit-standard", id: standard.id });

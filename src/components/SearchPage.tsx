@@ -13,7 +13,7 @@ import { countText, FILTER_LABEL, filterCount, filtersOf, profileOptions, rigour
 import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
 import { openCount } from "./Feedback";
 import { DocCard, Marked } from "./DocCard";
-import { needsReview } from "./DocList";
+import { needsReview } from "../lib/lifecycle";
 import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, OrderControls, Pager, profileChosen, ResultsBar, ResultsFoot, SearchBox, toResults, TypeTabs, type Chosen, type FlagControl } from "./Lists";
 import "../search.css";
 
@@ -149,7 +149,7 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   const flags: Record<string, Flag> = {
     // while the bookmarks are not known, "only my bookmarks" waits instead of showing nothing
     bookmarked: { on: bookmarked && known, test: (k, d) => eng.isBookmarked(k, d.id) },
-    review: { on: due, test: (k: "process" | "standard", d: Process | Standard) => manages(k, d) && needsReview(d) },
+    review: { on: due, test: (k: "process" | "standard", d: Process | Standard) => manages(k, d) && needsReview(d, meta?.[k]?.[d.id]) },
   };
   const plan = planOf(mode, q, asked, offered, meaning);
   const shownQ = plan.q;

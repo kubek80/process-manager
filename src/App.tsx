@@ -4,7 +4,7 @@ import { Lightbulb } from "lucide-react";
 import type { Catalog, DocMeta, Feedback, FeedbackByTarget, Me, Process, Standard, TargetKind } from "./types";
 import {
   ApiError, confirmReview, createFeedback, deleteFeedback, go, href, loadCatalog, loadFeedback, loadMe, loadProcesses, loadStandards, logout, pageTitle, putCatalog, putProcess, putStandard,
-  removeProcess, removeStandard, setAlsoHit, setResolved, SIGNED_OUT, forgetUnsaved, hasUnsaved, unsavedWork, useRoute, type MetaById,
+  removeProcess, removeStandard, savedMeta, setAlsoHit, setResolved, SIGNED_OUT, forgetUnsaved, hasUnsaved, unsavedSaver, unsavedWork, useRoute, type MetaById,
 } from "./lib/store";
 import { CatalogContext, EMPTY_CATALOG, useCatalog } from "./lib/catalog";
 import { EngagementProvider } from "./lib/engagement";
@@ -20,7 +20,7 @@ import { StandardsLibrary } from "./components/StandardsLibrary";
 import { MinePage } from "./components/MinePage";
 import { myGroups, responsibilities, urgent } from "./lib/responsibilities";
 import { platformName, practiceName } from "./lib/catalog";
-import { confirmDialog, ErrorBoundary, Field, LoadError, Loading, Modal, Notices, notify, useLayer } from "./components/ui";
+import { chooseDialog, confirmDialog, ErrorBoundary, Field, LoadError, Loading, Modal, Notices, notify, useLayer } from "./components/ui";
 import { BrandLogo } from "./components/Brand";
 import { chooseDark, refreshLook, startLook, useLook } from "./lib/theme";
 import "./theme.css";
@@ -92,7 +92,7 @@ function UserMenu({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
           <span className="muted">{me.user!.email}</span>
           <span className="user-role">{roleLabel(perms)}</span>
           <button className="btn small" onClick={async () => {
-            if (!await mayLeave(unsavedWork())) return;
+            if (!await mayLeave(unsavedWork(), unsavedSaver())) return;
             await logout().catch(() => {});
             onSignedOut();
           }}>
@@ -104,11 +104,25 @@ function UserMenu({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   );
 }
 
-/** Asks before unsaved edits are left behind. `what` is null when there are none. */
-const mayLeave = async (what: string | null) => !what || confirmDialog({
-  title: "Leave without saving?", body: `Your changes to ${what} have not been saved. If you leave now they are lost.`,
-  confirmLabel: "Leave without saving", cancelLabel: "Stay", danger: true,
-});
+/**
+ * Asks before unsaved edits are left behind. `what` is null when there are none. Where the
+ * editing screen can save them (`save`, its own Save draft), that is the main answer; when the
+ * save is refused the person stays, and the editor says why.
+ */
+const mayLeave = async (what: string | null, save?: (() => Promise<boolean>) | null) => {
+  if (!what) return true;
+  const question = {
+    title: "Leave without saving?", body: `Your changes to ${what} have not been saved. If you leave now they are lost.`,
+    confirmLabel: "Leave without saving", cancelLabel: "Stay", danger: true,
+  };
+  if (!save) return confirmDialog(question);
+  const choice = await chooseDialog({
+    ...question, title: "Save your changes before you leave?", preferredLabel: "Save draft and leave",
+    body: `Your changes to ${what} are not saved yet. Save them as a draft, or leave and lose them.`,
+  });
+  if (choice === "preferred") return save().catch(() => false);
+  return choice === "confirm";
+};
 
 /** How long the content on screen may be old before coming back to the tab fetches it again. */
 const REFRESH_AFTER_MS = 20_000;
@@ -170,7 +184,7 @@ function NameDialog({ noun, from, onCreate, onClose }: {
     try { await onCreate(title.trim(), choice); } catch { setBusy(false); }
   };
   return (
-    <Modal title={`New ${noun}`} subtitle={`It starts as a draft that only editors see. You can change everything later, except its address.`} onClose={onClose}
+    <Modal title={`New ${noun}`} subtitle={`It starts as a draft that only editors see. You can change everything later, except its link.`} onClose={onClose}
       footer={<><span className="spacer" /><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!ok || busy} onClick={create}>Create {noun}</button></>}>
       <form className="form" onSubmit={(e) => { e.preventDefault(); create(); }}>
         <Field label={`Name of the ${noun}`} hint={slugify(title).length >= 3 ? `Address: …/${from?.id ?? slugify(title)}` : noun === "process" ? "For example: Request a database" : "For example: Secure logging"}>
@@ -326,9 +340,9 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const byId = <T extends { id: string }>(list: T[], doc: T) => [...list.filter((x) => x.id !== doc.id), doc].sort((a, b) => a.id.localeCompare(b.id));
 
   // a save answers with the new version; what it does not say (when the first version was saved,
-  // unpublished changes) stays as it was
-  const setMeta = (set: typeof setProcessMeta, id: string, meta: Partial<DocMeta> & { version: number }) =>
-    set((all) => ({ ...all, [id]: { ...all[id], ...meta, createdAt: meta.createdAt || all[id]?.createdAt || meta.updatedAt || "" } as DocMeta }));
+  // when it was first published, unpublished changes) stays as it was, or follows from the save
+  const setMeta = (set: typeof setProcessMeta, id: string, meta: Partial<DocMeta> & { version: number }, doc: Process | Standard) =>
+    set((all) => ({ ...all, [id]: savedMeta(all[id], meta, doc) }));
 
   // unpublished changes were saved, published or discarded on the editing screen
   const setDraftMeta = (set: typeof setProcessMeta, id: string, draft: DocMeta["draft"] | null) =>
@@ -340,14 +354,14 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     writes.current++; // before and after: a refresh that overlaps the save on either side is dropped
     const meta = await putProcess(p, base, note);
     writes.current++;
-    setProcesses((list) => list && byId(list, p)); setMeta(setProcessMeta, p.id, meta); refreshFeedback();
+    setProcesses((list) => list && byId(list, p)); setMeta(setProcessMeta, p.id, meta, p); refreshFeedback();
     return meta.version;
   };
   const saveStandard = async (s: Standard, base: number, note?: string) => {
     writes.current++;
     const meta = await putStandard(s, base, note);
     writes.current++;
-    setStandards((list) => byId(list, s)); setMeta(setStandardMeta, s.id, meta); refreshFeedback();
+    setStandards((list) => byId(list, s)); setMeta(setStandardMeta, s.id, meta, s); refreshFeedback();
     return meta.version;
   };
   // "Still correct": the review is recorded by the server, with today's date and the person's
@@ -358,8 +372,8 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       const r = await confirmReview<Process | Standard>(kind, id, base);
       writes.current++;
       const meta = { version: r.version, updatedAt: r.updatedAt, updatedBy: r.updatedBy };
-      if (kind === "process") { setProcesses((list) => list && byId(list, r.document as Process)); setMeta(setProcessMeta, id, meta); }
-      else { setStandards((list) => byId(list, r.document as Standard)); setMeta(setStandardMeta, id, meta); }
+      if (kind === "process") { setProcesses((list) => list && byId(list, r.document as Process)); setMeta(setProcessMeta, id, meta, r.document as Process); }
+      else { setStandards((list) => byId(list, r.document as Standard)); setMeta(setStandardMeta, id, meta, r.document as Standard); }
       notify.info("Recorded as reviewed today.");
       return true;
     } catch (e) {
@@ -448,8 +462,8 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const mine = useMemo(() => myGroups(perms), [perms]);
   const waiting = useMemo(() => {
     // the top bar is on every page: whatever is wrong with one document, it must not take all of them down
-    try { return mine.length ? urgent(responsibilities(perms, null, all, standards, feedback).tasks) : 0; } catch { return 0; }
-  }, [mine, perms, all, standards, feedback]);
+    try { return mine.length ? urgent(responsibilities(perms, null, all, standards, feedback, undefined, { process: processMeta, standard: standardMeta }).tasks) : 0; } catch { return 0; }
+  }, [mine, perms, all, standards, feedback, processMeta, standardMeta]);
   const process = route.page === "process" || route.page === "edit-process" ? all.find((p) => p.id === route.id) : undefined;
   const standard = route.page === "standard" || route.page === "edit-standard" ? standards.find((s) => s.id === route.id) : undefined;
   // the editing screen is a screen of its own: its editing bar takes the place of the top bar
@@ -511,7 +525,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       )}
       {processes && route.page === "guide" && <GuidePage />}
       {processes && route.page === "admin" && (canOpenAdmin(perms)
-        ? <AdminPage section={route.section} processes={all} standards={standards} feedback={feedback} />
+        ? <AdminPage section={route.section} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }} />
         : <div className="page"><h1>Admin</h1><p className="muted">You do not have access to the Admin panel. An admin can give it to you.</p></div>)}
       {processes && route.page === "process" && (process
         ? <ProcessPage key={process.id} process={process} meta={processMeta[process.id]} all={all} standards={standards} tab={route.tab} item={route.item}

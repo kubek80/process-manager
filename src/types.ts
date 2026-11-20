@@ -167,12 +167,18 @@ export type Role = "admin" | "catalog-manager" | "process-editor" | "standards-e
 export interface Membership { email: string; role: "owner" | "platform-owner" | "practice-owner"; scope: string }
 export interface Assignment { email: string; role: Role; scope: string; grantedBy: string; grantedAt: string }
 export interface AuditEntry { id: number; at: string; email: string; name: string; action: string; target: string; detail: string }
-export interface DocVersion { version: number; savedAt: string; savedBy: string; note: string; deleted: boolean }
+export interface DocVersion {
+  version: number; savedAt: string; savedBy: string; note: string; deleted: boolean;
+  /** The name of whoever saved it, where the portal knows it. */
+  savedByName?: string;
+}
 /** What the server knows about a document besides its content. */
 export interface DocMeta {
   version: number; updatedAt: string; updatedBy: string;
   /** When the first version was saved. */
   createdAt: string;
+  /** When readers could first see it (its first version that was not a draft); none while it was never published. */
+  publishedAt?: string;
   /** Unpublished changes exist. Only sent to people who may edit the process or standard. */
   draft?: { updatedAt: string; updatedBy: string; updatedByName?: string };
 }

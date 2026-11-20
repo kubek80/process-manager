@@ -5,7 +5,7 @@ import { categoryName, environmentLabel, languageLabel, platformName, practiceNa
 import { belongsChoice, belongsRefused, wouldLoseEdit, type Belongs, type BelongsField } from "../lib/rights";
 import { usePerms } from "../lib/session";
 import type { Profile } from "../lib/edit";
-import { reviewInfo, statusOf, type ReviewInfo } from "../lib/lifecycle";
+import { statusOf, type ReviewInfo } from "../lib/lifecycle";
 import { Field } from "./ui";
 import { Fact, KindTag } from "./marks";
 import { VersionTag } from "./Editing";

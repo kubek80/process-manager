@@ -28,7 +28,7 @@ export const DUE_DAYS = 30;
 /**
  * When must the owner next confirm that the process or standard is still correct? Counted from
  * its last review; one that was never reviewed counts from `since`, when it was first published
- * (the app knows when its first version was saved: `meta[id].createdAt`). Its first review is
+ * (`firstPublished(meta[id])`: `meta[id].publishedAt`, from an older server `createdAt`). Its first review is
  * then due, and overdue, by the same rule as every later one. Without `since` nobody knows how
  * long it has gone unreviewed, so it is overdue.
  */
@@ -48,6 +48,23 @@ export function reviewInfo(p: Pick<Governed, "status" | "review">, today = new D
   if (days <= DUE_DAYS) return { state: "soon", dueAt, days, label: first ? `First review due ${dueAt}` : `Review due ${dueAt}`, ...extra };
   return { state: "ok", dueAt, days, label: first ? `First review due ${dueAt}` : `Next review ${dueAt}`, ...extra };
 }
+
+/** What the lists say about when a document came about (`DocMeta`). */
+export interface Dates { publishedAt?: string; createdAt?: string }
+
+/**
+ * When readers could first see it, where a first review is counted from: `publishedAt` from the
+ * server; an older server sends only `createdAt`, when its first version was saved.
+ */
+export const firstPublished = (m?: Dates): string | undefined => m?.publishedAt || m?.createdAt || undefined;
+
+/** `reviewInfo` with the first review counted from when it was first published. Every page decides "needs a review" with this. */
+export const reviewOf = (p: Pick<Governed, "status" | "review">, meta?: Dates, today?: string): ReviewInfo =>
+  reviewInfo(p, today, firstPublished(meta));
+
+/** Whether its owner should confirm it soon, or should have already. */
+export const needsReview = (p: Pick<Governed, "status" | "review">, meta?: Dates, today?: string): boolean =>
+  ["overdue", "soon"].includes(reviewOf(p, meta, today).state);
 
 /** A name as it is stored with a review: the format allows 60 characters. */
 export function reviewer(name?: string): string {

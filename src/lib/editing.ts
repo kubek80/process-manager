@@ -173,6 +173,20 @@ export interface OutlineEntry {
   level?: Level;
 }
 
+/** The width from which the outline of the editing screen is open by default; narrower, it starts as a rail. */
+export const OUTLINE_OPEN_FROM = 1440;
+/** Where the outline's choice (open or collapsed) is remembered, per person, in this browser. */
+export const outlineKey = (email?: string) => `pm:outline:${email ?? ""}`;
+/**
+ * Whether the outline shows as a narrow rail (numbers and kind icons only): as the person last
+ * left it ("rail" / "open"), else collapsed below `OUTLINE_OPEN_FROM` pixels and open from there.
+ */
+export function outlineCollapsed(stored: string | null | undefined, width: number): boolean {
+  if (stored === "rail") return true;
+  if (stored === "open") return false;
+  return width < OUTLINE_OPEN_FROM;
+}
+
 /** What the outline of a process lists, in order: its sections, and every step under "Steps". */
 export function processOutline(p: Process): OutlineEntry[] {
   const out: OutlineEntry[] = [];
@@ -369,6 +383,34 @@ export function baseBehindSentence(base: number, version: number): string {
 export function author(by: { updatedBy?: string; updatedByName?: string } | undefined, myEmail?: string): { you: boolean; name: string } {
   const you = !!by?.updatedBy && !!myEmail && by.updatedBy.toLowerCase() === myEmail.toLowerCase();
   return { you, name: you ? "You" : by?.updatedByName || by?.updatedBy || "Somebody else" };
+}
+
+/**
+ * Who saved a version, for the versions list: the person's name where the portal knows it (else
+ * their email), and a plain word for a version that no person saved.
+ */
+export function savedByText(v: { savedBy: string; savedByName?: string }): string {
+  if (v.savedBy === "import") return "Imported";
+  if (v.savedBy === "system") return "Updated by the portal";
+  return v.savedByName || v.savedBy || "Somebody";
+}
+
+/**
+ * The reader's page line about unpublished changes (shown only to who may edit): the person who
+ * made them reads "You have unpublished changes (saved 02:09)"; other editors are told whose
+ * they are. `when` is the time in words for others ("today at 02:09"), `clock` the short one.
+ */
+export function unpublishedLine(draft: { updatedAt: string; updatedBy: string; updatedByName?: string }, myEmail: string | undefined, now = new Date()): string {
+  const who = author(draft, myEmail);
+  const d = new Date(draft.updatedAt);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const known = !Number.isNaN(d.getTime());
+  const day = known ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` : "";
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const time = known ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : "";
+  if (who.you) return `You have unpublished changes${known ? ` (saved ${day === today ? time : `${day} ${time}`})` : ""}. Readers see the published version.`;
+  const name = draft.updatedByName || draft.updatedBy || "an editor";
+  return `There are unpublished changes by ${name}${known ? ` from ${day === today ? "today" : `${day}`} at ${time}` : ""}. Readers see the published version.`;
 }
 
 /**

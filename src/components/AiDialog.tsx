@@ -78,7 +78,7 @@ export function AiDialog<T extends { id: string; title: string }>({ spec, onImpo
           <div>
             <h4>Paste the answer here</h4>
             <p className="muted small">Paste the whole answer - the JSON is picked out and checked automatically.</p>
-            <textarea rows={7} className="mono" value={answer} aria-label="The answer of the AI chat" onChange={(e) => setAnswer(e.target.value)} placeholder={'```json\n{ "schemaVersion": "1.0", … }\n```'} />
+            <textarea rows={7} className="mono" value={answer} aria-label="The answer of the AI chat" onChange={(e) => setAnswer(e.target.value)} placeholder="Paste the whole answer from the chat here." />
             {parsed?.error && (
               <div className="check bad"><CircleAlert size={16} /><span>{parsed.error}</span></div>
             )}

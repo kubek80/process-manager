@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { reviewInfo } from "../lifecycle";
+import { firstPublished, needsReview, reviewInfo, reviewOf } from "../lifecycle";
+import { reviewLine } from "../cardLines";
+import { savedMeta } from "../store";
 import { responsibilities, urgent } from "../responsibilities";
 import type { Perms } from "../../types";
 import { base } from "./fixtures";
@@ -44,5 +46,47 @@ describe("My responsibilities and the first review", () => {
   it("without the dates, both count as never reviewed", () => {
     const { tasks } = responsibilities(perms, null, [fresh, old], [], { process: {}, standard: {} }, TODAY);
     expect(tasks.map((t) => t.kind)).toEqual(["review-overdue", "review-overdue"]);
+  });
+});
+
+describe("when the first review is counted from", () => {
+  it("is when it was first published, not when its first draft was saved", () => {
+    const meta = { createdAt: "2026-01-02T10:00:00Z", publishedAt: "2026-11-20T08:00:00Z" };
+    expect(firstPublished(meta)).toBe("2026-11-20T08:00:00Z");
+    expect(reviewOf(never(), meta, TODAY)).toMatchObject({ state: "ok", label: "First review due 2027-05-20", first: true });
+    expect(needsReview(never(), meta, TODAY)).toBe(false);
+    // counted from the first draft it would be overdue
+    expect(needsReview(never(), { createdAt: meta.createdAt }, TODAY)).toBe(true);
+  });
+  it("falls back to the first save from an older server, and to never reviewed without either", () => {
+    expect(firstPublished({ createdAt: "2026-11-19T10:00:00Z" })).toBe("2026-11-19T10:00:00Z");
+    expect(firstPublished(undefined)).toBeUndefined();
+    expect(reviewOf(never(), undefined, TODAY)).toEqual({ state: "overdue", label: "Never reviewed" });
+  });
+  it("is the same everywhere: the cards, My responsibilities and the top bar badge", () => {
+    const doc = { ...base(), id: "fresh", title: "Fresh", review: { intervalMonths: 6 } };
+    const meta = { createdAt: "2025-01-01T10:00:00Z", publishedAt: "2026-11-20T08:00:00Z" };
+    expect(reviewLine(doc, TODAY, meta)).toBe("");
+    expect(reviewLine(doc, TODAY, { createdAt: meta.createdAt })).toBe("Overdue since 2025-07-01");
+    const perms: Perms = { admin: false, catalog: false, processes: false, standards: false, owns: ["cloud-platform-team"], platforms: [], practices: [] };
+    const { tasks } = responsibilities(perms, null, [doc], [], { process: {}, standard: {} }, TODAY, { process: { fresh: meta } });
+    expect(tasks).toEqual([]);
+  });
+});
+
+describe("what the app knows after a save", () => {
+  const before = { version: 1, updatedAt: "2026-11-01T10:00:00Z", updatedBy: "alex", createdAt: "2026-11-01T10:00:00Z" };
+  it("a save that publishes for the first time is when it was first published", () => {
+    expect(savedMeta(before, { version: 2, updatedAt: "2026-11-20T10:00:00Z", updatedBy: "alex" }, { status: "active" }))
+      .toEqual({ version: 2, updatedAt: "2026-11-20T10:00:00Z", updatedBy: "alex", createdAt: "2026-11-01T10:00:00Z", publishedAt: "2026-11-20T10:00:00Z" });
+  });
+  it("a draft saved again is not published; a later save keeps the first publication", () => {
+    expect(savedMeta(before, { version: 2, updatedAt: "2026-11-20T10:00:00Z", updatedBy: "alex" }, { status: "draft" }).publishedAt).toBeUndefined();
+    const published = { ...before, publishedAt: "2026-11-05T10:00:00Z" };
+    expect(savedMeta(published, { version: 3, updatedAt: "2026-11-20T10:00:00Z", updatedBy: "alex" }, {}).publishedAt).toBe("2026-11-05T10:00:00Z");
+  });
+  it("a new document saved straight as published", () => {
+    expect(savedMeta(undefined, { version: 1, updatedAt: "2026-11-20T10:00:00Z", updatedBy: "alex" }, {}))
+      .toMatchObject({ createdAt: "2026-11-20T10:00:00Z", publishedAt: "2026-11-20T10:00:00Z" });
   });
 });

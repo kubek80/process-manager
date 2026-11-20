@@ -122,9 +122,12 @@ export function Modal({ title, subtitle, onClose, children, wide, footer, closab
 // ---------- questions and notices, instead of the browser's own pop-ups
 
 export interface ConfirmOptions { title: string; body?: ReactNode; confirmLabel?: string; cancelLabel?: string; danger?: boolean }
+/** A question with a third answer: `preferred` is the main button, the confirm button the other way on. */
+export interface ChoiceOptions extends ConfirmOptions { preferredLabel: string }
+export type Choice = "preferred" | "confirm" | "cancel";
 export interface NoticeAction { label: string; run: () => void }
 interface Notice { id: number; kind: "error" | "info"; title: string; detail?: string; action?: NoticeAction }
-interface Question extends ConfirmOptions { answer: (yes: boolean) => void }
+interface Question extends ConfirmOptions { preferredLabel?: string; answer: (choice: Choice) => void }
 
 let ui: { question: Question | null; notices: Notice[] } = { question: null, notices: [] };
 const listeners = new Set<() => void>();
@@ -135,9 +138,22 @@ const MAX_NOTICES = 4;
 
 /** Asks a yes/no question in the app's own dialog. Resolves to true when the person confirms. */
 export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
+  return ask(options).then((c) => c === "confirm");
+}
+
+/**
+ * Asks with three answers: the main button (`preferredLabel`, e.g. "Save draft and leave"), the
+ * confirm button (`confirmLabel`, e.g. "Leave without saving", in the problem colour with
+ * `danger`) and the cancel button. Closing the dialog is "cancel".
+ */
+export function chooseDialog(options: ChoiceOptions): Promise<Choice> {
+  return ask(options);
+}
+
+function ask(options: ConfirmOptions & { preferredLabel?: string }): Promise<Choice> {
   return new Promise((resolve) => {
-    ui.question?.answer(false); // a newer question replaces an unanswered one
-    setUi({ question: { ...options, answer: (yes) => { setUi({ question: null }); resolve(yes); } } });
+    ui.question?.answer("cancel"); // a newer question replaces an unanswered one
+    setUi({ question: { ...options, answer: (choice) => { setUi({ question: null }); resolve(choice); } } });
   });
 }
 
@@ -162,11 +178,16 @@ export const notify = {
 
 function ConfirmDialog({ q }: { q: Question }) {
   return (
-    <Modal title={q.title} onClose={() => q.answer(false)}
-      footer={<>
+    <Modal title={q.title} onClose={() => q.answer("cancel")}
+      footer={q.preferredLabel ? <>
+        <button className={`btn ${q.danger ? "danger" : ""}`} onClick={() => q.answer("confirm")}>{q.confirmLabel ?? "OK"}</button>
         <span className="spacer" />
-        <button className="btn" data-autofocus={q.danger ? "" : undefined} onClick={() => q.answer(false)}>{q.cancelLabel ?? "Cancel"}</button>
-        <button className={`btn primary ${q.danger ? "danger" : ""}`} data-autofocus={q.danger ? undefined : ""} onClick={() => q.answer(true)}>{q.confirmLabel ?? "OK"}</button>
+        <button className="btn" onClick={() => q.answer("cancel")}>{q.cancelLabel ?? "Cancel"}</button>
+        <button className="btn primary" data-autofocus="" onClick={() => q.answer("preferred")}>{q.preferredLabel}</button>
+      </> : <>
+        <span className="spacer" />
+        <button className="btn" data-autofocus={q.danger ? "" : undefined} onClick={() => q.answer("cancel")}>{q.cancelLabel ?? "Cancel"}</button>
+        <button className={`btn primary ${q.danger ? "danger" : ""}`} data-autofocus={q.danger ? undefined : ""} onClick={() => q.answer("confirm")}>{q.confirmLabel ?? "OK"}</button>
       </>}>
       <div className="confirm-body">{q.body ?? "Are you sure?"}</div>
     </Modal>

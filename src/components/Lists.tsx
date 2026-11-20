@@ -9,7 +9,7 @@ import { useRemembered } from "../lib/profile";
 import { LevelBars } from "./marks";
 import type { ListView } from "../lib/paging";
 import { SORT_KEYS, sortLabel, sortOf, type SortKey } from "../lib/sorting";
-import { pageNumbers, PAGE_SIZES, showingText, storedPage, type Page, type StoredPage } from "../lib/paging";
+import { pageNumbers, PAGE_SIZES, showingText, type Page } from "../lib/paging";
 import "../lists.css";
 
 // The pieces the three lists share (Processes, Standards, the search results): the filter panel
@@ -449,33 +449,6 @@ export function Pager({ page, onPage, label, compact }: {
       </button>
     </nav>
   );
-}
-
-/**
- * The page of a list that is shown. Any change of `what` (the search, a filter) goes back to the
- * first page. With `key`, the page is remembered in this browser tab together with what it was
- * the page of, so that coming back to the list (Back, a reload) shows the page that was left; a
- * page that no longer exists shows the last one (`pageOf` takes care of that).
- */
-export function usePaging(what: string, key?: string): [number, (n: number) => void] {
-  const [at, setAt] = useStoredPage(key, { what, page: 1 });
-  // forget the old page as soon as the search or a filter changes, so that undoing the change
-  // does not bring the old page back
-  if (at.what !== what) setAt({ what, page: 1 });
-  const page = at.what === what ? at.page : 1;
-  return [page, (n: number) => setAt({ what, page: n })];
-}
-
-function useStoredPage(key: string | undefined, initial: StoredPage): [StoredPage, (v: StoredPage) => void] {
-  const [at, setAt] = useState<StoredPage>(() => {
-    if (!key) return initial;
-    try { return storedPage(sessionStorage.getItem(key)) ?? initial; } catch { return initial; }
-  });
-  const change = (v: StoredPage) => {
-    setAt(v);
-    if (key) try { sessionStorage.setItem(key, JSON.stringify(v)); } catch { /* private mode: it lasts for this page */ }
-  };
-  return [at, change];
 }
 
 /** After going to another page: the start of the results is where reading continues. */

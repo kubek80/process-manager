@@ -269,9 +269,6 @@ function fresh(key: string): Answer | null {
   return had.answer;
 }
 
-/** For tests: forget the answers had. */
-export const forgetAnswers = () => answers.clear();
-
 // ---------- what the page shows
 
 /** What the results page shows, worked out from the mode, the query and the server's state. */

@@ -43,9 +43,17 @@
 .tab.on .tab-count { background: var(--accent-fill, var(--accent)); border-color: transparent; color: var(--accent-ink); }
 
 /* ---------- the segmented control: one of a few, the chosen one in the brand colour ---------- */
-.seg { display: inline-flex; flex: none; padding: 3px; gap: 2px; border-radius: 10px; background: color-mix(in srgb, var(--line) 70%, transparent); }
-.seg-item { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 7px; font-size: 13px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
+/* where there is no room (a phone) it scrolls sideways inside itself instead of widening the page */
+.seg { display: inline-flex; flex: none; max-width: 100%; overflow-x: auto; scrollbar-width: none; padding: 3px; gap: 2px; border-radius: 10px; background: color-mix(in srgb, var(--line) 70%, transparent); }
+.seg::-webkit-scrollbar { display: none; }
+.seg-item { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 7px; font-size: 13px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
 .seg-item svg { flex: none; }
 .seg-item:hover:not(.on) { color: var(--text); background: color-mix(in srgb, var(--surface) 50%, transparent); }
 .seg-item.on { background: var(--accent-fill, var(--accent)); color: var(--accent-ink); box-shadow: var(--shadow-1); }
 .seg-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* a count inside an option: "Open 2" */
+.seg-item .seg-n { margin-left: 1px; font-weight: 500; font-variant-numeric: tabular-nums; opacity: .72; }
+/* a level's bars inside an option ("Must 4"): on the brand fill in its ink */
+.seg-item .level-bars { margin-right: 1px; }
+.seg-item.on .level-bars i { background: color-mix(in srgb, var(--accent-ink) 35%, transparent); }
+.seg-item.on .level-bars i.on { background: var(--accent-ink); }

@@ -174,10 +174,11 @@
 
 /* ---------- rows: one line each, for scanning many ---------- */
 .cards.rows { display: flex; flex-direction: column; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow-1); overflow: hidden; }
-.card.row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 190px) auto; grid-template-areas: "kind main level owner act"; align-items: center; gap: 4px 14px; padding: 9px 14px; border: 0; border-radius: 0; box-shadow: none; }
+/* the kind column has one width for both tags, so that every title starts at the same x */
+.card.row { --row-kind: 104px; display: grid; grid-template-columns: var(--row-kind) minmax(0, 1fr) auto minmax(0, 190px) auto; grid-template-areas: "kind main level owner act"; align-items: center; gap: 4px 14px; padding: 9px 14px; border: 0; border-radius: 0; box-shadow: none; }
 .card.row + .card.row { border-top: 1px solid var(--line); }
 .card.row:hover { background: var(--surface-2); box-shadow: none; }
-.card.row > .kind-tag { grid-area: kind; }
+.card.row > .kind-tag { grid-area: kind; justify-self: start; }
 .card.row:not(:has(> .kind-tag)) { grid-template-columns: minmax(0, 1fr) auto minmax(0, 190px) auto; grid-template-areas: "main level owner act"; }
 .row-main { grid-area: main; display: flex; align-items: baseline; gap: 10px; min-width: 0; }
 .card.row .card-title { flex: 0 1 auto; min-width: 0; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -245,7 +246,7 @@
 }
 
 @media (max-width: 1100px) {
-  .card.row { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "kind main level act"; }
+  .card.row { grid-template-columns: var(--row-kind) minmax(0, 1fr) auto auto; grid-template-areas: "kind main level act"; }
   .card.row:not(:has(> .kind-tag)) { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "main level act"; }
   .row-owner { display: none; }
 }

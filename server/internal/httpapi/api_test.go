@@ -566,6 +566,13 @@ func TestHistoryIsForThoseWhoCanSeeTheDocument(t *testing.T) {
 	if status != 200 || len(versions) != 2 || versions[0].(map[string]any)["savedBy"] != alex || versions[1].(map[string]any)["savedBy"] != "import" {
 		t.Fatalf("history: %d %v", status, body)
 	}
+	// who saved it by name where the portal knows it; an import has none
+	if name := versions[0].(map[string]any)["savedByName"]; name != "Alex Editor" {
+		t.Errorf("name of who saved version 2: %v", name)
+	}
+	if _, has := versions[1].(map[string]any)["savedByName"]; has {
+		t.Errorf("an import has a name: %v", versions[1])
+	}
 	status, old := e.as(alex).do("GET", "/api/history/process/"+repoP+"/1", nil)
 	if status != 200 || old["title"] != "Request a repository" {
 		t.Fatalf("version 1: %d %v", status, old["title"])

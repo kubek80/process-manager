@@ -5,7 +5,7 @@ import type { Draft } from "../lib/draft";
 import { compare, describeChange, summarize, type Change } from "../lib/diff";
 import { ApiError, loadHistory, loadVersion } from "../lib/store";
 import { useCatalog } from "../lib/catalog";
-import { author } from "../lib/editing";
+import { author, savedByText, unpublishedLine } from "../lib/editing";
 import { useMe } from "../lib/session";
 import { LoadError, Modal } from "./ui";
 
@@ -29,6 +29,7 @@ export function savedWhen(iso?: string, now = new Date()): string {
  * calmly, when there are unpublished changes (`meta.draft` is only sent to them).
  */
 export function DraftLine({ meta, status, editHref, noun }: { meta?: DocMeta; status: Status; editHref?: string; noun: string }) {
+  const myEmail = useMe().user?.email;
   if (status === "draft") {
     return (
       <p className="draft-line never" role="note">
@@ -42,7 +43,7 @@ export function DraftLine({ meta, status, editHref, noun }: { meta?: DocMeta; st
   return (
     <p className="draft-line" role="note">
       <PencilLine size={16} aria-hidden="true" />
-      <span>There are unpublished changes by {meta.draft.updatedByName || meta.draft.updatedBy || "an editor"} from {savedWhen(meta.draft.updatedAt)}. Readers see the published version.</span>
+      <span>{unpublishedLine(meta.draft, myEmail)}</span>
       <a href={editHref}>Continue editing</a>
     </p>
   );
@@ -287,7 +288,7 @@ export function HistoryDialog<T>({ kind, id, title, onRestore, onClose }: {
               <span className="history-text">
                 <strong>{v.deleted ? "Deleted" : `Version ${v.version}`}{i === 0 && !v.deleted && <span className="history-current">current</span>}</strong>
                 {v.note && <span className="history-note">{v.note}</span>}
-                <em>{v.savedBy} · {when(v.savedAt)}</em>
+                <em>{savedByText(v)} · {when(v.savedAt)}</em>
               </span>
               {!v.deleted && <button className="btn small ghost" aria-expanded={open === v.version} onClick={() => show(v)}><GitCompare size={14} />What changed</button>}
               {!v.deleted && i > 0 && onRestore && <button className="btn small" onClick={() => restore(v.version)}><RotateCcw size={14} />Restore</button>}

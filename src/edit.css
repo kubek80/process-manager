@@ -121,7 +121,8 @@
 .outline-item { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 6px 10px; border-radius: 8px; font-size: 13.5px; font-weight: 600; color: var(--text); text-align: left; }
 /* a step or requirement: the colour of its lane (or level) along its left edge, as on the map */
 .depth-1 .outline-item { padding: 5px 8px 5px 10px; margin-left: 12px; font-weight: 500; font-size: 13px; color: var(--text-2); border-left: 3px solid var(--lane, var(--line)); border-radius: 0 8px 8px 0; }
-.outline-row.lvl-must { --lane: var(--bad); } .outline-row.lvl-should { --lane: var(--warn); } .outline-row.lvl-may { --lane: var(--line-strong); }
+/* a level is a fact, never a problem: strong ink for must, lighter for should and may (as the level bars) */
+.outline-row.lvl-must { --lane: var(--text); } .outline-row.lvl-should { --lane: var(--text-3); } .outline-row.lvl-may { --lane: var(--line-strong); }
 .outline-item:hover { background: var(--surface-2); }
 .outline-row.on > .outline-item { background: var(--accent-soft); color: var(--accent); }
 .depth-1.on > .outline-item { color: var(--text); font-weight: 600; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent); }
@@ -160,6 +161,32 @@
 .outline-add-form input { height: 36px; font-size: 13.5px; }
 .outline-add-help { font-size: 11.5px; color: var(--text-3); padding-left: 2px; }
 .outline-tip { display: flex; align-items: center; gap: 4px; margin: 14px 0 0 14px; font-size: 11.5px; color: var(--text-3); }
+
+/* the outline as a narrow rail (a laptop: the map gets the width): section icons, step numbers
+   and kind icons, the names as tooltips; one button narrows and widens it */
+.outline-head { display: flex; justify-content: flex-end; margin: -4px 0 4px; }
+.outline-toggle { width: 30px; height: 30px; color: var(--text-3); }
+.outline-toggle:hover { color: var(--text); }
+.outline-sec-icon, .outline-short { display: none; }
+@media (min-width: 1280px) {
+  .edit-screen.outline-rail .edit-body { grid-template-columns: 64px minmax(0, 1fr) 400px; }
+  .outline-rail .edit-outline { padding: 8px 6px 24px; overflow-x: hidden; }
+  .outline-rail .outline-head { justify-content: center; margin: 0 0 6px; }
+  .outline-rail .outline-label, .outline-rail .outline-count, .outline-rail .outline-tip, .outline-rail .outline-grip,
+  .outline-rail .outline-flag, .outline-rail .outline-n, .outline-rail .outline-add-text, .outline-rail .outline-add-help { display: none; }
+  .outline-rail .outline-item { position: relative; flex-direction: column; justify-content: center; gap: 1px; min-height: 40px; padding: 5px 2px; }
+  .outline-rail .depth-1 .outline-item { margin-left: 0; padding: 4px 2px; }
+  .outline-rail .outline-row.depth-0 { margin-top: 8px; }
+  .outline-rail .outline-row.depth-0:first-child { margin-top: 0; }
+  .outline-rail .outline-sec-icon { display: grid; place-items: center; color: var(--text-2); }
+  .outline-rail .outline-row.on .outline-sec-icon { color: var(--accent); }
+  .outline-rail .outline-short { display: block; font-size: 11px; font-weight: 650; line-height: 1.2; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .outline-rail .outline-mark { position: absolute; top: 1px; right: 1px; min-width: 15px; height: 15px; padding: 0 3px; font-size: 9.5px; }
+  .outline-rail .outline-add-line { flex: 1 0 100%; justify-content: center; width: 100%; margin: 4px 0 0; padding: 6px 0; }
+}
+@media (min-width: 1280px) and (max-width: 1500px) { .edit-screen.outline-rail .edit-body { grid-template-columns: 64px minmax(0, 1fr) 372px; } }
+/* below 1280 the outline slides over, with names: no rail and no button for it */
+@media (max-width: 1279px) { .outline-head { display: none; } }
 
 /* the middle: what readers will see, always editable */
 .edit-preview { max-width: 1100px; margin: 0 auto; display: grid; gap: 10px; }
@@ -281,8 +308,6 @@
 /* text boxes grow with what is written in them, up to a point, so nothing is hidden */
 .edit-fields textarea { field-sizing: content; min-height: 64px; max-height: 50vh; }
 .edit-fields .ins-rows textarea { min-height: 38px; }
-.level-chips .chip.on.lvl-must { background: var(--bad); border-color: var(--bad); color: var(--surface); }
-.level-chips .chip.on.lvl-should { background: var(--warn); border-color: var(--warn); color: var(--surface); }
 .edit-section-hint { margin-top: 4px; font-size: 13px; color: var(--text-3); }
 .edit-section-body { margin-top: 12px; }
 /* in the fields the help text sits under the label, not beside it */
@@ -313,7 +338,7 @@
 .item-feedback-text b { color: var(--bad); font-weight: 650; }
 .item-feedback .fb-list { margin: 0; padding: 0 10px 10px; }
 .req-fields .fields-head { border-top: 4px solid var(--line-strong); padding-top: 12px; }
-.req-fields.must .fields-head { border-top-color: var(--bad); } .req-fields.should .fields-head { border-top-color: var(--warn); }
+.req-fields.must .fields-head { border-top-color: var(--text); } .req-fields.should .fields-head { border-top-color: var(--text-3); }
 
 /* Publish */
 .publish-body { display: grid; gap: 14px; }

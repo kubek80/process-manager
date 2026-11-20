@@ -3,7 +3,6 @@
 .req-hero { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; padding: 8px 0 18px; }
 .req-hero .lead { max-width: 72ch; margin-top: 4px; font-size: 15px; }
 .req-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 18px; }
-.req-filters .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .req-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
 .req-item { display: flex; gap: 16px; align-items: flex-start; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow-1); min-width: 0; }
 .req-item.state-done, .req-item.state-declined { background: var(--surface-2); }
@@ -66,8 +65,6 @@
 .stat-name { min-width: 180px; }
 .stat-name a { font-weight: 600; color: var(--text); margin-right: 6px; }
 .stat-name a:hover { color: var(--accent); }
-.stat-kind { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-.stat-kind svg { color: var(--text-3); }
 .stat-none td:first-child { color: var(--text-3); font-style: italic; }
 .stat-trend { position: relative; width: 100%; overflow: hidden; }
 .stat-trend svg { display: block; }

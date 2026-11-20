@@ -1,5 +1,4 @@
-import { createContext, useContext, useMemo } from "react";
-import { canEdit as mayEdit } from "./rights";
+import { createContext, useContext } from "react";
 import type { Feedback, FeedbackKind, Me, Perms, TargetKind } from "../types";
 import { NO_PERMS } from "./rights";
 
@@ -8,15 +7,6 @@ export const MeContext = createContext<Me>({ authenticated: false, provider: "de
 export const useMe = () => useContext(MeContext);
 
 export const usePerms = (): Perms => useContext(MeContext).perms ?? NO_PERMS;
-
-/**
- * Which never-published drafts a list shows: the ones the person may edit (the server sends
- * drafts only to the people who may see them). The libraries, search and Home all follow this.
- */
-export function useVisibleDrafts(): false | ((kind: TargetKind, doc: { owner?: string; platform?: string; practice?: string }) => boolean) {
-  const perms = usePerms();
-  return useMemo(() => (kind: TargetKind, doc: { owner?: string; platform?: string; practice?: string }) => mayEdit(perms, kind, doc), [perms]);
-}
 
 // the rights themselves are worked out in ./rights; these are here for the pages that import them from the session
 export { canCreate, canEdit, canManage, canOpenAdmin, editsAll, roleLabel } from "./rights";

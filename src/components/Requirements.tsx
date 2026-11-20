@@ -7,6 +7,7 @@ import { DimTags, DimsEditor } from "./Governance";
 import { EditSection, FieldsHead, ItemFeedback, ItemIssues, selectExample } from "./EditFrame";
 import { EXAMPLE } from "../lib/edit";
 import { Field } from "./ui";
+import { LevelBars, LevelMark } from "./marks";
 
 export const LEVEL: Record<Level, { label: string; hint: string }> = {
   must: { label: "Must", hint: "Mandatory. Deviating needs an exception." },
@@ -39,7 +40,7 @@ export function RequirementCard({ r, standard, processes, applies, flags, select
     <li id={`req-${r.id}`} className={`req ${r.level} ${selected ? "selected" : ""} ${onSelect ? "selectable" : ""}`} onClick={onSelect}>
       <header className="req-head">
         <span className="req-id">{r.id}</span>
-        <span className={`level ${r.level}`} title={LEVEL[r.level].hint}>{LEVEL[r.level].label}</span>
+        <LevelMark level={r.level} title={LEVEL[r.level].hint} className="req-level" />
         <h3 className="req-title">{onSelect ? <button className="req-select" aria-pressed={selected} onClick={(e) => { e.stopPropagation(); onSelect(); }}>{r.title || "(no name yet)"}</button> : r.title}</h3>
         <span className="spacer" />
         {onReport
@@ -172,7 +173,7 @@ export function RequirementFields({ r, standard, processes, feedback, issues, on
   const none = <span className="muted">Nothing yet</span>;
   return (
     <div className={`edit-fields-inner req-fields ${r.level}`}>
-      <FieldsHead icon={<span className={`level big ${r.level}`}>{LEVEL[r.level].label}</span>}
+      <FieldsHead icon={<LevelMark level={r.level} title={LEVEL[r.level].hint} className="big" />}
         kicker={<><span className="who">{r.id}</span><span>Requirement {index + 1} of {standard.requirements.length}</span></>}
         title={r.title || "(no name yet)"}
         tools={<>
@@ -196,8 +197,8 @@ export function RequirementFields({ r, standard, processes, feedback, issues, on
       <div className="step-core form">
         <div className="field">
           <span className="field-label">Level<em>{LEVEL[r.level].hint}</em></span>
-          <div className="chips level-chips" role="group" aria-label="Level">
-            {(Object.keys(LEVEL) as Level[]).map((l) => <button key={l} className={`chip lvl-${l} ${r.level === l ? "on" : ""}`} aria-pressed={r.level === l} title={LEVEL[l].hint} onClick={() => onChange({ level: l })}>{LEVEL[l].label}</button>)}
+          <div className="seg level-chips" role="group" aria-label="Level">
+            {(Object.keys(LEVEL) as Level[]).map((l) => <button key={l} className={`seg-item lvl-${l} ${r.level === l ? "on" : ""}`} aria-pressed={r.level === l} title={LEVEL[l].hint} onClick={() => onChange({ level: l })}><LevelBars level={l} />{LEVEL[l].label}</button>)}
           </div>
         </div>
         <Field label="Short name" hint="A few words that name the rule"><input value={r.title} maxLength={80} onChange={(e) => onChange({ title: e.target.value })} onFocus={selectExample(EXAMPLE.newRequirement, EXAMPLE.firstRequirement)} /></Field>

@@ -9,7 +9,7 @@ import { useMe, usePerms } from "../lib/session";
 import { useCatalog } from "../lib/catalog";
 import { statusOf } from "../lib/lifecycle";
 import {
-  ApiError, deleteWorkingDraft, go, guardLeaving, loadVersion, loadWorkingDraft, publishWorkingDraft, putWorkingDraft, type WorkingDraft,
+  ApiError, deleteWorkingDraft, go, guardLeaving, offerSaving, loadVersion, loadWorkingDraft, publishWorkingDraft, putWorkingDraft, type WorkingDraft,
 } from "../lib/store";
 import type { AiSpec } from "./AiDialog";
 import { BehindBanner, ChangeList, ConflictDialog, HistoryDialog, savedWhen } from "./Editing";
@@ -296,20 +296,23 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
 
   // Save draft can always be pressed while there is something to save; when it cannot be saved
   // yet, the line under the bar says why and the first problem is brought into view
-  const saveDraft = () => {
-    if (d.saving || saveBlocked) return;
+  // resolves to true once saved (leaving with "Save draft and leave" waits for it)
+  const saveDraft = async (): Promise<boolean> => {
+    if (d.saving) return false;
+    if (saveBlocked) return !unsaved;
     const why = rightsBlock || jsonBlock;
-    if (why) return setNotice({ text: `This draft cannot be saved yet. ${why}`, tone: "bad" });
+    if (why) { setNotice({ text: `This draft cannot be saved yet. ${why}`, tone: "bad" }); return false; }
     if (saveErrors.length) {
       const first = saveErrors[0];
       const why = isGone
         ? `This ${noun} cannot be brought back yet: it comes back as a draft, which is only saved with nothing to fix. Your changes are still here.`
         : `This draft cannot be saved yet: a ${noun} that was never published is only saved with nothing to fix.`;
       setNotice({ text: why, tone: "bad", issue: first });
-      return goTo(first);
+      goTo(first);
+      return false;
     }
     setNotice(null);
-    void d.save("", keepStatus);
+    return d.save("", keepStatus);
   };
   const tryPublish = () => {
     if (busy || d.saving) return;
@@ -318,9 +321,10 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
     if (problemsBlock) { setNotice({ text: problemsBlock, tone: "bad", issue: firstError }); return goTo(firstError); }
     setDialog("publish");
   };
-  // Ctrl+S (Cmd+S on a Mac) saves the draft
+  // Ctrl+S (Cmd+S on a Mac) saves the draft; so does "Save draft and leave" when leaving
   const saveRef = useRef(saveDraft);
   saveRef.current = saveDraft;
+  useEffect(() => offerSaving(`${kind}/${id}`, () => saveRef.current()), [kind, id]);
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "s") return;
