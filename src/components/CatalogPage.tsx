@@ -17,11 +17,11 @@ type Key = "teams" | "practices" | "platforms" | "categories" | "tools" | "tiers
 type Row = { id: string; name: string; contact?: string; url?: string; description?: string; icon?: string };
 
 const KINDS: Record<Key, {
-  title: string; noun: string; icon: typeof Users; color: string; blurb: string;
+  title: string; noun: string; icon: typeof Users; blurb: string;
   fields: { field: "contact" | "url" | "description"; label: string; placeholder: string; long?: boolean }[];
 }> = {
   teams: {
-    title: "Teams", noun: "team", icon: Users, color: "#0d9488",
+    title: "Teams", noun: "team", icon: Users,
     blurb: "Maintain processes and standards, and take part in them.",
     fields: [
       { field: "contact", label: "How to reach them", placeholder: "Slack #cloud-platform, a mailbox or a queue" },
@@ -29,7 +29,7 @@ const KINDS: Record<Key, {
     ],
   },
   practices: {
-    title: "Practices", noun: "practice", icon: Compass, color: "#7c3aed",
+    title: "Practices", noun: "practice", icon: Compass,
     blurb: "Ways of working, such as cyber security or engineering.",
     fields: [
       { field: "contact", label: "How to reach them", placeholder: "Slack #engineering-practice or a mailbox" },
@@ -37,7 +37,7 @@ const KINDS: Record<Key, {
     ],
   },
   platforms: {
-    title: "Platforms", noun: "platform", icon: Boxes, color: "#0284c7",
+    title: "Platforms", noun: "platform", icon: Boxes,
     blurb: "Systems and services people get access to or build on.",
     fields: [
       { field: "contact", label: "How to reach its owners", placeholder: "Slack #cloud-platform or a mailbox" },
@@ -45,12 +45,12 @@ const KINDS: Record<Key, {
     ],
   },
   categories: {
-    title: "Categories", noun: "category", icon: Tag, color: "#be123c",
+    title: "Categories", noun: "category", icon: Tag,
     blurb: "How processes and standards are grouped for readers.",
     fields: [{ field: "description", label: "What belongs here", placeholder: "e.g. Getting and changing cloud accounts", long: true }],
   },
   tools: {
-    title: "Tools", noun: "tool", icon: Wrench, color: "#4f46e5",
+    title: "Tools", noun: "tool", icon: Wrench,
     blurb: "Systems that steps are done in. Steps pick one from this list.",
     fields: [
       { field: "url", label: "Link", placeholder: "https://…" },
@@ -58,17 +58,17 @@ const KINDS: Record<Key, {
     ],
   },
   tiers: {
-    title: "Application tiers", noun: "tier", icon: Layers, color: "#d97706",
+    title: "Application tiers", noun: "tier", icon: Layers,
     blurb: "A process applies to every tier or to a chosen few. Most critical first.",
     fields: [{ field: "description", label: "What makes an application this tier", placeholder: "e.g. Outage stops the business", long: true }],
   },
   environments: {
-    title: "Environments", noun: "environment", icon: Server, color: "#0284c7",
+    title: "Environments", noun: "environment", icon: Server,
     blurb: "Where things run. In the order work moves through them.",
     fields: [{ field: "description", label: "Notes", placeholder: "e.g. Production-like, used for final checks", long: true }],
   },
   languages: {
-    title: "Languages", noun: "language", icon: Code2, color: "#db2777",
+    title: "Languages", noun: "language", icon: Code2,
     blurb: "Some processes only apply to one language. Most apply to any.",
     fields: [{ field: "description", label: "Notes", placeholder: "e.g. Includes TypeScript", long: true }],
   },
@@ -178,22 +178,21 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
         </div>
       )}
 
-      <div className="cat-tabs" role="tablist">
+      <div className="tabs cat-kinds" role="tablist" aria-label="Lists">
         {KEYS.map((k) => {
           const K = KINDS[k], Icon = K.icon;
           return (
-            <button key={k} role="tab" aria-selected={key === k} className={key === k ? "on" : ""} style={{ "--c": K.color } as React.CSSProperties} onClick={() => switchTo(k)}>
-              <span className="cat-tab-icon"><Icon size={18} /></span>
-              <span className="cat-tab-text"><strong>{K.title}</strong><em>{K.blurb}</em></span>
-              <span className="cat-tab-n">{(draft[k] ?? []).length}</span>
+            <button key={k} role="tab" aria-selected={key === k} className={`tab ${key === k ? "on" : ""}`} title={K.blurb} onClick={() => switchTo(k)}>
+              <Icon size={16} aria-hidden="true" />{K.title}<span className="tab-count">{(draft[k] ?? []).length}</span>
             </button>
           );
         })}
       </div>
+      <p className="cat-blurb">{kind.blurb}</p>
 
       {issues.length > 0 && <div className="issues-panel"><IssueList issues={issues} /></div>}
 
-      <div className="cat-split" style={{ "--c": kind.color } as React.CSSProperties}>
+      <div className="cat-split">
         <section className="cat-list">
           <div className="cat-list-bar">
             <div className="search"><Search size={15} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${kind.title.toLowerCase()}`} aria-label={`Search ${kind.title.toLowerCase()}`} /></div>

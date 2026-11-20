@@ -1,11 +1,15 @@
-import { Boxes, CalendarCheck, Code2, Compass, Gauge, Layers, Server, Tag, TriangleAlert } from "lucide-react";
-import type { Governed, Rigour, TargetKind } from "../types";
-import { categoryName, environmentLabel, languageLabel, platformName, practiceName, tierLabel, useCatalog } from "../lib/catalog";
+import type { ReactNode } from "react";
+import { ArrowLeft, CalendarCheck, Code2, Compass, Layers, Rows3, Server, TriangleAlert } from "lucide-react";
+import type { DocMeta, Governed, Rigour, TargetKind } from "../types";
+import { categoryName, environmentLabel, languageLabel, platformName, practiceName, teamName, tierLabel, useCatalog } from "../lib/catalog";
 import { belongsChoice, belongsRefused, wouldLoseEdit, type Belongs, type BelongsField } from "../lib/rights";
 import { usePerms } from "../lib/session";
 import type { Profile } from "../lib/edit";
-import { reviewInfo, statusOf } from "../lib/lifecycle";
+import { reviewInfo, statusOf, type ReviewInfo } from "../lib/lifecycle";
 import { Field } from "./ui";
+import { Fact, KindTag } from "./marks";
+import { VersionTag } from "./Editing";
+import "../lists.css";
 
 type Dims = { tiers?: string[]; languages?: string[]; environments?: string[] };
 const DIMS = [
@@ -100,14 +104,84 @@ export function ReviewEditor<T extends Governed>({ doc, others, onChange }: {
   );
 }
 
-export function ReviewTag({ doc }: { doc: Governed }) {
-  const review = reviewInfo(doc);
+/**
+ * Where the review stands, for the line under the facts: when it was last confirmed, or when the
+ * first review is due. A review that is due or overdue is a mark at the top instead (`ReviewMark`).
+ */
+export function ReviewTag({ doc, review }: { doc: Governed; review: ReviewInfo }) {
   if (review.state === "none") return null;
   const last = doc.review?.lastReviewedAt;
+  const by = doc.review?.reviewedBy ? ` by ${doc.review.reviewedBy}` : "";
   return (
-    <span className={`review-tag ${review.state}`} title={last ? `Last reviewed ${last}${doc.review?.reviewedBy ? ` by ${doc.review.reviewedBy}` : ""}` : "Never reviewed"}>
-      <CalendarCheck size={13} />{review.state === "ok" ? `Reviewed ${last}` : review.label}
+    <span className="review-tag" title={last ? `Last reviewed ${last}${by}` : review.first ? "Not reviewed yet: the first review is counted from when it was published" : "Never reviewed"}>
+      <CalendarCheck size={13} aria-hidden="true" />{last ? `Reviewed ${last}` : review.first && review.state === "ok" ? review.label : "Never reviewed"}
     </span>
+  );
+}
+
+/** A review that is due (warning) or overdue (problem), as the cards mark it. */
+export function ReviewMark({ review }: { review: ReviewInfo }) {
+  if (review.state !== "soon" && review.state !== "overdue") return null;
+  return <span className={`card-mark ${review.state === "overdue" ? "bad" : "warn"}`} data-line="review">{review.label}</span>;
+}
+
+/** Where it applies and who looks after it, as the cards say it: platform, practice, tiers, and environments and languages when narrowed. */
+export function WhereFacts({ doc }: { doc: Governed }) {
+  const { catalog } = useCatalog();
+  return (
+    <>
+      {doc.platform && <Fact icon={Layers} label="Platform">{platformName(catalog, doc.platform)}</Fact>}
+      {doc.practice && <Fact icon={Compass} label="Practice">{practiceName(catalog, doc.practice)}</Fact>}
+      <Fact icon={Rows3} label="Application tiers">{tierLabel(catalog, doc.tiers)}</Fact>
+      {!!doc.environments?.length && <Fact icon={Server} label="Environments">{environmentLabel(catalog, doc.environments)}</Fact>}
+      {!!doc.languages?.length && <Fact icon={Code2} label="Languages">{languageLabel(catalog, doc.languages)}</Fact>}
+    </>
+  );
+}
+
+/**
+ * The head of the reader's page of a process or standard, the same for both: the kind tag, the
+ * category and who owns it in plain words, marks for what needs attention, the title, the
+ * summary, the facts to compare first (`facts`, as on the card), where it applies, and when it
+ * was changed and reviewed. `actions` go to the right of the title; `children` (the use and
+ * feedback line) below.
+ */
+export function DocHead({ kind, doc, meta, review, facts, actions, onBack, onHistory, children }: {
+  kind: TargetKind; doc: Governed; meta?: DocMeta; review: ReviewInfo;
+  facts: ReactNode; actions?: ReactNode; onBack: () => void; onHistory: () => void; children?: ReactNode;
+}) {
+  const { catalog } = useCatalog();
+  const status = statusOf(doc);
+  return (
+    <header className="doc-head">
+      <button className="back" onClick={onBack}><ArrowLeft size={16} />All {kind === "process" ? "processes" : "standards"}</button>
+      <div className="doc-head-row">
+        <div className="doc-head-text">
+          <div className="doc-kicker">
+            <KindTag kind={kind} />
+            {(doc.category || doc.owner) && <span className="doc-owner">{[doc.category ? categoryName(catalog, doc.category) : "", doc.owner ? `${kind === "process" ? "Owned by" : "Issued by"} ${teamName(catalog, doc.owner)}` : ""].filter(Boolean).join(" · ")}</span>}
+            {(status !== "active" || review.state === "soon" || review.state === "overdue") && (
+              <span className="doc-marks">
+                {status === "draft" && <span className="card-mark draft">Draft</span>}
+                {status === "deprecated" && <span className="card-mark retired">Retired</span>}
+                <ReviewMark review={review} />
+              </span>
+            )}
+          </div>
+          <h1>{doc.title}</h1>
+          {doc.summary && <p className="lead">{doc.summary}</p>}
+        </div>
+        {actions && <div className="head-actions">{actions}</div>}
+      </div>
+      <div className="doc-facts">{facts}</div>
+      <div className="doc-facts doc-where"><WhereFacts doc={doc} /></div>
+      <p className="doc-when">
+        {doc.updatedAt && <span>Updated {doc.updatedAt}</span>}
+        <ReviewTag doc={doc} review={review} />
+        <VersionTag meta={meta} onOpen={onHistory} />
+      </p>
+      {children}
+    </header>
   );
 }
 
@@ -119,22 +193,6 @@ export const RIGOUR: Record<Rigour, { label: string; hint: string }> = {
 };
 
 type Grouped = { category?: string; practice?: string; platform?: string; rigour?: Rigour };
-
-/**
- * Tags for what a process or standard belongs to: its category, platform and practice, and for
- * a process how binding it is. `compact` leaves out the category (a card shows it on top).
- */
-export function BelongsTags({ doc, compact }: { doc: Grouped; compact?: boolean }) {
-  const { catalog } = useCatalog();
-  return (
-    <>
-      {doc.rigour && RIGOUR[doc.rigour] && <span className={`tier-tag rigour-${doc.rigour}`} title={RIGOUR[doc.rigour].hint}><Gauge size={12} />{RIGOUR[doc.rigour].label}</span>}
-      {!compact && doc.category && <span className="tier-tag" title="Category"><Tag size={12} />{categoryName(catalog, doc.category)}</span>}
-      {doc.platform && <span className="tier-tag" title="Platform"><Boxes size={12} />{platformName(catalog, doc.platform)}</span>}
-      {doc.practice && <span className="tier-tag" title="Practice"><Compass size={12} />{practiceName(catalog, doc.practice)}</span>}
-    </>
-  );
-}
 
 /**
  * Why the person could not save this document as it is now, or "" when they can. For somebody

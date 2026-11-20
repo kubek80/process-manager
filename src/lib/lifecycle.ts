@@ -1,7 +1,11 @@
 import type { Governed, Status } from "../types";
 
 export type ReviewState = "none" | "ok" | "soon" | "overdue";
-export interface ReviewInfo { state: ReviewState; dueAt?: string; days?: number; label: string }
+export interface ReviewInfo {
+  state: ReviewState; dueAt?: string; days?: number; label: string;
+  /** Never reviewed yet: the first review is counted from when it was first published. */
+  first?: boolean;
+}
 
 export const statusOf = (p: Pick<Governed, "status">): Status => p.status ?? "active";
 
@@ -18,18 +22,31 @@ const addMonths = (iso: string, months: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-/** When must the owner next confirm that the process is still correct? */
-export function reviewInfo(p: Pick<Governed, "status" | "review">, today = new Date().toISOString().slice(0, 10)): ReviewInfo {
+/** Within this many days a review is "due"; after its date it is "overdue". */
+export const DUE_DAYS = 30;
+
+/**
+ * When must the owner next confirm that the process or standard is still correct? Counted from
+ * its last review; one that was never reviewed counts from `since`, when it was first published
+ * (the app knows when its first version was saved: `meta[id].createdAt`). Its first review is
+ * then due, and overdue, by the same rule as every later one. Without `since` nobody knows how
+ * long it has gone unreviewed, so it is overdue.
+ */
+export function reviewInfo(p: Pick<Governed, "status" | "review">, today = new Date().toISOString().slice(0, 10), since?: string): ReviewInfo {
   if (!p.review || statusOf(p) !== "active") return { state: "none", label: "No review planned" };
-  if (!p.review.lastReviewedAt) return { state: "overdue", label: "Never reviewed" };
+  const last = p.review.lastReviewedAt;
+  const start = since ? since.slice(0, 10) : "";
+  if (!last && !isDate(start)) return { state: "overdue", label: "Never reviewed" };
   // a date that cannot be read (stored from outside the app) must not take the page down:
   // nobody knows when it was reviewed, so it is due
-  if (!isDate(p.review.lastReviewedAt)) return { state: "overdue", label: "Review date cannot be read" };
-  const dueAt = addMonths(p.review.lastReviewedAt, p.review.intervalMonths);
+  if (last && !isDate(last)) return { state: "overdue", label: "Review date cannot be read" };
+  const first = !last;
+  const dueAt = addMonths(last || start, p.review.intervalMonths);
   const days = Math.round((Date.parse(dueAt) - Date.parse(today)) / 86400000);
-  if (days < 0) return { state: "overdue", dueAt, days, label: `Review overdue since ${dueAt}` };
-  if (days <= 30) return { state: "soon", dueAt, days, label: `Review due ${dueAt}` };
-  return { state: "ok", dueAt, days, label: `Next review ${dueAt}` };
+  const extra = first ? { first } : {};
+  if (days < 0) return { state: "overdue", dueAt, days, label: `Review overdue since ${dueAt}`, ...extra };
+  if (days <= DUE_DAYS) return { state: "soon", dueAt, days, label: first ? `First review due ${dueAt}` : `Review due ${dueAt}`, ...extra };
+  return { state: "ok", dueAt, days, label: first ? `First review due ${dueAt}` : `Next review ${dueAt}`, ...extra };
 }
 
 /** A name as it is stored with a review: the format allows 60 characters. */

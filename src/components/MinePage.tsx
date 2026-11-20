@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowUpRight, Boxes, CalendarCheck, Check, CircleCheck, Compass, Flag, PencilLine, ShieldCheck, Users, Workflow } from "lucide-react";
+import { ArrowUpRight, Boxes, CalendarCheck, Check, CircleCheck, Compass, Flag, PencilLine, Users } from "lucide-react";
 import type { DocMeta, FeedbackByTarget, Process, Standard, TargetKind } from "../types";
 import { groupName, useCatalog } from "../lib/catalog";
 import { STATUS_LABEL } from "../lib/lifecycle";
@@ -7,6 +7,7 @@ import { groupKey, myGroups, responsibilities, type Group, type Owned, type Task
 import { useFeedbackActions, usePerms } from "../lib/session";
 import { href, type MetaById } from "../lib/store";
 import { FEEDBACK_KINDS } from "./Feedback";
+import { KindTag } from "./marks";
 import "../mine.css";
 
 const day = (iso?: string) => (iso ? iso.slice(0, 10) : "");
@@ -49,7 +50,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
   const only = group && groups.some((g) => groupKey(g) === group) ? group : null;
   const nameOf = (g: Group) => groupName(catalog, g.kind, g.id);
   const via = (o: Owned) => o.groups.map(nameOf).join(", ");
-  const { owned, tasks } = useMemo(() => responsibilities(perms, only, processes, standards, feedback), [perms, only, processes, standards, feedback]);
+  const { owned, tasks } = useMemo(() => responsibilities(perms, only, processes, standards, feedback, undefined, meta), [perms, only, processes, standards, feedback, meta]);
 
   const of = (...kinds: Task["kind"][]) => tasks.filter((t) => kinds.includes(t.kind));
   const overdue = of("review-overdue"), soon = of("review-soon"), open = of("feedback"), other = of("draft", "no-rhythm");
@@ -60,7 +61,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
     setBusy(o.kind + o.doc.id);
     try { await onReviewed(o.kind, o.doc.id); } finally { setBusy(null); }
   };
-  const Icon = ({ o }: { o: Owned }) => (o.kind === "process" ? <Workflow size={15} aria-label="Process" /> : <ShieldCheck size={15} aria-label="Standard" />);
+  const Icon = ({ o }: { o: Owned }) => <KindTag kind={o.kind} />;
 
   if (groups.length === 0) {
     return (
@@ -83,11 +84,11 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
         <h1>My responsibilities</h1>
         <p className="lead">The processes and standards of {groups.length === 1 ? <b>{nameOf(groups[0])}</b> : "your teams, platforms and practices"}: what needs you now, and how everything else stands.</p>
         {groups.length > 1 && (
-          <div className="chips" role="group" aria-label="Show what belongs to">
-            <button className={`chip ${only === null ? "on" : ""}`} aria-pressed={only === null} onClick={() => setGroup(null)}>All of mine</button>
+          <div className="seg mine-groups" role="group" aria-label="Show what belongs to">
+            <button className={`seg-item ${only === null ? "on" : ""}`} aria-pressed={only === null} onClick={() => setGroup(null)}>All of mine</button>
             {groups.map((g) => {
               const Icon = GROUP_ICON[g.kind];
-              return <button key={groupKey(g)} className={`chip ${only === groupKey(g) ? "on" : ""}`} aria-pressed={only === groupKey(g)} title={GROUP_TITLE[g.kind]} onClick={() => setGroup(groupKey(g))}><Icon size={13} aria-label={GROUP_TITLE[g.kind]} />{nameOf(g)}</button>;
+              return <button key={groupKey(g)} className={`seg-item ${only === groupKey(g) ? "on" : ""}`} aria-pressed={only === groupKey(g)} title={GROUP_TITLE[g.kind]} onClick={() => setGroup(groupKey(g))}><Icon size={13} aria-label={GROUP_TITLE[g.kind]} />{nameOf(g)}</button>;
             })}
           </div>
         )}
@@ -112,7 +113,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
             {[...overdue, ...soon].map(({ item: o }) => (
               <li key={o.kind + o.doc.id}>
                 <Icon o={o} />
-                <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a><em>{via(o)}{o.doc.review?.lastReviewedAt ? ` · last reviewed ${o.doc.review.lastReviewedAt}${o.doc.review.reviewedBy ? ` by ${o.doc.review.reviewedBy}` : ""}` : " · never reviewed"}</em></span>
+                <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a><em>{via(o)}{o.doc.review?.lastReviewedAt ? ` · last reviewed ${o.doc.review.lastReviewedAt}${o.doc.review.reviewedBy ? ` by ${o.doc.review.reviewedBy}` : ""}` : o.review.first ? " · not reviewed since it was first published" : " · never reviewed"}</em></span>
                 <span className={`tier-tag review-${o.review.state}`}>{o.review.label}</span>
                 <a className="btn small" href={pageOf(o)}>Read it<ArrowUpRight size={13} /></a>
                 <button className="btn small primary" disabled={busy === o.kind + o.doc.id} onClick={() => review(o)} title={`Records today and your name as the review of this ${noun(o.kind)}`}><Check size={14} />Still correct</button>
@@ -186,7 +187,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
                   const m: DocMeta | undefined = meta[o.kind][o.doc.id];
                   return (
                     <tr key={o.kind + o.doc.id}>
-                      <td><a href={pageOf(o)}><Icon o={o} />{o.doc.title}</a></td>
+                      <td><span className="mine-name"><Icon o={o} /><a href={pageOf(o)}>{o.doc.title}</a></span></td>
                       <td>{via(o)}</td>
                       <td>{o.status === "active" ? "In use" : <span className={`tier-tag status-${o.status}`}>{STATUS_LABEL[o.status]}</span>}{workingDraft(o) && <> <span className="tier-tag unpublished" title={`Changed by ${workingDraft(o)!.updatedBy} on ${day(workingDraft(o)!.updatedAt)}`}>Unpublished changes</span></>}</td>
                       <td>{o.review.state === "ok" ? o.review.label : o.review.state === "none" ? <span className="muted">—</span> : <span className={`tier-tag review-${o.review.state}`}>{o.review.label}</span>}</td>

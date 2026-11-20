@@ -58,13 +58,20 @@ export function groupsOf(perms: Perms, doc: { owner?: string; platform?: string;
 
 const ORDER: TaskKind[] = ["review-overdue", "feedback", "review-soon", "draft", "no-rhythm"];
 
-/** `only` narrows it to one of the person's groups (its `groupKey`); null: all of them. */
-export function responsibilities(perms: Perms, only: string | null, processes: Process[], standards: Standard[], feedback: FeedbackByTarget, today?: string): { owned: Owned[]; tasks: Task[] } {
+/** When each was first saved, by kind and id (`meta[id].createdAt` from the lists): where a first review is counted from. */
+export type FirstSaved = Partial<Record<TargetKind, Record<string, { createdAt?: string } | undefined>>>;
+
+/**
+ * `only` narrows it to one of the person's groups (its `groupKey`); null: all of them. `since`
+ * says when each was first saved, so that one never reviewed is due by the same rule as a
+ * reviewed one (see `reviewInfo`); without it, never reviewed counts as overdue.
+ */
+export function responsibilities(perms: Perms, only: string | null, processes: Process[], standards: Standard[], feedback: FeedbackByTarget, today?: string, since?: FirstSaved): { owned: Owned[]; tasks: Task[] } {
   const item = (kind: TargetKind, doc: Process | Standard): Owned | null => {
     const groups = groupsOf(perms, doc);
     if (!groups.length || (only !== null && !groups.some((g) => groupKey(g) === only))) return null;
     return {
-      kind, doc, groups, status: statusOf(doc), review: reviewInfo(doc, today),
+      kind, doc, groups, status: statusOf(doc), review: reviewInfo(doc, today, since?.[kind]?.[doc.id]?.createdAt),
       open: (feedback[kind][doc.id] ?? []).filter((f) => !f.resolved).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     };
   };

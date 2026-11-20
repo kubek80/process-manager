@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowUpRight, MousePointerClick, CalendarCheck, Check, ChevronDown, ChevronRight, Flag, Clock, ListChecks, Pencil, TriangleAlert, Users, Workflow, Bot, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, MousePointerClick, CalendarCheck, Check, ChevronDown, ChevronRight, Flag, Clock3, ListChecks, Pencil, TriangleAlert, UserCheck, Users, Workflow, Bot, ShieldCheck } from "lucide-react";
 import type { DocMeta, Feedback, Process } from "../types";
 import { prerequisiteKeys } from "../lib/edit";
 import { isDrawableProcess, validateProcess } from "../lib/validate";
 import { go, useProgress, type Tab } from "../lib/store";
 import { useSelectedItem } from "../lib/selection";
 import { canEdit, canManage } from "../lib/rights";
-import { categoryName, teamName, useCatalog } from "../lib/catalog";
-import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
+import { reviewInfo, statusOf } from "../lib/lifecycle";
 import { Resources } from "./Resources";
 import { FeedbackForm, FeedbackTab, openCount, processTarget } from "./Feedback";
 import { DocEngagement } from "./Engage";
@@ -18,8 +17,9 @@ import { ListView } from "./ListView";
 import { StepDrawer } from "./StepDrawer";
 import type { AiSpec } from "./AiDialog";
 import { Modal, scrollBehavior } from "./ui";
-import { BelongsTags, DimTags, ReviewTag } from "./Governance";
-import { DraftLine, HistoryDialog, NotShown, VersionTag } from "./Editing";
+import { DocHead, RIGOUR } from "./Governance";
+import { Fact, LevelMark } from "./marks";
+import { DraftLine, HistoryDialog, NotShown } from "./Editing";
 import { SourceSkills } from "./SkillPanel";
 import { createPrompt, modifyPrompt } from "../lib/prompt";
 import type { Catalog, Standard } from "../types";
@@ -44,7 +44,6 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
   const [flagging, setFlagging] = useState<string | null>(null); // the step reported from the map
   // arriving at the feedback tab (from a card's "Give feedback" or the button) puts the cursor in the form
   const [focusFeedback, setFocusFeedback] = useState(tab === "feedback");
-  const { catalog } = useCatalog();
   const perms = usePerms();
   // a process editor may change every process; a platform or practice owner what belongs to theirs
   const editor = canEdit(perms, "process", process);
@@ -70,7 +69,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
   useEffect(() => {
     if (item && view === "list") document.getElementById(`step-${item}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
   }, [item, view]);
-  const review = reviewInfo(doc);
+  const review = reviewInfo(doc, undefined, meta?.createdAt);
   const status = statusOf(doc);
   const replacement = doc.replacedBy ? all.find((p) => p.id === doc.replacedBy) : undefined;
   const back = () => go({ page: "library" });
@@ -95,43 +94,30 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
 
   return (
     <div className={`page process-page ${step ? "with-drawer" : ""}`}>
-      <div className="process-head">
-        <button className="back" onClick={back}><ArrowLeft size={16} />All processes</button>
-        <div className="head-row">
-          <div className="head-text">
-            <div className="eyebrow">{doc.category ? categoryName(catalog, doc.category) : "Process"}{doc.owner && <> · owned by {teamName(catalog, doc.owner)}</>}</div>
-            <h1>{doc.title}</h1>
-            <p className="lead">{doc.summary}</p>
-            <div className="facts">
-              {status !== "active" && <span className={`tier-tag status-${status}`}>{STATUS_LABEL[status]}</span>}
-              <BelongsTags doc={doc} compact />
-              <DimTags doc={doc} />
-              <span><ListChecks size={14} />{doc.steps.length} steps, {mine} for you</span>
-              <span><Users size={14} />{doc.actors.length - 1} other {doc.actors.length === 2 ? "party" : "parties"}</span>
-              {doc.estimatedDuration && <span><Clock size={14} />{doc.estimatedDuration}</span>}
-              {doc.updatedAt && <span>Updated {doc.updatedAt}</span>}
-              <ReviewTag doc={doc} />
-              <VersionTag meta={meta} onOpen={() => setHistory(true)} />
-            </div>
-          </div>
-          <div className="head-actions">
-            {/* the review belongs to the team that owns the process, and to whoever may edit it */}
-            {(editor || manages) && review.state !== "none" && status !== "draft" && <button className={`btn ${review.state === "ok" ? "" : "review-due"}`} onClick={() => onReviewed(meta?.version ?? 0)}
-              title="Confirm that this process is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
-            {editor && <a className="btn" href={editHref}><Pencil size={16} />Edit</a>}
-          </div>
-        </div>
+      <DocHead kind="process" doc={doc} meta={meta} review={review} onBack={back} onHistory={() => setHistory(true)}
+        facts={<>
+          {doc.rigour && <span title={RIGOUR[doc.rigour]?.hint}><LevelMark level={doc.rigour} /></span>}
+          {doc.estimatedDuration && <Fact icon={Clock3} label="Typical time" strong>{doc.estimatedDuration}</Fact>}
+          <Fact icon={UserCheck} label="Steps" strong>{`${mine} of ${doc.steps.length} steps are yours`}</Fact>
+          {doc.actors.length > 1 && <Fact icon={Users} label="Who else takes part">{`${doc.actors.length - 1} other ${doc.actors.length === 2 ? "party" : "parties"}`}</Fact>}
+        </>}
+        actions={<>
+          {/* the review belongs to the team that owns the process, and to whoever may edit it */}
+          {(editor || manages) && review.state !== "none" && status !== "draft" && <button className={`btn ${review.state === "soon" || review.state === "overdue" ? "review-due" : ""}`} onClick={() => onReviewed(meta?.version ?? 0)}
+            title="Confirm that this process is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
+          {editor && <a className="btn" href={editHref}><Pencil size={16} />Edit</a>}
+        </>}>
         {status !== "draft" && <DocEngagement kind="process" id={process.id} title={doc.title} summary={doc.summary}
           open={openCount(feedback)} resolvedHere={feedback.length - openCount(feedback)}
           onFeedback={() => { setFocusFeedback(true); go({ page: "process", id: process.id, tab: "feedback" }); }} />}
-      </div>
+      </DocHead>
 
       <DraftLine meta={meta} status={status} editHref={editor ? editHref : undefined} noun="process" />
 
       <div className="tabs-row">
         <div className="tabs" role="tablist">
           {([["flow", "Map", Workflow], ["list", "Checklist", ListChecks], ["feedback", "Feedback", Flag], ["skills", "Skill", Bot]] as const).map(([id, label, Icon]) => (
-            <button key={id} role="tab" aria-selected={view === id} className={view === id ? "on" : ""}
+            <button key={id} role="tab" aria-selected={view === id} className={`tab ${view === id ? "on" : ""}`}
               onClick={() => go({ page: "process", id: process.id, tab: id, ...(selected && (id === "flow" || id === "list") ? { item: selected } : {}) })}><Icon size={16} />{label}{id === "feedback" && openCount(feedback) > 0 && <span className="tab-count">{openCount(feedback)}</span>}</button>
           ))}
         </div>
@@ -153,6 +139,12 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
           onToggle={() => { const next = !extras; setExtras(next); try { localStorage.setItem(BEFORE_KEY, next ? "open" : "closed"); } catch { /* ignore */ } }} />
       )}
 
+      {showExtras && doc.prerequisites.length > 0 && (
+        <section className="prereqs">
+          <h2>Before you start <span>{readyCount}/{doc.prerequisites.length} ready</span></h2>
+          <PrereqGrid process={doc} all={all} hasPre={hasPre} tickPre={tickPre} />
+        </section>
+      )}
       {showExtras && !!doc.resources?.length && (
         <section className="prereqs">
           <h2>Do it faster <span>self-service skills and useful links</span></h2>
@@ -163,12 +155,6 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
         <section className="prereqs">
           <h2>Standards this helps to meet</h2>
           <StandardLinks ids={doc.standards} standards={standards} />
-        </section>
-      )}
-      {showExtras && doc.prerequisites.length > 0 && (
-        <section className="prereqs">
-          <h2>Before you start <span>{readyCount}/{doc.prerequisites.length} ready</span></h2>
-          <PrereqGrid process={doc} all={all} hasPre={hasPre} tickPre={tickPre} />
         </section>
       )}
       {view === "flow" && <FlowView editable={false} process={doc} selectedId={selected} done={done} feedback={feedback} onSelect={select} onReport={setFlagging} />}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Download, ShieldCheck, Workflow } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Download } from "lucide-react";
 import type { TargetKind } from "../types";
 import { platformName, practiceName, teamName, useCatalog } from "../lib/catalog";
 import {
@@ -8,6 +8,7 @@ import {
 } from "../lib/statistics";
 import { href, loadStatistics } from "../lib/store";
 import { LoadError, Loading } from "./ui";
+import { KindTag } from "./marks";
 import "../requests.css";
 
 const PERIOD_KEY = "pm:statistics-period";
@@ -70,8 +71,8 @@ export function StatisticsSection() {
         <p>A day runs from midnight to midnight UTC, so for people in other time zones the day changes at another hour.</p>
       </div>
       <div className="stat-toolbar">
-        <div className="chips" role="group" aria-label="Period">
-          {PERIODS.map((p) => <button key={p.id} className={`chip ${period === p.id ? "on" : ""}`} aria-pressed={period === p.id} onClick={() => choose(p.id)}>{p.label}</button>)}
+        <div className="seg" role="group" aria-label="Period">
+          {PERIODS.map((p) => <button key={p.id} className={`seg-item ${period === p.id ? "on" : ""}`} aria-pressed={period === p.id} onClick={() => choose(p.id)}>{p.label}</button>)}
         </div>
         <span className="spacer" />
         <a className="btn" href={csvHref(period)} download><Download size={16} />Download as CSV</a>
@@ -98,10 +99,10 @@ export function StatisticsSection() {
 
         <section className="admin-card" aria-labelledby="stat-docs">
           <h2 id="stat-docs">Per process and standard <span>{rows.length}</span></h2>
-          <div className="chips" role="group" aria-label="Kind">
+          <div className="seg stat-seg" role="group" aria-label="Kind">
             {(["all", "process", "standard"] as const).map((k) => (
-              <button key={k} className={`chip ${kind === k ? "on" : ""}`} aria-pressed={kind === k} onClick={() => setKind(k)}>
-                {k === "all" ? "All" : k === "process" ? "Processes" : "Standards"}<span>{stats.rows.filter((r) => k === "all" || r.kind === k).length}</span>
+              <button key={k} className={`seg-item ${kind === k ? "on" : ""}`} aria-pressed={kind === k} onClick={() => setKind(k)}>
+                {k === "all" ? "All" : k === "process" ? "Processes" : "Standards"}<span className="seg-n">{stats.rows.filter((r) => k === "all" || r.kind === k).length}</span>
               </button>
             ))}
           </div>
@@ -118,7 +119,7 @@ export function StatisticsSection() {
                     <tr key={r.kind + r.id}>
                       <td className="stat-name"><a href={href(r.kind === "process" ? { page: "process", id: r.id, tab: "flow" } : { page: "standard", id: r.id, tab: "doc" })}>{r.title}</a>
                         {r.status && r.status !== "active" && <span className={`tier-tag status-${r.status}`}>{r.status === "draft" ? "Draft" : "Retired"}</span>}</td>
-                      <td><span className="stat-kind">{r.kind === "process" ? <Workflow size={13} aria-hidden="true" /> : <ShieldCheck size={13} aria-hidden="true" />}{r.kind === "process" ? "Process" : "Standard"}</span></td>
+                      <td><KindTag kind={r.kind} /></td>
                       <td>{r.owner ? teamName(catalog, r.owner) : <span className="muted">—</span>}</td>
                       <td>{r.platform ? platformName(catalog, r.platform) : <span className="muted">—</span>}</td>
                       <td>{r.practice ? practiceName(catalog, r.practice) : <span className="muted">—</span>}</td>
@@ -139,8 +140,8 @@ export function StatisticsSection() {
 
         <section className="admin-card" aria-labelledby="stat-groups">
           <h2 id="stat-groups">Totals</h2>
-          <div className="chips" role="group" aria-label="Totals grouped">
-            {(Object.keys(GROUP_LABEL) as GroupBy[]).map((g) => <button key={g} className={`chip ${by === g ? "on" : ""}`} aria-pressed={by === g} onClick={() => setBy(g)}>{GROUP_LABEL[g]}</button>)}
+          <div className="seg stat-seg" role="group" aria-label="Totals grouped">
+            {(Object.keys(GROUP_LABEL) as GroupBy[]).map((g) => <button key={g} className={`seg-item ${by === g ? "on" : ""}`} aria-pressed={by === g} onClick={() => setBy(g)}>{GROUP_LABEL[g]}</button>)}
           </div>
           {groups.length === 0 ? <p className="muted">Nothing to count yet.</p> : (
             <div className="stat-table-wrap" tabIndex={0} role="region" aria-label={`Totals ${GROUP_LABEL[by].toLowerCase()}`}>

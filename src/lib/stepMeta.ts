@@ -26,4 +26,8 @@ export const STEP_TYPES = Object.keys(STEP_META) as StepType[];
 /** When to use a kind of step, in plain words: for tooltips. */
 export const stepHelp = (t: StepType) => [STEP_META[t].when, STEP_META[t].hint].filter(Boolean).join(" ");
 
-export const LANE_COLORS = ["#4f46e5", "#0d9488", "#d97706", "#db2777", "#0284c7", "#7c3aed", "#059669", "#b45309"];
+/**
+ * The colour of each lane, as CSS values (set as `--lane`). The first lane, "You", is in the
+ * brand colour, so it follows a look set in Admin > Theming; the others keep fixed colours.
+ */
+export const LANE_COLORS = ["var(--accent)", "#0d9488", "#d97706", "#db2777", "#0284c7", "#7c3aed", "#059669", "#b45309"];

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Activity, CalendarCheck, ChartColumn, Flag, KeyRound, List, Palette, Search, Server, ShieldCheck, Sparkles, Workflow } from "lucide-react";
-import type { AuditEntry, FeedbackByTarget, Process, Skill, Standard } from "../types";
+import type { AuditEntry, FeedbackByTarget, Process, Skill, Standard, TargetKind } from "../types";
 import { teamName, useCatalog } from "../lib/catalog";
 import { reviewInfo, statusOf } from "../lib/lifecycle";
 import { usePerms } from "../lib/session";
-import { go, href, loadAudit, loadSkills, loadSystem, type AdminSection, type SystemInfo } from "../lib/store";
+import { go, href, loadAudit, loadSkills, loadSystem, type AdminSection, type MetaById, type SystemInfo } from "../lib/store";
+import { KindTag } from "./marks";
 import { shownTarget } from "../lib/activity";
 import { CatalogPage } from "./CatalogPage";
 import { UsersSection } from "./UsersSection";
@@ -48,10 +49,10 @@ function SkillsSection() {
           <div className="cat-list-bar">
             <div className="search"><Search size={15} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search skills" aria-label="Search skills" /></div>
           </div>
-          <div className="chips skill-kinds" role="group" aria-label="Kind">
+          <div className="seg skill-kinds" role="group" aria-label="Kind">
             {(["all", "skill", "review-agent"] as const).map((k) => (
-              <button key={k} className={`chip ${kind === k ? "on" : ""}`} aria-pressed={kind === k} onClick={() => setKind(k)}>
-                {k === "all" ? "All" : SKILL_KIND[k].label + "s"}<span>{(skills ?? []).filter((s) => k === "all" || s.kind === k).length}</span>
+              <button key={k} className={`seg-item ${kind === k ? "on" : ""}`} aria-pressed={kind === k} onClick={() => setKind(k)}>
+                {k === "all" ? "All" : SKILL_KIND[k].label + "s"}<span className="seg-n">{(skills ?? []).filter((s) => k === "all" || s.kind === k).length}</span>
               </button>
             ))}
           </div>
@@ -84,12 +85,12 @@ function SkillsSection() {
   );
 }
 
-function HealthSection({ processes, standards, feedback }: { processes: Process[]; standards: Standard[]; feedback: FeedbackByTarget }) {
+function HealthSection({ processes, standards, feedback, meta }: { processes: Process[]; standards: Standard[]; feedback: FeedbackByTarget; meta?: Partial<Record<TargetKind, MetaById>> }) {
   const { catalog } = useCatalog();
   const rows = [
     ...processes.map((p) => ({ kind: "process" as const, doc: p, open: openCount(feedback.process[p.id]) })),
     ...standards.map((s) => ({ kind: "standard" as const, doc: s, open: openCount(feedback.standard[s.id]) })),
-  ].map((r) => ({ ...r, review: reviewInfo(r.doc), status: statusOf(r.doc) }));
+  ].map((r) => ({ ...r, review: reviewInfo(r.doc, undefined, meta?.[r.kind]?.[r.doc.id]?.createdAt), status: statusOf(r.doc) }));
   const due = rows.filter((r) => r.review.state === "overdue" || r.review.state === "soon").sort((a, b) => (a.review.days ?? -9999) - (b.review.days ?? -9999));
   const flagged = rows.filter((r) => r.open > 0).sort((a, b) => b.open - a.open);
   const drafts = rows.filter((r) => r.status === "draft");
@@ -97,7 +98,7 @@ function HealthSection({ processes, standards, feedback }: { processes: Process[
   const link = (r: (typeof rows)[number]) => () => go(r.kind === "process" ? { page: "process", id: r.doc.id, tab: "flow" } : { page: "standard", id: r.doc.id, tab: "doc" });
   const Row = ({ r, right }: { r: (typeof rows)[number]; right: React.ReactNode }) => (
     <li><button onClick={link(r)}>
-      {r.kind === "process" ? <Workflow size={15} /> : <ShieldCheck size={15} />}
+      <KindTag kind={r.kind} />
       <span className="person"><strong>{r.doc.title}</strong><em>{r.doc.owner ? teamName(catalog, r.doc.owner) : "No owner"}</em></span>{right}
     </button></li>
   );
@@ -208,26 +209,28 @@ function SystemSection() {
   );
 }
 
-export function AdminPage({ section, processes, standards, feedback }: {
+export function AdminPage({ section, processes, standards, feedback, meta }: {
   section: AdminSection; processes: Process[]; standards: Standard[]; feedback: FeedbackByTarget;
+  /** When each was first saved (`meta[id].createdAt`): where the first review is counted from. */
+  meta?: Partial<Record<TargetKind, MetaById>>;
 }) {
   const perms = usePerms();
   const allowed = SECTIONS.filter((s) => (s.admin ? perms.admin : s.id === "lists" ? perms.catalog : true));
   const current = allowed.find((s) => s.id === section) ?? allowed[0];
   return (
     <div className="page admin">
-      <aside className="admin-nav">
-        <h1>Admin</h1>
+      <aside className="admin-nav" aria-label="Admin">
+        <p className="admin-nav-title">Admin</p>
         {allowed.map((s) => (
           <a key={s.id} className={current.id === s.id ? "on" : ""} href={href({ page: "admin", section: s.id })} title={s.hint}><s.icon size={16} />{s.label}</a>
         ))}
       </aside>
       <main className="admin-main">
-        <header><h2>{current.label}</h2><p className="muted">{current.hint}</p></header>
+        <header className="admin-head"><h1>{current.label}</h1><p className="lead">{current.hint}</p></header>
         {current.id === "access" && <UsersSection />}
         {current.id === "lists" && <CatalogPage processes={processes} standards={standards} editable />}
         {current.id === "skills" && <SkillsSection />}
-        {current.id === "health" && <HealthSection processes={processes} standards={standards} feedback={feedback} />}
+        {current.id === "health" && <HealthSection processes={processes} standards={standards} feedback={feedback} meta={meta} />}
         {current.id === "activity" && <ActivitySection />}
         {current.id === "statistics" && <StatisticsSection />}
         {current.id === "theming" && <ThemeSection processes={processes} standards={standards} />}

@@ -1,11 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Bot, CalendarCheck, Flag, ListChecks, Pencil, ShieldCheck, TriangleAlert, Workflow, X } from "lucide-react";
+import { ArrowUpRight, Bot, CalendarCheck, Flag, ListChecks, Pencil, TriangleAlert, Workflow, X } from "lucide-react";
 import type { DocMeta, Feedback, Level, Process, Requirement, Standard } from "../types";
 import { teamName, useCatalog } from "../lib/catalog";
 import { appliesTo } from "../lib/edit";
 import { useSelectedItem } from "../lib/selection";
 import { useProfile } from "../lib/profile";
-import { reviewInfo, statusOf, STATUS_LABEL } from "../lib/lifecycle";
+import { reviewInfo, statusOf } from "../lib/lifecycle";
 import { createStandardPrompt, modifyStandardPrompt } from "../lib/prompt";
 import { canEdit, canManage } from "../lib/rights";
 import { usePerms } from "../lib/session";
@@ -14,8 +14,9 @@ import { isDrawableStandard, validateStandard } from "../lib/validate";
 import type { AiSpec } from "./AiDialog";
 import { FeedbackForm, FeedbackItem, FeedbackTab, openCount, standardTarget } from "./Feedback";
 import { DocEngagement } from "./Engage";
-import { BelongsTags, DimTags, ProfileFilter, ReviewTag } from "./Governance";
-import { DraftLine, HistoryDialog, NotShown, VersionTag } from "./Editing";
+import { DocHead, ProfileFilter } from "./Governance";
+import { Fact, LevelBars, LevelMark } from "./marks";
+import { DraftLine, HistoryDialog, NotShown } from "./Editing";
 import { LEVEL, RequirementCard } from "./Requirements";
 import { Resources } from "./Resources";
 import { SourceSkills } from "./SkillPanel";
@@ -51,7 +52,7 @@ function RequirementDrawer({ r, standard, feedback, reporting, setReporting, onC
   return (
     <aside ref={panel} className={`drawer req-drawer ${r.level}`} role="dialog" aria-labelledby={titleId} tabIndex={-1}>
       <header className="drawer-head">
-        <span className={`level big ${r.level}`}>{LEVEL[r.level].label}</span>
+        <span className="req-drawer-level" title={LEVEL[r.level].hint}><LevelMark level={r.level} /></span>
         <div className="drawer-title">
           <span className="step-kicker"><span className="who">{r.id}</span><span>Requirement {index + 1} of {standard.requirements.length}</span></span>
           <h3 id={titleId}>{r.title}</h3>
@@ -104,7 +105,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   const current = renderable ? doc.requirements.find((r) => r.id === selected) : undefined;
   const target = useMemo(() => standardTarget(doc), [doc]);
   const status = statusOf(doc);
-  const review = reviewInfo(doc);
+  const review = reviewInfo(doc, undefined, meta?.createdAt);
   const replacement = doc.replacedBy ? all.find((s) => s.id === doc.replacedBy) : undefined;
   const helpers = processes.filter((p) => p.standards?.includes(doc.id) && statusOf(p) === "active");
   const editHref = href({ page: "edit-standard", id: standard.id });
@@ -125,41 +126,31 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
 
   return (
     <div className={`page process-page standard-page ${current ? "with-drawer" : ""}`}>
-      <div className="process-head">
-        <button className="back" onClick={back}><ArrowLeft size={16} />All standards</button>
-        <div className="head-row">
-          <div className="head-text">
-            <div className="eyebrow"><ShieldCheck size={13} /> Standard · issued by {teamName(catalog, doc.owner)}</div>
-            <h1>{doc.title}</h1>
-            <p className="lead">{doc.summary}</p>
-            <div className="facts">
-              {status !== "active" && <span className={`tier-tag status-${status}`}>{STATUS_LABEL[status]}</span>}
-              <BelongsTags doc={doc} />
-              <DimTags doc={doc} />
-              <span><ListChecks size={14} />{doc.requirements.length} requirements, {doc.requirements.filter((r) => r.level === "must").length} mandatory</span>
-              {doc.updatedAt && <span>Updated {doc.updatedAt}</span>}
-              <ReviewTag doc={doc} />
-              <VersionTag meta={meta} onOpen={() => setHistory(true)} />
-            </div>
-          </div>
-          <div className="head-actions">
-            {/* the review belongs to the team that issues the standard, and to whoever may edit it */}
-            {(editor || manages) && review.state !== "none" && status !== "draft" && <button className={`btn ${review.state === "ok" ? "" : "review-due"}`} onClick={() => onReviewed(meta?.version ?? 0)}
-              title="Confirm that this standard is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
-            {editor && <a className="btn" href={editHref}><Pencil size={16} />Edit</a>}
-          </div>
-        </div>
+      <DocHead kind="standard" doc={doc} meta={meta} review={review} onBack={back} onHistory={() => setHistory(true)}
+        facts={<>
+          <Fact icon={ListChecks} label="Requirements" strong>{`${doc.requirements.length} ${doc.requirements.length === 1 ? "requirement" : "requirements"}`}</Fact>
+          {(Object.keys(LEVEL) as Level[]).map((l) => {
+            const n = doc.requirements.filter((r) => r.level === l).length;
+            return n > 0 && <span key={l} title={LEVEL[l].hint}><LevelMark level={l} count={n} /></span>;
+          })}
+        </>}
+        actions={<>
+          {/* the review belongs to the team that issues the standard, and to whoever may edit it */}
+          {(editor || manages) && review.state !== "none" && status !== "draft" && <button className={`btn ${review.state === "soon" || review.state === "overdue" ? "review-due" : ""}`} onClick={() => onReviewed(meta?.version ?? 0)}
+            title="Confirm that this standard is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
+          {editor && <a className="btn" href={editHref}><Pencil size={16} />Edit</a>}
+        </>}>
         {status !== "draft" && <DocEngagement kind="standard" id={standard.id} title={doc.title} summary={doc.summary}
           open={openCount(feedback)} resolvedHere={feedback.length - openCount(feedback)}
           onFeedback={() => { setFocusFeedback(true); go({ page: "standard", id: standard.id, tab: "feedback" }); }} />}
-      </div>
+      </DocHead>
 
       <DraftLine meta={meta} status={status} editHref={editor ? editHref : undefined} noun="standard" />
 
       <div className="tabs-row">
         <div className="tabs" role="tablist">
           {([["doc", "Requirements", ListChecks], ["feedback", "Feedback", Flag], ["skills", "Skills", Bot]] as const).map(([id, label, Icon]) => (
-            <button key={id} role="tab" aria-selected={view === id} className={view === id ? "on" : ""}
+            <button key={id} role="tab" aria-selected={view === id} className={`tab ${view === id ? "on" : ""}`}
               onClick={() => go({ page: "standard", id: standard.id, tab: id })}><Icon size={16} />{label}{id === "feedback" && openCount(feedback) > 0 && <span className="tab-count">{openCount(feedback)}</span>}</button>
           ))}
         </div>
@@ -179,10 +170,10 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
           {!!doc.resources?.length && <section className="prereqs"><h2>Background</h2><Resources list={doc.resources} /></section>}
 
           <div className="req-bar">
-            <div className="chips" role="group" aria-label="Show requirements of level">
-              <button className={`chip ${level === null ? "on" : ""}`} aria-pressed={level === null} onClick={() => setLevel(null)}>All<span>{doc.requirements.filter((r) => appliesTo(r, profile)).length}</span></button>
+            <div className="seg level-seg" role="group" aria-label="Show requirements of level">
+              <button className={`seg-item ${level === null ? "on" : ""}`} aria-pressed={level === null} onClick={() => setLevel(null)}>All<span className="seg-n">{doc.requirements.filter((r) => appliesTo(r, profile)).length}</span></button>
               {(Object.keys(LEVEL) as Level[]).map((l) => count(l) > 0 && (
-                <button key={l} className={`chip ${level === l ? "on" : ""}`} aria-pressed={level === l} title={LEVEL[l].hint} onClick={() => setLevel(level === l ? null : l)}>{LEVEL[l].label}<span>{count(l)}</span></button>
+                <button key={l} className={`seg-item ${level === l ? "on" : ""}`} aria-pressed={level === l} title={LEVEL[l].hint} onClick={() => setLevel(level === l ? null : l)}><LevelBars level={l} />{LEVEL[l].label}<span className="seg-n">{count(l)}</span></button>
               ))}
             </div>
             <ProfileFilter value={profile} onChange={setProfile} />

@@ -14,20 +14,20 @@
 .engage-stats { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; color: var(--text-2); font-size: 13px; }
 .engage-stats li { display: inline-flex; align-items: center; gap: 6px; }
 .engage-stats svg { color: var(--text-3); flex: none; }
-.engage-stats .engage-open.has { color: var(--bad); font-weight: 600; }
-.engage-stats .engage-open.has svg { color: var(--bad); }
+.engage-stats .engage-open.has { color: var(--warn); font-weight: 600; }
+.engage-stats .engage-open.has svg { color: var(--warn); }
 .engage-stats .engage-unknown { color: var(--text-3); }
 .engage-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 @media (max-width: 520px) { .engage-actions { width: 100%; } }
 
 /* less room above the map: the tabs closer to the page head and to the map */
-.process-page > .tabs-row { margin: 12px 0 8px; }
+.process-page > .tabs-row { margin: 18px 0 14px; }
 
 /* "Before you start" on the map: open unless closed, one panel above the map */
-.before-panel { margin: 0 0 12px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-1); }
+.before-panel { margin: 0 0 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-1); }
 .before-toggle { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; width: 100%; padding: 8px 14px; border-radius: 10px; color: var(--text-2); font-size: 13.5px; text-align: left; }
 .before-toggle:hover { background: var(--surface-2); }
-.before-toggle > svg { color: var(--accent); flex: none; }
+.before-toggle > svg { color: var(--text-3); flex: none; }
 .before-toggle b { color: var(--text); font-size: 15px; font-weight: 650; }
 .before-toggle span { display: inline-flex; align-items: center; }
 .before-toggle span + span::before { content: "·"; margin-right: 12px; color: var(--text-3); }
@@ -45,7 +45,8 @@
 .before-side .link-list.row { flex-direction: column; align-items: flex-start; }
 
 /* the map: a hint, dragging to move around */
-.map-hint { display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 5px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--text-2); font-size: 13px; }
+.map-hint { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 0 auto; padding: 0 2px 10px; color: var(--text-2); font-size: 13px; }
+@media (max-width: 900px) { .map-hint { margin-left: 0; padding-top: 8px; } }
 .map-hint > svg { color: var(--accent); flex: none; }
 .map-hint b { color: var(--text); font-weight: 650; }
 .map-pan-hint { display: inline-flex; align-items: center; gap: 6px; color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
@@ -139,3 +140,27 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
   .flow-lanes .lane-text strong { font-size: 12.5px; overflow-wrap: anywhere; }
   .flow-lanes .lane-text span { font-size: 11px; }
 }
+
+/* ---------- the head of a process or standard page (DocHead in Governance.tsx) ----------
+   The same parts as the cards: the kind tag, the category and owner in plain words, the marks for
+   what needs attention, then the facts as icon lines (Fact, LevelMark). */
+.doc-head { display: grid; gap: 0; }
+.doc-head .back { justify-self: start; margin-bottom: 12px; }
+.doc-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; }
+.doc-head-text { flex: 1 1 520px; min-width: 0; display: grid; gap: 8px; }
+.doc-head-text h1 { overflow-wrap: anywhere; }
+.doc-head-text .lead { margin-top: 0; }
+.doc-kicker { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; min-height: 26px; color: var(--text-2); font-size: 13.5px; font-weight: 550; }
+.doc-marks { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.doc-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; margin-top: 14px; font-size: 14px; color: var(--text-2); }
+.doc-facts.doc-where { margin-top: 8px; font-size: 13.5px; }
+.doc-facts .fact { max-width: 40ch; }
+.doc-when { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 12px; color: var(--text-3); font-size: 12.5px; }
+.doc-when .review-tag { display: inline-flex; align-items: center; gap: 5px; }
+.doc-when .version-tag { height: 22px; font-size: 12px; }
+.doc-head .head-actions { padding-top: 2px; }
+@media (max-width: 520px) {
+  .doc-facts { gap: 6px 14px; }
+  .doc-head .head-actions { width: 100%; }
+}
+

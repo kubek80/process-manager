@@ -9,6 +9,7 @@ import {
 import { createRequest, go, href, loadRequests, setRequestState, voteRequest, withdrawRequest } from "../lib/store";
 import { usePerms } from "../lib/session";
 import { confirmDialog, Field, LoadError, Loading, Modal, notify } from "./ui";
+import { KindTag } from "./marks";
 import "../requests.css";
 
 const NOUN: Record<TargetKind, string> = { process: "process", standard: "standard" };
@@ -90,23 +91,23 @@ export function RequestsPage({ state, kind, processes, standards }: {
       <header className="req-hero">
         <div>
           <h1>Requests</h1>
-          <p className="lead">Missing a process or standard? Ask for it here, and vote for what others asked for: the most wanted come first. The people who look after that kind of content plan it, make it, or explain why not.</p>
+          <p className="lead">Missing a process or standard? Ask for it, and vote for what others asked for: the most wanted come first. Whoever looks after that kind of content plans it, makes it, or says why not.</p>
         </div>
         <button className="btn primary" onClick={() => setAsking(true)}><Plus size={16} />Ask for a process or standard</button>
       </header>
 
       <div className="req-filters">
-        <div className="chips" role="group" aria-label="State">
+        <div className="seg" role="group" aria-label="State">
           {REQUEST_FILTERS.map((s) => (
-            <button key={s} className={`chip ${filter === s ? "on" : ""}`} aria-pressed={filter === s} onClick={() => view(s, kind)}>
-              {STATE_LABEL[s]}{requests && <span>{counts[s]}</span>}
+            <button key={s} className={`seg-item ${filter === s ? "on" : ""}`} aria-pressed={filter === s} onClick={() => view(s, kind)}>
+              {STATE_LABEL[s]}{requests && <span className="seg-n">{counts[s]}</span>}
             </button>
           ))}
         </div>
-        <div className="chips" role="group" aria-label="Kind">
+        <div className="seg" role="group" aria-label="Kind">
           {([undefined, "process", "standard"] as const).map((k) => (
-            <button key={k ?? "all"} className={`chip ${kind === k ? "on" : ""}`} aria-pressed={kind === k} onClick={() => view(filter, k)}>
-              {k === undefined ? "Processes and standards" : k === "process" ? "Processes" : "Standards"}
+            <button key={k ?? "all"} className={`seg-item ${kind === k ? "on" : ""}`} aria-pressed={kind === k} onClick={() => view(filter, k)}>
+              {k && <KindIcon kind={k} />}{k === undefined ? "Processes and standards" : k === "process" ? "Processes" : "Standards"}
             </button>
           ))}
         </div>
@@ -169,7 +170,7 @@ function RequestItem({ r, processes, standards, onVote, onWithdraw, onRemove, on
       </button>
       <div className="req-body">
         <div className="req-tags">
-          <span className="tier-tag req-kind"><KindIcon kind={r.kind} size={12} />{r.kind === "process" ? "Process" : "Standard"}</span>
+          <KindTag kind={r.kind} />
           <span className={`tier-tag req-state state-${r.state}`}>{STATE_LABEL[r.state]}</span>
           {r.mine && <span className="tier-tag req-mine">Yours</span>}
         </div>
