@@ -86,8 +86,9 @@
 .results-tools { display: flex; align-items: center; justify-content: flex-end; gap: 8px 12px; flex-wrap: wrap; flex: 0 1 auto; margin-left: auto; }
 .results-order { display: inline-flex; align-items: center; gap: 8px 12px; }
 .view-switch .seg-item { height: 26px; padding: 0 9px; font-size: 12.5px; }
-.filter-toggle { display: none; }
-.filter-done { display: none; }
+/* .btn sets a display of its own: these are doubled to win wherever the stylesheets end up in order */
+.btn.filter-toggle { display: none; }
+.btn.filter-done { display: none; }
 .page-size, .sort-by { display: inline-flex; align-items: center; gap: 6px; flex: none; font-size: 12.5px; color: var(--text-3); white-space: nowrap; }
 .page-size select, .sort-by select { width: auto; height: 32px; padding: 0 8px; font-size: 13px; font-weight: 550; color: var(--text); }
 .results-foot { display: flex; align-items: center; justify-content: center; gap: 10px 24px; flex-wrap: wrap; margin: 28px 0 8px; }
@@ -254,10 +255,10 @@
 @media (max-width: 860px) {
   .list-layout, .list-layout.no-panel { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: "head" "panel" "body"; }
   .filter-panel.open { margin-bottom: 14px; }
-  .filter-toggle { display: inline-flex; flex: none; }
+  .btn.filter-toggle { display: inline-flex; flex: none; }
   .filter-panel { display: none; position: static; max-height: none; overflow: visible; padding: 14px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r); }
   .filter-panel.open { display: flex; }
-  .filter-done { display: inline-flex; justify-content: center; width: 100%; height: 42px; }
+  .btn.filter-done { display: inline-flex; justify-content: center; width: 100%; height: 42px; }
   .filter-order { display: flex; }
   .results-order { display: none; }
   /* the chosen filters on one line that scrolls sideways inside itself */

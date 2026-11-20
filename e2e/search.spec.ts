@@ -81,7 +81,7 @@ test("each filter narrows the results, and the number next to an option is what 
   await expect(count(page)).toHaveText("10 results");
   // the kind is chosen with the tabs above the results, each with what it gives; the address says it
   const tabs = page.getByRole("radiogroup", { name: "Show" });
-  await expect(tabs.getByRole("radio")).toHaveAccessibleName(["All, 10 results", "Processes, 7 results", "Standards, 3 results"]);
+  for (const [i, name] of ["All, 10 results", "Processes, 7 results", "Standards, 3 results"].entries()) await expect(tabs.getByRole("radio").nth(i)).toHaveAccessibleName(name);
   await expect(tabs.getByRole("radio", { name: /^All,/ })).toHaveAttribute("aria-checked", "true");
   await tabs.getByRole("radio", { name: /^Standards,/ }).click();
   await expect(results(page)).toHaveCount(3);

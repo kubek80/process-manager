@@ -49,7 +49,7 @@ export function SearchModeSwitch({ mode, onChange, provider }: { mode: SearchMod
     <div className={`search-mode ${help ? "help-open" : ""}`.trim()}>
       <div className="search-mode-row">
         <span className="search-mode-name sr-only" id="search-mode-name">Search by</span>
-        <div className="seg search-mode-choices" role="radiogroup" aria-labelledby="search-mode-name" aria-describedby="search-mode-help" onKeyDown={onKey}>
+        <div className="seg search-mode-choices" role="radiogroup" aria-labelledby="search-mode-name" aria-describedby="search-mode-help search-mode-outside" onKeyDown={onKey}>
           {SEARCH_MODES.map((m) => {
             const Icon = MODE_ICON[m];
             return (
@@ -183,6 +183,8 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   const tab = typeTab(filters);
   const kindCount = (k: string) => out.options.type.find((o) => o.value === k)?.count ?? 0;
   const tabCounts = { "": kindCount("process") + kindCount("standard"), process: kindCount("process"), standard: kindCount("standard") };
+  // nothing of the chosen kind, but something of the other: the tab is what hides it
+  const otherKind = tab && out.results.length === 0 ? tabCounts[""] : 0;
 
   // words found nothing (whatever the filters): on a search asked for on purpose, the closest by meaning
   const wordHits = plan.show === "words" && asked ? search({ processes, standards, catalog, q: asked, drafts, profile }).results.length : -1;
@@ -244,7 +246,7 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
         {offered && <SearchModeSwitch mode={mode} onChange={setMode} provider={providerOf(me.search?.provider)} />}
       </div>
       {/* a fact about privacy, not help: visible before Meaning or Both is chosen */}
-      {offered && me.search?.outside && <p className="search-mode-outside">With Meaning and Both, what you type is sent to Google Cloud to be compared.</p>}
+      {offered && me.search?.outside && <p className="search-mode-outside" id="search-mode-outside">With Meaning and Both, what you type is sent to Google Cloud to be compared.</p>}
 
       <div className={`list-layout ${bare ? "no-panel" : ""}`.trim()}>
         <div className="list-head">
@@ -311,14 +313,25 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
               <h2>Nothing found</h2>
               {processes.length + standards.length === 0 ? <p className="muted">There are no processes or standards yet.</p> : (
                 <>
-                  <p className="muted">
+                  {/* the tab hides what the other kind gives: say so, and offer all kinds first */}
+                  {otherKind > 0 && (
+                    <p className="muted search-other-kind">
+                      {`No ${tab === "process" ? "process" : "standard"} ${shownQ.trim() ? `matches “${shownQ.trim()}”` : "matches"}${chosen.length ? " with these filters" : ""}. All kinds together give ${plural(otherKind, "result")}.`}
+                    </p>
+                  )}
+                  {otherKind > 0 && (
+                    <div className="btn-row">
+                      <button type="button" className="btn small primary" onClick={() => setFilters(withTypeTab(filters, ""))}>Show all kinds</button>
+                    </div>
+                  )}
+                  {otherKind === 0 && <p className="muted">
                     {chosen.length ? (shownQ.trim() ? `Nothing matches “${shownQ.trim()}” with these filters.` : "Nothing matches these filters.")
                       : plan.show === "meaning" ? `Nothing close to “${shownQ.trim()}” was found.` : `Nothing matches “${shownQ.trim()}”.`}
                     {chosen.length > 0 && withoutFilters > 0 && ` Without the filters there ${withoutFilters === 1 ? "is 1 result" : `are ${withoutFilters} results`}.`}
                     {!chosen.length && plan.show === "words" && words.length > 1 && " Every word must be found, so try fewer words."}
                     {!chosen.length && plan.show === "words" && words.length <= 1 && " Check the spelling, or try another word."}
-                  </p>
-                  {chosen.length > 0 && (
+                  </p>}
+                  {chosen.length > 0 && otherKind === 0 && (
                     <div className="btn-row">
                       {chosen.map((c) => (
                         <button key={c.key} type="button" className="btn small" onClick={c.remove}><X size={13} />Without {c.name}: {c.value}</button>
@@ -327,7 +340,7 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
                     </div>
                   )}
                   {/* the other way of searching, unless it is the filters that hide what was found */}
-                  {offered && shownQ.trim() && (plan.show === "meaning" || mode === "words") && !(chosen.length > 0 && withoutFilters > 0) && (
+                  {offered && shownQ.trim() && (plan.show === "meaning" || mode === "words") && !(chosen.length > 0 && withoutFilters > 0) && otherKind === 0 && (
                     <p className="search-try-other">
                       <button type="button" className="btn small accent-soft" onClick={() => setMode(plan.show === "meaning" ? "words" : "meaning")}>
                         {plan.show === "meaning" ? "Search by words instead" : "Search by meaning instead"}

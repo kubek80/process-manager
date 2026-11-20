@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ALEX, fields, open, openEditor, outline, publish, readCatalog, readProcess, readWorkingDraft, save, saveDraft, signIn } from "./helpers";
+import { ALEX, fields, open, openEditor, outline, publish, readCatalog, readProcess, readWorkingDraft, save, saveDraft, signIn, unfold } from "./helpers";
 
 // Alex manages the lists: for him the Admin panel has the Lists section only.
 
@@ -105,5 +105,6 @@ test("a new environment can be chosen in a process; the lists of groups are sepa
   await signIn(page, ALEX);
   await openEditor(page, "process", "raise-servicenow-request");
   await outline(page, "About");
+  await unfold(page, "Where it applies");
   await expect(fields(page).getByRole("button", { name: "Pre-production" })).toBeVisible();
 });

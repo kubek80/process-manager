@@ -115,7 +115,7 @@ test("a process editor closes feedback on any process; feedback on a step that c
   await page.locator(".block", { hasText: "Finish the repository setup" }).click();
   await expect(page.locator(".drawer .fb-stale")).toHaveCount(0);
   await page.getByRole("link", { name: "Edit", exact: true }).click();
-  await outline(page, /Finish the repository setup, 1 open feedback$/);
+  await outline(page, /Finish the repository setup, by You, 1 open feedback$/);
   await expect(fields(page).locator(".item-feedback")).toContainText("CODEOWNERS format changed.");
   await fields(page).getByLabel(/^What happens/).fill("Finish setting up the repository");
   await publish(page);

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ALEX, CSRF, DANA, JORDAN, fields, more, open, openEditor, outline, pickFilter, publish, putDoc, readCatalog, readProcess, SAM, save, signIn } from "./helpers";
+import { ALEX, CSRF, DANA, fields, JORDAN, more, open, openEditor, outline, pickFilter, publish, putDoc, readCatalog, readProcess, SAM, save, signIn, unfold } from "./helpers";
 
 // Categories, practices and platforms are lists of their own, next to the teams. A platform's
 // and a practice's members are their owners, who may change what belongs to them; everyone can
@@ -56,6 +56,7 @@ test("an admin adds a platform, a practice and a category, uses them, and can re
     await openEditor(page, "process", "lists-demo");
     await outline(page, "About");
     const about = fields(page);
+    await unfold(page, "What it belongs to");
     await about.getByLabel(/^Category/).selectOption({ label: "Containers" });
     await about.getByLabel(/^Platform/).selectOption({ label: "Kubernetes" });
     await about.getByLabel(/^Practice/).selectOption({ label: "Data" });
@@ -216,6 +217,7 @@ test("About: an editor says what a process belongs to and its rigour; readers se
     await outline(page, "About");
     const modal = fields(page);
     await expect(modal.getByRole("heading", { name: /What it belongs to/ })).toBeVisible();
+    await unfold(page, "What it belongs to"); // folded, with a one-line summary of what is set
     const binding = modal.getByRole("group", { name: "Rigour" });
     await expect(modal.locator(".field", { has: page.getByRole("group", { name: "Rigour" }) }).locator(".field-label")).toHaveText(/^Rigourhow binding it is/);
     await expect(binding.getByRole("button")).toHaveText(["Not stated", "Mandatory", "Recommended", "Optional"]);
@@ -228,6 +230,7 @@ test("About: an editor says what a process belongs to and its rigour; readers se
     expect((await readProcess(page, "details-demo"))!).toMatchObject({ category: "network", platform: "akamai", practice: "service-management", rigour: "recommended" });
 
     await outline(page, "About");
+    await unfold(page, "What it belongs to");
     await modal.getByLabel(/^Platform/).selectOption({ label: "Azure" });
     await binding.getByRole("button", { name: "Mandatory" }).click();
     // Publish… says what changed before it is published
