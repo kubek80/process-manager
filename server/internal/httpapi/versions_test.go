@@ -68,7 +68,7 @@ func TestASaveFromAnOutdatedVersionIsRefused(t *testing.T) {
 	// dana still has version 1 open
 	status, body = e.as(dana).do("PUT", "/api/processes/"+repoP+"?base=1", second)
 	c, _ := body["conflict"].(map[string]any)
-	if status != 409 || c["exists"] != true || c["version"] != float64(2) || c["updatedBy"] != alex || !strings.Contains(body["error"].(string), alex) {
+	if status != 409 || c["exists"] != true || c["version"] != float64(2) || c["updatedBy"] != alex || c["updatedByName"] != "Alex Editor" || c["status"] != "active" || body["error"] != "Alex Editor saved a newer version (version 2) while you were working on this." {
 		t.Fatalf("conflict: %d %v", status, body)
 	}
 	if d, _ := e.deps.Docs.Get(bg, docs.Process, repoP); d.Version != 2 || !strings.Contains(string(d.Body), "Request a repo\"") {

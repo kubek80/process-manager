@@ -66,23 +66,28 @@ export function laneColumn(zoom: number, narrowScreen = false): number {
 }
 
 /**
- * A lane's name on the lines it has, broken between words: `perLine` characters fit a line. What
- * does not fit ends in "…" after the last whole word that does; a single word longer than a line
- * keeps a line of its own (the only place it may be cut).
+ * A lane's name on the lines it has, broken between words. `fits`: how many characters fit a line,
+ * or a test whether a line fits (measured). What does not fit ends in "…" after the last whole word
+ * that does; a word is never cut: when not even the first word fits, the name shows its initial
+ * (the whole name is in the lane's label and tooltip).
  */
-export function wrapWords(text: string, perLine: number, lines: number): string[] {
+export function wrapWords(text: string, fits: number | ((line: string) => boolean), lines: number): string[] {
+  const ok = typeof fits === "number" ? (l: string) => l.length <= fits : fits;
   const words = (typeof text === "string" ? text : "").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  if (!ok(words[0])) return [words[0].charAt(0).toUpperCase()];
   const out: string[] = [];
-  let i = 0;
+  let i = 0, cut = false;
   while (i < words.length && out.length < lines) {
+    if (!ok(words[i])) { cut = true; break; } // a word longer than a line: the name stops before it
     let line = words[i++];
-    while (i < words.length && line.length + 1 + words[i].length <= perLine) line += ` ${words[i++]}`;
+    while (i < words.length && ok(`${line} ${words[i]}`)) line += ` ${words[i++]}`;
     out.push(line);
   }
-  if (i < words.length && out.length) {
+  if (cut || i < words.length) {
     // the last line ends with "…" after a whole word, made room for if needed
     let last = out[out.length - 1];
-    while (last.includes(" ") && last.length + 1 > perLine) last = last.slice(0, last.lastIndexOf(" "));
+    while (last.includes(" ") && !ok(`${last}…`)) last = last.slice(0, last.lastIndexOf(" "));
     out[out.length - 1] = `${last}…`;
   }
   return out;
@@ -130,16 +135,26 @@ export function fitWhole(view: { width: number; height: number }, content: { wid
 }
 
 /**
- * The zoom a map opens at: the largest, in steps of 5%, at which the drawing and the lane column
- * fit the width, never above 100% and never below `floor` (where a step's name can still be read).
+ * The zoom a map opens at: the larger of "fits the width" (the drawing and the lane column side by
+ * side) and "fits the height" (the drawing in the height the map has, `height`), in steps of 5%,
+ * never above 100% and never below `floor` (where a step's name can still be read). A long flow
+ * then opens in a size one can read, using the height, and scrolls sideways.
  */
-export function openingZoom(viewWidth: number, contentWidth: number, floor: number, column: (z: number) => number = () => 0): number {
+export function openingZoom(viewWidth: number, contentWidth: number, floor: number, column: (z: number) => number = () => 0, height?: { view: number; content: number }): number {
   if (!viewWidth || !contentWidth) return 1;
+  let byWidth = floor;
   for (let p = 100; p >= floor * 100; p -= 5) {
     const z = p / 100;
-    if (column(z) + contentWidth * z <= viewWidth) return z;
+    if (column(z) + contentWidth * z <= viewWidth) { byWidth = z; break; }
   }
-  return floor;
+  let byHeight = floor;
+  if (height && height.view > 0 && height.content > 0) {
+    for (let p = 100; p >= floor * 100; p -= 5) {
+      const z = p / 100;
+      if (height.content * z <= height.view) { byHeight = z; break; }
+    }
+  }
+  return Math.max(byWidth, byHeight);
 }
 
 /**

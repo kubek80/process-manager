@@ -214,7 +214,10 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
     if (opened.current === process.id || (opened.current !== null && editable)) return;
     opened.current = process.id;
     // a picture in the guide never scrolls: it gets as small as its column needs
-    const z = openingZoom(viewWidth(), drawW, bare ? 0.3 : opening, column);
+    // the map uses its height: a long flow opens as large as fits it, and scrolls sideways
+    const el = scroller.current;
+    const room = el && !bare ? mapHeight(el) : 0;
+    const z = openingZoom(viewWidth(), drawW, bare ? 0.3 : opening, column, room ? { view: room - 14, content: layout.height } : undefined);
     working.current = z;
     fitted.current = false;
     setZoom(z);
@@ -486,6 +489,12 @@ function LegendButton({ types }: { types: StepType[] }) {
       )}
     </div>
   );
+}
+
+/** The height the map can have: its own limit (the reader's map), else the height its column gives it (the editing map). */
+function mapHeight(el: HTMLElement): number {
+  const max = parseFloat(getComputedStyle(el).maxHeight);
+  return Number.isFinite(max) ? max : el.clientHeight;
 }
 
 /** Where the room for the map ends: the bottom of the screen, or of the column that scrolls it, inside its padding. */

@@ -70,7 +70,7 @@ func TestAWorkingDraftFromStartToPublished(t *testing.T) {
 
 	// starting a second one, and saving from an old revision, are conflicts in the usual shape
 	status, got = e.as(jordan).do("PUT", drafts+"?rev=0", e.body(docs.Process, gcp, "", ""))
-	wantError(t, status, got, 409, "alex@example.com saved newer unpublished changes while you were working on this.")
+	wantError(t, status, got, 409, "Alex Editor saved newer unpublished changes while you were working on this.")
 	if c := got["conflict"].(map[string]any); c["exists"] != true || c["draft"] != true || num(c["version"]) != 1 || c["updatedBy"] != alex || c["updatedAt"] == nil {
 		t.Fatalf("conflict: %v", c)
 	}
@@ -416,9 +416,9 @@ func TestOrdinarySavesWhileThereAreUnpublishedChanges(t *testing.T) {
 	a.startDraft(docs.Process, gcp, e.body(docs.Process, gcp, "Request a GCP project", "Changed"))
 	path := "/api/processes/" + gcp
 	for _, c := range []struct{ body, want string }{
-		{e.body(docs.Process, gcp, `"status": "active"`, `"status": "draft"`), "This process has unpublished changes by alex@example.com. Publish or discard them before you hide the process from readers again."},
-		{e.body(docs.Process, gcp, `"status": "active"`, `"status": "deprecated", "replacedBy": "`+repoP+`"`), "This process has unpublished changes by alex@example.com. Publish or discard them before you retire the process."},
-		{e.body(docs.Process, gcp, "Request a GCP project", "Changed directly"), "This process has unpublished changes by alex@example.com. Publish or discard them first, then make this change."},
+		{e.body(docs.Process, gcp, `"status": "active"`, `"status": "draft"`), "This process has unpublished changes by Alex Editor. Publish or discard them before you hide the process from readers again."},
+		{e.body(docs.Process, gcp, `"status": "active"`, `"status": "deprecated", "replacedBy": "`+repoP+`"`), "This process has unpublished changes by Alex Editor. Publish or discard them before you retire the process."},
+		{e.body(docs.Process, gcp, "Request a GCP project", "Changed directly"), "This process has unpublished changes by Alex Editor. Publish or discard them first, then make this change."},
 	} {
 		status, body := e.as(jordan).do("PUT", path, c.body)
 		wantError(t, status, body, 409, c.want)
