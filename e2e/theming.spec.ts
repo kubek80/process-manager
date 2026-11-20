@@ -116,10 +116,20 @@ test("name, colours and logo: the preview follows before saving; saved, everyone
   const dark = page.getByRole("group", { name: "Preview, dark" });
   await expect(light).toBeVisible();
   await expect(dark).toBeVisible();
-  await expect(light).toHaveAttribute("inert", /.*/); // nothing in it can be pressed
+  await expect(light).toHaveAttribute("inert", /.*/); // nothing in it can be pressed, and the caption says so
+  await expect(section(page).locator("figcaption.pv-caption")).toHaveText(["Preview, light: a sample, nothing in it can be pressed", "Preview, dark: a sample, nothing in it can be pressed"]);
+  await expect(light).toContainText("Main button");
+  await expect(light).not.toContainText("Save changes");
 
   // the name: the preview's top bar follows at once
   const name = section(page).getByLabel(/^Name of the portal/);
+  await expect(name).toHaveAttribute("placeholder", "Process Manager (the default)");
+  // Undo and Redo at the top of the settings
+  const undo = section(page).getByRole("button", { name: "Undo", exact: true });
+  await expect(undo).toBeDisabled();
+  await name.fill("A first try");
+  await undo.click();
+  await expect(name).toHaveValue("");
   await name.fill("Acme Ways of Working");
   await expect(light).toContainText("Acme Ways of Working");
   await expect(saveBar(page)).toContainText("Unsaved changes");
@@ -145,6 +155,10 @@ test("name, colours and logo: the preview follows before saving; saved, everyone
   expect(now.look).toMatchObject({ name: "Acme Ways of Working", brand: "#ffd400" });
   expect(now.look.logo).toMatch(/^[0-9a-f]{64}$/);
   await expect(section(page).locator(".theme-status")).toContainText("Last changed by Dana Admin");
+  // the activity log says it in words
+  await page.goto("/#/admin/activity");
+  await expect(page.locator(".activity li").first()).toContainText("Dana Admin changed the look of the portal");
+  await page.goto("/#/admin/theming");
   // this page's own top bar follows at once
   await expect(page.locator(".topbar:not(.theme-preview *) .brand")).toHaveAccessibleName("Acme Ways of Working");
 
@@ -175,8 +189,15 @@ test("name, colours and logo: the preview follows before saving; saved, everyone
   const accent = await sam.page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim());
   expect(accent).toMatch(/^#[0-9a-f]{6}$/i);
   expect(contrast(hexToRgb(accent.toLowerCase()), [255, 255, 255]), "links stay readable on white").toBeGreaterThanOrEqual(4.5);
-  // narrower than 1200 px: only the logo, the name stays the link's accessible name
+  // between 1120 and 1200 px the places of the bar need the room: only the logo, the name stays the link's accessible name
+  await sam.page.setViewportSize({ width: 1150, height: 900 });
+  await expect(sam.page.locator(".topbar .brand-name")).toBeHidden();
+  await expect(sam.page.locator(".topbar .brand .logo")).toBeVisible();
+  await expect(sam.page.locator(".topbar .brand")).toHaveAccessibleName("Acme Ways of Working");
+  // below 1120 the places go behind "Menu", and the name shows again from 600 px up
   await sam.page.setViewportSize({ width: 1100, height: 900 });
+  await expect(sam.page.locator(".topbar .brand-name")).toBeVisible();
+  await sam.page.setViewportSize({ width: 500, height: 900 });
   await expect(sam.page.locator(".topbar .brand-name")).toBeHidden();
   await expect(sam.page.locator(".topbar .brand .logo")).toBeVisible();
   await expect(sam.page.locator(".topbar:not(.theme-preview *) .brand")).toHaveAccessibleName("Acme Ways of Working");

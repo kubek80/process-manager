@@ -273,3 +273,30 @@ test("on a phone Sort and Per page are inside the Filters sheet", async ({ page 
   await sheet.locator("button.filter-done").click();
   await expect(sheet).toBeHidden();
 });
+
+test("typed but not searched: a button offers the closest by meaning", async ({ page, request }) => {
+  await meaningReady(request);
+  await signIn(page, SAM);
+  await open(page, "/search");
+  await page.getByRole("searchbox", { name: "Search processes and standards" }).fill("zebra");
+  await expect(page.locator("p.list-count")).toHaveText("No results for “zebra”");
+  const other = page.locator(".search-try-other").getByRole("button", { name: "Show the closest by meaning" });
+  await other.click();
+  await expect(page.locator(".search-closest-line")).toBeVisible();
+  await expect(cards(page).first()).toBeVisible();
+});
+
+test("cards in a row line up their titles; long tier lists are short (“3 tiers”) with the whole list for screen readers", async ({ page }) => {
+  await signIn(page, SAM);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await open(page, "/search");
+  await expect(cards(page).first()).toBeVisible();
+  const ys = await cards(page).evaluateAll((els) => els.slice(0, 3).map((e) => [Math.round(e.getBoundingClientRect().top), Math.round(e.querySelector(".card-title")!.getBoundingClientRect().top)]));
+  expect(new Set(ys.map((y) => y[0])).size, "three cards in the first row").toBe(1);
+  expect(new Set(ys.map((y) => y[1])).size, `titles at ${ys.map((y) => y[1]).join(", ")}`).toBe(1);
+  const apigee = page.locator('li.card[data-id="onboard-api-to-apigee"] .card-tiers');
+  await expect(apigee.locator("[aria-hidden]")).toHaveText("3 tiers");
+  await expect(apigee.locator(".sr-only")).toHaveText("Applies to: Tier 0, Tier 1, Tier 2");
+  await expect(apigee).toHaveAttribute("title", "Applies to Tier 0, Tier 1, Tier 2");
+  await expect(page.locator('li.card[data-id="onboard-site-to-akamai"] .card-tiers')).toHaveText("Applies to: Tier 0, Tier 1"); // short enough to show whole
+});

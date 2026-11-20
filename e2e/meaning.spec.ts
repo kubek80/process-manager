@@ -613,7 +613,7 @@ test("when the filters hide what was found, dropping them is offered first", asy
   await expect(page.locator(".search-empty")).toContainText("Nothing close to “zzqx” was found.");
   await page.locator(".search-try-other").getByRole("button", { name: "Search by words instead" }).click();
   await expect(page).toHaveURL(/#\/search\?q=zzqx$/);
-  await expect(page.locator(".search-empty")).toContainText("Check the spelling");
+  await expect(page.locator(".search-empty")).toContainText("Nothing matches “zzqx”, and nothing comes close by meaning either. Try another word.");
 });
 
 // ---------- E. when the server cannot answer

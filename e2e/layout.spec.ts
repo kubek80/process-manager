@@ -52,14 +52,42 @@ for (const width of [390, 360]) {
         await signIn(page, who);
         await open(page, "/");
         await expect(page.locator("h1").first()).toBeVisible();
-        const nav = page.locator(".nav");
-        const controls = [
-          nav.getByRole("link", { name: "Home" }), nav.getByRole("link", { name: "Processes" }), nav.getByRole("link", { name: "Standards" }), nav.getByRole("link", { name: "Requests" }),
-          nav.getByRole("link", { name: /My responsibilities/ }), nav.getByRole("link", { name: "Teams & tools" }), nav.getByRole("link", { name: "Guide" }),
-          page.getByRole("button", { name: "Your account" }),
-        ];
-        if (who === DANA) controls.push(nav.getByRole("link", { name: "Admin" }));
-        for (const control of controls) await expect(control, `${who} at ${width}px`).toBeInViewport({ ratio: 1 });
+        // the places are behind "Menu": a sheet of labelled places, the current one marked
+        await expect(page.locator("nav.nav")).toBeHidden();
+        const menu = page.locator("button.menu-btn");
+        await expect(menu, `${who} at ${width}px`).toBeInViewport({ ratio: 1 });
+        await expect(menu).toHaveAccessibleName(/^Menu(, \d+ waiting)?$/);
+        await expect(menu).toHaveAttribute("aria-expanded", "false");
+        await expect(menu).toHaveAttribute("aria-controls", "main-menu");
+        await expect(page.getByRole("button", { name: "Your account" }), `${who} at ${width}px`).toBeInViewport({ ratio: 1 });
+        await menu.click();
+        await expect(menu).toHaveAttribute("aria-expanded", "true");
+        const sheet = page.getByRole("navigation", { name: "Main" });
+        await expect(sheet).toBeVisible();
+        const places = ["Home", "Processes", "Standards", "Requests", /^My responsibilities/, "Teams & tools", "Guide", ...(who === DANA ? ["Admin"] : [])];
+        for (const place of places) {
+          const link = sheet.getByRole("link", { name: place });
+          await expect(link, `${who} at ${width}px: ${place}`).toBeInViewport({ ratio: 1 });
+          expect((await link.boundingBox())!.height, `${place} is a touch target`).toBeGreaterThanOrEqual(44);
+        }
+        await expect(sheet.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+        await expect(sheet.locator("a.on")).toHaveCount(1);
+        expect(await sideways(page), `the menu for ${who} at ${width}px`).toBe(0);
+        // Escape closes it and gives the focus back to the button
+        await page.keyboard.press("Escape");
+        await expect(sheet).toBeHidden();
+        await expect(menu).toBeFocused();
+        // choosing a place goes there and closes it; the button shows where one is
+        await menu.click();
+        await sheet.getByRole("link", { name: "Standards" }).click();
+        await expect(page).toHaveURL(/#\/standards$/);
+        await expect(sheet).toBeHidden();
+        await expect(menu.locator(".menu-here")).toHaveText("Standards");
+        await menu.click();
+        await expect(sheet.getByRole("link", { name: "Standards" })).toHaveAttribute("aria-current", "page");
+        // a press outside closes it
+        await page.mouse.click(5, 800);
+        await expect(sheet).toBeHidden();
         expect(await sideways(page), `top bar for ${who} at ${width}px`).toBe(0);
       }
     } finally {

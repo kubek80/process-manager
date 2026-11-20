@@ -149,6 +149,17 @@ export async function unfold(page: Page, title: string) {
   await expect(head).toHaveAttribute("aria-expanded", "true");
 }
 
+/**
+ * Presses "Delete step" / "Delete requirement" in the fields. The button ignores presses for
+ * 700 ms after it appeared (so that a double press does not delete the next one too): wait first.
+ */
+export async function deleteSelected(page: Page, label: "Delete step" | "Delete requirement") {
+  const button = fields(page).getByRole("button", { name: label });
+  await expect(button).toBeEnabled();
+  await page.waitForTimeout(750);
+  await button.click();
+}
+
 /** The checker's chip on the editing bar: "3 to fix", "2 suggestions", "Nothing to fix". */
 export const checkerChip = (page: Page) => page.locator(".edit-bar .eb-status");
 

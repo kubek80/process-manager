@@ -43,7 +43,7 @@ test("an owner sees what is theirs and what needs them, and handles it from one 
   await expect(row).toContainText("Review overdue since 2025-07-01");
   await expect(row).toContainText("last reviewed 2025-01-01 by Somebody long ago");
   await row.getByRole("button", { name: "Still correct" }).click();
-  await expect(page.locator(".toast", { hasText: "Recorded as reviewed today" })).toBeVisible();
+  await expect(page.getByText("“Mine demo” is recorded as reviewed today.")).toBeVisible();
   await expect(reviews.locator("li", { hasText: "Mine demo" })).toHaveCount(0);
   expect((await readProcess(page, "mine-demo"))!.review).toEqual({ intervalMonths: 6, lastReviewedAt: serverToday(), reviewedBy: "Casey Owner" });
 
@@ -53,7 +53,12 @@ test("an owner sees what is theirs and what needs them, and handles it from one 
   await expect(item).toContainText("Mine demo");
   await expect(item).toContainText("Step 2: Raise the 'New GCP project' request");
   await expect(item).toContainText("Sam Consumer");
+  // secondary buttons in the rows: one main button per page at most
+  await expect(item.getByRole("button", { name: "Mark as fixed" })).not.toHaveClass(/\bprimary\b/);
   await item.getByRole("button", { name: "Mark as fixed" }).click();
+  // every action confirms itself, and the new message replaces the one before
+  await expect(page.locator(".toast", { hasText: /^Marked as fixed\. Sam Consumer is told\./ })).toBeVisible();
+  await expect(page.locator(".toast", { hasText: "is recorded as reviewed today" })).toHaveCount(0);
   await expect(waiting.locator("li", { hasText: "The form has a new name since last week." })).toHaveCount(0);
 
   // everything that is hers, with its version; nothing of other teams
@@ -62,7 +67,8 @@ test("an owner sees what is theirs and what needs them, and handles it from one 
   await expect(mine).toContainText("Cloud Platform team");
   await expect(mine).toContainText("In use");
   await expect(mine).toContainText("Version 2"); // the review was a version of its own
-  await expect(mine).toContainText(CASEY);
+  await expect(mine).toContainText("Casey Owner"); // the name, not the address
+  await expect(mine).not.toContainText(CASEY);
   await expect(all.locator("tr", { hasText: "Request a GCP project" })).toBeVisible();
   await expect(all.locator("tr", { hasText: "Onboard a site to Akamai" })).toHaveCount(0);
   await mine.getByRole("link", { name: "Mine demo" }).click();

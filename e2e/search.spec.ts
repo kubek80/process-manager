@@ -209,9 +209,10 @@ test("when nothing is found, the filters can be dropped from there", async ({ pa
   await page.locator(".search-empty").getByRole("button", { name: "Clear all filters" }).click();
   await expect(results(page)).toHaveCount(3);
 
-  // without filters: a hint on the words, and the libraries to browse
+  // without filters: what was tried, a hint on the words, and the libraries to browse; nothing to press that would only repeat it
   await open(page, "/search?q=zzqx");
-  await expect(page.locator(".search-empty")).toContainText("Check the spelling");
+  await expect(page.locator(".search-empty")).toContainText("Nothing matches “zzqx”, and nothing comes close by meaning either. Try another word.");
+  await expect(page.locator(".search-try-other")).toHaveCount(0);
   await page.locator(".search-empty").getByRole("link", { name: "all processes" }).click();
   await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
 });

@@ -60,29 +60,31 @@ test("a view counts once per person per day, shows at once, and the numbers are 
   expect(v.body).toEqual({ views: 1, people: 1 });
   expect(v.loads).toBe(1);
   // the person's own first view of the day shows without a reload
-  await expect(views(page)).toHaveText("Viewed once by 1 person");
-  await expect(stats(page)).toContainText("Skill not downloaded yet");
-  await expect(stats(page)).toContainText("No feedback open");
-  await expect(stats(page).locator(".engage-handled")).toHaveText("0 pieces of feedback handled");
+  await expect(views(page)).toHaveText("1 view by 1 person");
+  // what is zero and says nothing is left out: no downloads, no feedback open or handled
+  await expect(stats(page).locator(".engage-downloads")).toHaveCount(0);
+  await expect(stats(page).locator(".engage-open")).toHaveCount(0);
+  await expect(stats(page).locator(".engage-handled")).toHaveCount(0);
+  await expect(stats(page)).not.toContainText(/not downloaded|No feedback|0 pieces/);
 
   // again the same day: no more
   v = await visit(page);
   expect(v.body).toEqual({ views: 1, people: 1 });
   expect(v.loads).toBe(1);
-  await expect(views(page)).toHaveText("Viewed once by 1 person");
+  await expect(views(page)).toHaveText("1 view by 1 person");
   await open(page, `/p/${ID}/list`); // another tab of the same page is no new view either
-  await expect(views(page)).toHaveText("Viewed once by 1 person");
+  await expect(views(page)).toHaveText("1 view by 1 person");
 
   // somebody else, on a process that already has views: one more view and person, at once, one load
   await signIn(page, CASEY);
   v = await visit(page);
   expect(v.body).toEqual({ views: 2, people: 2 });
   expect(v.loads).toBe(1);
-  await expect(views(page)).toHaveText("Viewed 2 times by 2 people");
+  await expect(views(page)).toHaveText("2 views by 2 people");
   await signIn(page, SAM);
   v = await visit(page);
   expect(v.body).toEqual({ views: 2, people: 2 });
-  await expect(views(page)).toHaveText("Viewed 2 times by 2 people");
+  await expect(views(page)).toHaveText("2 views by 2 people");
 
   // the server counts the same: through the API, a second view is no view
   const again = await page.request.post(`/api/views/process/${ID}`, { headers: CSRF });
@@ -98,7 +100,7 @@ test("while the numbers are not known, nothing pretends to know them", async ({ 
   await open(page, `/p/${ID}/flow`);
   await expect(stats(page).locator(".engage-unknown")).toHaveText("The numbers are not available right now.");
   await expect(stats(page).locator(".engage-handled")).toHaveCount(0);
-  await expect(stats(page).locator(".engage-open")).toHaveText("No feedback open"); // the page knows its own feedback
+  await expect(stats(page).locator(".engage-open")).toHaveCount(0); // the page knows its own feedback: none open, nothing said
   const engage = page.getByRole("group", { name: "Use and feedback" });
   const up = engage.getByRole("button", { name: `Upvote ${TITLE}`, exact: true });
   await expect(up).toHaveText("Upvote");
@@ -126,7 +128,7 @@ test("a click made while the numbers are still loading is kept", async ({ page, 
   expect((await put).status()).toBe(204);
   await expect(engage.getByRole("button", { name: `Remove bookmark from ${TITLE}` })).toHaveAttribute("aria-pressed", "true");
   release();
-  await expect(views(page)).toHaveText(/^Viewed/);
+  await expect(views(page)).toHaveText(/^\d+ views? by \d+ (person|people)$/);
   await page.waitForTimeout(300);
   await expect(engage.getByRole("button", { name: `Remove bookmark from ${TITLE}` })).toHaveAttribute("aria-pressed", "true");
   await page.unroute("**/api/engagement");
@@ -165,20 +167,20 @@ test("a view of what a person may not see is refused, and its numbers are not sh
 test("a skill download counts once per person and day", async ({ page }) => {
   await signIn(page, JORDAN);
   await open(page, `/p/${ID}/skills`);
-  await expect(stats(page)).toContainText("Skill not downloaded yet");
+  await expect(stats(page).locator(".engage-downloads")).toHaveCount(0);
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "Download" }).click()]);
   expect(download.suggestedFilename()).toBe("SKILL.md");
   await page.reload();
-  await expect(stats(page)).toContainText("Skill downloaded once");
+  await expect(stats(page)).toContainText("1 skill download");
   // the same person again the same day: no more
   expect((await page.request.get(`/api/skills/process-${ID}/download`)).ok()).toBeTruthy();
   await page.reload();
-  await expect(stats(page)).toContainText("Skill downloaded once");
+  await expect(stats(page)).toContainText("1 skill download");
   // another person: one more
   await signIn(page, SAM);
   expect((await page.request.get(`/api/skills/process-${ID}/download`)).ok()).toBeTruthy();
   await open(page, `/p/${ID}/flow`);
-  await expect(stats(page)).toContainText("Skill downloaded 2 times");
+  await expect(stats(page)).toContainText("2 skill downloads");
 });
 
 test("an upvote can be taken back from what the person no longer sees", async ({ page, request }) => {
@@ -235,10 +237,9 @@ test("a standard shows its numbers, upvote and bookmark too", async ({ page }) =
   await signIn(page, SAM);
   await open(page, "/s/code-review/doc");
   const engage = page.getByRole("group", { name: "Use and feedback" });
-  await expect(engage.locator(".engage-stats li").nth(0)).toHaveText(/^Viewed (once|\d+ times) by \d+ (person|people)$/);
-  await expect(engage.locator(".engage-stats li").nth(1)).toHaveText(/^Skill (not downloaded yet|downloaded (once|\d+ times))$/);
-  await expect(engage.locator(".engage-stats")).toContainText(/feedback open/);
-  await expect(engage.locator(".engage-stats")).toContainText(/feedback handled/);
+  await expect(engage.locator(".engage-stats li").nth(0)).toHaveText(/^\d+ views? by \d+ (person|people)$/);
+  // downloads and feedback only when there are some
+  for (const li of await engage.locator(".engage-stats li").all()) await expect(li).toHaveText(/^(\d+ views? by \d+ (person|people)|\d+ skill downloads?|\d+ pieces? of feedback (open|handled))$/);
   await expect(page.getByRole("button", { name: "Report a problem", exact: true })).toHaveCount(0);
   const up = engage.getByRole("button", { name: /^Upvote Code review \(\d+\)$/ });
   const n = Number((await up.getAttribute("aria-label"))!.match(/\((\d+)\)/)![1]);
@@ -263,7 +264,7 @@ test("open and handled feedback follow reporting and “Mark as fixed”", async
   await open(page, `/p/${ID}/flow`);
   await expect(stats(page).locator(".engage-open")).toHaveText("2 pieces of feedback open");
   await expect(stats(page).locator(".engage-open")).toHaveClass(/\bhas\b/);
-  await expect(stats(page).locator(".engage-handled")).toHaveText("0 pieces of feedback handled");
+  await expect(stats(page).locator(".engage-handled")).toHaveCount(0);
 
   await page.getByRole("tab", { name: /Feedback/ }).click();
   await page.locator(".fb-item", { hasText: "The budget form moved" }).getByRole("button", { name: "Mark as fixed" }).click();
@@ -271,8 +272,7 @@ test("open and handled feedback follow reporting and “Mark as fixed”", async
   await expect(stats(page).locator(".engage-open")).toHaveText("1 piece of feedback open");
   await expect(stats(page)).toContainText("1 piece of feedback handled");
   await page.locator(".fb-item", { hasText: "Who approves" }).getByRole("button", { name: "Mark as fixed" }).click();
-  await expect(stats(page).locator(".engage-open")).toHaveText("No feedback open");
-  await expect(stats(page).locator(".engage-open")).not.toHaveClass(/\bhas\b/);
+  await expect(stats(page).locator(".engage-open")).toHaveCount(0);
   await expect(stats(page)).toContainText("2 pieces of feedback handled");
 
   // a reader sees the same, and "handled" is in the numbers of the server

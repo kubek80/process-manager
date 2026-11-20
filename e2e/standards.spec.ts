@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { ALEX, answer, clearFeedback, editState, fields, more, moveTo, open, openEditor, outline, outlineNav, pickFilter, publish, putDoc, readSkill, readStandard, readWorkingDraft, report, RILEY, SAM, saveDraft, serverToday, signIn, unfold, watchErrors } from "./helpers";
+import { ALEX, answer, clearFeedback, deleteSelected, editState, fields, more, moveTo, open, openEditor, outline, outlineNav, pickFilter, publish, putDoc, readSkill, readStandard, readWorkingDraft, report, RILEY, SAM, saveDraft, serverToday, signIn, unfold, watchErrors } from "./helpers";
 
 const LOGGING = "secure-logging"; // belongs to the practice Cyber security: Riley edits it
 const IAC = "infrastructure-as-code"; // issued by the Cloud Platform team
@@ -231,7 +231,7 @@ test("add, reorder and remove a requirement; the checker guards the format", asy
   await expect(page.locator(".edit-preview #req-SEC-LOG-06")).toContainText("Checked by a person");
 
   await outline(page, "SEC-LOG-06");
-  await drawer.getByRole("button", { name: "Delete requirement" }).click();
+  await deleteSelected(page, "Delete requirement");
   // no question: the message says what was deleted and offers Undo
   await expect(page.getByRole("dialog", { name: "Delete SEC-LOG-06?" })).toHaveCount(0);
   await expect(page.locator(".edit-preview .req")).toHaveCount(5);
@@ -239,7 +239,7 @@ test("add, reorder and remove a requirement; the checker guards the format", asy
   await toast.getByRole("button", { name: "Undo" }).click();
   await expect(page.locator(".edit-preview .req")).toHaveCount(6);
   await outline(page, "SEC-LOG-06");
-  await drawer.getByRole("button", { name: "Delete requirement" }).click();
+  await deleteSelected(page, "Delete requirement");
   await expect(page.locator(".edit-preview .req")).toHaveCount(5);
   await publish(page);
   expect((await readStandard(page, LOGGING))!.requirements).toHaveLength(5);

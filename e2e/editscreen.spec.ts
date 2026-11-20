@@ -1,8 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import {
-  ALEX, CSRF, RILEY, addInOutline, editState, fields, moveTo, openEditor, outline, outlineNav, outlineTitles, pickKind, readWorkingDraft, saveDraft, signIn,
-} from "./helpers";
+import { addInOutline, ALEX, CSRF, deleteSelected, editState, fields, moveTo, openEditor, outline, outlineNav, outlineTitles, pickKind, readWorkingDraft, RILEY, saveDraft, signIn } from "./helpers";
 
 // The editing screen of a process, part by part: adding steps by name, moving them in the flow,
 // decisions and their answers, deleting with Undo instead of a question, who does a step, its
@@ -171,11 +169,17 @@ test("deleting a step inside a branch: no question, both answers kept, “delete
   await signIn(page, ALEX);
   await openEditor(page, "process", id);
   await outline(page, /^7 Add your project to the project factory/);
-  await fields(page).getByRole("button", { name: "Delete step" }).click();
+  await deleteSelected(page, "Delete step");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  const toast = page.locator(".toast", { hasText: "Step “Add your project to the project factory” deleted." });
+  // a short message: what was deleted (long names cut) and, on a line of its own, which answer now leads elsewhere
+  const toast = page.locator(".toast", { hasText: "deleted." });
   await expect(toast).toBeVisible();
-  await expect(toast).toContainText("“Yes” of “Details complete?” now leads to “Review and merge the pull request”");
+  await expect(toast).toContainText("Step “Add your project to the proje…” deleted.");
+  await expect(toast).toContainText("“Yes” of “Details complete?” now leads elsewhere.");
+  const lines = await toast.evaluate((e) => { const t = e.querySelector("p")!; const lh = parseFloat(getComputedStyle(t.querySelector("strong")!).lineHeight) || 20; return Math.round(t.getBoundingClientRect().height / lh); });
+  expect(lines, "at most two lines").toBeLessThanOrEqual(2);
+  // the focus is on the step now selected, in the outline: a second press cannot delete it
+  await expect(outlineNav(page).locator('.outline-item[aria-current="true"]')).toBeFocused();
   await expect(map(page).locator(".block")).toHaveCount(9);
   // the decision keeps both of its answers
   await outline(page, /^5 Details complete\?/);
@@ -184,6 +188,8 @@ test("deleting a step inside a branch: no question, both answers kept, “delete
   await toast.getByRole("button", { name: "Undo" }).click();
   await expect(map(page).locator(".block")).toHaveCount(10);
   await expect.poll(() => outlineTitles(page)).toContain("Add your project to the project factory");
+  // what Undo says is what is true now
+  await expect(page.locator(".toast", { hasText: /is back\.$/ })).toContainText(/Step “Add your project to the proje(ct factory|…)” is back\./);
 });
 
 test("who does it: “Someone else” adds a participant and gives them the step; the kind is chosen in a pop-up", async ({ page, request }) => {
@@ -386,4 +392,60 @@ test("a standard: “Where it applies” is under Scope and exceptions, not Abou
   // open there, not folded: it is what the section is about
   await expect(fields(page).getByRole("heading", { name: "Where it applies" })).toBeVisible();
   await expect(fields(page).getByRole("button", { name: "Production", exact: true })).toBeVisible();
+});
+
+test("the map: Fit shows the whole flow, a selected step is brought to the middle", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await signIn(page, ALEX);
+  await openEditor(page, "process", GCP);
+  const m = map(page);
+  const scroller = m.locator(".flow-scroll");
+  // opened as large as fits the width, never below 60%: this flow is wider than the view
+  await expect(m.locator(".zoom-val")).toHaveText(/^\d+%$/);
+  expect(Number((await m.locator(".zoom-val").innerText()).replace("%", ""))).toBeGreaterThanOrEqual(60);
+  expect(await scroller.evaluate((e) => e.scrollWidth > e.clientWidth)).toBe(true);
+  // a step in the middle of the flow, selected: moved to the middle of the view, not to its edge
+  await outline(page, /^10 /);
+  await outline(page, /^7 /);
+  const block = m.locator(".block.selected");
+  await expect.poll(async () => {
+    const [b, v] = [(await block.boundingBox())!, (await scroller.boundingBox())!];
+    return Math.abs((b.x + b.width / 2) - (v.x + v.width / 2)) / v.width;
+  }, { message: "the selected step is near the middle of the map" }).toBeLessThan(0.2);
+  // Fit: everything, whatever zoom it takes
+  await m.getByRole("button", { name: "Fit" }).click();
+  await expect.poll(() => scroller.evaluate((e) => e.scrollWidth - e.clientWidth)).toBeLessThanOrEqual(1);
+  expect(await scroller.evaluate((e) => [e.scrollLeft, e.scrollTop])).toEqual([0, 0]);
+  await expect(m.locator(".block")).toHaveCount(10);
+  for (const b of await m.locator(".block").all()) await expect(b).toBeInViewport();
+});
+
+test("a double press on Delete deletes one step, not the next one too", async ({ page, request }) => {
+  const id = `${PREFIX}double`;
+  await copyOf(request, LIB, id, "Editscreen demo double");
+  await signIn(page, ALEX);
+  await openEditor(page, "process", id);
+  await outline(page, /^3 Add the release workflow/);
+  await page.waitForTimeout(800);
+  await fields(page).getByRole("button", { name: "Delete step" }).dblclick();
+  await expect(map(page).locator(".block")).toHaveCount(5);
+  await page.waitForTimeout(300);
+  await expect(map(page).locator(".block")).toHaveCount(5);
+  await expect.poll(() => outlineTitles(page)).toContain("Tag the first version");
+});
+
+test("Publish… lists what changed by names, never by ids", async ({ page, request }) => {
+  const id = `${PREFIX}names`;
+  await copyOf(request, LIB, id, "Editscreen demo names");
+  await signIn(page, ALEX);
+  await openEditor(page, "process", id);
+  await outline(page, /^4 Tag the first version/);
+  await fields(page).getByRole("group", { name: "Who does it" }).getByRole("button", { name: "Release pipeline" }).click();
+  await bar(page).getByRole("button", { name: "Publish…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Publish your changes" });
+  await expect(dialog.locator("ul.publish-changes")).toContainText("“You” → “Release pipeline”");
+  await expect(dialog.locator("ul.publish-changes")).not.toContainText("“me”");
+  await expect(dialog.locator("ul.publish-changes")).not.toContainText("“pipeline”");
+  await expect(dialog.getByLabel(/^Note for the list of versions/)).toHaveAttribute("placeholder", /^e\.g\. /);
+  await dialog.getByRole("button", { name: "Not yet" }).click();
 });

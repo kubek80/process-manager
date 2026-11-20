@@ -733,7 +733,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .admin-head { display: grid; gap: 4px; padding-top: 8px; }
 .admin-head .lead { margin-top: 0; font-size: 15px; }
 .admin-card > .seg, .admin-section > .seg, .cat-list > .seg { justify-self: start; }
-.admin-section { display: grid; gap: 16px; }
+.admin-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .admin-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 20px; box-shadow: var(--shadow-1); display: grid; gap: 12px; min-width: 0; }
 .admin-card > h2 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
 .admin-card > h2 span { font-size: 13px; font-weight: 500; color: var(--text-3); }

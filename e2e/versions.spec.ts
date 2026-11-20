@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { ALEX, answer, DANA, editState, fields, meaningReady, more, open, openEditor, outline, publish, readProcess, readWorkingDraft, refusal, SAM, saveDraft, signIn, watchErrors } from "./helpers";
+import { ALEX, answer, DANA, deleteSelected, editState, fields, meaningReady, more, open, openEditor, outline, publish, readProcess, readWorkingDraft, refusal, SAM, saveDraft, signIn, watchErrors } from "./helpers";
 
 const CSRF = { "X-Requested-With": "process-manager" };
 
@@ -191,7 +191,7 @@ test("changes can be undone step by step, including a deleted step and Discard c
   const bar = page.locator(".edit-bar");
   await outline(page, /^1 /);
   const first = (await fields(page).locator(".fields-head h2").textContent())!;
-  await fields(page).getByRole("button", { name: "Delete step" }).click();
+  await deleteSelected(page, "Delete step");
   // no question first: it can be undone, and the message says so
   await expect(page.getByRole("dialog", { name: "Delete this step?" })).toHaveCount(0);
   await expect(blocks).toHaveCount(all - 1);

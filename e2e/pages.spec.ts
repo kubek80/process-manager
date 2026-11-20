@@ -48,11 +48,11 @@ test("the head of a process: kind, owner in words, how binding as a neutral mark
   await expect(head.locator(".tier-tag")).toHaveCount(0); // the old red chip
   // the facts to compare, then where it applies
   await expect(head.locator(".doc-facts").first()).toContainText("3-5 working days");
-  await expect(head.locator(".doc-where")).toContainText("Google Cloud");
-  await expect(head.locator(".doc-where .fact").first()).toHaveAttribute("title", /^Platform: /);
+  await expect(head.locator(".doc-facts")).toContainText("Google Cloud");
+  await expect(head.locator('.doc-facts .fact[title^="Platform: "]')).toHaveCount(1);
   // a quiet line with when it was updated and its version
-  await expect(head.locator(".doc-when")).toContainText(/Updated \d{4}-\d\d-\d\d/);
-  await expect(head.locator(".doc-when").getByRole("button", { name: /^Version \d+$/ })).toBeVisible();
+  await expect(head.locator(".doc-foot")).toContainText(/Updated \d{4}-\d\d-\d\d/);
+  await expect(head.locator(".doc-foot").getByRole("button", { name: /^Version \d+$/ })).toBeVisible();
 
   // the views are underline tabs
   const tabs = page.getByRole("tablist").first();
@@ -107,7 +107,7 @@ test("a first review is counted from the first publication: due later, not count
   await signIn(page, CASEY); // Owner of the team: looks after its reviews
   await open(page, `/p/${FRESH}/flow`);
   const head = page.locator("header.doc-head");
-  await expect(head.locator(".doc-when")).toContainText(`First review due ${due.toISOString().slice(0, 10)}`);
+  await expect(head.locator(".doc-foot")).toContainText(`First review due ${due.toISOString().slice(0, 10)}`);
   await expect(head.locator('.card-mark[data-line="review"]')).toHaveCount(0); // nothing to do yet: no mark
   await expect(page.locator(".banner", { hasText: /review/i })).toHaveCount(0);
   // the lists do not count it as needing a review
@@ -149,4 +149,46 @@ test("segmented controls: Requests' state and kind, My responsibilities' groups;
   await second.click();
   await expect(second).toHaveAttribute("aria-pressed", "true");
   await expect(groups.getByRole("button", { name: "All of mine" })).toHaveAttribute("aria-pressed", "false");
+});
+
+test("at 1366 x 768 the map of a process starts on the first screen", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await signIn(page, SAM);
+  await open(page, "/p/request-gcp-project/flow");
+  await expect(page.locator(".block").first()).toBeVisible();
+  // its tool line and its first lane, without scrolling
+  await expect(page.getByRole("button", { name: "Fit" })).toBeInViewport({ ratio: 1 });
+  await expect(page.locator(".lane-label").first()).toBeInViewport({ ratio: 1 });
+  // "Before you start" stays open, compact: one line of links and one row of what is needed
+  const before = page.getByRole("region", { name: "Before you start" });
+  await expect(before.getByRole("button", { name: /Before you start/ })).toHaveAttribute("aria-expanded", "true");
+  expect((await before.boundingBox())!.height).toBeLessThan(220);
+});
+
+test("a first review that is due soon reads “First review due …” on the card, as a warning", async ({ page, request }) => {
+  await as(request, ALEX);
+  const { processes } = await (await request.get("/api/processes")).json();
+  const src = processes.find((p: { id: string }) => p.id === "request-gcp-project");
+  const id = `${FRESH}-card`;
+  const res = await request.put(`/api/processes/${id}?base=0`, {
+    data: { ...src, id, title: "Pages demo first review", owner: "cloud-platform-team", status: "active", review: { intervalMonths: 1 } }, headers: CSRF,
+  });
+  expect(res.ok(), await res.text()).toBeTruthy();
+  try {
+    // twenty days later in this browser: the first review, a month after publication, is due within the month
+    await page.clock.install({ time: new Date(Date.now() + 20 * 86_400_000) });
+    await signIn(page, CASEY);
+    await open(page, "/processes");
+    const mark = page.locator(`li.card[data-id="${id}"] .card-mark[data-line="review"]`);
+    await expect(mark).toContainText(/First review due \d{4}-\d\d-\d\d$/);
+    await expect(mark).toHaveClass(/\bwarn\b/);
+    // the page: the same mark, and the quiet line says it was not reviewed yet
+    await page.locator(`li.card[data-id="${id}"] .card-link`).click();
+    await expect(page.locator('header.doc-head .card-mark[data-line="review"]')).toContainText("First review due");
+    await expect(page.locator("header.doc-head .doc-foot")).toContainText("Not reviewed yet");
+    await expect(page.locator("header.doc-head")).not.toContainText("Never reviewed");
+  } finally {
+    await as(request, ALEX);
+    await request.delete(`/api/processes/${id}`, { headers: CSRF });
+  }
 });
