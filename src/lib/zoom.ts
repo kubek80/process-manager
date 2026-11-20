@@ -88,7 +88,8 @@ export function wrapWords(text: string, fits: number | ((line: string) => boolea
     // the last line ends with "…" after a whole word, made room for if needed
     let last = out[out.length - 1];
     while (last.includes(" ") && !ok(`${last}…`)) last = last.slice(0, last.lastIndexOf(" "));
-    out[out.length - 1] = `${last}…`;
+    // a whole word with no room for "…" after it stays whole: the full name is in the tooltip
+    out[out.length - 1] = ok(`${last}…`) ? `${last}…` : last;
   }
   return out;
 }

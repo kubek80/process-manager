@@ -177,6 +177,16 @@ describe("lane names", () => {
     expect(wrapWords("Change advisory board members", 14, 1)).toEqual(["Change…"]);
     expect(wrapWords("", 10, 2)).toEqual([]);
   });
+  it("never cut a word: the initial when not even the first word fits, else “…” after the last whole word", () => {
+    expect(wrapWords("Procurement", 9, 2)).toEqual(["P"]);
+    expect(wrapWords("Change management board", 8, 1)).toEqual(["Change…"]);
+    expect(wrapWords("Site Reliability team", 9, 3)).toEqual(["Site…"]);
+    expect(wrapWords("Deployment pipeline", 11, 2)).toEqual(["Deployment", "pipeline"]);
+    // measured: a line fits when the test says so
+    const px = (l: string) => l.length * 8 <= 80;
+    expect(wrapWords("Procurement team", px, 2)).toEqual(["P"]);
+    expect(wrapWords("Team procurement", px, 2)).toEqual(["Team…"]);
+  });
   it("count the characters a column holds", () => {
     expect(laneChars(120, false, false)).toBe(13);
     expect(laneChars(156, false, true)).toBe(12);
