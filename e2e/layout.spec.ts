@@ -401,7 +401,7 @@ for (const theme of ["light", "dark"] as const) {
 }
 
 test("a long portal name never pushes the top bar over its edge", async ({ page, request }) => {
-  const name = "Acme Ways of Working for Every Department"; // 40 characters
+  const name = "Acme Ways of Working for All Departments"; // 40 characters, the most there may be
   await request.post("/auth/dev/login", { data: { email: DANA }, headers: CSRF });
   const { revision } = await (await request.get("/api/admin/theme")).json();
   expect((await request.put(`/api/admin/theme?rev=${revision}`, { data: { name }, headers: CSRF })).ok()).toBeTruthy();

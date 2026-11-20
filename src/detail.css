@@ -64,14 +64,13 @@
 .before-chips li.skill a > svg:first-child { color: var(--good); }
 .before-group .link-list.row a { height: 30px; font-size: 13px; }
 @media (pointer: coarse) { .before-chips a, .before-group .link-list.row a { height: 44px; } }
-/* on a phone (no tooltips) nothing is cut: one item per row, the text wraps; the links scroll sideways in one line */
+/* on a phone (no tooltips) nothing is cut: one item per row, the text wraps; the links under their heading */
 @media (max-width: 520px) {
   .prereq-grid.compact { grid-template-columns: minmax(0, 1fr); }
   .prereq-grid.compact .prereq strong, .prereq-grid.compact .prereq p, .prereq-grid.compact .prereq-link, .prereq-grid.compact .prereq a { white-space: normal; overflow: visible; }
-  .before-links { padding-left: 0; width: 100%; }
-  .before-group { flex-wrap: nowrap; width: 100%; }
-  .before-group > ul, .before-group .link-list.row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .before-group a { white-space: nowrap; }
+  .before-links { padding: 0 0 4px 10px; width: 100%; }
+  .before-group { flex-wrap: wrap; width: 100%; }
+  .before-chips a, .before-group .link-list.row a { height: auto; min-height: 44px; white-space: normal; }
 }
 
 /* the map: a hint, dragging to move around */
