@@ -262,6 +262,11 @@ function ColorField({ part, value, use, onChange }: { part: ColorPart; value?: s
         </div>
       )}
       {adjusted && <p className="color-note"><Info size={14} aria-hidden="true" /><span>{adjustedText(use!)}</span></p>}
+      {use?.grey && (
+        <p className="color-note warn"><TriangleAlert size={14} aria-hidden="true" />
+          <span>This colour is grey: {part === "brand" ? "buttons, links and what is selected" : `the mark of ${part === "process" ? "processes" : "standards"}`} hardly stand out from ordinary text.</span>
+        </p>
+      )}
       {use?.nearRed && (
         <p className="color-note warn"><TriangleAlert size={14} aria-hidden="true" />
           <span>This colour looks like the red that marks problems. People may take {part === "brand" ? "buttons and links" : `the mark of ${part === "process" ? "processes" : "standards"}`} for a warning. You can still use it.</span>
@@ -271,12 +276,11 @@ function ColorField({ part, value, use, onChange }: { part: ColorPart; value?: s
   );
 }
 
-/** Says plainly that a colour was made lighter or darker to stay readable, and where. */
+/** Says plainly that a colour was made lighter or darker to stay readable. */
 export function adjustedText(u: ColorUse): string {
-  const parts: string[] = [];
-  if (u.adjusted.light) parts.push(`a darker shade in the light look (${u.used.light})`);
-  if (u.adjusted.dark) parts.push(`a lighter shade in the dark look (${u.used.dark})`);
-  return `As chosen it would be hard to read, so text and marks use ${parts.join(" and ")}.`;
+  const how = u.adjusted.light && u.adjusted.dark ? "darker in the light look and lighter in the dark look"
+    : u.adjusted.light ? "darker in the light look" : "lighter in the dark look";
+  return `Made ${how}, so that text in this colour stays readable.`;
 }
 
 /** The look as it would be, in light and dark next to each other: driven by the values being edited. */

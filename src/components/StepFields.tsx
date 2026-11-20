@@ -39,7 +39,8 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
   onDelete: () => void;
   /** Moves the step in the flow: before another step, or (null) to the end. */
   onMove: (before: string | null) => void;
-  onAddAfter: () => void;
+  /** Adds a step with this name after this one (a new branch of a decision). */
+  onAddAfter: (name: string) => void;
 }) {
   const index = process.steps.findIndex((s) => s.id === step.id);
   const actor = process.actors.find((a) => a.id === step.actor);
@@ -49,6 +50,7 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
   // fields the checker has something to say about are shown even when empty
   const flagged = new Set(issues.map((i) => i.path.match(/^steps\[\d+\]\.([A-Za-z]+)/)?.[1]).filter(Boolean) as string[]);
   const [opened, setOpened] = useState<Detail[]>([]);
+  const [naming, setNaming] = useState(false);
   const shown = DETAILS.filter((d) => hasValue(step, d.id) || opened.includes(d.id) || flagged.has(d.id) || (d.id === "url" && flagged.has("urlLabel"))
     || (d.id === "subProcessId" && step.type === "subprocess"));
   const offered = DETAILS.filter((d) => !shown.includes(d));
@@ -60,7 +62,7 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
       <FieldsHead icon={<TypeIcon type={step.type} size={40} />} kicker={<><span className="who">{actor?.name ?? step.actor}</span><span>Step {index + 1} of {process.steps.length}</span></>}
         title={step.title || "(no name yet)"}
         tools={<>
-          <button className="btn small ghost" onClick={onAddAfter}><Plus size={14} />{step.type === "decision" ? "Add a branch" : "Add step after"}</button>
+          <button className="btn small ghost" aria-expanded={naming} onClick={() => setNaming(!naming)}><Plus size={14} />{step.type === "decision" ? "Add a branch" : "Add step after"}</button>
           <span className="spacer" />
           <span className="fields-move">
           {process.steps.length > 1 && (
@@ -75,6 +77,8 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
           <button className="icon-btn danger" title="Delete step" aria-label="Delete step" disabled={process.steps.length === 1} onClick={onDelete}><Trash2 size={16} /></button>
           </span>
         </>} />
+      {naming && <NameNew label={step.type === "decision" ? "Name of the step on the new branch" : "Name of the step after this one"}
+        onAdd={(name) => { setNaming(false); onAddAfter(name); }} onCancel={() => setNaming(false)} />}
       <ItemIssues issues={issues} />
       <ItemFeedback feedback={feedback.filter((f) => f.itemId === step.id && !f.resolved)} target={processTarget(process)} noun="step" />
 
@@ -122,6 +126,20 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
         )}
       </EditSection>
     </div>
+  );
+}
+
+/** A name for a new step, asked right where it is added: Enter adds it, Escape does not. */
+function NameNew({ label, onAdd, onCancel }: { label: string; onAdd: (name: string) => void; onCancel: () => void }) {
+  const [name, setName] = useState("");
+  const ok = name.trim().length >= 2;
+  return (
+    <form className="name-new" onSubmit={(e) => { e.preventDefault(); if (ok) onAdd(name.trim()); }}>
+      <input autoFocus value={name} maxLength={70} aria-label={label} placeholder={label} onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancel(); } }} />
+      <button type="submit" className="btn small primary" disabled={!ok}><Plus size={14} />Add</button>
+      <button type="button" className="btn small ghost" onClick={onCancel}>Cancel</button>
+    </form>
   );
 }
 

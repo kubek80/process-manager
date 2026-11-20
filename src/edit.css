@@ -130,7 +130,9 @@
 .outline-mark.bad { background: var(--bad); } .outline-mark.warn { background: var(--warn); }
 /* a requirement's id on its own line above its name, so the name keeps the width */
 .outline-item.long-n { flex-wrap: wrap; row-gap: 2px; }
-.outline-item.long-n .outline-label { flex: 1 0 100%; }
+.outline-item.long-n .outline-label { flex: 1 0 100%; order: 3; }
+.outline-item.long-n .outline-flag, .outline-item.long-n .outline-mark { margin-left: auto; }
+.outline-item.long-n .outline-flag + .outline-mark { margin-left: 0; }
 /* the handle to drag a step or requirement: shown on the selected one and while pointing at a row */
 .outline-grip { position: absolute; left: -2px; top: 50%; z-index: 1; width: 16px; height: 26px; margin-top: -13px; display: grid; place-items: center; border-radius: 5px; color: var(--text-3); cursor: grab; touch-action: none; opacity: 0; }
 .outline-row:hover .outline-grip, .outline-row.on .outline-grip, .outline-grip:focus-visible { opacity: 1; }
@@ -232,6 +234,8 @@
 .kind-pop .type-opt { padding: 5px 6px; }
 .kind-hint { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--text-2); min-height: 3.6em; }
 .kind-hint b { color: var(--text); font-weight: 600; }
+.name-new { display: flex; gap: 6px; align-items: center; padding: 10px 0 2px; }
+.name-new input { flex: 1; min-width: 0; }
 .add-chip { border-style: dashed; color: var(--accent); }
 .add-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
 .add-chip svg { flex: none; }
@@ -246,7 +250,7 @@
 .detail-offers { display: flex; flex-wrap: wrap; gap: 6px; }
 .detail-offers .chip { height: 30px; padding: 0 11px; }
 .fields-move { display: flex; align-items: center; gap: 4px; margin-left: auto; }
-.move-select { width: auto; height: 32px; padding: 0 26px 0 10px; font-size: 13px; font-weight: 550; max-width: 124px; }
+.move-select { width: auto; height: 32px; padding: 0 26px 0 10px; font-size: 13px; font-weight: 550; width: 112px; }
 /* text boxes grow with what is written in them, up to a point, so nothing is hidden */
 .edit-fields textarea { field-sizing: content; min-height: 64px; max-height: 50vh; }
 .edit-fields .ins-rows textarea { min-height: 38px; }
@@ -344,6 +348,10 @@
   .edit-fields .panel-close { display: flex; position: sticky; top: 0; z-index: 1; padding: 10px 10px 10px 18px; background: var(--surface); border-bottom: 1px solid var(--line); }
   .edit-fields .panel-close b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .panel-fields .panel-scrim { display: block; }
-  .preview-head h2 { font-size: 20px; }
+  .preview-head h2 { font-size: 19px; }
+  /* a blank process: the button under its words */
+  .start-here li { flex-wrap: wrap; row-gap: 6px; }
+  .start-here li .btn { margin-left: 40px; }
+  .start-here li.done .btn { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .edit-outline, .edit-fields { transition: none; } }

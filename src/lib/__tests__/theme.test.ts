@@ -89,6 +89,10 @@ describe("the derived tokens", () => {
     for (const other of ["#4f46e5", "#0f766e", "#6d28d9", "#facc15", "#334155", "#0369a1", "#808080"]) expect(derive({ brand: other }).colors[0].nearRed, other).toBe(false);
     expect(distance("#dc2626", BAD.light)).toBeLessThan(NEAR_RED);
   });
+  it("warn when a colour is grey", () => {
+    for (const g of ["#808080", "#6b6b70", "#3f3f46"]) expect(derive({ brand: g }).colors[0].grey, g).toBe(true);
+    for (const c of ["#4f46e5", "#0369a1", "#facc15", "#166534", "#334155"]) expect(derive({ brand: c }).colors[0].grey, c).toBe(false);
+  });
   it("as element properties: the chosen colours, and initial for the rest so that the defaults apply", () => {
     const p = lookProperties({ brand: "#0369a1" });
     expect(Object.keys(p).sort()).toEqual([...ALL_PROPERTIES].sort());
@@ -138,5 +142,21 @@ describe("light or dark", () => {
     expect(isDark(null, undefined, true)).toBe(true); // no appearance set: as the device is set, as before
     expect(isDark(null, undefined, false)).toBe(false);
     expect(isDark("garbage", "dark", false)).toBe(true);
+  });
+});
+
+describe("the Theming section in the app", () => {
+  it("has its own address, keeps unsaved changes when left for it, and the tab title names the portal as set", async () => {
+    const { href, pageTitle, parseRoute } = await import("../store");
+    const { normalizeHex } = await import("../theme");
+    expect(parseRoute("#/admin/theming")).toEqual({ page: "admin", section: "theming" });
+    expect(href({ page: "admin", section: "theming" })).toBe("#/admin/theming");
+    expect(pageTitle({ page: "admin", section: "theming" })).toBe("Theming · Admin · Process Manager");
+    expect(pageTitle({ page: "library" }, {}, "Acme Hub")).toBe("Processes · Acme Hub");
+    expect(pageTitle({ page: "home" }, {}, "Acme Hub")).toBe("Acme Hub");
+    expect(normalizeHex("0055AA")).toBe("#0055aa");
+    expect(normalizeHex(" #05a ")).toBe("#0055aa");
+    expect(normalizeHex("#0055a")).toBeNull();
+    expect(normalizeHex("blue")).toBeNull();
   });
 });

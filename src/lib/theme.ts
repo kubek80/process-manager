@@ -130,6 +130,16 @@ export function distance(a: string, b: string): number {
   const [p, q] = [lab(a), lab(b)];
   return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
 }
+/** How colourful a colour is (CIELAB chroma): 0 for a grey, about 130 for the brightest red. */
+export function chroma(hex: string): number {
+  // the distance to the grey of the same lightness
+  const l = luminance(hex);
+  const v = l <= 0.0031308 ? l * 12.92 : 1.055 * l ** (1 / 2.4) - 0.055;
+  const g = Math.round(v * 255);
+  return distance(hex, rgbToHex([g, g, g]));
+}
+/** Below this chroma a colour counts as grey. */
+export const GREY = 12;
 /** How alike a colour may be to the red of problems before the section warns. */
 export const NEAR_RED = 25;
 
@@ -145,6 +155,8 @@ export interface ColorUse {
   adjusted: Record<Mode, boolean>;
   /** It looks like the red that marks problems. */
   nearRed: boolean;
+  /** It is (nearly) grey: marks and links in it hardly stand out from ordinary text. */
+  grey: boolean;
 }
 export interface Derived {
   /** Custom properties for each theme, without the `--theme-<mode>-` prefix: only for chosen colours. */
@@ -196,7 +208,7 @@ export function derive(look: Look): Derived {
         : { [main]: d.text, [second]: d.soft, [third]: d.line });
     }
     const nearRed = distance(c, BAD.light) < NEAR_RED || distance(used.light, BAD.light) < NEAR_RED || distance(used.dark, BAD.dark) < NEAR_RED;
-    colors.push({ part, chosen: c, used, adjusted, nearRed });
+    colors.push({ part, chosen: c, used, adjusted, nearRed, grey: chroma(c) < GREY });
   }
   return { tokens, colors };
 }

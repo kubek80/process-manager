@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ListPlus, PenLine, Plus, Send, UserRound } from "lucide-react";
 import type { DocMeta, Feedback, Process, Standard, Step } from "../types";
-import { addStepAfter, appendStep, deleteStep, EXAMPLE, flowMoveBlocked, insertStep, moveStepInFlow, nudgeStep, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
+import { appendStep, deleteStep, EXAMPLE, flowMoveBlocked, insertStep, moveStepInFlow, nudgeStep, renameStepId, slugify, tidy, today, updateStep } from "../lib/edit";
 import { issueTarget, issuesByPlace, issuesFor, PROCESS_SECTIONS, processOutline, selectionKey, type ProcessSection, type Selection } from "../lib/editing";
 import { isDrawableProcess, processSchema, validateProcess } from "../lib/validate";
 import { useSelectedItem } from "../lib/selection";
@@ -93,11 +93,13 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
 
   const byPlace = useMemo(() => (drawable ? issuesByPlace("process", draft, s.issues) : new Map()), [drawable, draft, s.issues]);
   const outline = drawable ? processOutline(draft) : [];
-  const addAfter = (id: string | null) => {
-    const r = addStepAfter(draft, id);
-    setDraft(r.process);
-    selectStep(r.id);
-    s.setPanel("fields");
+  // the line under the steps in the outline that adds one by its name
+  const openAddLine = () => {
+    s.setPanel("outline");
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>(".outline-add-line")?.click();
+      document.querySelector<HTMLInputElement>(".outline-add-form input")?.focus();
+    });
   };
   const sectionLabel = PROCESS_SECTIONS.find((x) => x.id === section)?.label ?? "About";
   const fieldsLabel = step ? `Step ${draft.steps.indexOf(step) + 1}: ${step.title || "(no name yet)"}` : sel.section === "steps" ? "Steps" : sectionLabel;
@@ -119,7 +121,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
         setDraft((p) => deleteStep(p, step.id)); selectStep(null); setSection("steps");
       }}
       onMove={(before) => setDraft(moveStepInFlow(draft, step.id, before))}
-      onAddAfter={() => addAfter(step.id)} />;
+      onAddAfter={(name) => { const r = insertStep(draft, { afterId: step.id }, { title: name, type: "task", actor: step.actor }); setDraft(r.process); selectStep(r.id); }} />;
   } else {
     const head = <h2 className="fields-section-title">{sectionLabel}</h2>;
     const own = issuesFor("process", draft, s.issues, { section });
@@ -134,7 +136,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
           <div className="empty-hint">
             <p>{draft.steps.length} step{draft.steps.length === 1 ? "" : "s"}. Select one in the outline or on the map to change it.</p>
             <p>To add steps, type their names one after the other under <b>Add a step</b> at the end of the outline, or press <b>+</b> on an arrow of the map to put one exactly there.</p>
-            <button className="btn small" onClick={() => addAfter(null)}><Plus size={14} />Add a step at the end</button>
+            <button className="btn small" onClick={openAddLine}><Plus size={14} />Add a step at the end</button>
           </div>
           <ItemIssues issues={own.filter((i) => !issueTarget("process", draft, i.path).item)} />
         </>
@@ -154,10 +156,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
       {fresh && <StartHere process={draft} onSummary={() => {
         choose({ section: "about" });
         setTimeout(() => document.querySelector<HTMLTextAreaElement>(".edit-fields [data-field=summary]")?.focus(), 50);
-      }} onSteps={() => {
-        s.setPanel("outline");
-        requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(".outline-add-line")?.click());
-      }} onFirst={() => draft.steps[0] && choose({ section: "steps", item: draft.steps[0].id })} />}
+      }} onSteps={openAddLine} onFirst={() => draft.steps[0] && choose({ section: "steps", item: draft.steps[0].id })} />}
       {(draft.prerequisites.length > 0 || !!draft.resources?.length || !!draft.standards?.length)
         ? <div className={`preview-part ${["before", "links", "standards"].includes(sel.section) ? "on" : ""}`}>
             <BeforeYouStart process={draft} all={all} standards={standards} open={beforeOpen} onToggle={() => setBeforeOpen(!beforeOpen)} />
