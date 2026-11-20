@@ -242,14 +242,17 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
     if (!a || !b) return undefined;
     try { const c = compare(kind, a, b, catalog); return c.find((x) => x.kind !== "changed") ?? c[0]; } catch { return undefined; }
   };
-  const describe = (a: T | undefined, b: T | undefined) => { const c = mainChange(a, b); return c ? describeChange(c) : ""; };
+  // words for a tooltip: never a reason for the screen to fail
+  const describe = (a: T | undefined, b: T | undefined) => { try { const c = mainChange(a, b); return c ? describeChange(c) : ""; } catch { return ""; } };
   const undoWhat = useMemo(() => describe(d.previous, d.draft), [d.previous, d.draft]); // eslint-disable-line react-hooks/exhaustive-deps
   const [reveal, setReveal] = useState<{ item: string; n: number } | null>(null);
   useEffect(() => {
     const st = d.stepped;
     if (!st) return;
     // said as what is true now: from what was on screen to what is on screen ("Step “Approve” is back.")
-    notify.info(steppedMessage(st.dir, mainChange(st.from, st.to)));
+    let said = st.dir === "undo" ? "Undone." : "Done again.";
+    try { said = steppedMessage(st.dir, mainChange(st.from, st.to)); } catch { /* the plain words */ }
+    notify.info(said);
     const before = new Map(items(st.from).map((x) => [x.id, JSON.stringify(x)]));
     const touched = items(st.to).find((x) => !before.has(x.id)) ?? items(st.to).find((x) => before.get(x.id) !== JSON.stringify(x));
     if (touched) setReveal((r) => ({ item: touched.id, n: (r?.n ?? 0) + 1 }));
@@ -524,7 +527,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, restart, children 
       saveLine: unsaved ? "Not saved yet" : working ? `Draft saved ${clock(working.updatedAt)}` : unpublished && o.meta?.updatedAt ? `Saved ${clock(o.meta.updatedAt)}` : "Saved",
       onNotice: () => setNotice(null),
       fixBefore: (i) => (unpublished && !isExampleIssue(i) ? "saving" : "publishing"),
-      undo: { canUndo: d.canUndo, canRedo: d.canRedo, undo: d.undo, redo: d.redo, undoTitle: undoWhat ? `Undo: ${undoWhat[0].toLowerCase()}${undoWhat.slice(1)} (Ctrl+Z)` : undefined },
+      undo: { canUndo: d.canUndo, canRedo: d.canRedo, undo: d.undo, redo: d.redo, undoTitle: undoWhat ? `Undo: ${undoWhat.charAt(0).toLowerCase()}${undoWhat.slice(1)} (Ctrl+Z)` : undefined },
       onBack: () => go(kind === "process" ? { page: "process", id, tab: "flow" } : { page: "standard", id, tab: "doc" }),
       discard,
       save: { label: "Save draft", run: saveDraft, blocked: saveBlocked, busy: d.saving },

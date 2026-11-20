@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { forgetUnsaved, guardLeaving, hasUnsaved, href, offerSaving, parseRoute, unsavedSaver, unsavedWork, type Route } from "../store";
+import { forgetUnsaved, guardLeaving, hasUnsaved, href, isLoadFailure, offerSaving, parseRoute, unreachableMessage, unsavedSaver, unsavedWork, type Route } from "../store";
 import { blankProcess, blankStandard } from "../edit";
 
 describe("addresses", () => {
@@ -133,5 +133,18 @@ describe("the guard knows where edits live", () => {
     expect(unsavedWork()).toBe("this process"); // the other one is still there
     forgetUnsaved("process/gone-too");
     expect(unsavedWork()).toBeNull();
+  });
+});
+
+describe("when the portal cannot be reached", () => {
+  it("says so in plain words, and that nothing was saved only for a change", () => {
+    expect(unreachableMessage("GET")).toBe("Could not reach the portal. Check your connection and try again.");
+    expect(unreachableMessage("POST")).toBe("Could not reach the portal. Nothing was saved. Check your connection and try again.");
+    expect(unreachableMessage("DELETE")).toContain("Nothing was saved.");
+  });
+  it("tells a part of the app that could not be fetched from another failure", () => {
+    expect(isLoadFailure("Unable to preload CSS for http://127.0.0.1:8097/assets/requests-CK5fOcLU.css")).toBe(true);
+    expect(isLoadFailure("Failed to fetch dynamically imported module: http://x/assets/a.js")).toBe(true);
+    expect(isLoadFailure("Cannot read properties of undefined (reading 'id')")).toBe(false);
   });
 });

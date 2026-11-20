@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changedBy, groupsOf, myGroups, responsibilities, urgent } from "../responsibilities";
+import { accountRoles, changedBy, groupsOf, myGroups, responsibilities, urgent } from "../responsibilities";
 import type { Feedback, FeedbackByTarget, Perms } from "../../types";
 import { base, baseStandard } from "./fixtures";
 
@@ -106,5 +106,28 @@ describe("who made the last change", () => {
     expect(changedBy("import")).toBe("Imported");
     expect(changedBy("system")).toBe("Updated by the portal");
     expect(changedBy(undefined)).toBe("");
+  });
+});
+
+describe("the roles in the account menu", () => {
+  const groups = {
+    team: [{ id: "cloud-platform-team", name: "Cloud Platform team" }],
+    platform: [{ id: "gcp", name: "Google Cloud" }],
+    practice: [{ id: "engineering", name: "Engineering" }],
+  };
+  it("says of what somebody is an owner, in the words of Admin > Access", () => {
+    expect(accountRoles(perms({ platforms: ["gcp"], practices: ["engineering"], owns: ["cloud-platform-team"] }), groups))
+      .toEqual(["Platform owner for Google Cloud", "Practice owner for Engineering", "Owner for Cloud Platform team"]);
+  });
+  it("names the editors and the lists manager, and a reader as a reader", () => {
+    expect(accountRoles(perms({ processes: true, catalog: true }), groups)).toEqual(["Lists manager", "Process editor"]);
+    expect(accountRoles(perms({}), groups)).toEqual(["Reader"]);
+  });
+  it("an admin is an admin, with whatever they own besides", () => {
+    expect(accountRoles(perms({ admin: true, catalog: true, processes: true, standards: true, owns: ["cloud-platform-team"] }), groups))
+      .toEqual(["Admin", "Owner for Cloud Platform team"]);
+  });
+  it("an entry no longer in the lists is named by its id", () => {
+    expect(accountRoles(perms({ owns: ["gone-team"] }), groups)).toEqual(["Owner for gone-team"]);
   });
 });

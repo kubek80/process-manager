@@ -254,7 +254,10 @@ function changedAnswers(before: Process, after: Process): { step: Step; answer: 
 }
 
 /** A name in a short message: cut to `max` characters, with an ellipsis. */
-export const shortName = (t: string, max = 36) => (t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t);
+export const shortName = (t: string | undefined, max = 36): string => {
+  const text = typeof t === "string" ? t.trim() : "";
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+};
 
 /**
  * The message after a delete or a move, at most two short lines: what was done, and one line about
