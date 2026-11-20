@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addActor, answerChanges, newDecisionNotice, restructureNotice, shortName, appendRequirement, appendStep, blankProcess, deleteStep, EXAMPLE, flowMoveBlocked, moveRequirementTo, moveStepInFlow, nudgeStep, setStepType } from "../edit";
+import { addActor, answerChanges, movedHead, newDecisionNotice, restructureNotice, structureChanges, shortName, appendRequirement, appendStep, blankProcess, deleteStep, EXAMPLE, flowMoveBlocked, moveRequirementTo, moveStepInFlow, nudgeStep, setStepType } from "../edit";
 import { clock, movedItem, movedMessage, dropBefore, issueText, processOutline, standardOutline, withoutEarlySuggestions } from "../editing";
 import { validateProcess } from "../validate";
 import type { Process } from "../../types";
@@ -39,7 +39,7 @@ describe("moving a step in the flow", () => {
     const p = moveStepInFlow(base(), "ok", "approve");
     // every arrow into the step it is put before now goes into it, the loop back from "fix" too
     expect(flow(p)).toBe("ask>ok ok>approve(Yes),fix(No) approve>done fix>ok done>");
-    expect(answerChanges(base(), p)).toEqual(["“Yes” of “Approved?” now goes to 3. Approve it"]);
+    expect(answerChanges(base(), p)).toEqual(["“Yes” of “Approved?” now goes to step 3 “Approve it”"]);
     expect(flowMoveBlocked(base(), "ok")).toBe("");
   });
   it("does nothing for an unknown step or target, or onto itself", () => {
@@ -169,7 +169,7 @@ describe("the restructuring the critic did in “Release a service to production
     // the steps it was cut out of are joined to where "Yes" led
     expect(to(p, "watch-release")).toEqual({ "": "close-change" });
     expect(order(p).indexOf("release-healthy")).toBe(order(p).indexOf("roll-out") - 1);
-    expect(answerChanges(before, p)).toEqual([`“Yes” of “Release healthy?” now goes to ${order(p).indexOf("roll-out") + 1}. Roll out to 10%, then to all`]);
+    expect(answerChanges(before, p)).toEqual([`“Yes” of “Release healthy?” now goes to step ${order(p).indexOf("roll-out") + 1} “Roll out to 10%, then to all”`]);
     expect(validateProcess(p)).toEqual([]);
   });
 
@@ -179,14 +179,14 @@ describe("the restructuring the critic did in “Release a service to production
     expect(to(p, "start-deployment")).toEqual({ "": "watch-release" });
     expect(to(p, "release-healthy")).toEqual({ Yes: "close-change", No: "roll-out" });
     expect(to(p, "roll-out")).toEqual({ "": "roll-back" });
-    expect(answerChanges(before, p)).toEqual([`“No” of “Release healthy?” now goes to ${p.steps.findIndex((x) => x.id === "roll-out") + 1}. Roll out to 10%, then to all`]);
+    expect(answerChanges(before, p)).toEqual([`“No” of “Release healthy?” now goes to step ${p.steps.findIndex((x) => x.id === "roll-out") + 1} “Roll out to 10%, then to all”`]);
   });
 
   it("deletes step 8 (Book an SRE) inside a branch: both answers stay, and that is said", () => {
     const before = release();
     const p = deleteStep(before, "book-sre");
     expect(p.steps.find((s) => s.id === "tier-zero")!.next).toEqual([{ to: "start-deployment", label: "Yes" }, { to: "start-deployment", label: "No" }]);
-    expect(answerChanges(before, p)).toEqual([`“Yes” of “Is it a tier 0 service?” now goes to ${p.steps.findIndex((x) => x.id === "start-deployment") + 1}. Start the production deployment, as “No” does`]);
+    expect(answerChanges(before, p)).toEqual([`“Yes” of “Is it a tier 0 service?” now goes to step ${p.steps.findIndex((x) => x.id === "start-deployment") + 1} “Start the production deployment”, as “No” does`]);
     // the checker asks to tell the two answers apart: a problem to fix, not a silent loss
     expect(validateProcess(p).some((i) => i.level === "error" && i.path.startsWith("steps[6].next"))).toBe(true);
   });
@@ -196,6 +196,118 @@ describe("the restructuring the critic did in “Release a service to production
     expect(to(p, "tier-zero")).toEqual({ Yes: "book-sre", No: "start-deployment" });
     expect(order(p).at(-1)).toBe("tier-zero");
     expect(to(p, "change-approved").Approved).toBe("book-sre");
+  });
+});
+
+describe("every structural change on the demo says all it did (critic A, pass 5)", () => {
+  const release = () => readJson<Process>("demo/processes/release-service-to-production.json");
+  /** every step in list order with every arrow and every answer's name */
+  const all = (p: Process) => p.steps.map((s) => `${s.id}>${s.next.map((n) => (n.label ? `${n.to}(${n.label})` : n.to)).join(",")}`);
+  const said = (before: Process, after: Process, done: string, subject: string) => {
+    const n = restructureNotice(before, after, done, subject)!;
+    return [n.title, ...(n.detail ? n.detail.split("\n") : [])];
+  };
+  const UNCHANGED = ["check-freeze>write-release-notes", "write-release-notes>raise-change", "raise-change>approve-change"];
+
+  it("“Change approved?” to the end: the arrows into its old and new place are said; its answers keep names and targets", () => {
+    const p = moveStepInFlow(release(), "change-approved", null);
+    expect(all(p)).toEqual([...UNCHANGED, "approve-change>tier-zero", "rework-change>approve-change", "tier-zero>book-sre(Yes),start-deployment(No)",
+      "book-sre>start-deployment", "start-deployment>roll-out", "roll-out>watch-release", "watch-release>release-healthy",
+      "release-healthy>close-change(Yes),roll-back(No)", "roll-back>", "close-change>change-approved", "change-approved>tier-zero(Approved),rework-change(Rejected)"]);
+    expect(said(release(), p, movedHead(p, "change-approved"), "change-approved")).toEqual([
+      "Step “Change approved?” is now step 14, the last.",
+      "“Approve the change” now leads to step 6 “Is it a tier 0 service?”.",
+      "“Close the change record” now leads to step 14 “Change approved?”.",
+    ]);
+  });
+
+  it("“Change approved?” to the start: “Approved” is reconnected and that is said", () => {
+    const p = moveStepInFlow(release(), "change-approved", "check-freeze");
+    expect(all(p)[0]).toBe("change-approved>check-freeze(Approved),rework-change(Rejected)");
+    expect(all(p)).toContain("approve-change>tier-zero");
+    expect(said(release(), p, movedHead(p, "change-approved"), "change-approved")).toEqual([
+      "Step “Change approved?” is now step 1, the first.",
+      "“Approved” of “Change approved?” now goes to step 2 “Check there is no change freeze”.",
+      "“Approve the change” now leads to step 7 “Is it a tier 0 service?”.",
+    ]);
+  });
+
+  it("deleting the last step: “Yes” of “Release healthy?” is removed, and that is said", () => {
+    const p = deleteStep(release(), "close-change");
+    expect(all(p).slice(-2)).toEqual(["release-healthy>roll-back(No)", "roll-back>"]);
+    expect(said(release(), p, "Step “Close the change record” deleted.", "close-change")).toEqual([
+      "Step “Close the change record” deleted.",
+      "“Yes” of “Release healthy?” is removed: it led to the deleted step, which ended the flow.",
+    ]);
+  });
+
+  it("deleting the only step of a branch removes its answer, and says so", () => {
+    const p = deleteStep(release(), "roll-back");
+    expect(all(p)).toContain("release-healthy>close-change(Yes)");
+    expect(said(release(), p, "Step “Roll back to the previous version” deleted.", "roll-back")[1])
+      .toBe("“No” of “Release healthy?” is removed: it led to the deleted step, which ended the flow.");
+  });
+
+  it("deleting “Book an SRE…” and then “Is it a tier 0 service?” never renames “Approved”", () => {
+    const one = deleteStep(release(), "book-sre");
+    const two = deleteStep(one, "tier-zero");
+    expect(all(two)).toEqual([...UNCHANGED, "approve-change>change-approved", "change-approved>start-deployment(Approved),rework-change(Rejected)",
+      "rework-change>approve-change", "start-deployment>roll-out", "roll-out>watch-release", "watch-release>release-healthy",
+      "release-healthy>close-change(Yes),roll-back(No)", "roll-back>", "close-change>"]);
+    expect(said(one, two, "Step “Is it a tier 0 service?” deleted.", "tier-zero")).toEqual([
+      "Step “Is it a tier 0 service?” deleted.",
+      "“Approved” of “Change approved?” now goes to step 7 “Start the production deployment”.",
+    ]);
+  });
+
+  it("deleting a decision with two ways on: the answer into it keeps its name and follows the way that carried the flow on", () => {
+    const p = deleteStep(release(), "tier-zero");
+    expect(all(p)).toContain("change-approved>book-sre(Approved),rework-change(Rejected)");
+    expect(all(p)).toContain("book-sre>start-deployment");
+    expect(said(release(), p, "Step “Is it a tier 0 service?” deleted.", "tier-zero")[1]).toBe("“Approved” of “Change approved?” now goes to step 7 “Book an SRE to watch the release”.");
+  });
+
+  it("deleting a decision that an ordinary step led to: that step takes over both ways, and that is said", () => {
+    const p = deleteStep(release(), "change-approved");
+    expect(all(p)).toContain("approve-change>tier-zero,rework-change");
+    expect(said(release(), p, "Step “Change approved?” deleted.", "change-approved")[1])
+      .toBe("“Approve the change” now leads to step 6 “Is it a tier 0 service?” and to step 5 “Fix the change record”.");
+  });
+
+  it("moving the last step to the start removes the answer that led to it, and says so", () => {
+    const p = moveStepInFlow(release(), "close-change", "check-freeze");
+    expect(all(p)[0]).toBe("close-change>check-freeze");
+    expect(all(p)).toContain("release-healthy>roll-back(No)");
+    expect(said(release(), p, movedHead(p, "close-change"), "close-change")).toEqual([
+      "Step “Close the change record” is now step 1, the first.",
+      "“Yes” of “Release healthy?” is removed: it led to “Close the change record”, which was moved.",
+    ]);
+  });
+
+  it("a plain move names the answer and the arrows that changed", () => {
+    const p = moveStepInFlow(release(), "write-release-notes", "start-deployment");
+    expect(said(release(), p, movedHead(p, "write-release-notes"), "write-release-notes")).toEqual([
+      "Step “Write the release notes” is now step 8, before “Start the production deployment”.",
+      "“No” of “Is it a tier 0 service?” now goes to step 8 “Write the release notes”.",
+      "“Check there is no change freeze” now leads to step 2 “Raise the change record”.",
+      "“Book an SRE to watch the release” now leads to step 8 “Write the release notes”.",
+    ]);
+  });
+
+  it("an answer's name never changes by deleting or moving any one step", () => {
+    const names = (p: Process) => p.steps.flatMap((s) => s.next.filter((n) => n.label).map((n) => `${s.id}:${n.label}`));
+    const r = release();
+    for (const s of r.steps) {
+      for (const after of [deleteStep(r, s.id), moveStepInFlow(r, s.id, null), moveStepInFlow(r, s.id, r.steps[0].id)]) {
+        const now = names(after);
+        // each name there now was there before (a new branch "Other" only when put after a decision)
+        expect(now.filter((x) => !names(r).includes(x) && !x.endsWith(":Other"))).toEqual([]);
+        // and each name that went is said
+        const gone = names(r).filter((x) => !now.includes(x) && after.steps.some((t) => t.id === x.split(":")[0]));
+        const lines = structureChanges(r, after, s.id).join(" ");
+        for (const g of gone) expect(lines).toContain(`“${g.split(":")[1]}” of`);
+      }
+    }
   });
 });
 
@@ -229,43 +341,54 @@ describe("problems in words", () => {
 });
 
 describe("the message after a delete or a move", () => {
-  it("is at most two lines: what was done, and one line about answers that now lead elsewhere", () => {
+  it("says what was done, then every other change to the flow", () => {
     const p = base();
     // deleting "fix": the "No" of "Approved?" now leads to what followed it
     const next = deleteStep(p, "fix");
-    expect(restructureNotice(p, next, "Step “Fix the request” deleted.")).toEqual({
-      title: "Step “Fix the request” deleted.", detail: "“No” of “Approved?” now goes to 2. Approve it.",
+    expect(restructureNotice(p, next, "Step “Fix the request” deleted.", "fix")).toEqual({
+      title: "Step “Fix the request” deleted.", detail: "“No” of “Approved?” now goes to step 2 “Approve it”.",
     });
-    // nothing about answers: one line
-    expect(restructureNotice(p, deleteStep(p, "done"), "Step “Check the result” deleted.")?.detail).toBeUndefined();
+    // deleting the last step: the answer that led to it is removed, and that is said
+    expect(restructureNotice(p, deleteStep(p, "done"), "Step “Check the result” deleted.", "done")?.detail)
+      .toBe("“Yes” of “Approved?” is removed: it led to the deleted step, which ended the flow.");
+    // a step in a line: the arrow that was joined
+    expect(restructureNotice(p, deleteStep(p, "approve"), "Step “Approve it” deleted.", "approve")?.detail).toBe(
+      "“Ask for it” now leads to step 2 “Approved?”.\n“Fix the request” now leads to step 2 “Approved?”.");
   });
-  it("after a move that changed one answer, says where it now leads", () => {
+  it("after a move, says where the step is and what leads elsewhere", () => {
     const p = base();
     const moved = moveStepInFlow(p, "ok", "approve");
-    expect(restructureNotice(p, moved)).toEqual({ title: "“Yes” of “Approved?” now goes to 3. Approve it." });
+    expect(restructureNotice(p, moved, movedHead(moved, "ok"), "ok")).toEqual({
+      title: "Step “Approved?” is now step 2, before “Approve it”.",
+      detail: ["“Yes” of “Approved?” now goes to step 3 “Approve it”.", "“Ask for it” now leads to step 2 “Approved?”.", "And 2 more: see “What comes next” of the steps on the map."].join("\n"),
+      all: ["“Yes” of “Approved?” now goes to step 3 “Approve it”.", "“Ask for it” now leads to step 2 “Approved?”.", "“Approve it” now leads to step 5 “Check the result”.", "“Fix the request” now leads to step 2 “Approved?”."],
+    });
   });
-  it("names two answers, counts more, and counts decisions", () => {
+  it("says three lines at most: two, then how many more", () => {
     const p = base();
     const both = { ...p, steps: p.steps.map((s) => (s.id === "ok" ? { ...s, next: [{ to: "ask", label: "Yes" }, { to: "ask", label: "No" }] } : s)) };
     const said = restructureNotice(p, both)!;
-    expect(said.title).toBe("“Yes” of “Approved?” now goes to 1. Ask for it, as “No” does.");
-    expect(said.detail).toBe("“No” of “Approved?” now goes to 1. Ask for it, as “Yes” does.");
-    // a delete that changed four answers: two named, the rest counted, all of them kept for a list
+    expect(said.title).toBe("“Yes” of “Approved?” now goes to step 1 “Ask for it”, as “No” does.");
+    expect(said.detail!.split("\n")).toEqual([
+      "“No” of “Approved?” now goes to step 1 “Ask for it”, as “Yes” does.",
+      "Nothing leads to step 4 “Fix the request” any more.",
+      "Nothing leads to step 5 “Check the result” any more.",
+    ]);
     const many = { ...both, steps: [...both.steps, { id: "d2", title: "Other?", actor: "me", type: "decision" as const, next: [{ to: "ask", label: "A" }, { to: "done", label: "B" }] }] };
     const four = restructureNotice({ ...p, steps: [...p.steps, { id: "d2", title: "Other?", actor: "me", type: "decision" as const, next: [{ to: "done", label: "A" }, { to: "ask", label: "B" }] }] }, many, "Step “X” deleted.")!;
     expect(four.title).toBe("Step “X” deleted.");
     expect(four.detail!.split("\n")).toEqual([
-      "“Yes” of “Approved?” now goes to 1. Ask for it, as “No” does.",
-      "“No” of “Approved?” now goes to 1. Ask for it, as “Yes” does.",
-      "And 2 more answers: see “What comes next” of those decisions.",
+      "“Yes” of “Approved?” now goes to step 1 “Ask for it”, as “No” does.",
+      "“No” of “Approved?” now goes to step 1 “Ask for it”, as “Yes” does.",
+      "And 3 more: see “What comes next” of the steps on the map.",
     ]);
-    expect(four.all).toHaveLength(4);
+    expect(four.all).toHaveLength(5);
   });
   it("cuts long names", () => {
     expect(shortName("Start the production deployment of the service")).toBe("Start the production deployment of…");
     expect(shortName("Short")).toBe("Short");
   });
-  it("says nothing when nothing was done and no answer changed", () => {
+  it("says nothing when nothing was done and nothing changed", () => {
     expect(restructureNotice(base(), base())).toBeNull();
   });
 });

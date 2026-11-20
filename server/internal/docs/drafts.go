@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"reflect"
 	"time"
 	"unicode/utf8"
@@ -14,12 +13,17 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Working drafts: unpublished changes to a PUBLISHED process or standard (status active or
-// deprecated), kept beside it, one per document and shared by everyone who may edit it. The
-// document, its versions, its skills and the search index know nothing of it until it is
-// published - which is an ordinary save (Save with PublishDraft), so there is still exactly one
-// way a version comes into being. A document that was never published (status "draft") has no
-// working draft: it is saved the ordinary way.
+// Working drafts: changes to a process or standard that are not stored as the document itself,
+// kept beside it, one per document and shared by everyone who may edit it. The document, its
+// versions, its skills and the search index know nothing of it until it is published - which is
+// an ordinary save (Save with PublishDraft or ReplaceDraft), so there is still exactly one way a
+// version comes into being.
+//
+// For a published document (status active or deprecated) they are its unpublished changes. A
+// document that was never published (status "draft") is saved the ordinary way while it passes
+// every check; what does not pass yet (an empty row, a link without https://) is kept as its
+// working draft, so that saving always works, and the next save that passes replaces the working
+// draft with the document itself (ReplaceDraft).
 
 // MaxDraftBytes is the largest working draft that is stored, measured on the body as it was
 // sent: the same limit as for any save (the server refuses a larger request before it is read).
@@ -61,9 +65,7 @@ const (
 	// KeepDraft: the working draft stays as it is; its base is not moved, so publishing it later
 	// meets the ordinary version conflict (or is rebased, when only a review confirmation came
 	// in between). For saves that are no person's editing: imports, the conversion of older
-	// content, review confirmations (which move the base themselves, see MoveDraftBaseIn). When such a save makes the document unpublished
-	// (status "draft"), the working draft is dropped and that is logged: only a published
-	// document has one.
+	// content, review confirmations (which move the base themselves, see MoveDraftBaseIn).
 	KeepDraft DraftRule = iota
 	// RefuseIfDraft: the save is refused with a *DraftPending. For people's ordinary saves:
 	// changes to a document that has unpublished changes go through those, and unpublishing or
@@ -72,12 +74,16 @@ const (
 	// PublishDraft: the save publishes the working draft of revision Change.Revision and removes
 	// it in the same transaction. When it is gone or has another revision: *DraftConflict.
 	PublishDraft
+	// ReplaceDraft: a person's ordinary save of a document that was never published, made from
+	// its working draft of revision Change.Revision: the document is stored and the working draft
+	// removed in the same transaction. When the draft is gone or has another revision:
+	// *DraftConflict; when the stored document is published: ErrPublished (its unpublished changes
+	// are published with PublishDraft, which keeps its status and review record).
+	ReplaceDraft
 )
 
-var (
-	// ErrNeverPublished: a working draft is only for a published document.
-	ErrNeverPublished = errors.New("the document was never published")
-)
+// ErrPublished refuses ReplaceDraft for a published document.
+var ErrPublished = errors.New("the document is published")
 
 // DraftPending refuses an ordinary save while the document has unpublished changes.
 type DraftPending struct {
@@ -124,23 +130,6 @@ func draftIn(ctx context.Context, q pgx.Tx, kind, id string) (*WorkingDraft, err
 		return nil, err
 	}
 	return &d, nil
-}
-
-func dropDraftIn(ctx context.Context, tx pgx.Tx, kind, id string, log *slog.Logger) error {
-	var by string
-	err := tx.QueryRow(ctx, `delete from working_drafts where kind = $1 and id = $2 returning updated_by`, kind, id).Scan(&by)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if log == nil {
-		log = slog.Default()
-	}
-	log.Warn("unpublished changes dropped: the document is no longer published, and only a published document keeps unpublished changes",
-		"kind", kind, "id", id, "lastSavedBy", by)
-	return nil
 }
 
 // GetDraft returns the working draft of a document, or ErrNotFound.
@@ -325,9 +314,9 @@ func storableJSON(b []byte) bool {
 	return !pendingHigh
 }
 
-// SaveDraft stores a working draft. It returns ErrNotFound when the document does not exist,
-// ErrNeverPublished when it was never published, a *DraftConflict when c.Revision is not the
-// stored revision, and a *Conflict when c.Base is not the current version.
+// SaveDraft stores a working draft. It returns ErrNotFound when the document does not exist, a
+// *DraftConflict when c.Revision is not the stored revision, and a *Conflict when c.Base is not
+// the current version.
 func (s *Store) SaveDraft(ctx context.Context, c DraftChange) (WorkingDraft, error) {
 	var out WorkingDraft
 	if c.Kind != Process && c.Kind != Standard || !ValidID(c.ID) {
@@ -353,9 +342,6 @@ func (s *Store) SaveDraft(ctx context.Context, c DraftChange) (WorkingDraft, err
 			if err := c.Check(*cur); err != nil {
 				return err
 			}
-		}
-		if !Published(cur.Body) {
-			return ErrNeverPublished
 		}
 		have, err := draftIn(ctx, tx, c.Kind, c.ID)
 		if err != nil {
@@ -457,9 +443,9 @@ func MoveDraftBaseIn(ctx context.Context, tx pgx.Tx, kind, id string, from, to i
 	return err
 }
 
-// ForPublishing prepares a working draft for publishing over the published document. The status
-// is the published one (publishing neither un-retires nor hides anything; "status" in the draft
-// is ignored). The review record - when it was last confirmed and by whom - is the published
+// ForPublishing prepares a working draft for publishing over the stored document. The status
+// is the stored one (publishing neither un-retires nor hides anything; "status" in the draft
+// is ignored) - except for a document that was never published, which publishing makes active. The review record - when it was last confirmed and by whom - is the published
 // one too: a confirmation is made on the published document, never in a draft. The rest of
 // "review" (how often it is reviewed) comes from the draft. A draft without "review" keeps the
 // published review when that records a confirmation, so that the record is not lost. The order
@@ -473,7 +459,11 @@ func ForPublishing(draft, published []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	out = out.set("status", pub.get("status"), "review", "updatedAt")
+	status := pub.get("status")
+	if !Published(published) {
+		status = json.RawMessage(`"active"`)
+	}
+	out = out.set("status", status, "review", "updatedAt")
 	review, err := mergeReview(out.get("review"), pub.get("review"))
 	if err != nil {
 		return nil, err

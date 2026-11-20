@@ -10,6 +10,7 @@ import { ResourceEditor } from "./Resources";
 import { EntryIcon } from "./EntryIcon";
 import { DeleteButton, EditSection, FieldsHead, ItemFeedback, ItemIssues, selectExample } from "./EditFrame";
 import { Field, TypeIcon, notify, useLayer } from "./ui";
+import { editNotice } from "./Editing";
 
 /** The fields of a step that most steps do without: offered as "+ Tool", "+ Typical time"… until they have a value. */
 type Detail = "description" | "tool" | "duration" | "url" | "outcome" | "resources" | "subProcessId";

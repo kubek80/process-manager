@@ -18,7 +18,8 @@ import { GovernedSections, WhereSection } from "./ProcessSections";
 import { RequirementCard, RequirementFields } from "./Requirements";
 import { ResourceEditor, Resources } from "./Resources";
 import { standardAiSpec, StandardIntro } from "./StandardPage";
-import { Field, notify, scrollBehavior } from "./ui";
+import { Field, scrollBehavior } from "./ui";
+import { editNotice } from "./Editing";
 
 const stamp = (s: Standard): Standard => ({ ...s, updatedAt: today() });
 

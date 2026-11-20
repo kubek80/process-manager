@@ -153,15 +153,22 @@ export function deleteStep(p: Process, id: string): Process {
         return l ? { to: g.to, label: l, inherited: true } : { to: g.to, inherited: true };
       });
     };
+    // a path taken over is left out where the step already leads; a named answer always stays
+    const own = new Set(s.next.filter((n) => n.to !== id).map((n) => n.to));
     const seen = new Set<string>();
     const kept = s.next
       .flatMap((n): Path[] => (n.to === id ? replace(n) : [n]))
-      .filter((n) => n.to !== s.id && n.to !== id && ((!seen.has(n.to) && !!seen.add(n.to)) || (decides && !!n.label && !n.inherited)));
+      .filter((n) => {
+        if (n.to === s.id || n.to === id || (n.inherited && own.has(n.to))) return false;
+        const first = !seen.has(n.to);
+        seen.add(n.to);
+        return first || (decides && !!n.label && !n.inherited);
+      });
     // a name taken over from the deleted step never takes the name of an answer that was there
-    const own = kept.filter((n) => !n.inherited && n.label).map((n) => ({ to: n.to, label: n.label }));
+    const names = kept.filter((n) => !n.inherited && n.label).map((n) => ({ to: n.to, label: n.label }));
     const next = kept.reduce<NextLink[]>((out, { inherited, ...n }) => {
       if (!inherited || !decides || !n.label) return [...out, n];
-      return [...out, { ...n, label: freeLabel(n.label, [...own, ...out]) }];
+      return [...out, { ...n, label: freeLabel(n.label, [...names, ...out]) }];
     }, []);
     return { ...s, next };
   });
@@ -240,10 +247,10 @@ export function moveStepInFlow(p: Process, id: string, beforeId: string | null):
   return { ...p, steps: [...redirected.slice(0, at), moved, ...redirected.slice(at)] };
 }
 
-/** A step as the map numbers it: "9. Start the production deployment". */
+/** A step as the map numbers it, for a sentence: `step 9 “Start the production deployment”`. */
 const numbered = (p: Process, id: string, max = 40) => {
   const i = p.steps.findIndex((s) => s.id === id);
-  return i < 0 ? `“${shortName(id, max)}”` : `${i + 1}. ${shortName(p.steps[i].title, max) || "(no name yet)"}`;
+  return i < 0 ? `“${shortName(id, max)}”` : `step ${i + 1} ${shortName(p.steps[i].title, max) ? `“${shortName(p.steps[i].title, max)}”` : "(no name yet)"}`;
 };
 /** An answer of a decision in a sentence: `“No” of “Is it a tier 0 service?”`. */
 const answerOf = (label: string | undefined, decision: Step, max = 40) =>

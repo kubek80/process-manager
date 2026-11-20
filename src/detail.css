@@ -210,7 +210,7 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
    laptop also what a reader can do (from 1000 px up that sits on the tab row: DocActions) */
 .doc-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--line); }
 .doc-foot .engage-actions { margin-left: auto; }
-@media (max-width: 760px) { .doc-foot .engage-actions { margin: 6px 0 0; flex-basis: 100%; } }
+@media (max-width: 999px) { .doc-foot .engage-actions { margin: 4px 0 0; flex-basis: 100%; } }
 .doc-when { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0; color: var(--text-3); font-size: 12.5px; }
 .doc-when .review-tag { display: inline-flex; align-items: center; gap: 5px; }
 .doc-when .version-tag { height: 22px; font-size: 12px; }

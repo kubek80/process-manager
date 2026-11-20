@@ -460,9 +460,9 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .fb-new > p { margin-bottom: 12px; }
 .fb-form { display: grid; gap: 8px; container-type: inline-size; }
 /* the kind of feedback: the shared segmented control; four in a row where they fit, else two rows of two */
-.fb-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); justify-self: stretch; overflow: visible; }
+.seg.fb-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); justify-self: stretch; overflow: visible; }
 .fb-kinds .seg-item { min-width: 0; padding: 0 8px; }
-@container (min-width: 430px) { .fb-kinds { grid-template-columns: repeat(4, auto); justify-self: start; } }
+@container (min-width: 430px) { .seg.fb-kinds { grid-template-columns: repeat(4, auto); justify-self: start; } }
 .fb-send { display: flex; align-items: center; gap: 8px; }
 .fb-thanks { display: flex; align-items: center; gap: 6px; color: var(--good); font-size: 13px; font-weight: 550; }
 .fb-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }

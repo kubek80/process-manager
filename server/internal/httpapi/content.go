@@ -46,7 +46,9 @@ type docMeta struct {
 	Version   int       `json:"version"`
 	UpdatedAt time.Time `json:"updatedAt"`
 	UpdatedBy string    `json:"updatedBy"`
-	CreatedAt time.Time `json:"createdAt"`
+	// UpdatedByName is the name of whoever saved it last, where the portal knows it.
+	UpdatedByName string    `json:"updatedByName,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
 	// PublishedAt is when readers could first see it (its first version that was not a draft);
 	// absent for a document never published.
 	PublishedAt *time.Time      `json:"publishedAt,omitempty"`
@@ -117,6 +119,21 @@ func (a *api) listDocs(kind, key string) http.HandlerFunc {
 			}
 			meta[d.ID] = m
 		}
+		// who saved each last, by name where it is known: one lookup for the whole list
+		var emails []string
+		for _, m := range meta {
+			if strings.Contains(m.UpdatedBy, "@") && !slices.Contains(emails, m.UpdatedBy) {
+				emails = append(emails, m.UpdatedBy)
+			}
+		}
+		if names, err := a.names(r.Context(), emails); err == nil {
+			for id, m := range meta {
+				if n := names[m.UpdatedBy]; n != "" {
+					m.UpdatedByName = n
+					meta[id] = m
+				}
+			}
+		}
 		writeJSON(w, 200, map[string]any{key: bodies, "meta": meta})
 	}
 }
@@ -180,23 +197,86 @@ func deniedFor(w http.ResponseWriter, kind string, s session) {
 	denied(w, kind)
 }
 
-// conflict tells the app that somebody else saved first, and who.
-func conflict(w http.ResponseWriter, kind string, c *docs.Conflict) {
+// conflict tells the app that somebody else saved or deleted first, and who: by name where the
+// portal knows it. Who deleted something is said only to people who could edit its last version.
+func (a *api) conflict(w http.ResponseWriter, r *http.Request, kind, id string, c *docs.Conflict) {
+	ctx := r.Context()
 	if !c.Exists {
-		writeJSON(w, 409, map[string]any{
-			"error":    "This was deleted by someone else while you were working on it.",
-			"conflict": map[string]any{"exists": false},
-		})
+		info := map[string]any{"exists": false}
+		msg := "This was deleted by someone else while you were working on it."
+		if del, ok := a.deletion(r, kind, id); ok {
+			name := a.personName(ctx, del.By)
+			info["deletedBy"], info["deletedAt"] = del.By, del.At
+			if name != "" {
+				info["deletedByName"] = name
+			} else {
+				name = del.By
+			}
+			msg = fmt.Sprintf("%s deleted this %s while you were working on it.", name, noun[kind])
+		}
+		writeJSON(w, 409, map[string]any{"error": msg, "conflict": info})
 		return
 	}
-	msg := fmt.Sprintf("%s saved a newer version (version %d) while you were working on this.", c.Current.UpdatedBy, c.Current.Version)
-	if kind == docs.Catalog {
-		msg = fmt.Sprintf("%s changed the lists (version %d) while you were working on them.", c.Current.UpdatedBy, c.Current.Version)
+	info := a.headJSON(ctx, c.Current)
+	info["exists"] = true
+	by := c.Current.UpdatedBy
+	if name, ok := info["updatedByName"].(string); ok {
+		by = name
 	}
-	writeJSON(w, 409, map[string]any{
-		"error":    msg,
-		"conflict": map[string]any{"exists": true, "version": c.Current.Version, "updatedAt": c.Current.UpdatedAt, "updatedBy": c.Current.UpdatedBy},
-	})
+	msg := fmt.Sprintf("%s saved a newer version (version %d) while you were working on this.", by, c.Current.Version)
+	if kind == docs.Catalog {
+		msg = fmt.Sprintf("%s changed the lists (version %d) while you were working on them.", by, c.Current.Version)
+		delete(info, "status")
+	}
+	writeJSON(w, 409, map[string]any{"error": msg, "conflict": info})
+}
+
+// headJSON is what the app is told about the stored document after somebody else changed it:
+// its version, its status ("draft", "active" or "deprecated"), and who saved it when (by name
+// where known).
+func (a *api) headJSON(ctx context.Context, d docs.Doc) map[string]any {
+	status := docs.StatusOf(d.Body)
+	if status == "" {
+		status = "active"
+	}
+	out := map[string]any{"version": d.Version, "status": status, "updatedAt": d.UpdatedAt, "updatedBy": d.UpdatedBy}
+	if name := a.personName(ctx, d.UpdatedBy); name != "" {
+		out["updatedByName"] = name
+	}
+	return out
+}
+
+// personName is a person's name where the portal knows it, "" otherwise (also on a failure:
+// a name is never a reason for an answer to fail).
+func (a *api) personName(ctx context.Context, email string) string {
+	if !strings.Contains(email, "@") {
+		return ""
+	}
+	names, err := a.names(ctx, []string{email})
+	if err != nil {
+		return ""
+	}
+	return names[email]
+}
+
+// deletion is the last deletion of a document that does not exist now, when the caller could
+// edit its last version.
+func (a *api) deletion(r *http.Request, kind, id string) (docs.Deletion, bool) {
+	if kind == docs.Catalog || !docs.ValidID(id) {
+		return docs.Deletion{}, false
+	}
+	del, err := a.Docs.LastDeleted(r.Context(), kind, id)
+	if err != nil || !who(r).CanEdit(kind, belongsOf(del.Last)) {
+		return docs.Deletion{}, false
+	}
+	return del, true
+}
+
+// deletedFor reports whether a document that does not exist was deleted, and the caller could
+// edit it before.
+func (a *api) deletedFor(r *http.Request, kind, id string) bool {
+	_, ok := a.deletion(r, kind, id)
+	return ok
 }
 
 // baseOf reads the version a change was made from. Absent: no check.
@@ -395,13 +475,23 @@ func (a *api) putDoc(kind string) http.HandlerFunc {
 			a.fail(w, r, err)
 			return
 		}
-		// A person's ordinary save of a process or standard that has unpublished changes is
-		// refused: the changes would be lost, or hidden under a version they never saw.
-		rule := docs.KeepDraft
+		// A person's ordinary save of a process or standard that has a working draft is refused:
+		// the changes would be lost, or hidden under a version they never saw - unless it is a
+		// never-published document saved from its working draft (draft=<its revision>), which the
+		// save replaces.
+		rule, rev := docs.KeepDraft, 0
 		if kind != docs.Catalog {
 			rule = docs.RefuseIfDraft
+			if raw := r.URL.Query().Get("draft"); raw != "" {
+				n, err := strconv.Atoi(raw)
+				if err != nil || n < 1 {
+					writeError(w, 400, "draft must be the revision of the working draft the save replaces.")
+					return
+				}
+				rule, rev = docs.ReplaceDraft, n
+			}
 		}
-		a.save(w, r, saving{kind: kind, id: id, body: body, base: base, note: r.URL.Query().Get("note"), action: "save", drafts: rule})
+		a.save(w, r, saving{kind: kind, id: id, body: body, base: base, note: r.URL.Query().Get("note"), action: "save", drafts: rule, revision: rev})
 	}
 }
 
@@ -488,13 +578,16 @@ func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 		writeError(w, 403, m.Error())
 		return
 	case errors.As(err, &c):
-		conflict(w, kind, c)
+		a.conflict(w, r, kind, id, c)
 		return
 	case errors.As(err, &pending):
 		draftPending(w, kind, pending)
 		return
 	case errors.As(err, &dc):
 		draftConflict(w, dc)
+		return
+	case errors.Is(err, docs.ErrPublished):
+		writeError(w, 409, fmt.Sprintf("This %s is published: its unpublished changes are published with Publish, not saved over it.", noun[kind]))
 		return
 	case err != nil:
 		a.fail(w, r, err)
@@ -555,7 +648,7 @@ func (a *api) reviewDoc(kind string) http.HandlerFunc {
 		// the new content is built from it. A caller who names another version is told so; and
 		// the save below is refused if somebody else gets in first.
 		if base != nil && *base != current.Version {
-			conflict(w, kind, &docs.Conflict{Current: current, Exists: true})
+			a.conflict(w, r, kind, id, &docs.Conflict{Current: current, Exists: true})
 			return
 		}
 		body, err := docs.WithReview(current.Body, time.Now().UTC().Format("2006-01-02"), reviewerName(s.Name), reviewRhythm[kind])
@@ -580,7 +673,7 @@ func (a *api) reviewDoc(kind string) http.HandlerFunc {
 		var c *docs.Conflict
 		switch {
 		case errors.As(err, &c):
-			conflict(w, kind, c)
+			a.conflict(w, r, kind, id, c)
 			return
 		case err != nil:
 			a.fail(w, r, err)
@@ -636,7 +729,7 @@ func (a *api) deleteDoc(kind string) http.HandlerFunc {
 			denied(w, kind)
 			return
 		case errors.As(err, &c):
-			conflict(w, kind, c)
+			a.conflict(w, r, kind, id, c)
 			return
 		case err != nil:
 			a.fail(w, r, err)

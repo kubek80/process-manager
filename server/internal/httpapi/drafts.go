@@ -15,9 +15,10 @@ import (
 	"github.com/kubek80/process-manager/server/internal/docs"
 )
 
-// Working drafts: unpublished changes to a published process or standard, shared by everyone
-// who may edit it. Only they ever learn that one exists: for everybody else every answer here is
-// the one for something that does not exist. See docs/backend.md.
+// Working drafts: changes to a process or standard that are not stored as the document itself -
+// unpublished changes to a published one, or what cannot be saved yet as a never-published one -
+// shared by everyone who may edit it. Only they ever learn that one exists: for everybody else
+// every answer here is the one for something that does not exist. See docs/backend.md.
 
 // notThere is the answer for a document or working draft that does not exist, or that the caller
 // may not edit.
@@ -67,30 +68,49 @@ func draftConflict(w http.ResponseWriter, c *docs.DraftConflict) {
 		info["updatedByName"] = c.Current.UpdatedByName
 	}
 	writeJSON(w, 409, map[string]any{
-		"error":    fmt.Sprintf("%s saved newer unpublished changes while you were working on this.", c.Current.UpdatedBy),
+		"error":    fmt.Sprintf("%s saved newer unpublished changes while you were working on this.", draftAuthor(*c.Current)),
 		"conflict": info,
 	})
 }
 
-// draftPending refuses an ordinary save of a document that has unpublished changes.
+// draftAuthor names whoever saved a working draft last: by name when it is known.
+func draftAuthor(d docs.WorkingDraft) string {
+	if d.UpdatedByName != "" {
+		return d.UpdatedByName
+	}
+	return d.UpdatedBy
+}
+
+// draftPending refuses an ordinary save of a document that has a working draft. For a document
+// that was never published the working draft is simply the newer state of the same draft:
+// the answer is a draft conflict, so that the app asks whether to continue from it or to save
+// over it (with draft=<revision>).
 func draftPending(w http.ResponseWriter, kind string, p *docs.DraftPending) {
 	n := noun[kind]
-	msg := fmt.Sprintf("This %s has unpublished changes by %s. Publish or discard them first, then make this change.", n, p.Draft.UpdatedBy)
+	by := draftAuthor(p.Draft)
+	if p.Status == "draft" {
+		info := map[string]any{"exists": true, "draft": true, "version": p.Draft.Revision, "updatedAt": p.Draft.UpdatedAt, "updatedBy": p.Draft.UpdatedBy}
+		if p.Draft.UpdatedByName != "" {
+			info["updatedByName"] = p.Draft.UpdatedByName
+		}
+		writeJSON(w, 409, map[string]any{
+			"error":    fmt.Sprintf("%s saved newer changes to this draft while you were working on it.", by),
+			"conflict": info,
+			"draft":    p.Draft.Info(),
+		})
+		return
+	}
+	msg := fmt.Sprintf("This %s has unpublished changes by %s. Publish or discard them first, then make this change.", n, by)
 	switch {
 	case p.NewStatus == "draft":
-		msg = fmt.Sprintf("This %s has unpublished changes by %s. Publish or discard them before you hide the %s from readers again.", n, p.Draft.UpdatedBy, n)
+		msg = fmt.Sprintf("This %s has unpublished changes by %s. Publish or discard them before you hide the %s from readers again.", n, by, n)
 	case p.NewStatus == "deprecated" && p.Status != "deprecated":
-		msg = fmt.Sprintf("This %s has unpublished changes by %s. Publish or discard them before you retire the %s.", n, p.Draft.UpdatedBy, n)
+		msg = fmt.Sprintf("This %s has unpublished changes by %s. Publish or discard them before you retire the %s.", n, by, n)
 	}
 	writeJSON(w, 409, map[string]any{
 		"error": msg,
 		"draft": p.Draft.Info(),
 	})
-}
-
-// neverPublished answers a working draft of something readers do not see yet.
-func neverPublished(w http.ResponseWriter, kind string) {
-	writeError(w, 409, fmt.Sprintf("This %s is not published yet, so readers do not see it: save your changes to it directly.", noun[kind]))
 }
 
 // editable reads the published document and checks that the caller may edit it. It answers the
@@ -185,23 +205,30 @@ func (a *api) putDraft(kind string) http.HandlerFunc {
 		var c *docs.Conflict
 		var dc *docs.DraftConflict
 		switch {
+		case errors.Is(err, docs.ErrNotFound) && a.deletedFor(r, kind, id):
+			// deleted while somebody who could edit it worked on it: they are told who did it
+			a.conflict(w, r, kind, id, &docs.Conflict{})
 		case errors.Is(err, errHidden), errors.Is(err, docs.ErrNotFound):
 			notThere(w)
 		case errors.Is(err, errContent):
 			deniedFor(w, kind, s)
 		case errors.As(err, &m):
 			writeError(w, 403, m.Error())
-		case errors.Is(err, docs.ErrNeverPublished):
-			neverPublished(w, kind)
 		case errors.As(err, &dc):
 			draftConflict(w, dc)
 		case errors.As(err, &c):
-			conflict(w, kind, c)
+			a.conflict(w, r, kind, id, c)
 		case err != nil:
 			a.fail(w, r, err)
 		default:
 			// saving a draft is not in the activity log: it happens every few seconds
-			writeJSON(w, 200, draftJSON(d))
+			out := draftJSON(d)
+			// what the document itself is now: somebody may have retired, unpublished or saved it
+			// meanwhile, which the person is told at once rather than when they publish
+			if cur, err := a.Docs.Get(r.Context(), kind, id); err == nil {
+				out["document"] = a.headJSON(r.Context(), cur)
+			}
+			writeJSON(w, 200, out)
 		}
 	}
 }

@@ -117,8 +117,38 @@ func TestWorkingDraftsInTheStore(t *testing.T) {
 	if _, _, err := s.Put(ctx, docs.Process, "request-vpn", []byte(strings.Replace(vpn, `"zebra"`, `"status":"draft","zebra"`, 1)), "a"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SaveDraft(ctx, docs.DraftChange{Kind: docs.Process, ID: "request-vpn", Body: []byte(vpn), By: "a"}); !errors.Is(err, docs.ErrNeverPublished) {
-		t.Fatalf("never published: %v", err)
+	// a never-published document has a working draft too: what cannot be stored as itself yet
+	unfinished := strings.Replace(vpn, `"zebra"`, `"status":"draft","title":"","zebra"`, 1)
+	nd, err := s.SaveDraft(ctx, docs.DraftChange{Kind: docs.Process, ID: "request-vpn", Body: []byte(unfinished), By: "a"})
+	if err != nil || nd.Revision != 1 || nd.Base != 1 {
+		t.Fatalf("never published: %+v %v", nd, err)
+	}
+	one, fixed := 1, []byte(strings.Replace(vpn, `"zebra"`, `"status":"draft","note":"fixed","zebra"`, 1))
+	var dc0 *docs.DraftConflict
+	// an ordinary save is refused while it exists; one that replaces it needs its revision
+	var pending *docs.DraftPending
+	if _, _, err := s.Save(ctx, docs.Change{Kind: docs.Process, ID: "request-vpn", Body: fixed, By: "a", Base: &one, Drafts: docs.RefuseIfDraft}); !errors.As(err, &pending) || pending.Status != "draft" {
+		t.Fatalf("saved past the working draft: %v", err)
+	}
+	if _, _, err := s.Save(ctx, docs.Change{Kind: docs.Process, ID: "request-vpn", Body: fixed, By: "a", Base: &one, Drafts: docs.ReplaceDraft, Revision: 2}); !errors.As(err, &dc0) || dc0.Current.Revision != 1 {
+		t.Fatalf("replaced a newer revision: %v", err)
+	}
+	two0 := 2
+	if _, _, err := s.Save(ctx, docs.Change{Kind: docs.Process, ID: "request-vpn", Body: fixed, By: "a", Base: &two0, Drafts: docs.ReplaceDraft, Revision: 1}); !errors.As(err, new(*docs.Conflict)) {
+		t.Fatalf("replaced on a version that does not exist: %v", err)
+	}
+	if _, err := s.GetDraft(ctx, docs.Process, "request-vpn"); err != nil {
+		t.Fatalf("a refused replace lost the draft: %v", err)
+	}
+	saved0, changed0, err := s.Save(ctx, docs.Change{Kind: docs.Process, ID: "request-vpn", Body: fixed, By: "a", Base: &one, Drafts: docs.ReplaceDraft, Revision: 1})
+	if err != nil || !changed0 || saved0.Version != 2 || docs.StatusOf(saved0.Body) != "draft" {
+		t.Fatalf("replace: %+v %v %v", saved0, changed0, err)
+	}
+	if _, err := s.GetDraft(ctx, docs.Process, "request-vpn"); !errors.Is(err, docs.ErrNotFound) {
+		t.Fatalf("the replaced draft is still there: %v", err)
+	}
+	if _, _, err := s.Save(ctx, docs.Change{Kind: docs.Process, ID: "request-vpn", Body: fixed, By: "a", Base: &two0, Drafts: docs.ReplaceDraft, Revision: 1}); !errors.As(err, &dc0) || dc0.Current != nil {
+		t.Fatalf("replaced twice: %v", err)
 	}
 
 	d, err := s.SaveDraft(ctx, docs.DraftChange{Kind: docs.Standard, ID: "secure-logging", Body: []byte(draft), By: "alex@example.com", ByName: "Alex Editor"})
@@ -203,26 +233,20 @@ func TestWorkingDraftsInTheStore(t *testing.T) {
 		t.Fatalf("published twice: %v", err)
 	}
 
-	// an import that makes the document unpublished drops the draft, and says so
+	// an import that makes the document unpublished keeps the draft: a never-published document
+	// has one too
 	if _, err := s.SaveDraft(ctx, docs.DraftChange{Kind: docs.Standard, ID: "secure-logging", Body: []byte(draft), By: "a"}); err != nil {
 		t.Fatal(err)
 	}
-	logged.Reset()
 	if _, _, err := s.Put(ctx, docs.Standard, "secure-logging", []byte(strings.Replace(logging, `"active"`, `"draft"`, 1)), "import"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetDraft(ctx, docs.Standard, "secure-logging"); !errors.Is(err, docs.ErrNotFound) {
-		t.Fatalf("kept on an unpublished document: %v", err)
-	}
-	if !strings.Contains(logged.String(), "unpublished changes dropped") {
-		t.Fatalf("not logged: %s", logged.String())
+	if _, err := s.GetDraft(ctx, docs.Standard, "secure-logging"); err != nil {
+		t.Fatalf("dropped on an unpublished document: %v", err)
 	}
 
 	// discarding: the right revision only
 	if _, _, err := s.Put(ctx, docs.Standard, "secure-logging", []byte(logging), "import"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.SaveDraft(ctx, docs.DraftChange{Kind: docs.Standard, ID: "secure-logging", Body: []byte(draft), By: "a"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DiscardDraft(ctx, docs.Standard, "secure-logging", 7, nil, nil); !errors.As(err, &dc) {

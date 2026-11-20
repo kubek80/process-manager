@@ -148,17 +148,19 @@ describe("changing the flow", () => {
     one.steps[0].next = [{ to: "approve", label: "Send" }];
     expect(flow(deleteStep(one, "approve"))).toContain("ask>ok(Send) ");
   });
-  it("a decision that takes over the paths of a deleted decision keeps every name once", () => {
+  it("a decision whose answer led to a deleted decision keeps its answers' names", () => {
     const p = base();
     // first? (Yes: ok, No: done); ok? (Yes: done, No: fix)
     p.steps[1] = { ...p.steps[1], type: "decision", next: [{ to: "ok", label: "Yes" }, { to: "done", label: "No" }] };
+    // "Yes" keeps its name and goes where "ok" carried the flow on (done); "No" is untouched
     const next = deleteStep(p, "ok").steps.find((s) => s.id === "approve")!.next;
-    expect(next.map((n) => n.to)).toEqual(["done", "fix"]); // "done" was reachable twice: listed once
-    const labels = next.map((n) => n.label);
-    expect(labels.every(Boolean)).toBe(true);
-    expect(new Set(labels).size).toBe(labels.length);
-    const issues = validateProcess(deleteStep(p, "ok"));
-    expect(issues.filter((i) => i.message.includes("label"))).toEqual([]);
+    expect(next).toEqual([{ to: "done", label: "Yes" }, { to: "done", label: "No" }]);
+    // two answers to one step: the checker asks to tell them apart, nothing is lost silently
+    expect(validateProcess(deleteStep(p, "ok")).some((i) => i.level === "error" && i.path.startsWith("steps[1].next"))).toBe(true);
+    // an unnamed way in takes over the names of the deleted decision; a name already there gets a number
+    const q = base();
+    q.steps[1] = { ...q.steps[1], type: "decision", next: [{ to: "ok" }, { to: "fix", label: "Yes" }] };
+    expect(deleteStep(q, "ok").steps.find((s) => s.id === "approve")!.next).toEqual([{ to: "done", label: "Yes 2" }, { to: "fix", label: "Yes" }]); // "No" led to fix, where "Yes" already leads
   });
   it("a new decision starts with two named paths where the flow has them", () => {
     const decision = { title: "Is it urgent", type: "decision" as const, actor: "boss" };

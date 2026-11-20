@@ -115,9 +115,10 @@ type Change struct {
 	After func(ctx context.Context, tx pgx.Tx, saved Doc) error
 	// Drafts says what happens when the document has a working draft (see DraftRule).
 	Drafts DraftRule
-	// Revision is the revision of the working draft that is published (Drafts: PublishDraft).
+	// Revision is the revision of the working draft that is published or replaced (Drafts:
+	// PublishDraft, ReplaceDraft).
 	Revision int
-	// Log is told when a working draft is dropped; nil: the default logger.
+	// Log is kept for the callers; nothing is logged by a save at the moment.
 	Log *slog.Logger
 }
 
@@ -281,8 +282,15 @@ func SaveIn(ctx context.Context, tx pgx.Tx, c Change) (doc Doc, changed bool, er
 			return doc, false, err
 		}
 	}
-	if c.Drafts == PublishDraft && (draft == nil || draft.Revision != c.Revision) {
+	fromDraft := c.Drafts == PublishDraft || c.Drafts == ReplaceDraft
+	if fromDraft && cur == nil {
+		return doc, false, &Conflict{} // deleted, with its working draft
+	}
+	if fromDraft && (draft == nil || draft.Revision != c.Revision) {
 		return doc, false, &DraftConflict{Current: draft}
+	}
+	if c.Drafts == ReplaceDraft && Published(cur.Body) {
+		return doc, false, ErrPublished
 	}
 	if err := checkBase(c.Base, cur); err != nil {
 		return doc, false, err
@@ -290,7 +298,7 @@ func SaveIn(ctx context.Context, tx pgx.Tx, c Change) (doc Doc, changed bool, er
 	switch {
 	case c.Drafts == RefuseIfDraft && draft != nil:
 		return doc, false, &DraftPending{Draft: *draft, Status: StatusOf(cur.Body), NewStatus: StatusOf(pretty)}
-	case c.Drafts == PublishDraft:
+	case fromDraft:
 		if _, err := tx.Exec(ctx, `delete from working_drafts where kind = $1 and id = $2`, kind, id); err != nil {
 			return doc, false, err
 		}
@@ -312,13 +320,6 @@ func SaveIn(ctx context.Context, tx pgx.Tx, c Change) (doc Doc, changed bool, er
 	}
 	if _, err := tx.Exec(ctx, `insert into document_versions (kind, id, version, body, saved_by, note) values ($1, $2, $3, $4, $5, $6)`, kind, id, next, pretty, c.By, note); err != nil {
 		return doc, false, err
-	}
-	// Only a published document has a working draft. A save that is allowed to go past one
-	// (an import, the conversion of older content) and makes the document unpublished drops it.
-	if c.Drafts == KeepDraft && cur != nil && StatusOf(pretty) == "draft" {
-		if err := dropDraftIn(ctx, tx, kind, id, c.Log); err != nil {
-			return doc, false, err
-		}
 	}
 	if c.After != nil {
 		if err := c.After(ctx, tx, doc); err != nil {
@@ -420,6 +421,30 @@ func (s *Store) LastDeletion(ctx context.Context, kind, id string) (int, error) 
 	var n int
 	err := s.Pool.QueryRow(ctx, `select coalesce(max(version), 0) from document_versions where kind = $1 and id = $2 and body is null`, kind, id).Scan(&n)
 	return n, err
+}
+
+// Deletion is the most recent deletion of a document: who deleted it and when, and the body of
+// its last version before that.
+type Deletion struct {
+	By   string
+	At   time.Time
+	Last json.RawMessage
+}
+
+// LastDeleted returns the most recent deletion of a document, or ErrNotFound when it was never
+// deleted or exists again.
+func (s *Store) LastDeleted(ctx context.Context, kind, id string) (Deletion, error) {
+	var d Deletion
+	err := s.Pool.QueryRow(ctx, `select v.saved_by, v.saved_at, (select p.body from document_versions p
+			where p.kind = v.kind and p.id = v.id and p.version < v.version and p.body is not null order by p.version desc limit 1)
+		from document_versions v
+		where v.kind = $1 and v.id = $2 and v.body is null
+			and not exists (select 1 from documents d where d.kind = $1 and d.id = $2)
+		order by v.version desc limit 1`, kind, id).Scan(&d.By, &d.At, &d.Last)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && d.Last == nil) {
+		return Deletion{}, ErrNotFound
+	}
+	return d, err
 }
 
 // VersionBody returns the body of one saved version.

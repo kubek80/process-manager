@@ -147,7 +147,7 @@ describe("a message about answers", () => {
     // "Yes" of "Approved?" now goes to the decision itself's neighbour named with a question mark
     const q = { ...p, steps: p.steps.map((s) => (s.id === "ok" ? { ...s, next: s.next.map((n) => (n.label === "Yes" ? { ...n, to: "approve" } : n)) } : s.id === "approve" ? { ...s, title: "Is it approved?" } : s)) };
     const said = restructureNotice({ ...p, steps: p.steps.map((s) => (s.id === "approve" ? { ...s, title: "Is it approved?" } : s)) }, q)!;
-    expect(said.title).toMatch(/now goes to \d+\. Is it approved\?$/);
+    expect(said.title).toMatch(/now goes to step \d+ “Is it approved\?”\.$/);
   });
 });
 
