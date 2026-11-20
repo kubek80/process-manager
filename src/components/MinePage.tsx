@@ -3,7 +3,7 @@ import { ArrowUpRight, Boxes, CalendarCheck, Check, CircleCheck, Compass, Flag, 
 import type { DocMeta, FeedbackByTarget, Process, Standard, TargetKind } from "../types";
 import { groupName, useCatalog } from "../lib/catalog";
 import { STATUS_LABEL } from "../lib/lifecycle";
-import { changedBy, groupKey, myGroups, responsibilities, type Group, type Owned, type Task } from "../lib/responsibilities";
+import { changedBy, groupKey, myGroups, responsibilities, reviewsDue, type Group, type Owned, type Task } from "../lib/responsibilities";
 import { useFeedbackActions, useMe, usePerms } from "../lib/session";
 import { href, type MetaById } from "../lib/store";
 import { FEEDBACK_KINDS } from "./Feedback";
@@ -105,7 +105,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
       </header>
 
       <div className="stat-row">
-        <div className={`stat ${overdue.length ? "bad" : soon.length ? "warn" : "good"}`}><strong>{overdue.length + soon.length}</strong><span>{overdue.length ? `reviews due, ${overdue.length} overdue` : "reviews due"}</span></div>
+        {(() => { const t = reviewsDue(overdue.length, soon.length); return <div className={`stat ${t.tone}`}><strong>{t.count}</strong><span>{t.label}</span>{t.split && <span className="stat-split">{t.split}</span>}</div>; })()}
         <div className={`stat ${open.length ? "warn" : "good"}`}><strong>{open.length}</strong><span>open feedback</span></div>
         <div className="stat"><strong>{owned.filter((o) => o.status === "draft").length}</strong><span>drafts not yet published</span></div>
         <div className="stat"><strong>{owned.length}</strong><span>{owned.length === 1 ? "process or standard is yours" : "processes and standards are yours"}</span></div>
@@ -125,7 +125,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
                 <Icon o={o} />
                 <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a><em>{via(o)}{o.doc.review?.lastReviewedAt ? ` · last reviewed ${o.doc.review.lastReviewedAt}${o.doc.review.reviewedBy ? ` by ${o.doc.review.reviewedBy}` : ""}` : o.review.first ? " · not reviewed since it was first published" : " · not reviewed yet"}</em></span>
                 <span className={`tier-tag review-${o.review.state}`}>{o.review.label}</span>
-                <a className="btn small" href={pageOf(o)}>Read it<ArrowUpRight size={13} /></a>
+                <a className="btn small" href={pageOf(o)}>Open<ArrowUpRight size={13} /></a>
                 <button className="btn small" disabled={busy === o.kind + o.doc.id} onClick={() => review(o)} title={`Records today and your name as the review of this ${noun(o.kind)}`}><Check size={14} />Still correct</button>
               </li>
             ))}

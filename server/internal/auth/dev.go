@@ -6,14 +6,15 @@ type DevUser struct {
 	About string `json:"about"`
 }
 
-// DevUsers each exercise a different set of rights. DevRoles gives them their roles the
+// DevUsers each exercise a different set of rights. Their lines name the roles as Admin > Access
+// does ("Owner for Cloud Platform team"). DevRoles gives them their roles the
 // first time a local database is started; Dana is admin through the server settings.
 var DevUsers = []DevUser{
-	{User{"sam@example.com", "Sam Consumer"}, "Follows processes and reports problems"},
-	{User{"alex@example.com", "Alex Editor"}, "Edits processes and the lists"},
-	{User{"casey@example.com", "Casey Owner"}, "Member of the Cloud Platform team: confirms reviews and closes feedback on what it owns"},
-	{User{"riley@example.com", "Riley Security"}, "Owner of the Cyber security practice: edits what belongs to it; member of the Cyber Security team"},
-	{User{"jordan@example.com", "Jordan Platform"}, "Owner of the Google Cloud platform and the Engineering practice: edits what belongs to them; member of the Cloud Platform team"},
+	{User{"sam@example.com", "Sam Consumer"}, "Reader: follows processes and reports problems"},
+	{User{"alex@example.com", "Alex Editor"}, "Process editor and Lists manager: edits every process and the lists"},
+	{User{"casey@example.com", "Casey Owner"}, "Owner for Cloud Platform team: confirms the reviews and answers the feedback of what the team maintains"},
+	{User{"riley@example.com", "Riley Security"}, "Practice owner for Cyber security and Owner for Cyber Security: edits what belongs to the practice"},
+	{User{"jordan@example.com", "Jordan Platform"}, "Platform owner for Google Cloud, Practice owner for Engineering and Owner for Cloud Platform team"},
 	{User{"dana@example.com", "Dana Admin"}, "Admin: everything, including who has access"},
 }
 

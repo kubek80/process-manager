@@ -13,12 +13,13 @@ import { go, href, type StandardTab } from "../lib/store";
 import { isDrawableStandard, validateStandard } from "../lib/validate";
 import type { AiSpec } from "./AiDialog";
 import { FeedbackForm, FeedbackItem, FeedbackTab, openCount, standardTarget } from "./Feedback";
-import { DocEngagement } from "./Engage";
-import { DocHead, ProfileFilter } from "./Governance";
+import { DocActions, DocEngagement } from "./Engage";
+import { DocHead, PrintFoot, ProfileFilter } from "./Governance";
+import { ACTIONS_ON_TABS, useMedia, usePrinting } from "../lib/media";
 import { Fact, LevelBars, LevelMark } from "./marks";
 import { DraftLine, HistoryDialog, NotShown } from "./Editing";
 import { LEVEL, RequirementCard } from "./Requirements";
-import { Resources } from "./Resources";
+import { RESOURCE_KINDS } from "./Resources";
 import { SourceSkills } from "./SkillPanel";
 import { scrollBehavior, useLayer } from "./ui";
 
@@ -65,7 +66,7 @@ function RequirementDrawer({ r, standard, feedback, reporting, setReporting, onC
           {mine.length > 0 && <ul className="fb-list">{mine.map((f) => <FeedbackItem key={f.id} item={f} target={target} hideItem />)}</ul>}
           {reporting
             ? <><h4>What is wrong or unclear in {r.id}?</h4><FeedbackForm target={target} itemId={r.id} onDone={() => setReporting(false)} /></>
-            : <button className="btn small report-btn" onClick={() => setReporting(true)}><Flag size={14} />Report a problem with this requirement</button>}
+            : <button className="btn small report-btn" onClick={() => setReporting(true)} aria-label="Report a problem with this requirement"><Flag size={14} />Report a problem</button>}
         </section>
       </div>
     </aside>
@@ -95,9 +96,12 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   const [focusFeedback, setFocusFeedback] = useState(tab === "feedback");
   const [profile, setProfile] = useProfile();
   const [level, setLevel] = useState<Level | null>(null);
+  const printing = usePrinting();
+  const actionsOnTabs = useMedia(ACTIONS_ON_TABS);
 
   const renderable = useMemo(() => isDrawableStandard(doc), [doc]);
-  const view: StandardTab = tab === "json" ? "doc" : tab;
+  // printed, a standard is its requirements, whatever tab is open
+  const view: StandardTab = tab === "json" || printing ? "doc" : tab;
   // the open requirement is part of the address, so a link can point at it and Back closes it
   const [selected, setSelected] = useSelectedItem(item,
     (id) => ({ page: "standard", id: standard.id, tab: "doc", ...(id ? { item: id } : {}) }),
@@ -118,14 +122,16 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
     return () => clearTimeout(t);
   }, [item, view]);
   const back = () => go({ page: "standards" });
+  const giveFeedback = () => { setFocusFeedback(true); go({ page: "standard", id: standard.id, tab: "feedback" }); };
 
   if (!renderable) return <NotShown kind="standard" title={doc.title || standard.id} editHref={editor ? editHref : undefined} back={back} problems={validateStandard(doc).length} />;
 
-  const shown = doc.requirements.filter((r) => !level || r.level === level);
+  // printed: every requirement, whatever the level chosen or the reader's application
+  const shown = doc.requirements.filter((r) => printing || !level || r.level === level);
   const count = (l: Level) => doc.requirements.filter((r) => r.level === l && appliesTo(r, profile)).length;
 
   return (
-    <div className={`page process-page standard-page ${current ? "with-drawer" : ""}`}>
+    <div className={`page process-page standard-page ${current && !printing ? "with-drawer" : ""} ${printing ? "printing" : ""}`}>
       <DocHead kind="standard" doc={doc} meta={meta} review={review} onBack={back} onHistory={() => setHistory(true)}
         facts={<>
           <Fact icon={ListChecks} label="Requirements" strong>{`${doc.requirements.length} ${doc.requirements.length === 1 ? "requirement" : "requirements"}`}</Fact>
@@ -149,9 +155,8 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
             title="Confirm that this standard is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
           {editor && <a className="btn primary" href={editHref}><Pencil size={16} />Edit</a>}
         </>}>
-        {status !== "draft" && <DocEngagement kind="standard" id={standard.id} title={doc.title} summary={doc.summary}
-          open={openCount(feedback)} resolvedHere={feedback.length - openCount(feedback)}
-          onFeedback={() => { setFocusFeedback(true); go({ page: "standard", id: standard.id, tab: "feedback" }); }} />}
+        {status !== "draft" && <DocEngagement kind="standard" id={standard.id} title={doc.title} summary={doc.summary} actions={!actionsOnTabs}
+          open={openCount(feedback)} resolvedHere={feedback.length - openCount(feedback)} onFeedback={giveFeedback} />}
       </DocHead>
 
       <DraftLine meta={meta} status={status} editHref={editor ? editHref : undefined} noun="standard" />
@@ -163,12 +168,12 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
               onClick={() => go({ page: "standard", id: standard.id, tab: id })}><Icon size={16} />{label}{id === "feedback" && openCount(feedback) > 0 && <span className="tab-count">{openCount(feedback)}</span>}</button>
           ))}
         </div>
+        {actionsOnTabs && status !== "draft" && <DocActions kind="standard" id={standard.id} title={doc.title} summary={doc.summary} onFeedback={giveFeedback} />}
       </div>
 
       {view === "doc" && (
         <div className="standard-doc">
-          <StandardIntro standard={doc} processes={processes} helpers={helpers} />
-          {!!doc.resources?.length && <section className="prereqs"><h2>Background</h2><Resources list={doc.resources} /></section>}
+          <StandardIntro standard={doc} processes={processes} helpers={helpers} background />
 
           <div className="req-bar">
             <div className="seg level-seg" role="group" aria-label="Show requirements of level">
@@ -181,17 +186,18 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
           </div>
           <ol className="reqs">
             {shown.map((r) => (
-              <RequirementCard key={r.id} r={r} standard={doc} processes={processes} applies={appliesTo(r, profile)} flags={openCount(feedback, r.id)}
-                selected={selected === r.id}
+              <RequirementCard key={r.id} r={r} standard={doc} processes={processes} applies={printing || appliesTo(r, profile)} flags={openCount(feedback, r.id)}
+                selected={selected === r.id && !printing}
                 onReport={() => { setSelected(r.id); setReporting(true); }} />
             ))}
           </ol>
         </div>
       )}
+      {printing && <PrintFoot doc={doc} meta={meta} />}
       {view === "feedback" && <FeedbackTab target={target} feedback={feedback} onSelect={select} focus={focusFeedback} onFocused={() => setFocusFeedback(false)} />}
       {view === "skills" && <SourceSkills kind="standard" id={standard.id} revision={standard} />}
 
-      {current && view === "doc" && (
+      {current && view === "doc" && !printing && (
         <RequirementDrawer r={current} standard={doc} feedback={feedback} reporting={reporting} setReporting={setReporting}
           onClose={() => setSelected(null)} />
       )}
@@ -200,22 +206,43 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   );
 }
 
-/** Scope, exceptions and the processes that help: the top of a standard, for readers and on the editing screen. */
-export function StandardIntro({ standard, processes, helpers }: { standard: Standard; processes: Process[]; helpers: Process[] }) {
+/**
+ * Scope, exceptions, the processes that help and (on the reader's page) the background reading: the
+ * top of a standard as one compact band of columns, for readers and on the editing screen.
+ */
+export function StandardIntro({ standard, processes, helpers, background }: { standard: Standard; processes: Process[]; helpers: Process[]; background?: boolean }) {
   const { catalog } = useCatalog();
   const exception = standard.exceptionProcessId ? processes.find((p) => p.id === standard.exceptionProcessId) : undefined;
+  const reading = background ? [...(standard.resources ?? [])].sort((a, b) => Number(b.kind === "skill") - Number(a.kind === "skill")) : [];
   return (
-    <section className="standard-intro">
-      {standard.scope && <div><h2>Scope</h2><p>{standard.scope}</p></div>}
-      <div>
+    <section className="standard-intro" aria-label="About this standard">
+      {standard.scope && <div className="intro-scope"><h2>Scope</h2><p>{standard.scope}</p></div>}
+      <div className="intro-exceptions">
         <h2>Exceptions</h2>
         <p>A mandatory requirement can only be waived by {teamName(catalog, standard.owner)}.{" "}
-          {exception ? <a href={href({ page: "process", id: exception.id, tab: "flow" })}>Follow “{exception.title}”<ArrowUpRight size={13} /></a>
+          {exception ? <a className="kind-link process" href={href({ page: "process", id: exception.id, tab: "flow" })}><Workflow size={13} aria-hidden="true" />Follow “{exception.title}”</a>
             : standard.exceptionProcessId ? `The process “${standard.exceptionProcessId}” is not described yet.` : "Ask them directly."}</p>
       </div>
       {helpers.length > 0 && (
-        <div><h2>Processes that help</h2>
-          <ul className="link-list">{helpers.map((p) => <li key={p.id}><a href={href({ page: "process", id: p.id, tab: "flow" })}><Workflow size={13} />{p.title}</a></li>)}</ul>
+        <div className="intro-helpers"><h2>Processes that help</h2>
+          <ul className="link-list">{helpers.map((p) => <li key={p.id}><a className="kind-link process" href={href({ page: "process", id: p.id, tab: "flow" })}><Workflow size={13} aria-hidden="true" />{p.title}</a></li>)}</ul>
+        </div>
+      )}
+      {reading.length > 0 && (
+        <div className="intro-reading"><h2>Background</h2>
+          <ul className="reading-list">
+            {reading.map((r, i) => {
+              const K = RESOURCE_KINDS[r.kind ?? "other"];
+              return (
+                <li key={i} className={r.kind === "skill" ? "skill" : ""}>
+                  <a href={r.url} target="_blank" rel="noreferrer" title={r.description ? `${K.label}: ${r.description}` : K.label}>
+                    <K.icon size={14} aria-hidden="true" /><span><span className="sr-only">{K.label}: </span>{r.title}</span><ArrowUpRight size={13} aria-hidden="true" />
+                  </a>
+                  {r.description && <p>{r.description}</p>}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
     </section>

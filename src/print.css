@@ -1,0 +1,106 @@
+/* Printing. A process or standard prints as a document: its head, then (a process) "Before you
+   start" and every step as the checklist, (a standard) its scope, exceptions and every requirement;
+   the last line says which version it is and when it was printed (PrintFoot in Governance.tsx). The
+   pages draw that version while printing (usePrinting in lib/media.ts). Every other page prints
+   without the top bar and its controls. Paper is always light, whatever the theme; the brand and
+   kind colours of a custom look stay. Tags, level bars and ticks keep their colours. */
+
+@page { size: A4; margin: 14mm 13mm 16mm; }
+
+@media print {
+  /* the light tokens, also when the screen is dark (the selectors outweigh the theme's own) */
+  html:root, html:root[data-theme="dark"] {
+    --bg: #ffffff; --surface: #ffffff; --surface-2: #f6f7fa; --line: #dde1ea; --line-strong: #c3c9d6;
+    --text: #11131c; --text-2: #3f4659; --text-3: #5d6578;
+    --accent: var(--theme-light-accent, #4f46e5); --accent-fill: var(--theme-light-accent-fill, #4f46e5); --accent-ink: var(--theme-light-accent-ink, #ffffff); --accent-soft: var(--theme-light-accent-soft, #eef0ff);
+    --kind-process: var(--theme-light-kind-process, #0f766e); --kind-process-fill: var(--theme-light-kind-process-fill, #0f766e); --kind-process-ink: var(--theme-light-kind-process-ink, #ffffff);
+    --kind-process-bg: var(--theme-light-kind-process-bg, #e2f3f0); --kind-process-line: var(--theme-light-kind-process-line, #9fd6cd);
+    --kind-standard: var(--theme-light-kind-standard, #6d28d9); --kind-standard-fill: var(--theme-light-kind-standard-fill, #6d28d9); --kind-standard-ink: var(--theme-light-kind-standard-ink, #ffffff);
+    --kind-standard-bg: var(--theme-light-kind-standard-bg, #f1ebfd); --kind-standard-line: var(--theme-light-kind-standard-line, #cdb9f5);
+    --good: #15803d; --good-bg: #e9f7ee; --warn: #b45309; --warn-bg: #fdf3e1; --bad: #be123c; --bad-bg: #fdecef; --bad-ink: #ffffff;
+    --shadow-1: none; --shadow-2: none; --shadow-3: none;
+    --seg-on: #ffffff; --seg-on-line: var(--line-strong); --search-mark: #fdeca6;
+    color-scheme: light;
+  }
+  /* what the dark theme lightens, back to the light formula */
+  html:root[data-theme="dark"] .type-icon { color: var(--c); background: color-mix(in srgb, var(--c) 14%, var(--surface)); }
+  html:root[data-theme="dark"] .step-kicker .who, html:root[data-theme="dark"] .block-type { color: color-mix(in srgb, var(--c) 72%, #000); }
+  html:root[data-theme="dark"] .instructions li > span { color: color-mix(in srgb, var(--c) 72%, #000); }
+  html:root[data-theme="dark"] .tick.on { color: #fff; }
+
+  /* colours, fills and marks print as on the screen (tags, level bars, ticks, kind colours) */
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { background: #fff; }
+  body { font-size: 11pt; line-height: 1.45; }
+  a { text-decoration: none; }
+
+  /* ---------- every page: no top bar, no controls ---------- */
+  .topbar, .menu-shade, .menu-sheet, .skip-link, .toasts, .overlay, .drawer,
+  button.btn, a.btn, .icon-btn, .engage-btn, .engage-actions, select, .switch, .seg, .tabs, .tabs-row,
+  .back, .search, .profile-filter, .pager, .per-page { display: none !important; }
+  .page { max-width: none; margin: 0; padding: 0; }
+  .process-page.with-drawer { margin: 0; }
+
+  /* ---------- the head of a process or standard ---------- */
+  .printing .doc-kicker .back { display: none; }
+  .printing .doc-kicker { font-size: 10pt; }
+  .printing .doc-head-text h1 { font-size: 21pt; }
+  .printing .doc-head-text .lead { font-size: 11.5pt; max-width: none; }
+  .printing .head-actions, .printing .doc-foot, .printing .draft-line { display: none !important; }
+  .printing .doc-facts { font-size: 10pt; gap: 4px 16px; margin-top: 8px; padding-bottom: 10px; border-bottom: 1.5px solid var(--text); }
+  .printing .doc-notices { max-width: none; }
+
+  /* ---------- "Before you start" ---------- */
+  .printing .before-panel { margin: 14px 0 6px; border: 0; padding: 0; break-inside: avoid; }
+  .printing .before-head { padding: 0; gap: 4px 20px; }
+  .printing .before-toggle { padding: 0; min-height: 0; pointer-events: none; }
+  .printing .before-toggle > svg, .printing .before-toggle em, .printing .before-toggle span { display: none; }
+  .printing .before-toggle b, .printing .before-title { padding: 0; font-size: 13pt; }
+  .printing .before-links { padding-left: 0; width: 100%; }
+  .printing .before-group { flex-wrap: wrap; }
+  .printing .before-chips a, .printing .before-group .link-list.row a { height: auto; min-height: 24px; white-space: normal; }
+  .printing .before-chips a > svg:last-child { display: none; }
+  .printing .before-body { padding: 8px 0 0; }
+  .printing .prereq-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .printing .prereq { padding: 8px 10px; break-inside: avoid; }
+  .printing .prereq-link { color: var(--kind-process); }
+
+  /* ---------- the steps (the checklist) ---------- */
+  .printing .list-view { max-width: none; display: block; margin-top: 12px; }
+  .printing .step { break-inside: avoid; grid-template-columns: 36px 1fr; }
+  .printing .step-card { margin-bottom: 8px; padding: 10px 12px; }
+  .printing .step.other .step-card { padding: 8px 12px; }
+  .printing .step.other .step-body { margin-left: 44px; }
+  .printing .step .step-body { margin-left: 52px; }
+  .printing .step.other .then, .printing .step.other .outcome { display: flex; }
+  .printing .step.done .step-title { text-decoration: none; color: var(--text); }
+  .printing .step-title { font-size: 12pt; }
+  .printing .step.other .step-title { font-size: 11pt; color: var(--text); }
+  .printing .step-titles { pointer-events: none; }
+  .printing .report { display: none; }
+  .printing .then-link { pointer-events: none; }
+  .printing .link-btn, .printing .resources a { break-inside: avoid; }
+  /* a link on paper shows where it leads */
+  .printing .before-chips a[href^="http"]::after, .printing .reading-list a[href^="http"]::after, .printing .resources a[href^="http"] .res-text::after {
+    content: attr(href); display: block; font-size: 8pt; font-weight: 400; color: var(--text-3); overflow-wrap: anywhere;
+  }
+  .printing .before-chips a[href^="http"] { flex-wrap: wrap; border-radius: 10px; padding: 3px 10px; }
+  .printing .before-chips a[href^="http"]::after { flex-basis: 100%; }
+  .printing .step-body .link-btn { display: inline-flex !important; height: auto; padding: 0; border: 0; box-shadow: none; background: none; font-weight: 600; }
+  .printing .step-body .link-btn[href^="http"]::after { content: " (" attr(href) ")"; font-weight: 400; color: var(--text-3); font-size: 9pt; overflow-wrap: anywhere; }
+  .printing .subproc .btn { display: none !important; }
+
+  /* ---------- a standard ---------- */
+  .printing .standard-doc { max-width: none; gap: 10px; margin-top: 14px; }
+  .printing .standard-intro { break-inside: avoid; }
+  .printing .req-bar { display: none; }
+  .printing .reqs { gap: 8px; }
+  .printing .req { break-inside: avoid; padding: 10px 12px; border-color: var(--line-strong); }
+  .printing .req-statement { font-size: 11pt; max-width: none; }
+  .printing .req-why, .printing .req-block { max-width: none; }
+  .printing .req-toggle { display: none; }
+  .printing .req-examples pre { font-size: 8.5pt; }
+
+  /* ---------- the last line ---------- */
+  .print-foot { margin-top: 18px; padding-top: 8px; border-top: 1px solid var(--line-strong); font-size: 8.5pt; color: var(--text-3); overflow-wrap: anywhere; break-inside: avoid; }
+}

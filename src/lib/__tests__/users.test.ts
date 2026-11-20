@@ -60,6 +60,9 @@ describe("the roles dialog", () => {
     const c = choicesOf([]);
     c["platform-owner"] = { on: true, scopes: [""] };
     expect(roleProblems({ ...base, choices: c })).toContain("Choose the platform for Platform owner, or remove that line.");
+    // a role is ticked: the list says what is missing for it, not "give at least one role"
+    c.owner = { on: true, scopes: [""] };
+    expect(roleProblems({ ...base, choices: c })).toEqual(["Choose the platform for Platform owner, or remove that line.", "Choose the team for Owner, or remove that line."]);
     c["platform-owner"] = { on: true, scopes: ["gcp", "gcp"] };
     expect(roleProblems({ ...base, choices: c })).toContain("Platform owner for Google Cloud is chosen twice.");
     c["platform-owner"] = { on: true, scopes: ["old"] };
@@ -81,7 +84,7 @@ describe("the roles dialog", () => {
 describe("deleting a person", () => {
   it("is refused, in plain words, for oneself, an admin from the server settings and the last admin", () => {
     expect(deleteBlocked(sam, [dana, sam], "SAM@example.com")).toMatch(/cannot delete yourself/);
-    expect(deleteBlocked(dana, [dana, sam], "ana@example.com")).toMatch(/PM_ADMINS/);
+    expect(deleteBlocked(dana, [dana, sam], "ana@example.com")).toMatch(/settings where the portal is installed/);
     expect(isLastAdmin(ana, [ana, sam])).toBe(true);
     expect(deleteBlocked(ana, [ana, sam], "sam@example.com")).toMatch(/only admin/);
     expect(deleteBlocked(ana, [ana, dana], "dana@example.com")).toBe("");

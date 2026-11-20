@@ -6,7 +6,7 @@ import { groupKindOf } from "../lib/members";
 import { useMe } from "../lib/session";
 import { deleteUser, loadUsers, saveUserRoles } from "../lib/store";
 import {
-  BOOTSTRAP_PLACE, choicesOf, deleteBlocked, normalRoles, ROLE_ORDER, ROLES, roleLine, roleProblems, rolesDiff, rolesOf, shownRoles, userMatches,
+  BOOTSTRAP_PLACE, BOOTSTRAP_SETTING, choicesOf, deleteBlocked, normalRoles, ROLE_ORDER, ROLES, roleLine, roleProblems, rolesDiff, rolesOf, shownRoles, userMatches,
   type AdminUser, type Groups, type RoleChoices,
 } from "../lib/users";
 import { confirmDialog, Field, LoadError, Loading, Modal, notify } from "./ui";
@@ -74,12 +74,12 @@ export function UsersSection() {
                   </span>
                   <ul className="user-roles" aria-label={`Roles of ${u.name || u.email}`}>
                     {shownRoles(u).map((r) => (
-                      <li key={r.role + r.scope}>{roleLine(r, groups)}{u.bootstrap && r.role === "admin" && <span className="user-fixed" title={`Named in ${BOOTSTRAP_PLACE}`}><Lock size={11} aria-hidden="true" />server settings</span>}</li>
+                      <li key={r.role + r.scope}>{roleLine(r, groups)}{u.bootstrap && r.role === "admin" && <span className="user-fixed" title={`Named in ${BOOTSTRAP_PLACE} (the setting ${BOOTSTRAP_SETTING}). It cannot be taken away here.`}><Lock size={11} aria-hidden="true" />set where the portal is installed</span>}</li>
                     ))}
                   </ul>
                   <span className="user-actions">
                     <button className="btn small" onClick={() => setEditing({ user: u })} aria-label={`Edit ${u.name || u.email}`}><Pencil size={14} aria-hidden="true" />Edit</button>
-                    <button className="btn small ghost danger" disabled={!!blocked} title={blocked || undefined} aria-label={`Delete ${u.name || u.email}`} onClick={() => remove(u)}><Trash2 size={14} aria-hidden="true" />Delete</button>
+                    <button className="btn small ghost user-del" disabled={!!blocked} title={blocked || undefined} aria-label={`Delete ${u.name || u.email}`} onClick={() => remove(u)}><Trash2 size={14} aria-hidden="true" />Delete</button>
                   </span>
                   {blocked && <span className="user-note muted small">{blocked}</span>}
                 </li>
@@ -143,7 +143,7 @@ function RolesDialog({ user, users, groups, me, onClose, onSaved }: {
       footer={<>
         <span className="muted small roles-summary" role="status">{user && !changed ? "Nothing changed yet." : summary(diff, groups)}</span>
         <span className="spacer" />
-        <button className="btn ghost" onClick={onClose}>Cancel</button>
+        <button className="btn" onClick={onClose}>Cancel</button>
         <button className="btn primary" disabled={busy || (tried && problems.length > 0) || !changed} onClick={save}>{busy ? "Saving…" : user ? "Save" : "Add person"}</button>
       </>}>
       <div className="roles-dialog">

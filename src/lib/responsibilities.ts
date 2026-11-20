@@ -132,3 +132,17 @@ export function accountRoles(p: Perms, groups: Groups): string[] {
   ];
   return roles.length ? roles.map((r) => roleLine(r, groups)) : ["Reader"];
 }
+
+/**
+ * The count of reviews to do for a tile: the number in the colour of its worst case (overdue a
+ * problem, due a warning), and the split in words when there is something to split.
+ */
+export function reviewsDue(overdue: number, due: number): { count: number; tone: "bad" | "warn" | "good"; label: string; split: string } {
+  const count = overdue + due;
+  return {
+    count,
+    tone: overdue ? "bad" : due ? "warn" : "good",
+    label: count === 1 ? "review due" : "reviews due",
+    split: overdue && due ? `${overdue} overdue · ${due} due` : overdue ? `${overdue === 1 ? "it is" : "all"} overdue` : "",
+  };
+}

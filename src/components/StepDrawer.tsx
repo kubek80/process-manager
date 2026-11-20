@@ -49,7 +49,7 @@ export function StepDrawer({ process, all, step, onClose, onSelect, feedback, re
           )}
           {reporting
             ? <><h4>What is wrong with this step?</h4><FeedbackForm target={processTarget(process)} itemId={step.id} onDone={() => setReporting(false)} /></>
-            : <button className="btn small report-btn" onClick={() => setReporting(true)}><Flag size={14} />This step doesn’t work</button>}
+            : <button className="btn small report-btn" onClick={() => setReporting(true)} aria-label="Report a problem with this step"><Flag size={14} />Report a problem</button>}
         </section>
       </div>
     </aside>

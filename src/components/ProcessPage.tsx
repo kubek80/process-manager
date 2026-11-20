@@ -9,7 +9,7 @@ import { canEdit, canManage } from "../lib/rights";
 import { reviewOf, statusOf } from "../lib/lifecycle";
 import { RESOURCE_KINDS } from "./Resources";
 import { FeedbackForm, FeedbackTab, openCount, processTarget } from "./Feedback";
-import { DocEngagement } from "./Engage";
+import { DocActions, DocEngagement } from "./Engage";
 import { useMe, usePerms } from "../lib/session";
 import { href } from "../lib/store";
 import { FlowView } from "./FlowView";
@@ -17,7 +17,8 @@ import { ListView } from "./ListView";
 import { StepDrawer } from "./StepDrawer";
 import type { AiSpec } from "./AiDialog";
 import { Modal, scrollBehavior } from "./ui";
-import { DocHead, RIGOUR } from "./Governance";
+import { DocHead, PrintFoot, RIGOUR } from "./Governance";
+import { ACTIONS_ON_TABS, PHONE, arrivalTab, useMedia, usePrinting } from "../lib/media";
 import { Fact, LevelMark } from "./marks";
 import { DraftLine, HistoryDialog, NotShown } from "./Editing";
 import { SourceSkills } from "./SkillPanel";
@@ -51,6 +52,14 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
   const me = useMe();
   const { done, toggle, reset } = useProgress(process.id);
   const doc = process;
+  const printing = usePrinting();
+  // from a laptop up, what a reader can do sits on the tab row (and stays there while scrolling); narrower, in the head
+  const actionsOnTabs = useMedia(ACTIONS_ON_TABS);
+  // on a phone a process opens on its checklist, unless the address names a step on the map
+  useEffect(() => {
+    const to = arrivalTab(tab, item, !!window.matchMedia?.(PHONE).matches);
+    if (to) go({ page: "process", id: process.id, tab: to }, { replace: true });
+  }, [process.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A process that was stored broken cannot be drawn; it is repaired on the editing screen.
   const renderable = useMemo(() => isDrawableProcess(doc), [doc]);
@@ -63,6 +72,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
   const step = renderable ? doc.steps.find((s) => s.id === selected) : undefined;
 
   const select = (id: string) => { setSelected(id); setReporting(false); if (view === "flow") hint.seen(); };
+  const coarse = useMedia("(pointer: coarse)");
   const hint = useMapHint(me.user?.email ?? "");
   const flagged = flagging ? doc.steps.find((s) => s.id === flagging) : undefined;
   // in the checklist the open step is brought into view, also when the page was opened by a link to it
@@ -73,6 +83,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
   const status = statusOf(doc);
   const replacement = doc.replacedBy ? all.find((p) => p.id === doc.replacedBy) : undefined;
   const back = () => go({ page: "library" });
+  const giveFeedback = () => { setFocusFeedback(true); go({ page: "process", id: process.id, tab: "feedback" }); };
   const editHref = href({ page: "edit-process", id: process.id });
   // ticks are remembered by the prerequisite's title; ticks from before that were remembered by position
   const preKeys = renderable ? prerequisiteKeys(doc.prerequisites) : [];
@@ -91,7 +102,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
     problems={validateProcess(doc).length} />;
 
   return (
-    <div className={`page process-page ${step ? "with-drawer" : ""}`}>
+    <div className={`page process-page ${step && !printing ? "with-drawer" : ""} ${printing ? "printing" : ""}`}>
       <DocHead kind="process" doc={doc} meta={meta} review={review} onBack={back} onHistory={() => setHistory(true)}
         facts={<>
           {doc.rigour && <span title={RIGOUR[doc.rigour]?.hint}><LevelMark level={doc.rigour} /></span>}
@@ -114,9 +125,8 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
             title="Confirm that this process is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
           {editor && <a className="btn primary" href={editHref}><Pencil size={16} />Edit</a>}
         </>}>
-        {status !== "draft" && <DocEngagement kind="process" id={process.id} title={doc.title} summary={doc.summary}
-          open={openCount(feedback)} resolvedHere={feedback.length - openCount(feedback)}
-          onFeedback={() => { setFocusFeedback(true); go({ page: "process", id: process.id, tab: "feedback" }); }} />}
+        {status !== "draft" && <DocEngagement kind="process" id={process.id} title={doc.title} summary={doc.summary} actions={!actionsOnTabs}
+          open={openCount(feedback)} resolvedHere={feedback.length - openCount(feedback)} onFeedback={giveFeedback} />}
       </DocHead>
 
       <DraftLine meta={meta} status={status} editHref={editor ? editHref : undefined} noun="process" />
@@ -128,22 +138,27 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
               onClick={() => go({ page: "process", id: process.id, tab: id, ...(selected && (id === "flow" || id === "list") ? { item: selected } : {}) })}><Icon size={16} />{label}{id === "feedback" && openCount(feedback) > 0 && <span className="tab-count">{openCount(feedback)}</span>}</button>
           ))}
         </div>
-        {view === "flow" && hint.show && (
-          <p className="map-hint"><MousePointerClick size={15} aria-hidden="true" /><span><b>Select a step</b> on the map to see what to do, who does it and with which tool.</span></p>
+        {view === "flow" && hint.show && !step && (
+          <p className="map-hint"><MousePointerClick size={15} aria-hidden="true" /><span><b>{coarse ? "Tap a step" : "Select a step"}</b> for what to do</span></p>
         )}
+        {actionsOnTabs && status !== "draft" && <DocActions kind="process" id={process.id} title={doc.title} summary={doc.summary} onFeedback={giveFeedback} />}
       </div>
 
-      {(view === "flow" || view === "list") && hasExtras && (
-        <BeforeYouStart process={doc} all={all} standards={standards} open={extras} hasPre={hasPre} tickPre={tickPre} readyCount={readyCount}
+      {(printing || view === "flow" || view === "list") && hasExtras && (
+        <BeforeYouStart process={doc} all={all} standards={standards} open={extras || printing} full={printing} hasPre={hasPre} tickPre={tickPre} readyCount={readyCount}
           onToggle={() => { const next = !extras; setExtras(next); try { localStorage.setItem(BEFORE_KEY, next ? "open" : "closed"); } catch { /* ignore */ } }} />
       )}
-      {view === "flow" && <FlowView editable={false} follow process={doc} selectedId={selected} done={done} feedback={feedback} onSelect={select} onReport={setFlagging} />}
-      {view === "list" && <ListView process={doc} all={all} done={done} toggle={toggle} reset={reset} selectedId={selected} onSelect={select}
+      {/* printed, a process is its checklist: every step, who does it, what to do and with which tool */}
+      {printing && <ListView process={doc} all={all} done={done} toggle={toggle} reset={reset} selectedId={null} onSelect={select}
+        feedback={feedback} onReport={() => undefined} print />}
+      {!printing && view === "flow" && <FlowView editable={false} follow process={doc} selectedId={selected} done={done} feedback={feedback} onSelect={select} onReport={setFlagging} />}
+      {!printing && view === "list" && <ListView process={doc} all={all} done={done} toggle={toggle} reset={reset} selectedId={selected} onSelect={select}
         feedback={feedback} onReport={(id) => { setSelected(id); setReporting(true); }} />}
-      {view === "feedback" && <FeedbackTab target={processTarget(doc)} feedback={feedback} onSelect={select} focus={focusFeedback} onFocused={() => setFocusFeedback(false)} />}
-      {view === "skills" && <SourceSkills kind="process" id={process.id} revision={process} />}
+      {!printing && view === "feedback" && <FeedbackTab target={processTarget(doc)} feedback={feedback} onSelect={select} focus={focusFeedback} onFocused={() => setFocusFeedback(false)} />}
+      {!printing && view === "skills" && <SourceSkills kind="process" id={process.id} revision={process} />}
+      {printing && <PrintFoot doc={doc} meta={meta} />}
 
-      {step && (view === "flow" || view === "list") && (
+      {step && !printing && (view === "flow" || view === "list") && (
         <StepDrawer process={doc} all={all} step={step} feedback={feedback} reporting={reporting} setReporting={setReporting}
           onClose={() => setSelected(null)} onSelect={select} />
       )}
@@ -210,9 +225,11 @@ export function StandardLinks({ ids, standards }: { ids: string[]; standards: St
  * out, what is needed in one row of small items with ticks for the reader. Descriptions that do
  * not fit are the item's tooltip.
  */
-export function BeforeYouStart({ process, all, standards, open, onToggle, hasPre, tickPre, readyCount }: {
+export function BeforeYouStart({ process, all, standards, open, onToggle, hasPre, tickPre, readyCount, full }: {
   process: Process; all: Process[]; standards: Standard[]; open: boolean; onToggle: () => void;
   hasPre?: (i: number) => boolean; tickPre?: (i: number) => void; readyCount?: number;
+  /** Every item with its whole text (printed): nothing cut to one line. */
+  full?: boolean;
 }) {
   const pre = process.prerequisites;
   const res = [...(process.resources ?? [])].sort((a, b) => Number(b.kind === "skill") - Number(a.kind === "skill"));
@@ -253,7 +270,7 @@ export function BeforeYouStart({ process, all, standards, open, onToggle, hasPre
       </div>
       {open && foldable && (
         <div id="before-body" className="before-body">
-          <PrereqGrid compact process={process} all={all} hasPre={hasPre} tickPre={tickPre} />
+          <PrereqGrid compact={!full} process={process} all={all} hasPre={hasPre} tickPre={tickPre} />
         </div>
       )}
     </section>

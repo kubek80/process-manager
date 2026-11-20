@@ -11,7 +11,7 @@ import { useDraft } from "../lib/draft";
 import { BehindBanner, ConflictDialog, SaveBar } from "./Editing";
 import { go, loadMembers } from "../lib/store";
 import { hasErrors, validateCatalog } from "../lib/validate";
-import { Field, IssueList, notify } from "./ui";
+import { Field, IssueList, notify, useScrollFade } from "./ui";
 
 type Key = "teams" | "practices" | "platforms" | "categories" | "tools" | "tiers" | "environments" | "languages";
 type Row = { id: string; name: string; contact?: string; url?: string; description?: string; icon?: string };
@@ -165,6 +165,38 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
     setSelected(newId); setAdding(false); setNewName(""); setQ("");
   };
   const switchTo = (k: Key) => { setKey(k); setSelected(null); setAdding(false); setQ(""); };
+  // Removing an entry says so, with Undo (it puts the entry back where it was, whatever was changed
+  // since); the selection moves to its neighbour, which stays in view.
+  const latest = useRef(draft);
+  latest.current = draft;
+  const remove = (entry: Row) => {
+    const list = key, at = rows.findIndex((r) => r.id === entry.id);
+    const next = rows.filter((r) => r.id !== entry.id);
+    setRows(next);
+    setSelected(next[Math.min(at, next.length - 1)]?.id ?? null);
+    notify.info(`${entry.name || `The ${KINDS[list].noun}`} removed`, {
+      label: "Undo",
+      run: () => {
+        const now = latest.current, have = (now[list] ?? []) as Row[];
+        if (have.some((r) => r.id === entry.id)) return;
+        setDraft({ ...now, [list]: [...have.slice(0, at), entry, ...have.slice(at)] });
+        setKey(list); setSelected(entry.id); setAdding(false);
+      },
+    }, "It is gone for everyone once the lists are saved.");
+  };
+  // the chosen entry is kept in view in the list (after adding, removing or Undo)
+  const listBox = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    listBox.current?.querySelector<HTMLElement>(".cat-item.on")?.scrollIntoView({ block: "nearest" });
+  }, [current?.id, key]);
+  // on a narrow screen the lists' tabs scroll sideways: the cut edge fades, the chosen one is brought into view
+  const tabsBox = useRef<HTMLDivElement>(null);
+  useScrollFade(tabsBox);
+  useEffect(() => {
+    const box = tabsBox.current, on = box?.querySelector<HTMLElement>(".tab.on");
+    if (!box || !on || box.scrollWidth <= box.clientWidth) return;
+    box.scrollLeft = Math.max(0, on.offsetLeft - box.offsetLeft - (box.clientWidth - on.offsetWidth) / 2);
+  }, [key]);
 
   return (
     <div className={editor ? "catalog-page" : "page catalog-page"}>
@@ -177,7 +209,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
         </div>
       )}
 
-      <div className="tabs cat-kinds" role="tablist" aria-label="Lists">
+      <div ref={tabsBox} className="tabs cat-kinds" role="tablist" aria-label="Lists">
         {KEYS.map((k) => {
           const K = KINDS[k];
           return (
@@ -204,9 +236,9 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
         <section className="cat-list">
           <div className="cat-list-bar">
             <div className="search"><Search size={15} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${kind.title.toLowerCase()}`} aria-label={`Search ${kind.title.toLowerCase()}`} /></div>
-            {editor && <button className="btn primary" onClick={() => { setAdding(true); setNewName(""); }}><Plus size={16} />New {kind.noun}</button>}
+            {editor && <button className="btn" onClick={() => { setAdding(true); setNewName(""); }}><Plus size={16} />New {kind.noun}</button>}
           </div>
-          <ul>
+          <ul ref={listBox}>
             {shown.map((r) => {
               const used = usesOf(key, r.id, docs);
               const n = used.length;
@@ -241,7 +273,8 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
               </Field>
               <p className="muted small">Id: <code>{slugify(newName) ? newId : "…"}</code>. It is made from the name and never changes, even if you rename.</p>
               <div className="btn-row">
-                <button className="btn primary" disabled={!slugify(newName)} onClick={add}><Plus size={16} />Add {kind.noun}</button>
+                {/* the one main button of the view: Save changes, once there is something to save */}
+                <button className={`btn ${dirty ? "" : "primary"}`} disabled={!slugify(newName)} onClick={add}><Plus size={16} />Add {kind.noun}</button>
                 <button className="btn ghost" onClick={() => setAdding(false)}>Cancel</button>
               </div>
             </div>
@@ -309,7 +342,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
 
               {editor && (
                 <div className="cat-danger">
-                  <button className="btn danger" disabled={uses.length > 0 || stillMembers > 0} onClick={() => { setRows(rows.filter((r) => r.id !== current.id)); setSelected(null); }}>
+                  <button className="btn danger" disabled={uses.length > 0 || stillMembers > 0} onClick={() => remove(current)}>
                     <Trash2 size={15} />Remove this {kind.noun}
                   </button>
                   <span className="muted small">{removeHint(countOf(uses), stillMembers, kind.noun)}</span>

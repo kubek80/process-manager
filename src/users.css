@@ -12,6 +12,8 @@
 .users-list .user-roles li { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; border: 0; padding: 0; }
 .user-fixed { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: 999px; font-size: 11px; color: var(--text-3); background: var(--surface-2); border: 1px solid var(--line); }
 .user-actions { display: flex; gap: 6px; justify-content: flex-end; }
+/* "Delete" is quiet in every row: the problem colour only on pointing at it, and in the dialog that asks */
+.user-actions .user-del:hover:not(:disabled) { color: var(--bad); }
 .user-note { grid-column: 2 / -1; }
 @media (max-width: 720px) {
   .users-list .user-row { grid-template-columns: 30px minmax(0, 1fr); }

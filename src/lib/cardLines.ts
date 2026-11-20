@@ -4,6 +4,9 @@ import { reviewOf, type Dates } from "./lifecycle";
 
 export { rigourLine };
 
+/** The rigour line of a process that does not say how binding it is. */
+export const RIGOUR_NOT_STATED = "Not stated";
+
 // What a card in the lists and the search results says about a process or a standard: one piece
 // of information per line, always in the same order, and only the lines that have something to say.
 
@@ -85,7 +88,8 @@ export function cardLines(f: CardFacts): CardLine[] {
   add("owner", "Owner", nameIn(c.teams, doc.owner));
   add("platform", "Platform", nameIn(c.platforms, doc.platform));
   add("practice", "Practice", nameIn(c.practices, doc.practice));
-  add("rigour", "Rigour", rigourLine(f.kind, f.rigour));
+  // a process that does not say how binding it is says so, so that every card has the same lines
+  add("rigour", "Rigour", rigourLine(f.kind, f.rigour) || (f.kind === "process" ? RIGOUR_NOT_STATED : ""));
   // where else it applies, only when it is narrowed down (the tiers are in the corner)
   add("environments", "Environments", names(c.environments, doc.environments));
   add("languages", "Languages", names(c.languages, doc.languages));

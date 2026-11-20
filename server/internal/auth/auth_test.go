@@ -81,6 +81,22 @@ func TestDevUsers(t *testing.T) {
 			t.Errorf("role for unknown dev user %s", r.Email)
 		}
 	}
+	// the sign-in page names the roles as Admin > Access does: "Owner for …", never "Member of" or "Owner of"
+	words := map[string]string{"owner": "Owner for ", "platform-owner": "Platform owner for ", "practice-owner": "Practice owner for "}
+	for _, u := range DevUsers {
+		if strings.Contains(u.About, "Member of") || strings.Contains(u.About, "member of") || strings.Contains(u.About, "Owner of") {
+			t.Errorf("%s: %q does not use the words of Admin > Access", u.Email, u.About)
+		}
+	}
+	for _, r := range DevRoles {
+		if w, ok := words[r.Role]; ok {
+			for _, u := range DevUsers {
+				if u.Email == r.Email && !strings.Contains(u.About, w) {
+					t.Errorf("%s: %q does not say %q", u.Email, u.About, w)
+				}
+			}
+		}
+	}
 }
 
 // signIn runs the whole browser flow against the fake provider and returns the outcome.

@@ -94,3 +94,14 @@
 .stat-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
 .stat-swatch.partial { background: color-mix(in srgb, var(--accent-fill, var(--accent)) 40%, var(--surface)); border: 1px dashed var(--accent); }
 .req-gone { color: var(--text-2); }
+
+/* the other actions of a request: one quiet "More" that opens a short list under it */
+.req-more { position: relative; }
+.req-more .btn svg { color: var(--text-3); }
+.req-more-pop { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; min-width: 200px; display: grid; gap: 2px; padding: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-3); }
+.req-more-pop:focus { outline: none; }
+.req-more-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 0 10px; border-radius: 8px; font-size: 13.5px; font-weight: 550; color: var(--text); text-align: left; white-space: nowrap; }
+.req-more-item svg { flex: none; color: var(--text-3); }
+.req-more-item:hover, .req-more-item:focus-visible { background: var(--surface-2); }
+.req-more-item.danger, .req-more-item.danger svg { color: var(--bad); }
+@media (pointer: coarse) { .req-more-item { min-height: 44px; } }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Catalog, Process, Standard } from "../../types";
-import { excerpt, filterCount, matchRanges, NO_CATEGORY, rigourText, search, toggleFilter, wordsOf, type Filters, type SearchInput } from "../search";
+import { DROPPED_FILTER_TEXT, excerpt, filterCount, knownFilters, matchRanges, NO_CATEGORY, rigourText, search, toggleFilter, wordsOf, type Filters, type SearchInput } from "../search";
 import { href, pageTitle, parseRoute, type Route } from "../store";
 import { catalog as sampleCatalog, processes as sampleProcesses, standards as sampleStandards } from "./fixtures";
 
@@ -300,5 +300,28 @@ describe("addresses of home and search", () => {
     expect(pageTitle({ page: "home" })).toBe("Process Manager");
     expect(pageTitle({ page: "search" })).toBe("Search · Process Manager");
     expect(pageTitle({ page: "search", q: " gcp " })).toBe("“gcp” · Search · Process Manager");
+  });
+});
+
+describe("filters of an old link", () => {
+  const cat = { teams: [{ id: "cloud-team", name: "Cloud team" }], tools: [], categories: [{ id: "cloud", name: "Cloud" }], platforms: [{ id: "google-cloud", name: "Google Cloud" }], practices: [] } as unknown as SearchInput["catalog"];
+  const used = [{ id: "a", title: "A", owner: "old-team", platform: "azure" }] as unknown as Process[];
+  it("leaves out what names nothing and counts it", () => {
+    expect(knownFilters({ category: ["cloud"], platform: ["gcp"], rigour: ["mandatory"] }, cat, used))
+      .toEqual({ filters: { category: ["cloud"], rigour: ["mandatory"] }, dropped: 1 });
+    expect(knownFilters({ platform: ["gcp", "google-cloud"], practice: ["nope"] }, cat, used))
+      .toEqual({ filters: { platform: ["google-cloud"] }, dropped: 2 });
+  });
+  it("keeps what a process or standard still uses, and what has no category", () => {
+    expect(knownFilters({ owner: ["old-team"], platform: ["azure"], category: [NO_CATEGORY] }, cat, used))
+      .toEqual({ filters: { owner: ["old-team"], platform: ["azure"], category: [NO_CATEGORY] }, dropped: 0 });
+  });
+  it("keeps the kinds and the rigours, and drops anything else", () => {
+    expect(knownFilters({ type: ["process", "x"], rigour: ["optional", "strict"] } as Filters, cat, []))
+      .toEqual({ filters: { type: ["process"], rigour: ["optional"] }, dropped: 2 });
+    expect(knownFilters({}, cat, [])).toEqual({ filters: {}, dropped: 0 });
+  });
+  it("says so in plain words", () => {
+    expect(DROPPED_FILTER_TEXT).toBe("A filter in this link no longer exists and was left out.");
   });
 });

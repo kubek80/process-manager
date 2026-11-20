@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accountRoles, changedBy, groupsOf, myGroups, responsibilities, urgent } from "../responsibilities";
+import { accountRoles, changedBy, groupsOf, myGroups, responsibilities, reviewsDue, urgent } from "../responsibilities";
 import type { Feedback, FeedbackByTarget, Perms } from "../../types";
 import { base, baseStandard } from "./fixtures";
 
@@ -129,5 +129,15 @@ describe("the roles in the account menu", () => {
   });
   it("an entry no longer in the lists is named by its id", () => {
     expect(accountRoles(perms({ owns: ["gone-team"] }), groups)).toEqual(["Owner for gone-team"]);
+  });
+});
+
+describe("the reviews tile", () => {
+  it("takes the colour of the worst case and says the split in words", () => {
+    expect(reviewsDue(6, 5)).toEqual({ count: 11, tone: "bad", label: "reviews due", split: "6 overdue · 5 due" });
+    expect(reviewsDue(0, 2)).toEqual({ count: 2, tone: "warn", label: "reviews due", split: "" });
+    expect(reviewsDue(1, 0)).toEqual({ count: 1, tone: "bad", label: "review due", split: "it is overdue" });
+    expect(reviewsDue(3, 0).split).toBe("all overdue");
+    expect(reviewsDue(0, 0)).toMatchObject({ count: 0, tone: "good", split: "" });
   });
 });

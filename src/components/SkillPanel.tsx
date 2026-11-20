@@ -7,6 +7,23 @@ import { formatDate } from "../lib/dates";
 
 export const SKILL_KIND = { skill: { label: "Skill", icon: Sparkles }, "review-agent": { label: "Review agent", icon: Bot } } as const;
 
+/** What the file is for, in a sentence for whoever reads the Skills tab. */
+export function skillPurpose(kind: keyof typeof SKILL_KIND, sourceKind: TargetKind): string {
+  if (kind === "review-agent") return "Lets an AI assistant check a pull request against this standard and point out what does not meet it.";
+  return sourceKind === "process"
+    ? "Lets an AI coding assistant walk a person through this process: it does their steps and says who does the others."
+    : "Lets an AI coding assistant write code that meets this standard.";
+}
+
+/**
+ * The text shown on the page: the file without its front matter (the lines between the opening
+ * "---" and the next "---", which only the assistant reads). Copy and Download keep the whole file.
+ */
+export function skillPreview(text: string): string {
+  const m = /^---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/.exec(text);
+  return m ? text.slice(m[0].length).replace(/^(?:[ \t]*\r?\n)+/, "") : text;
+}
+
 /** One generated skill or review agent: its text, its versions and the hand-written extra guidance. */
 export function SkillPanel({ id, onChanged }: { id: string; onChanged?: () => void }) {
   const [detail, setDetail] = useState<SkillDetail | null>(null);
@@ -48,9 +65,13 @@ export function SkillPanel({ id, onChanged }: { id: string; onChanged?: () => vo
         <div>
           <span className="eyebrow">{K.label}{!skill.active && " · withdrawn"}</span>
           <h3>{skill.title}</h3>
-          <code>{skill.path}</code>
+          <p className="skill-purpose">{skillPurpose(skill.kind, skill.sourceKind)}</p>
         </div>
       </header>
+      <details className="skill-where">
+        <summary>Where to put it</summary>
+        <p>Download the file and save it in the repository you work in, as <code>{skill.path}</code>. The AI coding assistant finds it there by itself; to update it, download it again.</p>
+      </details>
       {!skill.active && <div className="check warn"><span>Withdrawn: its source is a draft, retired or deleted. The last version is kept for reference.</span></div>}
 
       <div className="skill-bar">
@@ -69,7 +90,7 @@ export function SkillPanel({ id, onChanged }: { id: string; onChanged?: () => vo
         <CopyButton label="Copy" text={() => content} />
         <a className="btn" href={`/api/skills/${skill.id}/download`} download><Download size={16} />Download</a>
       </div>
-      <pre className="skill-content" tabIndex={0}>{content}</pre>
+      <pre className="skill-content" tabIndex={0} aria-label={`What the ${K.label.toLowerCase()} says`}>{skillPreview(content)}</pre>
 
       <section className="skill-extra">
         <h4><FileText size={15} />Extra guidance <span className="muted">added to every new version, kept when the source changes</span></h4>

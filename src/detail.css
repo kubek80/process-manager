@@ -28,7 +28,7 @@
 @media (pointer: coarse) { .engage-actions .btn, .engage-actions .engage-btn { height: 44px; min-width: 44px; } }
 
 /* less room above the map: the tabs closer to the page head and to the map */
-.process-page > .tabs-row { margin: 12px 0 10px; }
+.process-page > .tabs-row { margin: 8px 0 8px; }
 /* the page head: "Edit" is its one primary; "Mark as reviewed" is a quiet secondary until a review is due */
 .head-actions .btn.quiet { box-shadow: none; color: var(--text-2); }
 .head-actions .btn.quiet:hover:not(:disabled) { color: var(--text); }
@@ -38,7 +38,7 @@
 
 /* "Before you start", the same compact panel on the map and the checklist: what is needed in one
    row of small items, then the faster ways and the standards in one line of chips */
-.before-panel { margin: 0 0 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-1); }
+.before-panel { margin: 0 0 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-1); }
 .before-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 24px; padding: 4px 14px 4px 4px; }
 .before-title { padding: 8px 10px; color: var(--text); font-size: 15px; font-weight: 650; }
 .before-toggle { display: inline-flex; align-items: center; gap: 6px 12px; min-height: 40px; padding: 6px 10px; border-radius: 10px; color: var(--text-2); font-size: 13.5px; text-align: left; }
@@ -79,9 +79,17 @@
   .before-chips a, .before-group .link-list.row a { height: auto; min-height: 44px; white-space: normal; }
 }
 
+/* the tab row: the tabs, then (on the map, until a step is opened) a short hint, then what a reader can do */
+.tabs-row > .engage-actions { margin-left: auto; padding-bottom: 6px; flex-wrap: nowrap; }
+.tabs-row > .map-hint + .engage-actions { margin-left: 0; }
+/* where room is short the actions keep their icon (and their name for screen readers) */
+@media (max-width: 1199px) { .tabs-row .engage-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }
+.with-drawer .tabs-row .engage-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.tabs-row .engage-actions .btn, .tabs-row .engage-actions .engage-btn { min-width: 30px; justify-content: center; }
+
 /* the map: a hint, dragging to move around */
-.map-hint { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 0 auto; padding: 0 2px 10px; color: var(--text-2); font-size: 13px; }
-@media (max-width: 900px) { .map-hint { margin-left: 0; padding-top: 8px; } }
+.map-hint { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 0 auto; padding: 0 2px 12px; color: var(--text-2); font-size: 13px; white-space: nowrap; }
+@media (max-width: 999px) { .map-hint { margin-left: 0; padding-top: 8px; white-space: normal; } }
 .map-hint > svg { color: var(--accent); flex: none; }
 .map-hint b { color: var(--text); font-weight: 650; }
 .map-pan-hint { display: inline-flex; align-items: center; gap: 6px; color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
@@ -192,17 +200,17 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
 .doc-kicker { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; min-height: 26px; color: var(--text-2); font-size: 13.5px; font-weight: 550; }
 .doc-kicker .back { margin: 0 4px 0 0; padding-right: 14px; border-right: 1px solid var(--line); }
 .doc-marks { display: inline-flex; flex-wrap: wrap; gap: 6px; }
-.doc-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px 24px; flex-wrap: wrap; margin-top: 8px; }
+.doc-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px 24px; flex-wrap: wrap; margin-top: 6px; }
 .doc-head-text { flex: 1 1 520px; min-width: 0; display: grid; gap: 6px; }
 .doc-head-text h1 { overflow-wrap: anywhere; }
 .doc-head-text .lead { margin-top: 0; max-width: 92ch; }
-.doc-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; margin-top: 10px; font-size: 14px; color: var(--text-2); }
+.doc-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; margin-top: 8px; font-size: 14px; color: var(--text-2); }
 .doc-facts .fact { max-width: 40ch; }
-/* the quiet last line: dates and version, how much it is used, and what a reader can do */
-.doc-foot { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 20px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
-.doc-foot > .doc-when, .doc-foot .engage-stats { grid-column: 1; }
-.doc-foot .engage-actions { grid-column: 2; grid-row: 1 / span 2; }
-@media (max-width: 760px) { .doc-foot { grid-template-columns: minmax(0, 1fr); } .doc-foot .engage-actions { grid-column: 1; grid-row: auto; margin: 6px 0 0; } }
+/* the quiet last line: dates and version, then how much it is used, in one line; narrower than a
+   laptop also what a reader can do (from 1000 px up that sits on the tab row: DocActions) */
+.doc-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--line); }
+.doc-foot .engage-actions { margin-left: auto; }
+@media (max-width: 760px) { .doc-foot .engage-actions { margin: 6px 0 0; flex-basis: 100%; } }
 .doc-when { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 0; color: var(--text-3); font-size: 12.5px; }
 .doc-when .review-tag { display: inline-flex; align-items: center; gap: 5px; }
 .doc-when .version-tag { height: 22px; font-size: 12px; }

@@ -8,12 +8,12 @@ import "../controls.css";
  * The small parts that say the same thing the same way on every page. Their styles are in
  * src/controls.css. Use them instead of a copy:
  *
- * <KindTag kind="process" | "standard" size?="sm" | "md" />
+ * <KindTag kind="process" | "standard" size?="sm" | "md" | "icon" />
  *   "PROCESS" / "STANDARD" with its icon, in the kind colours, round for a process and square for
  *   a standard. Show it where kinds are mixed (search, Home, bookmarks, requests, My
  *   responsibilities) and at the top of a process or standard page; not on every card of a list
- *   that holds one kind only. Classes: `.kind-tag.process|.standard` (`.kind-tag.md` bigger), the
- *   word in `.card-kind`.
+ *   that holds one kind only. Classes: `.kind-tag.process|.standard` (`.kind-tag.md` bigger, `.kind-tag.icon` the
+ *   icon alone in the same shape, for the rows of a list), the word in `.card-kind`.
  *
  * <LevelMark level="mandatory" | "recommended" | "optional" | "must" | "should" | "may" count?={n} title? />
  *   How binding something is: three bars as a small lead-in icon (3 filled for mandatory / must,
@@ -22,6 +22,10 @@ import "../controls.css";
  *   "May". With `count` it reads "4 must" (the word in lower case). Strong neutral ink, never the
  *   problem red: a level is a fact, not a problem. Classes: `.level-mark[data-level]`, the bars
  *   `.level-bars` (also `<LevelBars level />` alone, `aria-hidden`).
+ *
+ * <NoLevelMark words?="Rigour not stated" />
+ *   A process that does not say how binding it is: three empty bars and the words, in the quiet
+ *   ink (`.level-mark[data-level="none"]`), so that its place on a card or in a row is kept.
  *
  * <Fact icon={LucideIcon | ReactNode} label?="Owner" strong?>text</Fact>
  *   One fact as the cards show it: a small grey icon and the text, on one line (cut with "…" when
@@ -47,8 +51,14 @@ export const KindIcon = ({ kind, size = 13 }: { kind: TargetKind; size?: number 
   return <Icon size={size} aria-hidden="true" />;
 };
 
-export function KindTag({ kind, size = "sm", className = "" }: { kind: TargetKind; size?: "sm" | "md"; className?: string }) {
+export function KindTag({ kind, size = "sm", className = "" }: { kind: TargetKind; size?: "sm" | "md" | "icon"; className?: string }) {
   const { word, Icon } = KIND[kind];
+  // the icon alone, in the same shape and colours; the word is the tooltip and is read out
+  if (size === "icon") return (
+    <span className={`kind-tag ${kind} icon ${className}`.trim()} title={word}>
+      <Icon size={13} aria-hidden="true" /><span className="card-kind sr-only">{word}</span>
+    </span>
+  );
   return (
     <span className={`kind-tag ${kind} ${size === "md" ? "md" : ""} ${className}`.replace(/\s+/g, " ").trim()}>
       <Icon size={size === "md" ? 14 : 13} aria-hidden="true" /><span className="card-kind">{word}</span>
@@ -74,6 +84,16 @@ export function LevelMark({ level, count, className = "", title }: { level: Rigo
     <span className={`level-mark ${className}`.trim()} data-level={level} data-strength={STRENGTH[level]} title={title}>
       <LevelBars level={level} />
       {count === undefined ? word : `${count} ${word.toLowerCase()}`}
+    </span>
+  );
+}
+
+/** A process that does not say how binding it is: three empty bars and the words, quiet. */
+export function NoLevelMark({ words = "Rigour not stated" }: { words?: string }) {
+  return (
+    <span className="level-mark" data-level="none" data-strength="none">
+      <span className="level-bars" data-strength="none" aria-hidden="true"><i /><i /><i /></span>
+      {words}
     </span>
   );
 }

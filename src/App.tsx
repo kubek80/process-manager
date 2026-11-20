@@ -183,6 +183,19 @@ const mayLeave = async (what: string | null, save?: (() => Promise<boolean>) | n
   return choice === "confirm";
 };
 
+/**
+ * "Skip to the page", the first stop of the keyboard: past the top bar to the page's main
+ * content. On the editing screen that is its own main region (what readers will see), inside
+ * the page's region; elsewhere the page's region itself.
+ */
+function skipToPage() {
+  const region = document.getElementById("main");
+  const target = region?.querySelector<HTMLElement>("main") ?? region;
+  if (!target) return;
+  if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+  target.focus();
+}
+
 /** How long the content on screen may be old before coming back to the tab fetches it again. */
 const REFRESH_AFTER_MS = 20_000;
 
@@ -389,10 +402,12 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     return {
       add: (spec) => wrote(createFeedback(spec)).then((item) => { put(item); return true; }, (e) => { notify.error("Your feedback could not be sent.", e); return false; }),
       alsoHit: (item, on) => { wrote(setAlsoHit(item.id, on)).then(put, (e) => notify.error("That could not be recorded.", e)); },
-      resolve: (item, resolved) => {
+      resolve: function resolve(item, resolved) {
         wrote(setResolved(item.id, resolved)).then((saved) => {
           put(saved);
-          notify.info(resolved ? `Marked as fixed. ${item.author.name || "The person who reported it"} is told.` : "The feedback is open again.");
+          // marking as fixed acts at once: Undo opens it again
+          if (resolved) notify.info(`Marked as fixed. ${item.author.name || "The person who reported it"} is told.`, { label: "Undo", run: () => resolve(saved, false) });
+          else notify.info("The feedback is open again.");
         }, (e) => notify.error("The feedback could not be changed.", e));
       },
       remove: (item) => { wrote(deleteFeedback(item.id)).then(() => { change(item, (list) => list.filter((x) => x.id !== item.id)); notify.info("The feedback was deleted."); }, (e) => notify.error("The feedback could not be deleted.", e)); },
@@ -553,9 +568,12 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const title = pageTitle(route, { process: process?.title, standard: standard?.title, loading: !processes }, name);
   useEffect(() => { document.title = title; }, [title]);
 
+  // the page itself is the main region; the editing screen has a main region of its own inside
+  const Main = editing ? "div" : "main";
   return (
     <CatalogContext.Provider value={catalogApi}>
     <FeedbackContext.Provider value={actions}>
+      <a className="skip-link" href="#main" onClick={(e) => { e.preventDefault(); skipToPage(); }}>Skip to the page</a>
       {!editing && <header className="topbar">
         <a className="brand" href="#/" aria-label={name} title={name}>
           <BrandLogo look={look} />
@@ -570,6 +588,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         <UserMenu me={me} onSignedOut={onSignedOut} />
       </header>}
 
+      <Main id="main" className="main-region" tabIndex={-1}>
       {error && <div className="page"><LoadError what="The content could not be loaded." error={error} onRetry={load} /></div>}
       {!processes && !error && <Loading page />}
       <ErrorBoundary resetKey={href(route)}>
@@ -613,6 +632,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         : <NotFound noun="standard" />)}
       </Suspense>
       </ErrorBoundary>
+      </Main>
       <Suspense fallback={null}>
         {ai === "process" && <AiDialog spec={processAiSpec(undefined, all, standards, catalog)} onClose={() => setAi(null)} onImport={(p) => { createProcess(p).catch(() => {}); }} />}
         {ai === "standard" && <AiDialog spec={standardAiSpec(undefined, standards, all, catalog)} onClose={() => setAi(null)} onImport={(s) => { createStandard(s).catch(() => {}); }} />}

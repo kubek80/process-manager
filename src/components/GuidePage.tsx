@@ -128,9 +128,9 @@ export function GuidePage() {
 
         <Section id="what" title="What it is">
           <div className="guide-cards three">
-            <div><Workflow size={20} /><h3>Processes</h3><p>Who does what, in which order. Read as a map with one lane per participant, your lane first, or as your own checklist with the exact actions.</p></div>
-            <div><ShieldCheck size={20} /><h3>Standards</h3><p>Rules set by cyber security, platform owners and practices. Each requirement says what must be true, why, how to comply and how it is checked.</p></div>
-            <div><Bot size={20} /><h3>Skills for AI assistants</h3><p>From every process and standard the portal generates instructions an AI coding assistant can follow, and for standards a reviewer for pull requests.</p></div>
+            <div className="kind-process"><Workflow size={20} /><h3>Processes</h3><p>Who does what, in which order. Read as a map with one lane per participant, your lane first, or as your own checklist with the exact actions.</p></div>
+            <div className="kind-standard"><ShieldCheck size={20} /><h3>Standards</h3><p>Rules set by cyber security, platform owners and practices. Each requirement says what must be true, why, how to comply and how it is checked.</p></div>
+            <div className="kind-skill"><Bot size={20} /><h3>Skills for AI assistants</h3><p>From every process and standard the portal generates instructions an AI coding assistant can follow, and for standards a reviewer for pull requests.</p></div>
           </div>
           <p>Processes and standards share the same ground: an owning team, a category, a platform and a practice they can belong to, a life-cycle with regular reviews, feedback from readers, and the tiers, environments and languages they apply to.</p>
           <p><b>Getting around.</b> The top bar leads to every place: Home, Processes, Standards, Requests, My responsibilities (for members), Teams &amp; tools, the Guide and Admin (for those who configure). On a screen narrower than 1120 pixels, such as a tablet or a phone, the places are behind <b>Menu</b>, which shows, right after the word Menu, how much is waiting for you, like My responsibilities (“Menu, 2 waiting”), and then where you are; it opens a list of the places with their names. Escape, a press outside it or choosing a place closes it. The light and dark switch and your account menu always stay in the bar.</p>

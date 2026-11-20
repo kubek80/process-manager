@@ -71,19 +71,23 @@ export function StepBody({ step, process, all, onSelect, compact }: {
   );
 }
 
-/** The checklist of the reader's page: every step in order, the reader's own ones to tick off. */
-export function ListView({ process, all, done, toggle, reset, selectedId, onSelect, feedback, onReport }: {
+/**
+ * The checklist of the reader's page: every step in order, the reader's own ones to tick off.
+ * `print`: the paper version - every step with all its instructions, nothing to switch.
+ */
+export function ListView({ process, all, done, toggle, reset, selectedId, onSelect, feedback, onReport, print }: {
   process: Process; all: Process[]; feedback: Feedback[]; onReport: (id: string) => void; done: Set<string>; toggle: (id: string) => void; reset: () => void;
-  selectedId: string | null; onSelect: (id: string) => void;
+  selectedId: string | null; onSelect: (id: string) => void; print?: boolean;
 }) {
-  const [onlyMine, setOnlyMine] = useState(false);
+  const [mineOnly, setOnlyMine] = useState(false);
+  const onlyMine = mineOnly && !print;
   const mine = process.steps.filter((s) => s.actor === "me");
   const mineDone = mine.filter((s) => done.has(s.id)).length;
   const laneIdx = (id: string) => Math.max(0, process.actors.findIndex((a) => a.id === id));
 
   return (
-    <div className="list-view">
-      <div className="list-bar">
+    <div className={`list-view ${print ? "print-list" : ""}`}>
+      {!print && <div className="list-bar">
         <div className="progress">
           <div className="progress-text"><strong>{mineDone} of {mine.length}</strong> of your steps done</div>
           <div className="progress-track"><span style={{ width: `${mine.length ? (mineDone / mine.length) * 100 : 0}%` }} /></div>
@@ -93,7 +97,7 @@ export function ListView({ process, all, done, toggle, reset, selectedId, onSele
           <span className="switch-ui" />Only my steps
         </label>
         {done.size > 0 && <button className="btn small ghost" onClick={reset}><RotateCcw size={14} />Reset ticks</button>}
-      </div>
+      </div>}
 
       <ol className="steps">
         {process.steps.map((s, i) => {
@@ -102,7 +106,7 @@ export function ListView({ process, all, done, toggle, reset, selectedId, onSele
           const actor = process.actors[laneIdx(s.actor)];
           const meta = STEP_META[s.type];
           return (
-            <li key={s.id} id={`step-${s.id}`}
+            <li key={s.id} id={print ? undefined : `step-${s.id}`}
               className={`step ${isMine ? "mine" : "other"} ${done.has(s.id) ? "done" : ""} ${selectedId === s.id ? "selected" : ""}`}
               style={{ "--c": meta.color, "--lane": LANE_COLORS[laneIdx(s.actor) % LANE_COLORS.length] } as React.CSSProperties}>
               <div className="step-rail"><span className="step-num">{i + 1}</span></div>
@@ -119,7 +123,7 @@ export function ListView({ process, all, done, toggle, reset, selectedId, onSele
                     <span className="step-title">{s.title}</span>
                   </button>
                   <button className={`report ${openCount(feedback, s.id) ? "has" : ""}`} onClick={() => onReport(s.id)}
-                    title={openCount(feedback, s.id) ? `${openCount(feedback, s.id)} open feedback` : "This step doesn’t work? Tell us"}
+                    title={openCount(feedback, s.id) ? `${openCount(feedback, s.id)} open feedback` : "Report a problem with this step"}
                     aria-label={`${openCount(feedback, s.id) ? `${openCount(feedback, s.id)} open feedback` : "Report a problem"} on step ${i + 1}: ${s.title}`}>
                     <Flag size={14} />{openCount(feedback, s.id) || ""}
                   </button>
@@ -127,7 +131,7 @@ export function ListView({ process, all, done, toggle, reset, selectedId, onSele
                     ? <button className={`tick ${done.has(s.id) ? "on" : ""}`} onClick={() => toggle(s.id)} aria-pressed={done.has(s.id)} aria-label={`Mark as done: ${s.title}`}><Check size={16} strokeWidth={3} /></button>
                     : <span className="waiting">{s.type === "automation" ? "Automatic" : "Not you"}</span>}
                 </div>
-                <StepBody step={isMine ? s : { ...s, instructions: undefined }} process={process} all={all} onSelect={onSelect} />
+                <StepBody step={isMine || print ? s : { ...s, instructions: undefined }} process={process} all={all} onSelect={onSelect} />
               </div>
             </li>
           );

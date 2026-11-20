@@ -12,7 +12,7 @@ import { BookmarkButton, UpvoteButton } from "./Engage";
 import { EntryIcon } from "./EntryIcon";
 import { useEngagement } from "../lib/engagement";
 import { engagementKnown } from "./Lists";
-import { Fact, KindIcon, KindTag, kindWord, LevelMark } from "./marks";
+import { Fact, KindIcon, KindTag, kindWord, LevelMark, NoLevelMark } from "./marks";
 import "../lists.css";
 
 /** The text with the searched words marked; built as elements, never as HTML. */
@@ -92,6 +92,7 @@ export interface DocCardProps {
 /** How binding it is, in its own words: "Mandatory" for a process, "4 must · 1 should" for a standard. */
 function Levels({ kind, rigour }: { kind: TargetKind; rigour: Partial<Record<Rigour, number>> }) {
   const parts = rigourParts(rigour);
+  if (kind === "process" && !parts.length) return <NoLevelMark />;
   if (kind === "process") return <>{parts.map((p) => <LevelMark key={p.rigour} level={p.rigour} />)}</>;
   return <>{parts.map((p, i) => <Fragment key={p.rigour}>{i > 0 && <span className="level-sep" aria-hidden="true"> · </span>}<LevelMark level={RIGOUR_LEVEL[p.rigour]} count={p.n} /></Fragment>)}</>;
 }
@@ -101,8 +102,9 @@ function Levels({ kind, rigour }: { kind: TargetKind; rigour: Partial<Record<Rig
  * the tiers; the title and two lines of summary; one line of facts to compare (how binding, how long,
  * how much is yours) and one of who looks after it; after a search, up to two places inside where it
  * was found; what needs attention (marks: draft, retired, review, unpublished changes, needs fixing)
- * just above a compact foot. As a row: one line of the same,
- * for scanning many. The title is the link; it covers the whole card for the mouse, while the links
+ * just above a compact foot. As a row: one line in the columns of a grid shared by all rows (the
+ * kind where kinds are mixed, the title and category, the rigour, the lead time or the number of
+ * requirements, the owner, the actions), for scanning many. The title is the link; it covers the whole card for the mouse, while the links
  * and buttons inside stay separate and reachable with the keyboard.
  */
 export function DocCard(props: DocCardProps) {
@@ -148,11 +150,13 @@ export function DocCard(props: DocCardProps) {
   if (view === "rows") {
     const best = places[0];
     const owner = groups.who.find((l) => l.key === "owner");
+    // the one fact to compare after the rigour: how long a process takes, how many requirements a standard has
+    const fact = groups.key.find((l) => l.key === (kind === "process" ? "lead" : "rules"));
     return (
       <li className={`card row ${status === "deprecated" ? "retired" : ""} ${status === "draft" ? "draft" : ""}`.trim()} data-kind={kind} data-id={doc.id}>
-        {showKind && <KindTag kind={kind} />}
+        {showKind && <KindTag kind={kind} size="icon" />}
         <div className="row-main">
-          <H className="card-title"><a className="card-link" href={docHref(kind, doc.id, fix)}><Marked text={title} words={words} /></a></H>
+          <H className="card-title"><a className="card-link" href={docHref(kind, doc.id, fix)} title={title}><Marked text={title} words={words} /></a></H>
           {best ? (
             <a className="row-hit" href={hitHref(kind, doc.id, best)}>
               <span className="card-hit-where">{HIT_WORD[best.where]}</span>{" "}
@@ -162,6 +166,7 @@ export function DocCard(props: DocCardProps) {
         </div>
         {marks}
         <span className="row-level"><Levels kind={kind} rigour={rigour} /></span>
+        <span className="row-fact">{fact && <Fact icon={FACT_ICON[fact.key]} label={fact.name}>{shortFact(fact, kind)}</Fact>}</span>
         <span className="row-owner">{owner && <Fact icon={Users} label="Owner">{owner.value}</Fact>}</span>
         {engage}
       </li>

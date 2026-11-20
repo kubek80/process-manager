@@ -8,6 +8,7 @@ import {
 } from "../lib/statistics";
 import { href, loadStatistics } from "../lib/store";
 import { LoadError, Loading } from "./ui";
+import { countingDay } from "../lib/dates";
 import { KindIcon, kindWord } from "./marks";
 import "../requests.css";
 
@@ -68,7 +69,7 @@ export function StatisticsSection() {
     <div className="admin-section statistics">
       <div className="lead small stat-about">
         <p>A view counts once per person per day, however often they open it; the portal counts views but nobody, admins included, can see who viewed what. Views by admins and editors count like everyone else's. A skill download counts once per person per skill per day.</p>
-        <p>A day runs from midnight to midnight UTC, so for people in other time zones the day changes at another hour.</p>
+        <p>{countingDay(new Date().getTimezoneOffset())}</p>
       </div>
       <div className="stat-toolbar">
         <div className="seg" role="group" aria-label="Period">

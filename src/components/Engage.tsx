@@ -83,23 +83,24 @@ export function engagementLines(c: Counts, open: number, handled?: number): Enga
 }
 
 /**
- * Near the top of a process or standard page, in one line: how much it is used, the feedback,
- * and what a reader can do - give feedback, upvote, bookmark, share.
+ * Near the top of a process or standard page, in one quiet line: how much it is used and the
+ * feedback; and, unless the page shows them on its tab row, what a reader can do (`DocActions`).
  *
  * "Handled" is the server's count (feedback marked as fixed that still exists), the same number
  * the cards and the statistics show. `resolvedHere` is what the feedback on this page says; when it
  * changes (marked as fixed, reopened, deleted) the numbers are fetched again, so they cannot drift.
  */
-export function DocEngagement({ kind, id, title, summary, open, resolvedHere, onFeedback }: {
+export function DocEngagement({ kind, id, title, summary, open, resolvedHere, onFeedback, actions = true }: {
   kind: TargetKind; id: string; title: string; summary?: string;
   /** Open feedback, from the feedback the page shows. */
   open: number;
   /** Feedback marked as fixed, from the feedback the page shows. */
   resolvedHere: number;
   onFeedback: () => void;
+  /** false: the buttons are shown elsewhere (on the tab row, `DocActions`), only the numbers here. */
+  actions?: boolean;
 }) {
   const eng = useEngagement();
-  const [sharing, setSharing] = useState(false);
   const c = eng.countsOf(kind, id);
   const signedIn = useMe().authenticated;
   // counted once per page load and person (the server counts once a day); not on every tab or render
@@ -117,12 +118,22 @@ export function DocEngagement({ kind, id, title, summary, open, resolvedHere, on
         })}
         {!eng.known && <li className="engage-unknown">{eng.failed ? "The numbers are not available right now." : <span aria-label="Loading the numbers">–</span>}</li>}
       </ul>
-      <div className="engage-actions">
-        <button type="button" className="btn small give-feedback" onClick={onFeedback}><MessageSquarePlus size={15} />Give feedback</button>
-        <UpvoteButton kind={kind} id={id} title={title} size="page" />
-        <BookmarkButton kind={kind} id={id} title={title} size="page" />
-        <button type="button" className="btn small share-btn" onClick={() => setSharing(true)} aria-haspopup="dialog"><Share2 size={15} /><span className="engage-label">Share</span></button>
-      </div>
+      {actions && <DocActions kind={kind} id={id} title={title} summary={summary} onFeedback={onFeedback} />}
+    </div>
+  );
+}
+
+/** What a reader can do with a process or standard: give feedback, upvote, bookmark, share. */
+export function DocActions({ kind, id, title, summary, onFeedback }: {
+  kind: TargetKind; id: string; title: string; summary?: string; onFeedback: () => void;
+}) {
+  const [sharing, setSharing] = useState(false);
+  return (
+    <div className="engage-actions">
+      <button type="button" className="btn small give-feedback" onClick={onFeedback}><MessageSquarePlus size={15} />Give feedback</button>
+      <UpvoteButton kind={kind} id={id} title={title} size="page" />
+      <BookmarkButton kind={kind} id={id} title={title} size="page" />
+      <button type="button" className="btn small share-btn" onClick={() => setSharing(true)} aria-haspopup="dialog"><Share2 size={15} /><span className="engage-label">Share</span></button>
       {sharing && <ShareDialog info={{ kind, id, title, summary }} onClose={() => setSharing(false)} />}
     </div>
   );

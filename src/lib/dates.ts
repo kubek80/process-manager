@@ -25,3 +25,19 @@ export function formatDateTime(value?: string | null): string {
   const d = parse(value);
   return d ? `${localDay(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}` : "";
 }
+
+/**
+ * When the portal's counting day (midnight to midnight UTC) starts in the reader's own time, as
+ * "01:00"; `offset` is `Date.getTimezoneOffset()` (minutes behind UTC). "" where it is midnight
+ * there too.
+ */
+export function utcMidnightHere(offset: number): string {
+  const minutes = ((-offset % 1440) + 1440) % 1440;
+  return minutes === 0 ? "" : `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+}
+
+/** The counting day in the reader's terms: "A day is counted from 01:00 to 01:00 your time (midnight to midnight UTC)." */
+export function countingDay(offset: number): string {
+  const at = utcMidnightHere(offset);
+  return at ? `A day is counted from ${at} to ${at} your time (midnight to midnight UTC).` : "A day is counted from midnight to midnight UTC, which is your time too.";
+}

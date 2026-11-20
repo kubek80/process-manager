@@ -9,6 +9,8 @@ import { quietReview, statusOf, type ReviewInfo } from "../lib/lifecycle";
 import { Field } from "./ui";
 import { Fact, KindTag } from "./marks";
 import { VersionTag } from "./Editing";
+import { formatDate } from "../lib/dates";
+import { printedLine } from "../lib/media";
 import "../lists.css";
 
 type Dims = { tiers?: string[]; languages?: string[]; environments?: string[] };
@@ -179,7 +181,7 @@ export function DocHead({ kind, doc, meta, review, facts, actions, notice, onBac
       <div className="doc-facts">{facts}<WhereFacts doc={doc} /></div>
       <div className="doc-foot">
         <p className="doc-when">
-          {doc.updatedAt && <span>Updated {doc.updatedAt}</span>}
+          {doc.updatedAt && <span className="doc-changed" title="When what it says last changed. Versions lists every time it was stored: saved, imported or confirmed in a review.">Content changed {formatDate(doc.updatedAt)}</span>}
           <ReviewTag doc={doc} review={review} />
           <VersionTag meta={meta} onOpen={onHistory} />
         </p>
@@ -187,6 +189,12 @@ export function DocHead({ kind, doc, meta, review, facts, actions, notice, onBac
       </div>
     </header>
   );
+}
+
+/** The last line of a printed process or standard (only drawn while printing). */
+export function PrintFoot({ doc, meta }: { doc: Governed & { title: string }; meta?: DocMeta }) {
+  const address = typeof window !== "undefined" ? `${window.location.origin}${window.location.pathname}${window.location.hash.replace(/^(#\/[ps]\/[a-z0-9-]+).*$/, "$1")}` : undefined;
+  return <footer className="print-foot">{printedLine({ title: doc.title, version: meta?.version, changed: doc.updatedAt, printedAt: new Date(), address })}</footer>;
 }
 
 /** How binding a process is, in words for readers. */

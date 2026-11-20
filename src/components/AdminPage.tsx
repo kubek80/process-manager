@@ -6,14 +6,15 @@ import { reviewOf, statusOf } from "../lib/lifecycle";
 import { usePerms } from "../lib/session";
 import { go, href, loadAudit, loadSkills, loadSystem, type AdminSection, type MetaById, type SystemInfo } from "../lib/store";
 import { KindTag } from "./marks";
-import { describeEntry } from "../lib/activity";
+import { describeEntry, detailParts, type Names } from "../lib/activity";
+import { reviewsDue } from "../lib/responsibilities";
 import { CatalogPage } from "./CatalogPage";
 import { UsersSection } from "./UsersSection";
 import { openCount } from "./Feedback";
 import { SKILL_KIND, SkillPanel } from "./SkillPanel";
 import { StatisticsSection } from "./StatisticsPage";
 import { ThemeSection } from "./ThemeSection";
-import { LoadError, Loading } from "./ui";
+import { LoadError, Loading, useScrollFade } from "./ui";
 import { formatDate, formatDateTime } from "../lib/dates";
 
 export { ROLES } from "../lib/users";
@@ -96,6 +97,7 @@ function HealthSection({ processes, standards, feedback, meta }: { processes: Pr
   const flagged = rows.filter((r) => r.open > 0).sort((a, b) => b.open - a.open);
   const drafts = rows.filter((r) => r.status === "draft");
   const unowned = rows.filter((r) => r.status === "active" && (!r.doc.owner || !r.doc.review));
+  const tile = reviewsDue(due.filter((r) => r.review.state === "overdue").length, due.filter((r) => r.review.state === "soon").length);
   const link = (r: (typeof rows)[number]) => () => go(r.kind === "process" ? { page: "process", id: r.doc.id, tab: "flow" } : { page: "standard", id: r.doc.id, tab: "doc" });
   const Row = ({ r, right }: { r: (typeof rows)[number]; right: React.ReactNode }) => (
     <li><button onClick={link(r)}>
@@ -106,7 +108,7 @@ function HealthSection({ processes, standards, feedback, meta }: { processes: Pr
   return (
     <div className="admin-section">
       <div className="stat-row">
-        <div className={`stat ${due.some((r) => r.review.state === "overdue") ? "bad" : due.length ? "warn" : "good"}`}><strong>{due.length}</strong><span>reviews due</span></div>
+        <div className={`stat ${tile.tone}`}><strong>{tile.count}</strong><span>{tile.label}</span>{tile.split && <span className="stat-split">{tile.split}</span>}</div>
         <div className={`stat ${flagged.length ? "warn" : "good"}`}><strong>{flagged.reduce((n, r) => n + r.open, 0)}</strong><span>open feedback</span></div>
         <div className="stat"><strong>{drafts.length}</strong><span>drafts not yet published</span></div>
         <div className={`stat ${unowned.length ? "warn" : "good"}`}><strong>{unowned.length}</strong><span>active without owner or review</span></div>
@@ -134,7 +136,7 @@ function HealthSection({ processes, standards, feedback, meta }: { processes: Pr
   );
 }
 
-function ActivitySection({ processes, standards }: { processes: Process[]; standards: Standard[] }) {
+function ActivitySection({ processes, standards, feedback }: { processes: Process[]; standards: Standard[]; feedback: FeedbackByTarget }) {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
   const [more, setMore] = useState(false);
   const [error, setError] = useState("");
@@ -150,6 +152,13 @@ function ActivitySection({ processes, standards }: { processes: Process[]; stand
   const titles = useMemo(() => ({
     process: Object.fromEntries(processes.map((p) => [p.id, p.title])), standard: Object.fromEntries(standards.map((x) => [x.id, x.title])),
   }), [processes, standards]);
+  // the names the page knows, by address: whoever appears in the log, whoever gave feedback
+  const names = useMemo<Names>(() => {
+    const out: Names = {};
+    for (const list of [...Object.values(feedback.process), ...Object.values(feedback.standard)]) for (const f of list) if (f.author.email && f.author.name) out[f.author.email.toLowerCase()] = f.author.name;
+    for (const e of entries ?? []) if (e.email && e.name && e.email.includes("@")) out[e.email.toLowerCase()] = e.name;
+    return out;
+  }, [feedback, entries]);
   return (
     <div className="admin-section">
       <p className="lead small">Every change to content, lists, roles and skills, newest first.</p>
@@ -158,14 +167,16 @@ function ActivitySection({ processes, standards }: { processes: Process[]; stand
       {entries && <section className="admin-card">
         <ul className="activity">
           {entries.map((e) => {
-            const d = describeEntry(e, titles);
+            const d = describeEntry(e, titles, names);
             const t = d.target;
             return (
               <li key={e.id}>
                 <time dateTime={e.at}>{formatDateTime(e.at)}</time>
                 <span>{d.person ? <b title={e.email}>{d.who}</b> : <span className="activity-portal">{d.who}</span>} {d.words}
                   {t && <> {t.code ? <code>{t.text}</code> : <span className={t.quoted ? "activity-doc" : ""} title={t.hint}>{t.text}</span>}</>}
-                  {d.detail && <em> · {d.detail}</em>}</span>
+                  {d.detail && <em> · {detailParts(d.detail, names).map((p, i) => p.colour
+                    ? <span key={i} className="activity-colour"><span className="activity-swatch" style={{ background: p.colour }} aria-hidden="true" />{p.text}</span>
+                    : p.person ? <span key={i} title={p.person}>{p.text}</span> : p.text)}</em>}</span>
               </li>
             );
           })}
@@ -197,11 +208,19 @@ function SystemSection() {
         <h2>How this installation is set up</h2>
         <table className="guide-table"><tbody>
           <tr><td>Sign-in</td><td>{provider}</td></tr>
-          <tr><td>Address</td><td><code>{info.baseUrl}</code></td></tr>
-          <tr><td>Notifications</td><td>{info.notify === "webhook" ? "Sent to a chat webhook" : "Written to the server log only"}</td></tr>
-          <tr><td>Content</td><td>Stored in the database. Every save is a version with a note, and can be restored. <code>server -export</code> writes a copy to files.</td></tr>
+          <tr><td>Address</td><td><a href={info.baseUrl}>{info.baseUrl}</a></td></tr>
+          <tr><td>Notifications</td><td>{info.notify === "webhook" ? "Sent to a chat channel" : "Not sent to a chat: only noted in the portal’s own log"}</td></tr>
+          <tr><td>Content</td><td>Kept by the portal. Every save is a version with a note, and can be restored. A copy can be written to files by whoever runs the portal.</td></tr>
         </tbody></table>
-        <p className="muted small">These are server settings and are changed where the server is deployed, not here. See <code>docs/backend.md</code>.</p>
+        <p className="muted small">These are set where the portal is installed, not here. Ask whoever runs the portal to change them.</p>
+        <details className="system-tech">
+          <summary>For the people who run the portal</summary>
+          <ul className="small">
+            <li>Sign-in: <code>PM_AUTH</code> ({info.provider}); address: <code>PM_BASE_URL</code>; notifications: <code>PM_NOTIFY</code>; admins named at installation: <code>PM_ADMINS</code>.</li>
+            <li>A copy of the content and the skills as files: <code>server -export &lt;folder&gt;</code>.</li>
+            <li>Every setting is described in <code>docs/backend.md</code> in the portal's source.</li>
+          </ul>
+        </details>
       </section>
     </div>
   );
@@ -217,6 +236,7 @@ export function AdminPage({ section, processes, standards, feedback, meta }: {
   const current = allowed.find((s) => s.id === section) ?? allowed[0];
   // on a phone the sections are one row that scrolls sideways: the current one is brought into it
   const nav = useRef<HTMLElement>(null);
+  useScrollFade(nav); // the cut edge fades: there is more to either side
   useEffect(() => {
     const box = nav.current, on = box?.querySelector<HTMLElement>("a.on");
     if (!box || !on || box.scrollWidth <= box.clientWidth) return;
@@ -230,17 +250,17 @@ export function AdminPage({ section, processes, standards, feedback, meta }: {
           <a key={s.id} className={current.id === s.id ? "on" : ""} aria-current={current.id === s.id ? "page" : undefined} href={href({ page: "admin", section: s.id })} title={s.hint}><s.icon size={16} />{s.label}</a>
         ))}
       </aside>
-      <main className="admin-main">
+      <div className="admin-main">
         <header className="admin-head"><h1>{current.label}</h1><p className="lead">{current.hint}</p></header>
         {current.id === "access" && <UsersSection />}
         {current.id === "lists" && <CatalogPage processes={processes} standards={standards} editable />}
         {current.id === "skills" && <SkillsSection />}
         {current.id === "health" && <HealthSection processes={processes} standards={standards} feedback={feedback} meta={meta} />}
-        {current.id === "activity" && <ActivitySection processes={processes} standards={standards} />}
+        {current.id === "activity" && <ActivitySection processes={processes} standards={standards} feedback={feedback} />}
         {current.id === "statistics" && <StatisticsSection />}
         {current.id === "theming" && <ThemeSection processes={processes} standards={standards} />}
         {current.id === "system" && <SystemSection />}
-      </main>
+      </div>
     </div>
   );
 }

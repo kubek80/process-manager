@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Catalog, Process, Standard } from "../../types";
 import { DEFAULT_PAGE_SIZE, pageNumbers, pageOf, showingText, sizeOf } from "../paging";
-import { cardLines, reviewLine, rigourLine, tiersText } from "../cardLines";
+import { cardLines, reviewLine, RIGOUR_NOT_STATED, rigourLine, tiersText } from "../cardLines";
 
 describe("pages of a list", () => {
   it("works out which items a page shows", () => {
@@ -102,7 +102,16 @@ describe("the lines of a card", () => {
   });
   it("copes with a document stored without proper lists", () => {
     const odd = { ...proc, steps: "x" as unknown as Process["steps"], environments: "prod" as unknown as string[] };
-    expect(lines(cardLines({ kind: "process", doc: odd, catalog, rigour: {}, rules: 0, mayEdit: false }))).toEqual(["Owner: Cloud team", "Platform: Google Cloud", "Lead time: 2 days"]);
+    expect(lines(cardLines({ kind: "process", doc: odd, catalog, rigour: {}, rules: 0, mayEdit: false }))).toEqual(["Owner: Cloud team", "Platform: Google Cloud", "Rigour: Not stated", "Lead time: 2 days"]);
+  });
+  it("gives a retired process without a rigour the same lines as every other card", () => {
+    const retired = { ...proc, status: "deprecated" as const, rigour: undefined, platform: undefined, environments: undefined };
+    const keys = (l: ReturnType<typeof cardLines>) => l.map((x) => x.key);
+    expect(keys(cardLines({ kind: "process", doc: retired, catalog, rigour: {}, rules: 0, mayEdit: false })))
+      .toEqual(["owner", "rigour", "lead", "steps"]);
+    expect(cardLines({ kind: "process", doc: retired, catalog, rigour: {}, rules: 0, mayEdit: false }).find((l) => l.key === "rigour")?.value).toBe(RIGOUR_NOT_STATED);
+    // a standard without requirements has nothing to say about its rigour
+    expect(cardLines({ kind: "standard", doc: { ...std, requirements: [] }, catalog, rigour: {}, rules: 0, mayEdit: false }).some((l) => l.key === "rigour")).toBe(false);
   });
 });
 

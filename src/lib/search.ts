@@ -347,6 +347,37 @@ export function filtersOf(r: Filters): Filters {
 }
 
 /**
+ * The filters of an address without the values that name nothing that exists (an old link: a
+ * platform since removed, a mistyped id), and how many were left out. A value counts as existing
+ * when it is in the lists or when a process or standard uses it (an entry used but no longer in
+ * the lists still shows, under its id, so that it can be found and removed); "Other" (no category)
+ * always exists.
+ */
+export function knownFilters(f: Filters, catalog: SearchInput["catalog"], docs: (Process | Standard)[]): { filters: Filters; dropped: number } {
+  const ids = (l?: { id: string }[]) => (l ?? []).map((x) => x.id);
+  const used = (field: "category" | "platform" | "practice" | "owner") => docs.map((d) => str(d[field])).filter(Boolean);
+  const exists: Record<FilterKey, Set<string>> = {
+    type: new Set(KINDS), rigour: new Set(RIGOURS),
+    category: new Set([NO_CATEGORY, ...ids(catalog.categories), ...used("category")]),
+    platform: new Set([...ids(catalog.platforms), ...used("platform")]),
+    practice: new Set([...ids(catalog.practices), ...used("practice")]),
+    owner: new Set([...ids(catalog.teams), ...used("owner")]),
+  };
+  const out: Record<string, string[]> = {};
+  let dropped = 0;
+  for (const k of FILTER_KEYS) {
+    const now = (f[k] ?? []) as string[];
+    const keep = now.filter((v) => exists[k].has(v));
+    dropped += now.length - keep.length;
+    if (keep.length) out[k] = keep;
+  }
+  return { filters: out as Filters, dropped };
+}
+
+/** What the page says once when an address named a filter value that does not exist. */
+export const DROPPED_FILTER_TEXT = "A filter in this link no longer exists and was left out.";
+
+/**
  * A count as a filter shows it. `atLeast`: the results are only the closest of more that matched
  * (search by meaning), so a count says how many there are at least: "12+", "at least 12 results".
  */

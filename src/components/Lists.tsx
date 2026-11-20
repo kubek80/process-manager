@@ -1,10 +1,10 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { AppWindow, ChevronDown, ChevronLeft, ChevronRight, LayoutGrid, Lightbulb, Rows3, Search, ShieldCheck, SlidersHorizontal, Workflow, X } from "lucide-react";
-import type { Rigour, TargetKind } from "../types";
+import type { Process, Rigour, Standard, TargetKind } from "../types";
 import { href } from "../lib/store";
 import type { Profile } from "../lib/edit";
-import { useCatalog } from "../lib/catalog";
-import { appSummary, countText, countWords, emptyFilterText, FILTER_LABEL, PROFILE_HINT, PROFILE_KEYS, PROFILE_LABEL, RIGOURS, rigourFilterName, rigourOptionLabel, type FilterKey, type Option, type ProfileKey, type TypeTab } from "../lib/search";
+import { EMPTY_CATALOG, useCatalog } from "../lib/catalog";
+import { appSummary, countText, countWords, DROPPED_FILTER_TEXT, emptyFilterText, FILTER_LABEL, knownFilters, type Filters, PROFILE_HINT, PROFILE_KEYS, PROFILE_LABEL, RIGOURS, rigourFilterName, rigourOptionLabel, type FilterKey, type Option, type ProfileKey, type TypeTab } from "../lib/search";
 import { useRemembered } from "../lib/profile";
 import { LevelBars } from "./marks";
 import type { ListView } from "../lib/paging";
@@ -21,6 +21,30 @@ import "../lists.css";
  * they always offer every entry, also one that would give nothing.
  */
 const HIDE_EMPTY: string[] = ["category", "practice", "platform", "owner"];
+
+/**
+ * The filters of an address, without the values that name nothing that exists (an old link). When
+ * the address named one, it is corrected (`correct`, which replaces the address: no new entry in
+ * the history) and `notice` says so once, until the filters are changed.
+ */
+export function useLinkFilters(filters: Filters, docs: (Process | Standard)[], correct: (f: Filters) => void): { filters: Filters; notice: ReactNode } {
+  const { catalog } = useCatalog();
+  // before the lists are loaded nothing can be told apart: the address is taken as it is
+  const ready = catalog !== EMPTY_CATALOG;
+  const checked = useMemo(() => knownFilters(filters, catalog, docs), [filters, catalog, docs]);
+  const [noticeFor, setNoticeFor] = useState<string | null>(null);
+  const kept = JSON.stringify(checked.filters);
+  const now = JSON.stringify(filters);
+  useEffect(() => {
+    if (ready && checked.dropped) { setNoticeFor(kept); correct(checked.filters); }
+    else if (noticeFor !== null && noticeFor !== now) setNoticeFor(null);
+  }, [ready, checked.dropped, kept, now]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = noticeFor !== null && noticeFor === now;
+  return {
+    filters: ready ? checked.filters : filters,
+    notice: shown ? <p className="list-notice" role="status">{DROPPED_FILTER_TEXT}</p> : null,
+  };
+}
 
 /** What one dropdown says it holds: "Any", the one name, or the names (cut by the layout). */
 export function chosenSummary(options: Option[]): string {
@@ -333,7 +357,7 @@ export function profileChosen(profile: Profile, onChange: (p: Profile) => void, 
 }
 
 /** The line above the results: how many are shown (announced politely), "Filters (n)" on a phone, the order, the page size and the pages. */
-export function ResultsBar({ page, noun, panelId, open, onOpen, chosen, size, onSize, extra, line, sort, onSort, searched, pager, view, onView, bare }: {
+export function ResultsBar({ page, noun, panelId, open, onOpen, chosen, size, onSize, extra, line, sort, onSort, searched, pager, view, onView, bare, unordered }: {
   page: Page; noun: { one: string; many: string }; panelId: string; open: boolean; onOpen: (open: boolean) => void; chosen: number;
   size: number; onSize: (n: number) => void; extra?: ReactNode;
   /** In place of the count: what is shown instead (the closest by meaning when nothing matched). */
@@ -347,6 +371,8 @@ export function ResultsBar({ page, noun, panelId, open, onOpen, chosen, size, on
   view: ListView; onView: (v: ListView) => void;
   /** Nothing to order, page or filter (nothing found, nothing chosen): the count alone. */
   bare?: boolean;
+  /** The results have an order of their own (the closest by meaning) and are not paged: "Filters" and the view only. */
+  unordered?: boolean;
 }) {
   return (
     <div className="results-bar">
@@ -358,8 +384,8 @@ export function ResultsBar({ page, noun, panelId, open, onOpen, chosen, size, on
           </button>
           <div className="results-tools">
             <ViewSwitch view={view} onView={onView} />
-            <span className="results-order"><SortBy sort={sort} onSort={onSort} searched={searched} /><PageSize size={size} onSize={onSize} /></span>
-            {pager}
+            {!unordered && <span className="results-order"><SortBy sort={sort} onSort={onSort} searched={searched} /><PageSize size={size} onSize={onSize} /></span>}
+            {!unordered && pager}
           </div>
         </>
       )}

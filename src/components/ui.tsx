@@ -26,6 +26,33 @@ export function TypeIcon({ type, size = 36 }: { type: StepType; size?: number })
 export const prefersReducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 export const scrollBehavior = (): ScrollBehavior => (prefersReducedMotion() ? "auto" : "smooth");
 
+/** Which edges of a strip that scrolls sideways have more behind them: "start", "end", both, or none. */
+export function cutEdges(scrollLeft: number, scrollWidth: number, clientWidth: number): string {
+  if (scrollWidth - clientWidth < 2) return "";
+  const at = Math.abs(scrollLeft); // right-to-left pages count from 0 downwards
+  return [at > 1 ? "start" : "", at < scrollWidth - clientWidth - 1 ? "end" : ""].filter(Boolean).join(" ");
+}
+
+/**
+ * A strip that scrolls sideways (tabs, a row of sections on a phone) says that there is more:
+ * `data-fade` names its cut edges ("start", "end"), which the stylesheet fades out.
+ */
+export function useScrollFade(ref: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const set = () => {
+      const edges = cutEdges(el.scrollLeft, el.scrollWidth, el.clientWidth);
+      if (edges) el.setAttribute("data-fade", edges); else el.removeAttribute("data-fade");
+    };
+    set();
+    el.addEventListener("scroll", set, { passive: true });
+    const watch = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(set);
+    watch?.observe(el);
+    return () => { el.removeEventListener("scroll", set); watch?.disconnect(); };
+  }, [ref]);
+}
+
 // ---------- layers: dialogs, side panels and pop-ups
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';

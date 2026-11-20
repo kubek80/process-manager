@@ -59,9 +59,9 @@ export function FeedbackForm({ target, itemId, pickItem, onDone, autoFocus }: {
 
   return (
     <div className="fb-form">
-      <div className="chips" role="group" aria-label="Kind of feedback">
+      <div className="seg fb-kinds" role="group" aria-label="Kind of feedback">
         {(Object.keys(FEEDBACK_KINDS) as FeedbackKind[]).map((k) => (
-          <button key={k} className={`chip ${kind === k ? "on" : ""}`} aria-pressed={kind === k} title={FEEDBACK_KINDS[k].hint} onClick={() => setKind(k)}>{FEEDBACK_KINDS[k].label}</button>
+          <button key={k} type="button" className={`seg-item ${kind === k ? "on" : ""}`} aria-pressed={kind === k} title={FEEDBACK_KINDS[k].hint} onClick={() => setKind(k)}>{FEEDBACK_KINDS[k].label}</button>
         ))}
       </div>
       {pickItem && (

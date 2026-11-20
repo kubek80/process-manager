@@ -32,7 +32,9 @@ export interface AdminUser {
 export type Groups = Record<GroupKind, { id: string; name: string }[]>;
 
 /** Where the admins named in the server settings are set, for the sentences below. */
-export const BOOTSTRAP_PLACE = "the server setting PM_ADMINS, where the server is deployed";
+export const BOOTSTRAP_PLACE = "the settings where the portal is installed";
+/** The same, for the people who run the portal: the name of the setting. */
+export const BOOTSTRAP_SETTING = "PM_ADMINS";
 
 const nameIn = (groups: Groups, kind: GroupKind, id: string) => groups[kind].find((g) => g.id === id)?.name ?? id;
 
@@ -136,7 +138,8 @@ export function roleProblems(c: RolesCheck): string[] {
     }
   }
   const after = rolesOf(c.choices);
-  if (!c.user && after.length === 0) out.push("Give at least one role. Everyone who can sign in can already read.");
+  // only when nothing is ticked at all: a ticked role without its team, platform or practice is said above
+  if (!c.user && after.length === 0 && !ROLE_ORDER.some((r) => c.choices[r]?.on)) out.push("Give at least one role. Everyone who can sign in can already read.");
   if (c.user && !c.user.bootstrap && c.user.roles.some((r) => r.role === "admin") && !after.some((r) => r.role === "admin")) {
     if (isLastAdmin(c.user, c.users)) out.push(`${c.user.email} is the only admin. Make someone else an admin first, or nobody could manage access any more.`);
     else if (c.user.email.toLowerCase() === c.me.toLowerCase()) out.push("You cannot take away your own admin role: you would lose access to this page. Ask another admin to do it.");

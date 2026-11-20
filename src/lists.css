@@ -101,6 +101,8 @@
 .filter-chip-key { color: var(--text-2); font-weight: 500; }
 .filter-clear { flex: none; min-height: 30px; padding: 0 8px; border-radius: 8px; color: var(--accent); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
 .filter-clear:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* an old link named a filter that no longer exists: said once, quietly, above the chosen filters */
+.list-notice { margin: 0 0 10px; padding: 7px 12px; width: fit-content; max-width: 100%; font-size: 13px; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; }
 
 .list-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 28px 28px 24px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); color: var(--text-2); }
 .list-empty .btn { margin-top: 12px; }
@@ -197,23 +199,34 @@
   .cards:not(.rows) > .card > .card-foot { grid-row: 6; align-self: end; margin-top: 8px; margin-bottom: 0; }
 }
 
-/* ---------- rows: one line each, for scanning many ---------- */
-.cards.rows { display: flex; flex-direction: column; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow-1); overflow: hidden; }
-/* the kind column has one width for both tags, so that every title starts at the same x */
-.card.row { --row-kind: 104px; display: grid; grid-template-columns: var(--row-kind) minmax(0, 1fr) auto minmax(0, 190px) auto; grid-template-areas: "kind main level owner act"; align-items: center; gap: 4px 14px; padding: 9px 14px; border: 0; border-radius: 0; box-shadow: none; }
+/* ---------- rows: one line each, for scanning many ----------
+   A real grid: the list holds the columns and every row takes them over (subgrid), so that the
+   rigour, the lead time (or the requirements), the owner and the actions start at the same x in
+   every row, whatever each row holds. The kind column is there only where kinds are mixed. */
+.cards.rows { display: grid; grid-template-columns: [kind] auto [main] minmax(0, 1fr) [level] auto [fact] fit-content(160px) [owner] fit-content(190px) [act] auto [end];
+  column-gap: 18px; row-gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow-1); overflow: hidden; }
+.cards.rows:not(:has(> .card.row > .kind-tag)) { grid-template-columns: [main] minmax(0, 1fr) [level] auto [fact] fit-content(160px) [owner] fit-content(190px) [act] auto [end]; }
+/* column-gap: normal - the gaps of the list, not the card's own gap */
+.card.row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; column-gap: normal; row-gap: 4px; padding: 9px 14px; border: 0; border-radius: 0; box-shadow: none; }
 .card.row + .card.row { border-top: 1px solid var(--line); }
 .card.row:hover { background: var(--surface-2); box-shadow: none; }
-.card.row > .kind-tag { grid-area: kind; justify-self: start; }
-.card.row:not(:has(> .kind-tag)) { grid-template-columns: minmax(0, 1fr) auto minmax(0, 190px) auto; grid-template-areas: "main level owner act"; }
-.row-main { grid-area: main; display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.card.row .card-title { flex: 0 1 auto; min-width: 0; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row-hit, .row-cat { position: relative; z-index: 1; flex: 1 1 0; min-width: 0; font-size: 12.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card.row > * { grid-row: 1; }
+.card.row > .kind-tag { grid-column: kind; justify-self: start; }
+/* the name over its category (or where the search found it): each gets the whole width of the column */
+.row-main { grid-column: main; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.card.row .card-title { min-width: 0; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-hit, .row-cat { position: relative; z-index: 1; min-width: 0; font-size: 12.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-cat { z-index: auto; color: var(--text-3); }
 .row-hit:hover { color: var(--accent); }
-.card.row .card-marks { grid-column: main; grid-row: 2; }
-.row-level { grid-area: level; display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; white-space: nowrap; }
-.row-owner { grid-area: owner; display: flex; align-items: center; min-width: 0; font-size: 12.5px; }
-.card.row .card-engage { grid-area: act; }
+.card.row > .card-marks { grid-column: main; grid-row: 2; }
+.row-level { grid-column: level; display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; white-space: nowrap; }
+.row-fact { grid-column: fact; display: flex; align-items: center; min-width: 0; font-size: 12.5px; }
+.row-owner { grid-column: owner; display: flex; align-items: center; min-width: 0; font-size: 12.5px; }
+.row-fact .fact.strong, .row-fact .fact { color: var(--text-2); font-weight: 500; font-variant-numeric: tabular-nums; }
+.card.row > .card-engage { grid-column: act; justify-self: end; }
+/* retired: the same lines, greyed */
+.card.retired .fact, .card.retired .fact.strong, .card.retired .level-mark, .card.retired .card-entry { color: var(--text-3); }
+.card.retired .level-bars i.on { background: var(--text-3); }
 
 /* ---------- pages ---------- */
 .pager { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; margin: 24px 0 8px; }
@@ -277,9 +290,10 @@
   .search-box .btn, .search-box.big .btn { height: 38px; padding: 0 12px; }
 }
 
+/* a narrower screen: the owner is left out of the rows (it is on the page and on the card) */
 @media (max-width: 1100px) {
-  .card.row { grid-template-columns: var(--row-kind) minmax(0, 1fr) auto auto; grid-template-areas: "kind main level act"; }
-  .card.row:not(:has(> .kind-tag)) { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "main level act"; }
+  .cards.rows { grid-template-columns: [kind] auto [main] minmax(0, 1fr) [level] auto [fact] fit-content(150px) [act] auto [end]; column-gap: 14px; }
+  .cards.rows:not(:has(> .card.row > .kind-tag)) { grid-template-columns: [main] minmax(0, 1fr) [level] auto [fact] fit-content(150px) [act] auto [end]; }
   .row-owner { display: none; }
 }
 /* narrow screens: the filters, the order and the page size fold away behind "Filters (n)" */
@@ -310,12 +324,14 @@
   .type-tabs .tab { padding: 0 10px; font-size: 13.5px; }
   .type-tab-mark { display: none; }
   .hero.list-hero h1 { font-size: 26px; }
-  .card.row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main act" "level act"; padding: 10px 12px; }
-  .card.row:not(:has(> .kind-tag)) { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main act" "level act"; }
+  /* a phone: each row wraps to two lines and keeps its order - the title and category, then the
+     rigour, the lead time (or requirements) and the actions */
+  .cards.rows, .cards.rows:not(:has(> .card.row > .kind-tag)) { display: flex; flex-direction: column; }
+  .card.row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 10px 12px; }
   .card.row > .kind-tag { display: none; }
-  .row-main { flex-direction: column; gap: 2px; align-items: stretch; }
-  /* in a column a basis of 0 would fold the line away: where it was found (or the category) stays readable */
-  .row-hit, .row-cat { flex: none; }
+  .row-main { flex: 1 1 100%; gap: 2px; }
+  .row-fact { min-width: 0; flex: 0 1 auto; }
+  .card.row > .card-engage { margin-left: auto; }
   .card.row .card-marks { display: none; }
 }
 

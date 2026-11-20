@@ -11,6 +11,7 @@
 .kind-tag.process { border-radius: 999px; background: var(--kind-process-bg); color: var(--kind-process); }
 .kind-tag.standard { border-radius: 4px; background: var(--kind-standard-bg); color: var(--kind-standard); box-shadow: inset 0 0 0 1px var(--kind-standard-line); }
 .kind-tag.md { height: 26px; padding: 0 11px 0 9px; font-size: 11.5px; }
+.kind-tag.icon { justify-content: center; width: 24px; height: 24px; padding: 0; }
 
 /* ---------- the level: three bars as a lead-in, the word always written ---------- */
 .level-mark { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--text); font-weight: 600; }
@@ -21,6 +22,7 @@
 .level-bars i.on { background: var(--text); }
 .level-bars[data-strength="mid"] i.on { background: var(--text-2); }
 .level-bars[data-strength="light"] i.on { background: var(--text-3); }
+.level-mark[data-level="none"] { color: var(--text-3); font-weight: 500; }
 
 /* ---------- one fact: a grey icon and the text, on one line ---------- */
 .fact { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; color: var(--text-2); }

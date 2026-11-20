@@ -14,7 +14,7 @@ import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
 import { openCount } from "./Feedback";
 import { DocCard, Marked } from "./DocCard";
 import { needsReview } from "../lib/lifecycle";
-import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, OrderControls, Pager, profileChosen, ResultsBar, ResultsFoot, SearchBox, toResults, TypeTabs, type Chosen, type FlagControl } from "./Lists";
+import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, OrderControls, Pager, profileChosen, ResultsBar, ResultsFoot, SearchBox, toResults, TypeTabs, useLinkFilters, type Chosen, type FlagControl } from "./Lists";
 import "../search.css";
 
 export { Marked };
@@ -76,6 +76,7 @@ export function SearchModeSwitch({ mode, onChange, provider }: { mode: SearchMod
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const n0 = (o: { results: unknown[] }) => o.results.length === 0;
 
 export function SearchPage({ route, processes, standards, feedback, meta }: {
   route: SearchState; processes: Process[]; standards: Standard[];
@@ -90,7 +91,10 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   const known = engagementKnown(eng);
   // the server sends a never-published draft only to whoever may see it
   const drafts = true;
-  const filters = useMemo(() => filtersOf(route), [route]);
+  const linkFilters = useMemo(() => filtersOf(route), [route]);
+  const docs = useMemo(() => [...processes, ...standards], [processes, standards]);
+  // an old link may name a filter value that no longer exists: it is left out, and the address corrected
+  const { filters, notice } = useLinkFilters(linkFilters, docs, (f) => setFilters(f));
   const q = route.q ?? "";
   const [profile, setProfile] = useProfile();
   const [bookmarked, setBookmarked] = useRemembered("pm:search:bookmarked", false);
@@ -167,7 +171,7 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   }, [plan.show, plan.meaning, shownQ, processes, standards, catalog, drafts, profile]);
   const input = { processes, standards, catalog, q: shownQ, filters, drafts, profile, flags, found };
   const out = search(input);
-  const mine = profileOptions(input);
+
   // by meaning (and both ways) the order is the best match the server gave, unless another is chosen
   const sorted = useMemo(() => sortResults(out.results, sort, meta), [out.results, sort, meta]);
   const anyChosen = filterCount(filters) > 0 || bookmarked || due || !!(profile.tier || profile.environment || profile.language);
@@ -179,27 +183,35 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   // the server sent only the closest of more that matched: the counts are "at least"
   const truncated = plan.truncated && plan.show !== "words" && plan.show !== "none";
 
-  // the tabs: how many results each kind gives with everything else as chosen
-  const tab = typeTab(filters);
-  const kindCount = (k: string) => out.options.type.find((o) => o.value === k)?.count ?? 0;
-  const tabCounts = { "": kindCount("process") + kindCount("standard"), process: kindCount("process"), standard: kindCount("standard") };
-  // nothing of the chosen kind, but something of the other: the tab is what hides it
-  const otherKind = tab && out.results.length === 0 ? tabCounts[""] : 0;
-
   // words found nothing (whatever the filters and "My application"): on a search asked for on purpose, the closest by meaning
   const wordHits = plan.show === "words" && asked ? search({ processes, standards, catalog, q: asked, drafts }).results.length : -1;
-  // (with filters chosen, it is the filters that hide what words find: the empty state says so;
-  // "My application" is kept for good, so it does not stop the closest from being looked for)
+  // (words found nothing at all, whatever the filters: the closest are looked for, and the type tabs,
+  // the filters and "My application" narrow them as they narrow any results)
   const filtered = filterCount(filters) > 0 || bookmarked || due;
-  const wantClosest = closestWanted({ mode, offered, asked, submitted, wordHits }) && !filtered;
+  const wantClosest = closestWanted({ mode, offered, asked, submitted, wordHits });
   const closestState = useMeaningSearch(asked, wantClosest, attempt, stamp);
-  const closest = useMemo(() => {
+  const closestFound = useMemo(() => {
     if (!wantClosest || closestState.for !== asked || closestState.loading || !closestState.answer || closestState.answer.query !== asked) return null;
     const byKey = new Map<string, Process | Standard>([...processes.map((p) => [`process:${p.id}`, p] as const), ...standards.map((d) => [`standard:${d.id}`, d] as const)]);
-    return search({ processes, standards, catalog, drafts, profile, found: fromMeaning(closestState.answer.results, (k, id) => byKey.get(`${k}:${id}`)) }).results;
-  }, [wantClosest, closestState, asked, processes, standards, catalog, drafts, profile]);
+    return fromMeaning(closestState.answer.results, (k, id) => byKey.get(`${k}:${id}`));
+  }, [wantClosest, closestState, asked, processes, standards]);
+  // how many came close at all (with "My application", which is kept for good), and those the filters leave
+  const closestAll = useMemo(() => (closestFound ? search({ processes, standards, catalog, drafts, profile, found: closestFound }).results.length : 0), [closestFound, processes, standards, catalog, drafts, profile]);
+  const closestIn = closestFound ? { ...input, found: closestFound } : null;
+  const closestOut = closestIn ? search(closestIn) : null;
+  const closest = closestOut ? closestOut.results : null;
   const closestWords = useMemo(() => markedWords(wordsOf(asked)), [asked]);
-  const closestOutcome: ClosestOutcome = !wantClosest ? "not-tried" : closestState.problem ? "problem" : closest === null ? "waiting" : closest.length ? "found" : "nothing";
+  const closestOutcome: ClosestOutcome = !wantClosest ? "not-tried" : closestState.problem ? "problem" : closest === null ? "waiting" : closestAll ? "found" : "nothing";
+  // words found nothing and the closest by meaning are shown (or looked for): the tabs and the filters work on them
+  const closestShown = n0(out) && (closestOutcome === "waiting" || closestOutcome === "found");
+  const shownOut = closestShown && closestOut ? closestOut : out;
+
+  // the tabs: how many results each kind gives with everything else as chosen
+  const tab = typeTab(filters);
+  const kindCount = (k: string) => shownOut.options.type.find((o) => o.value === k)?.count ?? 0;
+  const tabCounts = { "": kindCount("process") + kindCount("standard"), process: kindCount("process"), standard: kindCount("standard") };
+  // nothing of the chosen kind, but something of the other: the tab is what hides it
+  const otherKind = tab && shownOut.results.length === 0 ? tabCounts[""] : 0;
 
   const [view, setView] = useListView(me.user?.email);
   const [open, setOpen] = useState(false); // the filters on a narrow screen
@@ -220,29 +232,31 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   const ids = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds: standards.map((s) => s.id), catalog }), [processes, standards, catalog]);
   const usedBy = (id: string) => processes.filter((p) => Array.isArray(p.steps) && p.steps.some((s) => s && s.subProcessId === id)).length;
 
+  const mine = profileOptions(closestShown && closestIn ? closestIn : input);
   const flagControls: FlagControl[] = [
-    { key: "bookmarked", label: "Only my bookmarks", count: out.flags.bookmarked ?? 0, on: bookmarked, onChange: (v) => { setBookmarked(v); toFirst(); }, unknown: bookmarksUnknown(eng) },
+    { key: "bookmarked", label: "Only my bookmarks", count: shownOut.flags.bookmarked ?? 0, on: bookmarked, onChange: (v) => { setBookmarked(v); toFirst(); }, unknown: bookmarksUnknown(eng) },
   ];
-  if ((out.flags.review ?? 0) > 0 || due) flagControls.push({ key: "review", label: "Only what needs a review", count: out.flags.review ?? 0, on: due, onChange: (v) => { setDue(v); toFirst(); } });
+  if ((shownOut.flags.review ?? 0) > 0 || due) flagControls.push({ key: "review", label: "Only what needs a review", count: shownOut.flags.review ?? 0, on: due, onChange: (v) => { setDue(v); toFirst(); } });
   const changeProfile = (p: typeof profile) => { setProfile(p); toFirst(); };
 
   const chosen: Chosen[] = [
     ...(bookmarked ? [{ key: "bookmarked", name: "Bookmarks", value: "only mine", remove: () => { setBookmarked(false); toFirst(); } }] : []),
     ...(due ? [{ key: "review", name: "Review", value: "due or overdue", remove: () => { setDue(false); toFirst(); } }] : []),
-    ...KEYS.flatMap((k) => out.options[k].filter((o) => o.chosen).map((o) => ({
+    ...KEYS.flatMap((k) => shownOut.options[k].filter((o) => o.chosen).map((o) => ({
       key: `${k}:${o.value}`, name: FILTER_LABEL[k], value: k === "rigour" ? rigourOptionLabel(o.value as never, "any") : o.label, remove: () => setFilters(toggleFilter(filters, k, o.value)),
     }))),
     ...profileChosen(profile, changeProfile, catalog),
   ];
   const clear = () => { setBookmarked(false); setDue(false); setProfile({}); setFilters({}); };
   // nothing found and nothing chosen to blame: no tabs, filters, order or pages to offer
-  const bare = n === 0 && !anyChosen && !plan.busy;
+  const bare = n === 0 && !anyChosen && !plan.busy && !closestShown;
   // nothing found: nothing to order or page through (the chosen filters stay, with a way to remove them)
-  const noTools = n === 0 && !plan.busy;
+  const noTools = n === 0 && !plan.busy && !closestShown;
+  // how many the panel and the tabs speak of: the results, or the closest by meaning that the filters leave
+  const shownN = closestShown ? (closest?.length ?? 0) : n;
   const other = otherWay({ offered, q: shownQ, show: plan.show, mode, filtered, closest: closestOutcome });
   const summary = <>{shownQ.trim() ? <> for “{shownQ.trim()}”</> : null}{chosen.length ? <> with {plural(chosen.length, "filter")}</> : null}</>;
-  // words found nothing and the closest by meaning are shown (or looked for): the line above says so, instead of a count of none
-  const closestShown = n === 0 && (closestOutcome === "waiting" || closestOutcome === "found");
+  // the line above says so, instead of a count of none
   const closestLine = closestShown ? <>No exact match for “{shownQ.trim()}”.{closestOutcome === "found" && closest?.length ? " Closest by meaning:" : ""}</> : undefined;
   // nothing found, but the filters hide what there is: the empty state offers the one "Clear all filters"
   const clearsInEmpty = n === 0 && !plan.busy && !closestShown && otherKind === 0 && chosen.length > 0 && withoutFilters > 0;
@@ -262,16 +276,17 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
           {(!noTools || !!tab) && <TypeTabs value={tab} counts={tabCounts} atLeast={truncated} onChange={(t) => setFilters(withTypeTab(filters, t))} />}
           <ResultsBar page={page} noun={{ one: "result", many: "results" }} panelId="search-filters" open={open} onOpen={setOpen}
             chosen={chosen.length} size={size} onSize={changeSize} extra={summary} line={closestLine}
-            sort={sort} onSort={changeSort} searched={!!shownQ.trim()} view={view} onView={setView} bare={noTools}
+            sort={sort} onSort={changeSort} searched={!!shownQ.trim()} view={view} onView={setView} bare={noTools} unordered={closestShown}
             pager={<Pager page={page} onPage={goTo} label="Pages of results" compact />} />
           {truncated && <p className="search-truncated">{truncatedText(plan.meaning.length)}</p>}
+          {notice}
           <ChosenFilters chosen={chosen} onClear={clear} clearAll={!clearsInEmpty} />
         </div>
         {!bare && (
-          <FilterPanel id="search-filters" open={open} keys={KEYS} options={out.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}
-            flags={flagControls} profile={profile} onProfile={changeProfile} profileOptions={mine} subject="any" total={n} atLeast={truncated}
-            order={<OrderControls sort={sort} onSort={changeSort} searched={!!shownQ.trim()} size={size} onSize={changeSize} />}
-            done={{ label: `Show ${countText(n, truncated)} ${n === 1 ? "result" : "results"}`, onClick: () => { setOpen(false); toResults(results.current); } }} />
+          <FilterPanel id="search-filters" open={open} keys={KEYS} options={shownOut.options} onToggle={(k, v) => setFilters(toggleFilter(filters, k, v))}
+            flags={flagControls} profile={profile} onProfile={changeProfile} profileOptions={mine} subject="any" total={shownN} atLeast={truncated}
+            order={closestShown ? undefined : <OrderControls sort={sort} onSort={changeSort} searched={!!shownQ.trim()} size={size} onSize={changeSize} />}
+            done={{ label: `Show ${countText(shownN, truncated)} ${shownN === 1 ? "result" : "results"}`, onClick: () => { setOpen(false); toResults(results.current); } }} />
         )}
         <section className="list-results" aria-label="Results" ref={results} tabIndex={-1} aria-busy={plan.busy || undefined}>
           {offered && (
@@ -302,6 +317,20 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
             <div className="search-closest" role="status" aria-live="polite">
               {closest === null ? (
                 <p className="search-busy"><span className="search-spinner" aria-hidden="true" />Looking for the closest by meaning…</p>
+              ) : closest.length === 0 ? (
+                <div className="list-empty search-empty">
+                  <span className="list-empty-icon" aria-hidden="true"><SearchX size={22} /></span>
+                  <h2>Nothing found</h2>
+                  <p className="muted">{otherKind > 0
+                    ? `None of the closest by meaning is a ${tab === "process" ? "process" : "standard"}${chosen.length ? " with these filters" : ""}. All kinds together give ${plural(otherKind, "result")}.`
+                    : `None of the ${plural(closestAll, "closest result")} by meaning matches these filters.`}</p>
+                  <div className="btn-row">
+                    {otherKind > 0
+                      ? <button type="button" className="btn small primary" onClick={() => setFilters(withTypeTab(filters, ""))}>Show all kinds</button>
+                      : <button type="button" className="btn small primary" onClick={clear}>Clear all filters</button>}
+                  </div>
+                  <AskForIt />
+                </div>
               ) : (
                 <>
                   <ol className={`cards ${view === "rows" ? "rows" : ""}`.trim()}>

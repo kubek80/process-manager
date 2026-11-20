@@ -3,7 +3,7 @@ import { Plus, Trash2, UserPlus } from "lucide-react";
 import type { Membership } from "../types";
 import { GROUP, looksLikeEmail, MEMBER_ROLE, membersOf, type GroupKind } from "../lib/members";
 import { usePerms } from "../lib/session";
-import { grantAccess, loadAccess, revokeAccess, type Access } from "../lib/store";
+import { grantAccess, loadAccess, loadUsers, revokeAccess, type Access } from "../lib/store";
 import { confirmDialog, LoadError, Loading, notify } from "./ui";
 import { formatDate } from "../lib/dates";
 
@@ -30,7 +30,7 @@ function MemberList({ kind, id, members, error, manage }: { kind: GroupKind; id:
           {list.map((m) => (
             <li key={m.email}>
               <span className="avatar">{m.email.slice(0, 1).toUpperCase()}</span>
-              <span className="person"><a href={`mailto:${m.email}`}><strong>{m.email}</strong></a><em>{GROUP[kind].member}</em></span>
+              <span className="person"><a href={`mailto:${m.email}`}><strong>{m.email}</strong></a></span>
             </li>
           ))}
         </ul>
@@ -65,8 +65,15 @@ export function GroupMembers({ kind, id, name, saved, manage, members, membersEr
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
+  // the names of the people with roles, by address: a member is shown by name, the address small
+  const [names, setNames] = useState<Record<string, string>>({});
 
-  const load = useCallback(() => { setError(""); loadAccess().then(setAccess, (e) => setError(e.message)); }, []);
+  const load = useCallback(() => {
+    setError("");
+    loadAccess().then(setAccess, (e) => setError(e.message));
+    loadUsers().then((users) => setNames(Object.fromEntries(users.filter((u) => u.name).map((u) => [u.email.toLowerCase(), u.name!]))), () => { /* the addresses are shown instead */ });
+  }, []);
+  const nameOf = (email: string) => names[email.toLowerCase()];
   useEffect(() => { if (admin) load(); }, [admin, load]);
   useEffect(() => { setEmail(""); }, [kind, id]);
 
@@ -112,21 +119,19 @@ export function GroupMembers({ kind, id, name, saved, manage, members, membersEr
           <ul className="people">
             {list.map((m) => (
               <li key={m.email}>
-                <span className="avatar">{m.email.slice(0, 1).toUpperCase()}</span>
-                <span className="person"><strong>{m.email}</strong><em>since {formatDate(m.grantedAt)}, added by {m.grantedBy}</em></span>
-                <span className="role-chips">
-                  <span className="role-chip">
-                    {GROUP[kind].member}
-                    <button aria-label={`Remove ${m.email} as ${GROUP[kind].member}`} onClick={() => remove(m.email)}><Trash2 size={12} /></button>
-                  </span>
+                <span className="avatar">{(nameOf(m.email) || m.email).slice(0, 1).toUpperCase()}</span>
+                <span className="person">
+                  <strong>{nameOf(m.email) || m.email}</strong>
+                  <em>{nameOf(m.email) && <>{m.email} · </>}since {formatDate(m.grantedAt)}, added by <span title={m.grantedBy.includes("@") ? m.grantedBy : undefined}>{nameOf(m.grantedBy) || m.grantedBy}</span></em>
                 </span>
+                <button className="icon-btn member-remove" aria-label={`Remove ${m.email} as ${GROUP[kind].member}`} title={`Remove from this ${noun}`} onClick={() => remove(m.email)}><Trash2 size={15} aria-hidden="true" /></button>
               </li>
             ))}
           </ul>
           <form className="member-add" onSubmit={(e) => { e.preventDefault(); add(); }}>
             <UserPlus size={15} aria-hidden="true" />
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. name@company.com" aria-label="Email of the new member" />
-            <button className="btn small primary" disabled={!looksLikeEmail(email) || busy}><Plus size={14} />Add member</button>
+            <button className="btn small" disabled={!looksLikeEmail(email) || busy}><Plus size={14} />Add member</button>
           </form>
         </>
       )}

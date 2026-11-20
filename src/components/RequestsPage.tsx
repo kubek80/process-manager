@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, Ban, CalendarClock, Check, ChevronUp, CircleCheck, Lightbulb, Plus, RotateCcw, ShieldCheck, Trash2, Undo2, Workflow } from "lucide-react";
+import { ArrowUpRight, Ban, CalendarClock, Check, ChevronDown, ChevronUp, CircleCheck, Lightbulb, Plus, RotateCcw, ShieldCheck, Trash2, Undo2, Workflow } from "lucide-react";
 import type { Process, Standard, TargetKind } from "../types";
 import { platformName, practiceName, useCatalog } from "../lib/catalog";
 import {
@@ -8,7 +8,7 @@ import {
 } from "../lib/requests";
 import { createRequest, go, href, loadRequests, setRequestState, voteRequest, withdrawRequest } from "../lib/store";
 import { usePerms } from "../lib/session";
-import { confirmDialog, Field, LoadError, Loading, Modal, notify } from "./ui";
+import { confirmDialog, Field, LoadError, Loading, Modal, notify, useLayer } from "./ui";
 import { KindTag } from "./marks";
 import "../requests.css";
 import { formatDate } from "../lib/dates";
@@ -16,6 +16,30 @@ import { formatDate } from "../lib/dates";
 const NOUN: Record<TargetKind, string> = { process: "process", standard: "standard" };
 const day = formatDate;
 const docHref = (kind: TargetKind, id: string) => href(kind === "process" ? { page: "process", id, tab: "flow" } : { page: "standard", id, tab: "doc" });
+/** What can be done with a request in the list. */
+export type RequestAct = "planned" | "done" | "declined" | "open" | "withdraw" | "remove";
+
+/**
+ * The actions of one request: the one next step as a button (`next`), the others under "More".
+ * Whoever moves requests along plans an open one, marks a planned one as done, and can bring a
+ * finished one back; the person who asked withdraws it while it is open; an admin removes it.
+ */
+export function requestActions(r: { state: RequestState; canManage?: boolean; mine?: boolean }, admin: boolean): { next?: RequestAct; more: RequestAct[] } {
+  const all: RequestAct[] = [];
+  if (r.canManage) {
+    if (r.state === "open") all.push("planned");
+    if (r.state === "open" || r.state === "planned") all.push("done", "declined");
+    else all.push("open");
+  }
+  const withdrawable = !!r.mine && r.state === "open";
+  if (withdrawable) all.push("withdraw");
+  if (admin && !withdrawable) all.push("remove");
+  const [next, ...more] = all;
+  return { next, more };
+}
+
+const ACT_ICON: Record<RequestAct, typeof Check> = { planned: CalendarClock, done: Check, declined: Ban, open: RotateCcw, withdraw: Undo2, remove: Trash2 };
+
 const KindIcon = ({ kind, size = 14 }: { kind: TargetKind; size?: number }) => (kind === "process" ? <Workflow size={size} aria-hidden="true" /> : <ShieldCheck size={size} aria-hidden="true" />);
 
 /**
@@ -159,9 +183,8 @@ function RequestItem({ r, showState, processes, standards, onVote, onWithdraw, o
   const { catalog } = useCatalog();
   // the server says who may move a request along (whoever could create what is asked for)
   const admin = usePerms().admin;
-  const manage = r.canManage;
-  const withdrawable = r.mine && r.state === "open";
-  const removable = admin && !withdrawable;
+  const acts = requestActions(r, admin);
+  const run = (a: RequestAct) => (a === "withdraw" ? onWithdraw() : a === "remove" ? onRemove() : a === "open" ? onReopen() : onChange(a));
   const answer = r.state === "done" ? answerOf(r, r.kind === "process" ? processes : standards) : null;
   const titleId = `req-${r.id}-title`;
   return (
@@ -198,20 +221,64 @@ function RequestItem({ r, showState, processes, standards, onVote, onWithdraw, o
         {r.state === "declined" && (
           <p className="req-outcome declined"><Ban size={15} aria-hidden="true" /><span><b>Declined</b>{r.stateBy && <> by {r.stateBy}</>}{r.stateAt && <> on {day(r.stateAt)}</>}: {r.stateNote || "no reason given"}</span></p>
         )}
-        {(manage || withdrawable || removable) && (
+        {acts.next && (
           <div className="req-actions">
-            {manage && r.state === "open" && <button className="btn small" onClick={() => onChange("planned")}><CalendarClock size={14} />{ACTION_LABEL.planned}</button>}
-            {manage && (r.state === "open" || r.state === "planned") && <>
-              <button className="btn small" onClick={() => onChange("done")}><Check size={14} />{ACTION_LABEL.done}</button>
-              <button className="btn small" onClick={() => onChange("declined")}><Ban size={14} />{ACTION_LABEL.declined}</button>
-            </>}
-            {manage && r.state !== "open" && <button className="btn small ghost" onClick={onReopen}><RotateCcw size={14} />{ACTION_LABEL.open}</button>}
-            {withdrawable && <button className="btn small ghost danger" onClick={onWithdraw}><Undo2 size={14} />{ACTION_LABEL.withdraw}</button>}
-            {removable && <button className="btn small ghost danger" onClick={onRemove} title="Admins only: removes the request for good, with its votes"><Trash2 size={14} />{ACTION_LABEL.remove}</button>}
+            <ActButton act={acts.next} run={run} />
+            {acts.more.length > 0 && <MoreActions acts={acts.more} run={run} title={r.title} />}
           </div>
         )}
       </div>
     </li>
+  );
+}
+
+/** One action of a request as a button: the next step is outlined; withdrawing and removing are quiet. */
+function ActButton({ act, run }: { act: RequestAct; run: (a: RequestAct) => void }) {
+  const Icon = ACT_ICON[act];
+  const quiet = act === "open" || act === "withdraw" || act === "remove";
+  return (
+    <button className={`btn small ${quiet ? "ghost" : ""} ${act === "withdraw" || act === "remove" ? "danger" : ""}`} onClick={() => run(act)}
+      title={act === "remove" ? "Admins only: removes the request for good, with its votes" : undefined} data-act={act}>
+      <Icon size={14} aria-hidden="true" />{ACTION_LABEL[act]}
+    </button>
+  );
+}
+
+/** The other actions of a request, under one "More" button: a short list that opens under it. */
+function MoreActions({ acts, run, title }: { acts: RequestAct[]; run: (a: RequestAct) => void; title: string }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: Event) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("focusin", away);
+    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("focusin", away); };
+  }, [open]);
+  return (
+    <div className="req-more" ref={box}>
+      <button className="btn small ghost" aria-expanded={open} onClick={() => setOpen(!open)} title={`More for “${title}”`}>
+        More<ChevronDown size={14} aria-hidden="true" />
+      </button>
+      {open && <MorePop acts={acts} onClose={() => setOpen(false)} run={(a) => { setOpen(false); run(a); }} />}
+    </div>
+  );
+}
+
+function MorePop({ acts, run, onClose }: { acts: RequestAct[]; run: (a: RequestAct) => void; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayer(ref, onClose);
+  return (
+    <div ref={ref} className="req-more-pop" role="group" aria-label="More actions" tabIndex={-1}>
+      {acts.map((a, i) => {
+        const Icon = ACT_ICON[a];
+        return (
+          <button key={a} className={`req-more-item ${a === "withdraw" || a === "remove" ? "danger" : ""}`} data-autofocus={i === 0 ? "" : undefined} onClick={() => run(a)}>
+            <Icon size={15} aria-hidden="true" />{ACTION_LABEL[a]}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

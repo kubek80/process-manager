@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACTION, describeEntry, shownTarget } from "../activity";
+import { ACTION, describeEntry, detailParts, shownTarget } from "../activity";
 import type { AuditEntry } from "../../types";
 
 const entry = (action: string, target: string, more: Partial<AuditEntry> = {}): AuditEntry =>
@@ -46,5 +46,31 @@ describe("the activity list", () => {
     const e = describeEntry(entry("theme.change", "look", { detail: "Brand colour #0055aa" }), titles);
     expect(e.words).toBe("changed the look of the portal");
     expect(e.target).toBeUndefined();
+  });
+});
+
+describe("the activity list in words a reader knows", () => {
+  it("names a request by its title, its number as the hint", () => {
+    const asked = describeEntry(entry("request.create", "request 6", { detail: "Asked for a process: “Order a TLS certificate”" }), titles);
+    expect(asked).toMatchObject({ words: "asked for a new process:", target: { text: "“Order a TLS certificate”", hint: "request 6", quoted: true } });
+    expect(asked.detail).toBeUndefined();
+    const planned = describeEntry(entry("request.state", "request 6", { detail: "“Order a TLS certificate”: planned. Note: next month" }), titles);
+    expect(planned).toMatchObject({ words: "changed the state of the request", target: { text: "“Order a TLS certificate”", hint: "request 6" }, detail: "planned. Note: next month" });
+    expect(describeEntry(entry("request.delete", "request 6", { detail: "something else" }), titles).target).toEqual({ text: "request 6" });
+  });
+  it("names a person by their name where the page knows it, the address as the hint", () => {
+    const names = { "morgan.lee@example.com": "Morgan Lee" };
+    expect(describeEntry(entry("access.change", "morgan.lee@example.com"), titles, names).target).toEqual({ text: "Morgan Lee", hint: "morgan.lee@example.com" });
+    expect(describeEntry(entry("access.change", "nobody@example.com"), titles, names).target).toEqual({ text: "nobody@example.com" });
+  });
+  it("cuts the detail into words, people and colours", () => {
+    expect(detailParts("reported by sam@example.com", { "sam@example.com": "Sam Consumer" })).toEqual([
+      { text: "reported by " }, { text: "Sam Consumer", person: "sam@example.com" },
+    ]);
+    expect(detailParts("name “Hub”; brand colour #be185d; logo added")).toEqual([
+      { text: "name “Hub”; brand colour " }, { text: "#be185d", colour: "#be185d" }, { text: "; logo added" },
+    ]);
+    expect(detailParts("version 2")).toEqual([{ text: "version 2" }]);
+    expect(detailParts("x@example.com: added Owner")).toEqual([{ text: "x@example.com", person: "x@example.com" }, { text: ": added Owner" }]);
   });
 });

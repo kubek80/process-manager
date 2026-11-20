@@ -12,7 +12,7 @@ import { go, parseRoute, type ListState } from "../lib/store";
 import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
 import { openCount } from "./Feedback";
 import { DocCard } from "./DocCard";
-import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, OrderControls, Pager, profileChosen, ResultsBar, ResultsFoot, SearchBox, toResults, type Chosen, type FlagControl } from "./Lists";
+import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, OrderControls, Pager, profileChosen, ResultsBar, ResultsFoot, SearchBox, toResults, useLinkFilters, type Chosen, type FlagControl } from "./Lists";
 
 const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "owner"];
 const NOUN: Record<TargetKind, { one: string; many: string }> = { process: { one: "process", many: "processes" }, standard: { one: "standard", many: "standards" } };
@@ -52,7 +52,9 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
   const route = parseRoute(location.hash) as ListState & { page: string };
   const state: ListState = route.page === page ? route : {};
   const q = state.q ?? "";
-  const filters = useMemo(() => filtersOf(state), [JSON.stringify(state)]); // eslint-disable-line react-hooks/exhaustive-deps
+  const linkFilters = useMemo(() => filtersOf(state), [JSON.stringify(state)]); // eslint-disable-line react-hooks/exhaustive-deps
+  // an old link may name a filter value that no longer exists: it is left out, and the address corrected
+  const { filters, notice } = useLinkFilters(linkFilters, kind === "process" ? processes : standards, (f) => setFilters(f));
   const [bookmarked, setBookmarked] = useRemembered(`pm:${list}:bookmarked`, false);
   const [due, setDue] = useRemembered(`pm:${list}:review`, false);
   const [profile, setProfile] = useProfile();
@@ -133,6 +135,7 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
           <ResultsBar page={pg} noun={NOUN[kind]} panelId={panelId} open={open} onOpen={setOpen} chosen={chosen.length} size={size} onSize={changeSize}
             sort={sort} onSort={changeSort} searched={!!q.trim()} view={view} onView={setView} bare={n === 0}
             pager={<Pager page={pg} onPage={goTo} label={`Pages of ${NOUN[kind].many}`} compact />} />
+          {notice}
           {/* nothing found: the empty state holds the one "Clear all filters" */}
           <ChosenFilters chosen={chosen} onClear={clear} clearAll={n > 0} />
         </div>

@@ -23,7 +23,7 @@ export const ACTION: Record<string, string> = {
   "skill.guidance": "changed the extra guidance of the skill",
   "icon.upload": "added an icon",
   "theme.change": "changed the look of the portal",
-  "request.create": "asked for something new:", "request.state": "changed the state of", "request.delete": "removed",
+  "request.create": "asked for something new:", "request.state": "changed the state of the request", "request.delete": "removed the request",
   "content.import": "imported", "content.convert": "brought the stored content up to date for this version",
 };
 
@@ -43,14 +43,34 @@ export interface ShownEntry {
   detail?: string;
 }
 
-/** One entry of the activity log in plain words. */
-export function describeEntry(e: AuditEntry, titles: Titles): ShownEntry {
+/** The names the page knows, by email in lower case: who appears in the log, who gave feedback. */
+export type Names = Record<string, string>;
+
+/** One entry of the activity log in plain words. `names` turns an address the log names into the person's name. */
+export function describeEntry(e: AuditEntry, titles: Titles, names: Names = {}): ShownEntry {
   const person = !SYSTEM_AUTHORS.has(e.email);
   const who = person ? e.name || e.email : "The portal";
   const words = ACTION[e.action] ?? e.action.replace(/[._]/g, " ");
   const shown = shownTarget(e.action, e.target);
   const out: ShownEntry = { who, person, words, ...(e.detail ? { detail: e.detail } : {}) };
   if (!shown) return out;
+  // a request is named by its title (the server writes it into the detail), its number as the hint
+  if (e.action.startsWith("request.")) {
+    const asked = /^Asked for an? (process|standard): “(.+)”$/s.exec(e.detail);
+    const titled = /^“(.+?)”: (.+)$/s.exec(e.detail);
+    if (e.action === "request.create" && asked) {
+      out.words = `asked for a new ${asked[1]}:`;
+      out.target = { text: `“${asked[2]}”`, hint: shown, quoted: true };
+      delete out.detail;
+    } else if (titled) {
+      out.target = { text: `“${titled[1]}”`, hint: shown, quoted: true };
+      out.detail = titled[2];
+    } else out.target = { text: shown };
+    return out;
+  }
+  // a person's address: their name where the page knows it, the address as the hint
+  const name = names[shown.toLowerCase()];
+  if (name && /@/.test(shown)) { out.target = { text: name, hint: shown }; return out; }
   const [kind] = e.action.split(".");
   // a process or standard: by its title where the app knows it; feedback names "process <id>"
   const fb = kind === "feedback" ? /^(process|standard) (.+)$/.exec(shown) : null;
@@ -65,5 +85,25 @@ export function describeEntry(e: AuditEntry, titles: Titles): ShownEntry {
   if (e.action === "skill.guidance") out.target = { text: shown, code: true };
   else if (e.action === "content.import") out.target = { text: shown === "sample content" ? "the sample content" : shown };
   else out.target = { text: shown };
+  return out;
+}
+
+/** A part of an entry's detail: words, a person (their name, the address as the hint) or a colour (shown as a swatch with its code). */
+export type DetailPart = { text: string; person?: string; colour?: string };
+
+const PARTS = /([^\s@:;,()]+@[^\s@:;,()]+\.[a-z]{2,})|(#[0-9a-f]{6}\b|#[0-9a-f]{3}\b)/gi;
+
+/** The detail of an entry in parts: addresses become names where the page knows them, colour codes get a swatch. */
+export function detailParts(detail: string, names: Names = {}): DetailPart[] {
+  const out: DetailPart[] = [];
+  let at = 0;
+  for (const m of detail.matchAll(PARTS)) {
+    const i = m.index ?? 0;
+    if (i > at) out.push({ text: detail.slice(at, i) });
+    if (m[1]) out.push({ text: names[m[1].toLowerCase()] || m[1], person: m[1] });
+    else out.push({ text: m[2], colour: m[2] });
+    at = i + m[0].length;
+  }
+  if (at < detail.length) out.push({ text: detail.slice(at) });
   return out;
 }
