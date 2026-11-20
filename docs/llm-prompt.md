@@ -67,7 +67,7 @@ E. FLOW ("next")
 - Every "next.to" and every "actor" must reference an id that exists. Ids must be unique.
 
 # SELF-CHECK BEFORE ANSWERING
-- schemaVersion is "1.0"; "updatedAt" is "2026-11-17".
+- schemaVersion is "1.0"; "updatedAt" is "2026-11-20".
 - actors[0].id is "me".
 - Every step has id, title, actor, type and next.
 - Every step id used in "next.to" exists; every "actor" exists in "actors".

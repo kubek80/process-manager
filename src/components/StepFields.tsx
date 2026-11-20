@@ -351,7 +351,7 @@ function PathsField({ process, step, onChange }: { process: Process; step: Step;
               add(nextFree.id, label);
               // the new answer's name is ready to type over, and the screen says where it leads
               focusSoon(".edit-fields .path-rows > li:last-child .next-label", true);
-              editNotice.info(`Answer “${label}” added: it goes to ${n(nextFree.id)}. ${nextFree.title || "(no name yet)"}. Name it, and choose where it goes.`);
+              editNotice.info(`Answer “${label}” added: it goes to step ${n(nextFree.id)} ${nextFree.title?.trim() ? `“${nextFree.title.trim()}”` : "(no name yet)"}. Name it, and choose where it goes.`);
             }}><GitBranch size={14} />Add a branch</button>
           : <button className="btn small ghost" onClick={() => { add(nextFree.id); focusSoon(".edit-fields .path-rows > li:last-child select"); }}><Plus size={14} />{step.next.length === 0 ? "Continue to a step" : "Add another way on"}</button>)}
         {backTo && <button className="btn small ghost" title={`A loop: the flow goes back to “${backTo.title || `step ${n(backTo.id)}`}”, for example to correct something`}
