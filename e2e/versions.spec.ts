@@ -47,7 +47,7 @@ test("every publish is a version with a note, and everyone can see what changed"
   await expect(versions.locator("li").first()).toContainText("Alex Editor"); // the name, not the address
   await expect(versions.locator("li").first()).not.toContainText(ALEX);
   await versions.locator("li").first().getByRole("button", { name: "What changed" }).click();
-  await expect(versions.locator(".history-detail")).toContainText("Step “Ask for a namespace” changed: title");
+  await expect(versions.locator(".history-detail")).toContainText("Step “Ask for a namespace” changed: what happens");
   // the reader's page restores nothing: that is done on the editing screen
   await expect(versions.getByRole("button", { name: "Restore" })).toHaveCount(0);
   await page.keyboard.press("Escape");
@@ -83,7 +83,7 @@ test("a draft that was never published: when somebody else saved first, nothing 
   await page.locator(".edit-bar").getByRole("button", { name: "Save draft" }).click();
   const dialog = page.getByRole("dialog", { name: "Somebody else saved first" });
   await expect(dialog).toContainText(/(dana@example\.com|Dana Admin) saved version 2/);
-  await expect(dialog).toContainText("Title changed");
+  await expect(dialog).toContainText("Name changed");
   expect((await readProcess(page, "conflict-demo"))!.title).toBe("Renamed by Dana"); // theirs is untouched
 
   // continue from their version: their title is there, my change is one Undo away
@@ -421,7 +421,7 @@ test("what others change shows up when coming back to the tab; unsaved changes a
   await expect(firstBlock(page)).toContainText("Alex's unsaved wording");
   // "Compare and decide" shows what they changed without trying to save
   await banner.getByRole("button", { name: "Compare and decide" }).click();
-  await expect(page.getByRole("dialog", { name: "Somebody else saved the draft first" })).toContainText("Title changed");
+  await expect(page.getByRole("dialog", { name: "Somebody else saved the draft first" })).toContainText("Name changed");
   await page.getByRole("dialog", { name: "Somebody else saved the draft first" }).getByRole("button", { name: "Keep editing" }).click();
   // going back to what was saved (Discard changes) is going to their draft
   await page.locator(".edit-bar").getByRole("button", { name: "Discard changes" }).click();

@@ -190,7 +190,10 @@ test("a place found inside a document opens straight at that step or requirement
   await open(page, "/search?q=personal%20data");
   const logging = page.locator('li.card[data-id="secure-logging"]');
   const requirement = logging.locator("ul.card-hits a", { hasText: "SEC-LOG-02" });
-  await expect(requirement.locator(".card-hit-where")).toHaveText("Requirement SEC-LOG-02");
+  // "Requirement · its name · SEC-LOG-02": the code comes after the name
+  await expect(requirement.locator(".card-hit-where")).toHaveText("Requirement");
+  await expect(requirement.locator(".card-hit-code")).toHaveText("SEC-LOG-02");
+  expect(await requirement.evaluate((a) => [...a.querySelectorAll(".card-hit-where, .card-hit-label, .card-hit-code")].map((e) => e.className))).toEqual(["card-hit-where", "card-hit-label", "card-hit-code"]);
   await requirement.click();
   await expect(page).toHaveURL(/#\/s\/secure-logging\/doc\/SEC-LOG-02$/);
   await expect(page.locator("#req-SEC-LOG-02")).toHaveClass(/selected/);
@@ -201,8 +204,12 @@ test("when nothing is found, the filters can be dropped from there", async ({ pa
   await open(page, "/search?q=gcp&platform=azure");
   const empty = page.locator(".search-empty");
   await expect(empty.getByRole("heading", { name: "Nothing found" })).toBeVisible();
-  await expect(empty).toContainText("Without the filters there are 3 results.");
-  await empty.getByRole("button", { name: "Without Platform: Azure" }).click();
+  await expect(empty).toContainText("Nothing matches “gcp” with these filters. Without them there are 3 results.");
+  // one way out, the primary "Clear all filters"; the link beside the chips is not offered twice
+  await expect(empty.getByRole("button", { name: /^Without / })).toHaveCount(0);
+  await expect(empty.getByRole("button", { name: "Clear all filters" })).toHaveClass(/\bprimary\b/);
+  await expect(page.getByRole("button", { name: "Clear all filters" })).toHaveCount(1);
+  await empty.getByRole("button", { name: "Clear all filters" }).click();
   await expect(results(page)).toHaveCount(3);
 
   await open(page, "/search?q=gcp&platform=azure&type=standard");
@@ -229,9 +236,8 @@ test("a draft is found only by the people who may see it (its editors and its te
   try {
     await signIn(page, SAM);
     await open(page, "/search?q=zebra");
-    await expect(count(page)).toHaveText("No results for “zebra”");
     // words find nothing; the closest by meaning never include a draft (drafts are not searched by meaning)
-    await expect(page.locator(".search-closest-line").or(page.locator(".search-empty h2")).first()).toBeVisible();
+    await expect(count(page).filter({ hasText: /^No exact match for “zebra”\. Closest by meaning:$/ }).or(page.locator(".search-empty h2")).first()).toBeVisible();
     await expect(page.locator('li.card[data-id="search-draft-demo"]')).toHaveCount(0);
 
     // Jordan is Owner of the team, so the draft reaches him: he looks after it, and finds it marked as a draft

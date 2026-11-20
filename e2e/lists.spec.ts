@@ -167,13 +167,14 @@ test("everyone sees who the members of a platform, a practice and a team are", a
   await check("Practices", "Engineering", [[JORDAN, "Practice owner"]]);
   await check("Practices", "Cyber security", [["riley@example.com", "Practice owner"]]);
   await check("Teams", "Cloud Platform team", [["casey@example.com", "Owner"], [JORDAN, "Owner"]]);
-  await expect(members).toContainText("A member is Owner of this team");
+  await expect(members).toContainText("Members confirm the reviews of what this team maintains and answer its feedback. They find this under “My responsibilities”.");
   // reading only: nothing to add or remove
   await expect(members.getByLabel("Email of the new member")).toHaveCount(0);
   await expect(members.getByRole("button")).toHaveCount(0);
   await tab(page, "Platforms").click();
   await item(page, "Azure").click();
   await expect(members).toContainText("Nobody yet.");
+  await expect(members).toContainText("Members change the processes and standards that belong to this platform, confirm their reviews and answer their feedback");
   await expect(page.locator(".cat-usage")).toContainText("Request an Azure landing zone");
 });
 
@@ -364,9 +365,12 @@ for (const [width, theme] of [[1440, "light"], [390, "dark"]] as const) {
     await page.getByRole("button", { name: "Save changes" }).click();
     const toast = page.locator(".toast", { hasText: "The lists could not be saved." });
     await expect(toast).toBeVisible();
-    const bar = page.locator(".cat-save.dirty");
+    const bar = page.locator(".cat-toolbar.with-save.dirty");
+    await expect(bar).toBeInViewport();
     const [t, b] = [(await toast.boundingBox())!, (await bar.boundingBox())!];
-    expect(t.y + t.height).toBeLessThanOrEqual(b.y + 1); // the message sits above the bar
+    // the message and the save bar (under the top bar) do not overlap
+    const apart = t.y >= b.y + b.height - 1 || t.y + t.height <= b.y + 1 || t.x >= b.x + b.width - 1 || t.x + t.width <= b.x + 1;
+    expect(apart, `message ${JSON.stringify(t)} and save bar ${JSON.stringify(b)}`).toBe(true);
     // Discard can be pressed without closing the message first (a covered button fails this click)
     await page.getByRole("button", { name: "Discard" }).click();
     await expect(bar).toHaveCount(0);

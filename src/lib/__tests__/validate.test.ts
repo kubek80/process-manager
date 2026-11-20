@@ -50,6 +50,8 @@ describe("schema errors are explained in plain words", () => {
     expect(check((p) => (p.actors[0] = { id: "me", name: "You", description: "The requester" }))).toEqual([]);
   });
   it("too short", () => expect(check((p) => (p.title = "x"))[0].message).toContain("too short"));
+  it("a name that must not be empty is said to be empty, not “minimum 1 characters”", () =>
+    expect(check((p) => (p.actors[1].name = ""))[0]).toMatchObject({ path: "actors[1].name", message: "is empty" }));
   it("wrong type", () => expect(check((p) => (p.steps = "none"))[0].message).toContain("must be of type array"));
   it("wrong version", () => expect(check((p) => (p.schemaVersion = "2.0"))[0].message).toContain('exactly "1.0"'));
   it("empty steps", () => expect(check((p) => (p.steps = []))[0].message).toContain("at least 1"));

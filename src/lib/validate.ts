@@ -31,7 +31,7 @@ function describe(e: ErrorObject): string {
           ? "must be a full link starting with http:// or https://"
           : `must match the pattern ${e.params.pattern}`;
     case "type": return `must be of type ${e.params.type}`;
-    case "minLength": return `is too short (minimum ${e.params.limit} characters)`;
+    case "minLength": return e.params.limit === 1 ? "is empty" : `is too short (minimum ${e.params.limit} characters)`;
     case "maxLength": return `is too long (maximum ${e.params.limit} characters)`;
     case "minItems": return `needs at least ${e.params.limit} item(s)`;
     case "maxItems": return `has too many items (maximum ${e.params.limit})`;

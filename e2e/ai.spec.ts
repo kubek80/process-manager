@@ -31,11 +31,14 @@ test("create a process from text with any chat assistant", async ({ page }) => {
   const wrong = JSON.parse(JSON.stringify(draft));
   wrong.steps[1].actor = "the-boss";
   await answer.fill("Here you go:\n```json\n" + JSON.stringify(wrong, null, 2) + "\n```");
-  await expect(modal.locator(".issues")).toContainText('"the-boss" is not an actor id');
+  await expect(modal.locator(".issues")).toContainText("steps[1].actor Who does it is not one of the participants: choose who does it.");
   await expect(create).toBeDisabled();
+  // counted in the words of the checker; no "JSON schema" said to the person
+  await expect(modal.locator(".check.bad")).toContainText("1 to fix. Send the fix request to the same chat and paste the new answer.");
+  await expect(modal).not.toContainText(/JSON schema/i);
   await modal.getByRole("button", { name: "Copy fix request" }).click();
   const fix = await page.evaluate(() => navigator.clipboard.readText());
-  expect(fix).toContain('steps[1].actor: "the-boss" is not an actor id');
+  expect(fix).toContain("steps[1].actor: Who does it is not one of the participants");
 
   await answer.fill("```json\n" + JSON.stringify(draft, null, 2) + "\n```");
   await expect(modal.locator(".check.good")).toContainText("Valid: Request VPN access - 6 steps, 3 participants, 1 prerequisites");
@@ -87,7 +90,7 @@ test("change an existing process with AI, then delete it", async ({ page }) => {
   changed.steps.at(-1).title = "Connect and test the VPN";
   changed.id = "get-vpn";
   await modal.locator("textarea").nth(1).fill(JSON.stringify(changed));
-  await expect(modal.locator(".check.warn")).toContainText("The current id “request-vpn-access” is kept");
+  await expect(modal.locator(".check.warn")).toContainText("The answer changed the address of the process. Its own (“request-vpn-access”) is kept.");
   await modal.getByRole("button", { name: "Apply to draft" }).click();
   await expect(page.locator(".edit-preview .block", { hasText: "Connect and test the VPN" })).toBeVisible();
   await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\./);

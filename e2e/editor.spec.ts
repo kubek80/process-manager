@@ -224,7 +224,7 @@ test("the JSON editor marks problems on the line and applies valid edits", async
   const original = JSON.stringify(await readProcess(page, AZURE), null, 2);
 
   await replaceAll(original.replace('"actor": "cloud-governance"', '"actor": "nobody"'));
-  const finding = page.locator(".json-side .issues li", { hasText: '"nobody" is not an actor id' });
+  const finding = page.locator(".json-side .issues li", { hasText: "Who does it is not one of the participants" });
   await expect(finding).toBeVisible();
   await expect(page.locator(".json-side .check.bad")).toContainText("Not applied to the draft");
   await finding.getByRole("button").click();

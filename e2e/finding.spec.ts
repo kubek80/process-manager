@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { ALEX, CASEY, CSRF, SAM, meaningReady, open, pickFilter, signIn } from "./helpers";
+import { ALEX, CASEY, CSRF, DANA, SAM, discardWorkingDraft, meaningReady, open, pickFilter, putWorkingDraft, readProcess, signIn } from "./helpers";
 
 // Home's shelves and Browse, the search head (Words / Meaning / Both, "How this works"), the
 // lists' address, Cards and Rows, what is found and what is not, and how the lists fit a laptop
@@ -144,8 +144,9 @@ test("words that find nothing: the closest by meaning; with filters, the filters
   await meaningReady(request);
   await signIn(page, SAM);
   await open(page, "/search?q=zebra");
-  await expect(page.locator("p.list-count")).toHaveText("No results for “zebra”");
-  await expect(page.locator(".search-closest-line")).toHaveText("Nothing contains all these words. Closest by meaning:");
+  // one line above the results says it: no exact match, and what follows is the closest by meaning
+  await expect(page.locator("p.list-count")).toHaveText("No exact match for “zebra”. Closest by meaning:");
+  await expect(page.locator(".search-closest-line")).toHaveCount(0);
   await expect(cards(page).first()).toBeVisible();
   // nothing found: no filters, tabs, view switch, order or pages to offer
   await expect(page.getByRole("complementary", { name: "Filters" })).toHaveCount(0);
@@ -153,22 +154,26 @@ test("words that find nothing: the closest by meaning; with filters, the filters
   await expect(page.getByRole("radiogroup", { name: "Show as" })).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Sort by" })).toHaveCount(0);
 
-  // with a filter chosen, nothing is guessed: the filter is named, with ways to drop it
+  // with a filter chosen, nothing is guessed: it says that nothing matches with or without them
   await open(page, "/search?q=zebra&platform=azure");
   const empty = page.locator(".search-empty");
   await expect(empty.getByRole("heading", { name: "Nothing found" })).toBeVisible();
-  await expect(empty).toContainText("Nothing matches “zebra” with these filters.");
-  await expect(page.locator(".search-closest-line")).toHaveCount(0);
-  await expect(empty.getByRole("button", { name: "Without Platform: Azure" })).toBeVisible();
-  await expect(empty.getByRole("button", { name: "Clear all filters" })).toBeVisible();
+  await expect(empty).toContainText("Nothing matches “zebra”, with or without these filters.");
+  await expect(page.locator("p.list-count")).not.toContainText("Closest by meaning");
+  // no button per filter any more; the filters are not what hides it, so the empty state offers no Clear all filters
+  await expect(empty.getByRole("button", { name: /^Without / })).toHaveCount(0);
+  await expect(empty.getByRole("button", { name: "Clear all filters" })).toHaveCount(0);
+  await expect(empty.getByRole("button", { name: "Search by meaning instead" })).toBeVisible();
+  // the one "Clear all filters" is beside the chips
+  await expect(page.getByRole("button", { name: "Clear all filters" })).toHaveCount(1);
   // the panel keeps only the chosen filter
   const panel = page.getByRole("complementary", { name: "Filters" });
   await expect(panel.getByRole("button", { name: /^Platform: Azure$/ })).toBeVisible();
   await expect(panel.getByRole("button", { name: /^Category:/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Remove filter Platform: Azure" })).toBeVisible();
-  await empty.getByRole("button", { name: "Clear all filters" }).click();
+  await page.getByRole("group", { name: "Chosen filters" }).getByRole("button", { name: "Clear all filters" }).click();
   await expect(page).toHaveURL(/#\/search\?q=zebra$/);
-  await expect(page.locator(".search-closest-line")).toBeVisible();
+  await expect(page.locator("p.list-count")).toHaveText("No exact match for “zebra”. Closest by meaning:");
 });
 
 test("Cards or Rows: remembered per person; in Rows the titles line up", async ({ page }) => {
@@ -283,7 +288,7 @@ test("typed but not searched: a button offers the closest by meaning", async ({ 
   await expect(page.locator("p.list-count")).toHaveText("No results for “zebra”");
   const other = page.locator(".search-try-other").getByRole("button", { name: "Show the closest by meaning" });
   await other.click();
-  await expect(page.locator(".search-closest-line")).toBeVisible();
+  await expect(page.locator("p.list-count")).toHaveText("No exact match for “zebra”. Closest by meaning:");
   await expect(cards(page).first()).toBeVisible();
 });
 
@@ -300,4 +305,98 @@ test("cards in a row line up their titles; long tier lists are short (“3 tiers
   await expect(apigee.locator(".sr-only")).toHaveText("Applies to: Tier 0, Tier 1, Tier 2");
   await expect(apigee).toHaveAttribute("title", "Applies to Tier 0, Tier 1, Tier 2");
   await expect(page.locator('li.card[data-id="onboard-site-to-akamai"] .card-tiers')).toHaveText("Applies to: Tier 0, Tier 1"); // short enough to show whole
+});
+
+// ---------- the fourth round: marks at the foot of a card, one line for a sentence, a neutral highlight, phones
+
+test("a card with a mark: no title in the row lower than the others; the marks sit above the card's foot", async ({ page, request }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // unpublished changes on the first process, so that its card carries a mark for Alex
+  await request.post("/auth/dev/login", { data: { email: ALEX }, headers: CSRF });
+  const gcp = (await readProcess(request, "request-gcp-project"))!;
+  const put = await putWorkingDraft(request, "process", "request-gcp-project", { ...gcp, summary: `${gcp.summary} (a draft for the marks)` });
+  expect(put.ok(), await put.text()).toBeTruthy();
+  try {
+    await signIn(page, ALEX);
+    await open(page, "/processes?sort=title");
+    const marked = page.locator('li.card[data-id="request-gcp-project"]');
+    await expect(marked.locator(".card-marks")).toContainText("Unpublished changes");
+    // in the markup and on the screen, the marks come after what was found and before the foot
+    const order = await marked.evaluate((c) => [...c.querySelectorAll(".card-title, .card-found, .card-marks")].map((e) => e.className.split(" ")[0]));
+    expect(order.indexOf("card-marks")).toBeGreaterThan(order.indexOf("card-title"));
+    expect((await marked.locator(".card-marks").boundingBox())!.y).toBeGreaterThan((await marked.locator(".card-title").boundingBox())!.y);
+    // every row of cards: the titles at the same height
+    const rows = await cards(page).evaluateAll((els) => {
+      const by = new Map<number, number[]>();
+      for (const e of els) { const top = Math.round(e.getBoundingClientRect().top); by.set(top, [...(by.get(top) ?? []), Math.round(e.querySelector(".card-title")!.getBoundingClientRect().top)]); }
+      return [...by.values()];
+    });
+    expect(rows.some((r) => r.length > 1), "cards side by side").toBe(true);
+    for (const titles of rows) expect(new Set(titles).size, `titles of a row at ${titles.join(", ")}`).toBe(1);
+  } finally {
+    await request.post("/auth/dev/login", { data: { email: ALEX }, headers: CSRF });
+    await discardWorkingDraft(request, "process", "request-gcp-project");
+  }
+});
+
+test("a sentence typed as a search: one line says there is no exact match and that the closest by meaning follow", async ({ page, request }) => {
+  await meaningReady(request);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signIn(page, SAM);
+  const q = "how do I get a new project in google cloud for my team";
+  await open(page, `/search?q=${encodeURIComponent(q)}`);
+  const line = page.locator("p.list-count");
+  await expect(line).toHaveText(`No exact match for “${q}”. Closest by meaning:`);
+  await expect(cards(page).first()).toBeVisible();
+  // one line, not a count and a second sentence under it
+  const lines = await line.evaluate((e) => Math.round(e.getBoundingClientRect().height / (parseFloat(getComputedStyle(e).lineHeight) || 20)));
+  expect(lines).toBe(1);
+  await expect(page.locator(".search-closest-line")).toHaveCount(0);
+});
+
+test("the search highlight is a neutral mark that keeps the text's colour, also under a brand colour of the admin's", async ({ page, request }) => {
+  const look = async (look: Record<string, string>) => {
+    await request.post("/auth/dev/login", { data: { email: DANA }, headers: CSRF });
+    const { revision } = await (await request.get("/api/admin/theme")).json();
+    const res = await request.put(`/api/admin/theme?rev=${revision}`, { data: look, headers: CSRF });
+    expect(res.ok(), await res.text()).toBeTruthy();
+  };
+  await look({ brand: "#c2185b" });
+  try {
+    await signIn(page, SAM);
+    await open(page, "/search?q=logging");
+    const mark = page.locator("mark.search-mark").first();
+    await expect(mark).toBeVisible();
+    const colours = await mark.evaluate((m) => {
+      const probe = (v: string) => { const x = document.createElement("span"); x.style.backgroundColor = v; x.style.color = v; document.body.appendChild(x); const c = getComputedStyle(x); const r = [c.backgroundColor, c.color]; x.remove(); return r; };
+      return { bg: getComputedStyle(m).backgroundColor, color: getComputedStyle(m).color, parent: getComputedStyle(m.parentElement!).color, mark: probe("var(--search-mark)")[0], accent: probe("var(--accent)")[1], fill: probe("var(--accent-fill)")[0] };
+    });
+    expect(colours.bg, "the neutral mark colour").toBe(colours.mark);
+    expect(colours.bg).not.toBe(colours.fill);
+    expect(colours.bg).not.toBe(colours.accent);
+    expect(colours.color, "the text keeps its colour").toBe(colours.parent);
+  } finally {
+    await look({});
+  }
+});
+
+test("on a phone the search fields have short examples as placeholders", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page, SAM);
+  for (const [path, label, text] of [
+    ["/", "Search processes and standards", "e.g. GCP project or logging"],
+    ["/search", "Search processes and standards", "e.g. GCP project or logging"],
+    ["/processes", "Search processes", "e.g. GCP, repository, Akamai"],
+    ["/standards", "Search standards", "e.g. logging, SEC-LOG-01"],
+  ] as const) {
+    await open(page, path);
+    const box = page.getByRole("searchbox", { name: label, exact: true });
+    await expect(box, path).toHaveAttribute("placeholder", text);
+    // the whole placeholder fits in the field
+    expect(await box.evaluate((e: HTMLInputElement) => e.scrollWidth <= e.clientWidth + 1), `${path}: the placeholder fits`).toBe(true);
+  }
+  // wider, the longer ones
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, "/processes");
+  await expect(page.getByRole("searchbox", { name: "Search processes", exact: true })).toHaveAttribute("placeholder", "Search processes: GCP, repository, Akamai…");
 });

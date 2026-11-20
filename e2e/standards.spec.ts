@@ -334,7 +334,7 @@ test("mark a standard as reviewed, look at its history, edit its JSON", async ({
   await page.locator(".cm-content").click();
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.insertText(original.replace('"id": "SEC-LOG-02"', '"id": "SEC-LOG-01"'));
-  await expect(page.locator(".json-side .issues")).toContainText('duplicate requirement id "SEC-LOG-01"');
+  await expect(page.locator(".json-side .issues")).toContainText("Two requirements have the id SEC-LOG-01: give this one another id.");
   await expect(page.locator(".json-side .check.bad")).toContainText("Not applied to the draft");
   await expect(page.locator(".edit-bar").getByRole("button", { name: "Publish…" })).toHaveClass(/\bunavailable\b/);
   expect(await readWorkingDraft(page, "standard", LOGGING)).toBeUndefined(); // nothing was saved

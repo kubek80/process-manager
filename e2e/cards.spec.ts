@@ -88,7 +88,11 @@ test("a filter dropdown works with the keyboard: two values, a name that says th
   await expect(page.getByRole("button", { name: `Category: ${second}`, exact: true })).toBeVisible();
   await page.getByRole("checkbox", { name: /^Only my bookmarks/ }).check();
   await expect(chosen.getByRole("button", { name: "Remove filter Bookmarks: only mine" })).toBeVisible();
-  await chosen.getByRole("button", { name: "Clear all filters" }).click();
+  // nothing left (no bookmarks): the empty state holds the one "Clear all filters", the chips keep their crosses
+  await expect(page.locator(".list-empty")).toContainText("No process matches.");
+  await expect(page.getByRole("button", { name: "Clear all filters" })).toHaveCount(1);
+  await expect(chosen.getByRole("button", { name: "Clear all filters" })).toHaveCount(0);
+  await page.locator(".list-empty").getByRole("button", { name: "Clear all filters" }).click();
   await expect(chosen).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Category: Any" })).toBeVisible();
   await expect(page.getByRole("checkbox", { name: /^Only my bookmarks/ })).not.toBeChecked();
@@ -212,6 +216,16 @@ test("Home shows your bookmarks until the last one is removed; bookmarks belong 
   await expect(marks.locator("li.card").nth(0)).toHaveAttribute("data-id", GCP);
   await expect(marks.locator("li.card").nth(1)).toHaveAttribute("data-id", "secure-logging");
   await expect(marks.locator("h3.card-title")).toHaveCount(2);
+  // two bookmarks fill the row: side by side, together as wide as the section
+  const fills = async (n: number) => {
+    const list = (await marks.locator("ol, ul").filter({ has: page.locator("li.card") }).first().boundingBox())!;
+    const boxes = await marks.locator("li.card").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width }; }));
+    expect(boxes).toHaveLength(n);
+    expect(new Set(boxes.map((b) => Math.round(b.y))).size, "on one row").toBe(1);
+    const right = Math.max(...boxes.map((b) => b.x + b.w));
+    expect(list.x + list.width - right, "no empty room at the end of the row").toBeLessThan(24);
+  };
+  await fills(2);
   await page.reload();
   await expect(marks.locator("li.card")).toHaveCount(2);
 
@@ -229,6 +243,7 @@ test("Home shows your bookmarks until the last one is removed; bookmarks belong 
   await open(page, "/");
   await marks.getByRole("button", { name: "Remove bookmark from Request a GCP project" }).click();
   await expect(marks.locator("li.card")).toHaveCount(1);
+  await fills(1); // one bookmark: wide
   await marks.getByRole("button", { name: "Remove bookmark from Secure logging" }).click();
   await expect(page.locator("section.home-bookmarks")).toHaveCount(0);
   await page.reload();

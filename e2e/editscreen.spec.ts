@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { addInOutline, ALEX, CSRF, deleteSelected, editState, fields, moveTo, openEditor, outline, outlineNav, outlineTitles, pickKind, readWorkingDraft, RILEY, saveDraft, signIn } from "./helpers";
+import { addInOutline, ALEX, CSRF, deleteSelected, editState, fields, moveTo, openChecker, openEditor, outline, outlineNav, outlineTitles, pickKind, readWorkingDraft, RILEY, saveDraft, signIn } from "./helpers";
 
 // The editing screen of a process, part by part: adding steps by name, moving them in the flow,
 // decisions and their answers, deleting with Undo instead of a question, who does a step, its
@@ -151,8 +151,10 @@ test("a decision moves with its answers; the message names the answer that chang
   await outline(page, /^5 Details complete\?/);
   await moveTo(page, /^Before 4\. Check naming/);
   // no refusal: it moved, and says what it did to its answers
-  const toast = page.locator(".toast", { hasText: "“Yes” of “Details complete?” now leads to “Check naming, folder and ownership”" });
+  // the message says where the step is now, then names the answer and its new target by number and name
+  const toast = page.locator(".toast", { hasText: "“Yes” of “Details complete?” now goes to 5. Check naming, folder and ownership." });
   await expect(toast).toBeVisible();
+  await expect(toast).toContainText(/^Step “Details complete\?” is now step 4\./);
   await expect.poll(async () => (await outlineTitles(page)).slice(3, 5)).toEqual(["Details complete?", "Check naming, folder and ownership"]);
   // its "No" still goes where it went
   await expect(fields(page).getByRole("textbox", { name: "Name of path 2" })).toHaveValue("No");
@@ -161,6 +163,8 @@ test("a decision moves with its answers; the message names the answer that chang
   await toast.getByRole("button", { name: "Undo" }).click();
   await expect.poll(async () => (await outlineTitles(page)).slice(3, 5)).toEqual(["Check naming, folder and ownership", "Details complete?"]);
   await expect(editState(page)).toHaveAttribute("aria-label", /^Published\./); // back to what is saved
+  // what Undo says: the step is back in its place
+  await expect(page.locator(".toast", { hasText: "is back in its place." })).toContainText("“Details complete?”");
 });
 
 test("deleting a step inside a branch: no question, both answers kept, “deleted” with Undo", async ({ page, request }) => {
@@ -175,9 +179,15 @@ test("deleting a step inside a branch: no question, both answers kept, “delete
   const toast = page.locator(".toast", { hasText: "deleted." });
   await expect(toast).toBeVisible();
   await expect(toast).toContainText("Step “Add your project to the proje…” deleted.");
-  await expect(toast).toContainText("“Yes” of “Details complete?” now leads elsewhere.");
-  const lines = await toast.evaluate((e) => { const t = e.querySelector("p")!; const lh = parseFloat(getComputedStyle(t.querySelector("strong")!).lineHeight) || 20; return Math.round(t.getBoundingClientRect().height / lh); });
-  expect(lines, "at most two lines").toBeLessThanOrEqual(2);
+  await expect(toast).toContainText("“Yes” of “Details complete?” now goes to 7. Review and merge the pull request.");
+  // short: the head on one line, the one answer that changed on at most two
+  const lines = await toast.evaluate((e) => {
+    const t = e.querySelector("p")!; const head = t.querySelector("strong")!; const lh = parseFloat(getComputedStyle(head).lineHeight) || 20;
+    const rest = t.getBoundingClientRect().height - head.getBoundingClientRect().height;
+    return [Math.round(head.getBoundingClientRect().height / lh), Math.round(rest / lh)];
+  });
+  expect(lines[0], "the head on one line").toBe(1);
+  expect(lines[1], "the answer's line on at most two").toBeLessThanOrEqual(2);
   // the focus is on the step now selected, in the outline: a second press cannot delete it
   await expect(outlineNav(page).locator('.outline-item[aria-current="true"]')).toBeFocused();
   await expect(map(page).locator(".block")).toHaveCount(9);
@@ -266,6 +276,10 @@ test("actions: Enter adds the next, Backspace in an empty one removes it; what c
   await expect(fields(page).getByRole("textbox", { name: "Name of path 1" })).toHaveValue("Yes");
   await expect(fields(page).getByRole("textbox", { name: "Name of path 2" })).toHaveValue("No");
   await expect(fields(page).getByRole("combobox", { name: "Path 2 goes to" }).locator("option:checked")).toHaveText(/^↩ 3\. /);
+  // said in a message, and the answer's row is brought into view and marked for a moment
+  await expect(page.locator(".toast", { hasText: "“No” goes back to “Add the release workflow”. Change it under “What comes next”." })).toBeVisible();
+  await expect(next.locator(".path-row.flash")).toHaveCount(1);
+  await expect(next.locator(".path-row.flash")).toBeInViewport();
   await expect(fields(page).locator(".item-issues.bad")).toHaveCount(0);
   // "Add a branch" on a decision: a new step on a branch of its own, by its name
   await fields(page).getByRole("button", { name: "Add a branch" }).first().click();
@@ -448,4 +462,201 @@ test("Publish… lists what changed by names, never by ids", async ({ page, requ
   await expect(dialog.locator("ul.publish-changes")).not.toContainText("“pipeline”");
   await expect(dialog.getByLabel(/^Note for the list of versions/)).toHaveAttribute("placeholder", /^e\.g\. /);
   await dialog.getByRole("button", { name: "Not yet" }).click();
+});
+
+// ---------- the fourth round: the readers' preview, the map, the checker, the keyboard
+
+test("the readers' preview above the map is one line; its parts open their fields; Show and Hide", async ({ page, request }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const id = `${PREFIX}preview`;
+  await copyOf(request, LIB, id, "Editscreen demo preview");
+  await signIn(page, ALEX);
+  await openEditor(page, "process", id);
+  const line = map(page).locator(".preview-before > .preview-before-line");
+  await expect(line).toBeVisible();
+  // one line: every part at the same height
+  const tops = await line.locator(":scope > *").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2)));
+  expect(Math.max(...tops) - Math.min(...tops), `the parts on one line: ${tops}`).toBeLessThanOrEqual(4);
+  const parts = line.locator("button.preview-before-part");
+  await expect(parts).toHaveText(["2 needed", "2 links", "no standards"]);
+  await expect(map(page).locator(".preview-empty")).toHaveCount(0);
+  // each part opens its fields
+  await parts.nth(0).click();
+  await expect(fields(page).getByRole("textbox", { name: "Prerequisite 1", exact: true })).toBeVisible();
+  await parts.nth(1).click();
+  await expect(fields(page).getByRole("textbox", { name: "Name of link 1" })).toBeVisible();
+  await parts.nth(2).click();
+  await expect(fields(page).getByRole("heading", { name: "Standards it helps to meet" }).first()).toBeVisible();
+  // Show: as readers see it; Hide folds it away again
+  const show = line.locator("button.preview-before-show");
+  await expect(show).toHaveText("Show");
+  await expect(show).toHaveAttribute("aria-expanded", "false");
+  const prerequisite = (await readWorkingDraft(page, "process", id))?.doc.prerequisites[0].title
+    ?? JSON.parse(readFileSync(`processes/${LIB}.json`, "utf8")).prerequisites[0].title;
+  await expect(map(page).locator(".preview-before")).not.toContainText(prerequisite);
+  await show.click();
+  await expect(show).toHaveText("Hide");
+  await expect(show).toHaveAttribute("aria-expanded", "true");
+  await expect(map(page).locator(".preview-before")).toContainText(prerequisite);
+  await show.click();
+  await expect(show).toHaveText("Show");
+  await expect(map(page).locator(".preview-before")).not.toContainText(prerequisite);
+});
+
+test("at 1366 x 768 the editing map fills its column with all four lanes; Fit is temporary: selecting a step returns to the working zoom", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await signIn(page, ALEX);
+  await openEditor(page, "process", GCP);
+  const m = map(page);
+  const scroller = m.locator(".flow-scroll");
+  await expect(m.locator(".block").first()).toBeVisible();
+  // the map takes the room of the column: down to the bottom of the window, not a short strip
+  const box = (await scroller.boundingBox())!;
+  expect(box.height, "the map's height").toBeGreaterThan(450);
+  expect(box.y + box.height, "the map reaches the bottom of the window").toBeGreaterThan(768 - 40);
+  await expect(m.locator(".lane-label")).toHaveCount(4);
+  for (const lane of await m.locator(".lane-label").all()) await expect(lane).toBeInViewport();
+  // lane names wrap between words: the whole name is there, for screen readers too
+  await expect(m.locator(".lane-head strong").nth(2)).toHaveAttribute("aria-label", "Cloud Platform team");
+  await expect(m.locator(".lane-head strong").nth(2)).toHaveText(/^Cloud Platform team$/);
+
+  const zoom = m.locator(".zoom-val");
+  const working = await zoom.innerText();
+  await m.getByRole("button", { name: "Fit" }).click();
+  await expect(zoom).not.toHaveText(working);
+  // selecting a step: back to the working zoom, the step in the middle
+  await outline(page, /^7 /);
+  await expect(zoom).toHaveText(working);
+  await expect(m.locator(".block.selected")).toBeInViewport();
+  // the zoom buttons end Fit where the person zoomed to
+  await m.getByRole("button", { name: "Fit" }).click();
+  const fitted = await zoom.innerText();
+  await m.getByRole("button", { name: "Zoom in" }).click();
+  const zoomed = await zoom.innerText();
+  expect(Number(zoomed.replace("%", ""))).toBeGreaterThan(Number(fitted.replace("%", "")));
+  await outline(page, /^3 /);
+  await expect(zoom).toHaveText(zoomed);
+});
+
+test("the checker: choosing an entry puts the cursor in the field and marks it until it is fixed", async ({ page, request }) => {
+  const id = `${PREFIX}checker`;
+  await copyOf(request, LIB, id, "Editscreen demo checker");
+  await signIn(page, ALEX);
+  await openEditor(page, "process", id);
+  await outline(page, /^3 Add the release workflow/);
+  const what = fields(page).getByLabel(/^What happens/);
+  await what.fill("A");
+  await outline(page, "About");
+  const pop = await openChecker(page);
+  // a published document: what is to fix stops publishing, said in the field's own words
+  await expect(pop.locator("h3.checker-head").first()).toHaveText("To fixstops publishing");
+  const entry = pop.locator("li button", { hasText: /^Step 3 “A”\s*What happens is too short/ });
+  await entry.click();
+  await expect(what).toBeFocused();
+  await expect(what).toHaveAttribute("aria-invalid", "true");
+  await expect(what).toHaveClass(/\bneeds-fix\b/);
+  // still a problem after more typing: still marked
+  await what.press("End");
+  await what.pressSequentially("b");
+  await expect(what).toHaveClass(/\bneeds-fix\b/);
+  // fixed: the mark goes
+  await what.pressSequentially("out the workflow");
+  await expect(what).not.toHaveClass(/\bneeds-fix\b/);
+  await expect(what).not.toHaveAttribute("aria-invalid", "true");
+});
+
+test("the checker of a never-published draft says what “stops saving”", async ({ page }) => {
+  await signIn(page, ALEX);
+  await page.goto("/#/processes");
+  await page.getByRole("button", { name: "New process", exact: true }).click();
+  const named = page.getByRole("dialog", { name: "New process" });
+  await named.getByLabel("Name of the process").fill("Editscreen demo saving");
+  await named.getByRole("button", { name: "Create process" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/p/${PREFIX}saving/edit`));
+  await outline(page, "About");
+  await fields(page).getByRole("textbox", { name: /^Name/ }).first().fill("X");
+  const pop = await openChecker(page);
+  await expect(pop.locator("h3.checker-head").first()).toHaveText("To fixstops saving");
+  await expect(pop).toContainText("Name is too short");
+});
+
+test("Delete step waits a moment after a step is selected, says so, then deletes", async ({ page, request }) => {
+  const id = `${PREFIX}waiting`;
+  await copyOf(request, LIB, id, "Editscreen demo waiting");
+  await signIn(page, ALEX);
+  await openEditor(page, "process", id);
+  await outline(page, /^3 Add the release workflow/);
+  const button = fields(page).getByRole("button", { name: "Delete step" });
+  await expect(button).toHaveClass(/\bwaiting\b/);
+  await expect(button).toHaveAttribute("aria-disabled", "true");
+  await expect(button).toHaveAttribute("title", "Delete step (available in a moment)");
+  await expect(button).not.toHaveClass(/\bwaiting\b/);
+  await expect(button).not.toHaveAttribute("aria-disabled", "true");
+  await expect(button).toHaveAttribute("title", "Delete step");
+  await button.click();
+  await expect(map(page).locator(".block")).toHaveCount(5);
+  await expect.poll(() => outlineTitles(page)).not.toContain("Add the release workflow");
+});
+
+test("a requirement id that is taken is refused and put back when the field is left", async ({ page }) => {
+  await signIn(page, RILEY);
+  await openEditor(page, "standard", "secure-logging");
+  await outline(page, /^SEC-LOG-02/);
+  const idField = fields(page).getByRole("textbox", { name: /^Id/ });
+  await expect(idField).toHaveValue("SEC-LOG-02");
+  await idField.fill("SEC-LOG-01");
+  await idField.press("Tab");
+  await expect(idField).toHaveValue("SEC-LOG-02");
+  await expect(fields(page).locator(".field-error")).toHaveText("SEC-LOG-01 is already the id of another requirement, so this one keeps SEC-LOG-02.");
+  await expect(editState(page)).toHaveAttribute("aria-label", /^Published\./); // nothing changed
+});
+
+test("the blocks of the map are one Tab stop: arrow keys move in number order, Enter goes to What happens", async ({ page, request }) => {
+  const id = `${PREFIX}mapkeys`;
+  await copyOf(request, GCP, id, "Editscreen demo map keys");
+  await signIn(page, ALEX);
+  await openEditor(page, "process", id);
+  const blocks = map(page).locator(".block-main");
+  await expect(blocks).toHaveCount(10);
+  expect(await blocks.evaluateAll((els) => els.filter((e) => (e as HTMLElement).tabIndex === 0).length), "one block in the Tab order").toBe(1);
+  const focused = () => page.evaluate(() => document.activeElement?.closest(".block")?.getAttribute("data-step") ?? null);
+  const order = await map(page).locator(".block").evaluateAll((els) => els.map((e) => ({ id: e.getAttribute("data-step")!, n: Number(e.querySelector(".block-main")!.getAttribute("aria-label")!.split(".")[0]) })).sort((a, b) => a.n - b.n).map((x) => x.id));
+  await blocks.and(page.locator('[tabindex="0"]')).focus();
+  await page.keyboard.press("Home");
+  await expect.poll(focused).toBe(order[0]);
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(focused).toBe(order[1]);
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(focused).toBe(order[2]);
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(focused).toBe(order[1]);
+  await page.keyboard.press("End");
+  await expect.poll(focused).toBe(order[9]);
+  await expect(map(page).locator(`.block[data-step="${order[9]}"] .block-main`)).toHaveAttribute("aria-label", /^10\. .+, .+, by .+$/);
+  // the one with the Tab stop moved along
+  await expect(map(page).locator(`.block[data-step="${order[9]}"] .block-main`)).toHaveAttribute("tabindex", "0");
+  await page.keyboard.press("ArrowUp");
+  await expect.poll(focused).toBe(order[8]);
+  await page.keyboard.press("Enter");
+  await expect(fields(page).getByLabel(/^What happens/)).toBeFocused();
+  await expect(map(page).locator(".block.selected")).toHaveAttribute("data-step", order[8]);
+});
+
+test("Who takes part: the description of a participant grows with its text; move and remove under the fields", async ({ page, request }) => {
+  const id = `${PREFIX}participants`;
+  await copyOf(request, LIB, id, "Editscreen demo participants");
+  await signIn(page, ALEX);
+  await openEditor(page, "process", id);
+  await outline(page, "Who takes part");
+  const about = fields(page).getByRole("textbox", { name: "About participant 2" });
+  await expect(about).toHaveJSProperty("tagName", "TEXTAREA");
+  await about.fill("Short.");
+  const short = (await about.boundingBox())!.height;
+  await about.fill("A longer description of how to reach them: the channel in chat, the queue in the service desk, and who to ask out of hours when nobody answers.");
+  await expect.poll(async () => (await about.boundingBox())!.height, { message: "the field grows with its text" }).toBeGreaterThan(short + 10);
+  // move up / down and remove sit in the participant's foot, under its fields
+  const foot = fields(page).locator(".actor-foot").filter({ has: page.getByRole("button", { name: "Remove participant 2" }) });
+  await expect(foot.getByRole("button", { name: "Move participant 2 up" })).toBeVisible();
+  await expect(foot.getByRole("button", { name: "Move participant 2 down" })).toBeVisible();
+  expect((await foot.boundingBox())!.y).toBeGreaterThan((await about.boundingBox())!.y);
 });

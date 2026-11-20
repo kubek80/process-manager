@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { ALEX, CASEY, CSRF, SAM, open, signIn } from "./helpers";
+import { ALEX, CASEY, CSRF, SAM, open, readProcess, signIn } from "./helpers";
 
 // The reader's page of a process and of a standard: the head (kind, owner in words, how binding
 // as a neutral mark, the facts, the quiet line with dates), the tabs, and a first review that is
@@ -7,6 +7,7 @@ import { ALEX, CASEY, CSRF, SAM, open, signIn } from "./helpers";
 // responsibilities. What is made here is removed afterwards.
 
 const FRESH = "pages-demo-fresh";
+const OLD = "pages-demo-retired";
 
 async function as(request: APIRequestContext, email: string) {
   await request.post("/auth/dev/login", { data: { email }, headers: CSRF });
@@ -14,6 +15,7 @@ async function as(request: APIRequestContext, email: string) {
 test.afterAll(async ({ request }) => {
   await as(request, ALEX);
   await request.delete(`/api/processes/${FRESH}`, { headers: CSRF });
+  await request.delete(`/api/processes/${OLD}`, { headers: CSRF });
 });
 
 /** The problem colours of the page (of errors), as the browser computes them. */
@@ -127,7 +129,7 @@ test("a first review is counted from the first publication: due later, not count
   if (await reviews.count()) await expect(reviews).not.toContainText("Pages demo fresh");
 });
 
-test("segmented controls: Requests' state and kind, My responsibilities' groups; the chosen one in the brand fill", async ({ page }) => {
+test("segmented controls: Requests' state and kind, My responsibilities' groups; the chosen one raised and outlined, in brand-coloured text, not filled", async ({ page }) => {
   await signIn(page, SAM);
   await open(page, "/requests");
   for (const name of ["State", "Kind"]) {
@@ -136,8 +138,16 @@ test("segmented controls: Requests' state and kind, My responsibilities' groups;
     const on = group.locator('button.seg-item[aria-pressed="true"]');
     await expect(on).toHaveCount(1);
     await expect(on).toHaveClass(/\bon\b/);
-    const fill = await page.evaluate(() => { const p = document.createElement("span"); p.style.background = "var(--accent-fill)"; document.body.appendChild(p); const c = getComputedStyle(p).backgroundColor; p.remove(); return c; });
-    expect(await on.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(fill);
+    const token = (css: string, prop: "backgroundColor" | "color") => page.evaluate(([v, p]) => { const x = document.createElement("span"); x.style.background = v; x.style.color = v; document.body.appendChild(x); const c = getComputedStyle(x)[p as "color"]; x.remove(); return c; }, [css, prop]);
+    const look = await on.evaluate((e) => { const c = getComputedStyle(e); return { bg: c.backgroundColor, color: c.color, shadow: c.boxShadow }; });
+    // a raised neutral surface, never the brand fill; the text in the brand colour; an outline (inset ring)
+    expect(look.bg).not.toBe(await token("var(--accent-fill)", "backgroundColor"));
+    expect(look.bg).toBe(await token("var(--seg-on)", "backgroundColor"));
+    expect(look.color).toBe(await token("var(--accent)", "color"));
+    expect(look.shadow).toContain("inset");
+    // the others are not raised
+    const off = group.locator('button.seg-item[aria-pressed="false"]').first();
+    expect(await off.evaluate((e) => getComputedStyle(e).boxShadow)).toBe("none");
   }
   // Jordan looks after several groups: one segmented control to show one
   await signIn(page, "jordan@example.com");
@@ -191,4 +201,124 @@ test("a first review that is due soon reads “First review due …” on the ca
     await as(request, ALEX);
     await request.delete(`/api/processes/${id}`, { headers: CSRF });
   }
+});
+
+// ---------- the fourth round: one page frame, a quieter head
+
+test("a standard's page has the frame of a process page: the h1 at the same place at 1366 and at 1440", async ({ page }) => {
+  await signIn(page, SAM);
+  for (const width of [1366, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await open(page, "/p/request-gcp-project/flow");
+    const p = (await page.locator("header.doc-head h1").boundingBox())!;
+    await open(page, "/s/secure-logging/doc");
+    const s = (await page.locator("header.doc-head h1").boundingBox())!;
+    expect(Math.abs(p.x - s.x), `the h1 of both pages at the same x at ${width} (${p.x} and ${s.x})`).toBeLessThanOrEqual(1);
+    expect((await page.locator(".standard-doc").boundingBox())!.width).toBeLessThanOrEqual(1080);
+  }
+  // the requirement's code after its name, small and grey, in no box
+  const req = page.locator("#req-SEC-LOG-01");
+  const order = await req.locator(".req-head").evaluate((h) => [...h.querySelectorAll(".req-title, .req-id")].map((e) => e.className));
+  expect(order).toEqual(["req-title", "req-id"]);
+  const code = req.locator(".req-head .req-id");
+  const look = await code.evaluate((e) => { const c = getComputedStyle(e); return { border: c.borderTopWidth, bg: c.backgroundColor, size: parseFloat(c.fontSize) }; });
+  expect(look.border).toBe("0px");
+  expect(look.bg).toBe("rgba(0, 0, 0, 0)");
+  expect(look.size).toBeLessThan(parseFloat(await req.locator(".req-title").evaluate((e) => getComputedStyle(e).fontSize)));
+});
+
+test("the head: Edit is the one primary button, Mark as reviewed quiet unless due, Give feedback a plain button", async ({ page, request }) => {
+  await as(request, ALEX);
+  const src = (await readProcess(request, "publish-internal-library"))!;
+  await request.delete(`/api/processes/${OLD}`, { headers: CSRF });
+  const data = { ...src, id: OLD, title: "Pages demo retired", status: "active", review: { intervalMonths: 6, lastReviewedAt: "2025-01-01", reviewedBy: "Somebody" } };
+  const made = await request.put(`/api/processes/${OLD}?base=0`, { data, headers: CSRF });
+  expect(made.ok(), await made.text()).toBeTruthy();
+  await signIn(page, ALEX);
+  await open(page, "/p/publish-internal-library/flow");
+  const head = page.locator("header.doc-head");
+  await expect(head.locator(".btn.primary")).toHaveCount(1);
+  await expect(head.locator(".btn.primary")).toHaveText("Edit");
+  await expect(head.locator("a.btn.primary")).toHaveAttribute("href", "#/p/publish-internal-library/edit");
+  const reviewed = head.getByRole("button", { name: "Mark as reviewed" });
+  await expect(reviewed).toHaveClass(/\bquiet\b/);
+  await expect(reviewed).not.toHaveClass(/\breview-due\b/);
+  const feedback = head.getByRole("button", { name: "Give feedback" });
+  await expect(feedback).not.toHaveClass(/\baccent-soft\b/);
+  await expect(feedback).not.toHaveClass(/\bprimary\b/);
+  // not styled as "on": the background of an ordinary button, not the brand's
+  const plain = await head.locator(".btn.quiet").first().evaluate((e) => getComputedStyle(e).color);
+  expect(await feedback.evaluate((e) => getComputedStyle(e).backgroundColor)).not.toBe(await head.locator(".btn.primary").evaluate((e) => getComputedStyle(e).backgroundColor));
+  expect(plain).toBeTruthy();
+
+  // overdue: the warning style on Mark as reviewed, the banner under the title and summary, before the facts
+  await page.reload();
+  await open(page, `/p/${OLD}/flow`);
+  await expect(head.getByRole("button", { name: "Mark as reviewed" })).toHaveClass(/\breview-due\b/);
+  const notices = head.locator(".doc-notices");
+  await expect(notices.locator(".banner")).toHaveCount(1);
+  await expect(notices.locator(".banner")).toContainText("Review overdue");
+  // retired: its banner in the same place
+  const retired = await request.put(`/api/processes/${OLD}?base=1`, { data: { ...data, status: "deprecated" }, headers: CSRF });
+  expect(retired.ok(), await retired.text()).toBeTruthy();
+  await page.reload();
+  await expect(notices.locator(".banner").first()).toContainText("This process is retired.");
+  const order = await head.evaluate((h) => [...h.querySelectorAll("h1, .lead, .doc-notices, .doc-facts")].map((e) => e.tagName === "H1" ? "h1" : e.className.split(" ")[0]));
+  expect(order).toEqual(["h1", "lead", "doc-notices", "doc-facts"]);
+  const [notice, facts] = [(await notices.boundingBox())!, (await head.locator(".doc-facts").boundingBox())!];
+  expect(notice.y + notice.height).toBeLessThanOrEqual(facts.y + 1);
+});
+
+test("the Checklist at 1440: the steps up to 1000 px wide with the progress and its switches as a column beside them", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signIn(page, SAM);
+  await open(page, "/p/request-gcp-project/list");
+  const steps = page.locator(".list-view > ol.steps");
+  const bar = page.locator(".list-view > .list-bar");
+  await expect(bar).toContainText("of your steps done");
+  await expect(bar.getByText("Only my steps")).toBeVisible();
+  const [s, b] = [(await steps.boundingBox())!, (await bar.boundingBox())!];
+  expect(s.width).toBeLessThanOrEqual(1000);
+  expect(b.x, "the column is beside the steps").toBeGreaterThanOrEqual(s.x + s.width);
+  expect(Math.abs(b.y - s.y), "at the top of the steps").toBeLessThan(20);
+  // it stays in view while the steps scroll
+  await page.mouse.wheel(0, 900);
+  await expect.poll(async () => (await bar.boundingBox())!.y).toBeLessThan(200);
+  await expect(bar).toBeInViewport();
+  // a tick: "Reset ticks" in the same column
+  await page.getByRole("button", { name: /^Mark as done: / }).first().click();
+  await expect(bar.getByRole("button", { name: "Reset ticks" })).toBeVisible();
+  await bar.getByRole("button", { name: "Reset ticks" }).click();
+  await expect(bar.getByRole("button", { name: "Reset ticks" })).toHaveCount(0);
+});
+
+test("the reader's map: arrow keys go from step to step; the step opened stays in view when its panel opens", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await signIn(page, SAM);
+  await open(page, "/p/request-gcp-project/flow");
+  const blocks = page.locator(".block-main");
+  await expect(blocks).toHaveCount(10);
+  // "Before you start" folded, so that the map is on the first screen
+  const hide = page.getByRole("button", { name: "Hide", exact: true });
+  if (await hide.isVisible()) await hide.click();
+  expect(await blocks.evaluateAll((els) => els.filter((e) => (e as HTMLElement).tabIndex === 0).length), "one Tab stop for the blocks").toBe(1);
+  const name = () => page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? "");
+  await blocks.first().focus();
+  await expect.poll(name).toMatch(/^1\. Decide the project details, .+, by You$/);
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(name).toMatch(/^2\. /);
+  await page.keyboard.press("End");
+  await expect.poll(name).toMatch(/^10\. /);
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(name).toMatch(/^9\. /);
+  const nine = (await name()).replace(/^9\. /, "").split(",")[0];
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".drawer h3")).toHaveText(nine);
+  // the panel took room from the map: the step is brought back into view
+  const selected = page.locator(".block.selected");
+  const inMap = async () => {
+    const [b, v] = [(await selected.boundingBox())!, (await page.locator(".flow-scroll").boundingBox())!];
+    return b.x >= v.x - 1 && b.x + b.width <= v.x + v.width + 1 && b.y >= v.y - 1 && b.y + b.height <= v.y + v.height + 1;
+  };
+  await expect.poll(inMap, { message: "the selected step is inside the visible part of the map" }).toBe(true);
 });

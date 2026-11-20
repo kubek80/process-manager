@@ -57,8 +57,8 @@ test.afterAll(async ({ request }) => {
 
 const cells = async (row: Locator) => (await row.locator("td").allTextContents()).map((t) => t.trim());
 const num = (s: string) => Number(s.replace(/[^\d]/g, ""));
-/** The columns of the table, after Name, Kind, Owner, Platform, Practice. */
-const COL = { views: 5, people: 6, downloads: 7, upvotes: 8, open: 9, handled: 10 };
+/** The columns of the table, after Name (with the kind as a small mark before it) and Belongs to (owning team, platform · practice). */
+const COL = { views: 2, people: 3, downloads: 4, upvotes: 5, open: 6, handled: 7 };
 
 async function statistics(page: Page) {
   await signIn(page, DANA);
@@ -98,7 +98,14 @@ test("the numbers of a process over the last 7 days, sorted and grouped", async 
   const row = table.locator("tbody tr", { has: page.getByRole("link", { name: TITLE, exact: true }) });
   await expect(row).toHaveCount(1);
   const c = await cells(row);
-  expect(c.slice(1, 4)).toEqual(["Process", "Cloud Platform team", "Google Cloud"]); // names, not ids
+  // the headers: no Kind, Owner, Platform or Practice columns any more
+  await expect(table.locator("thead th")).toHaveText([/^Name/, "Belongs to", /^Views/, /^People/, /^Skill downloads/, /^Upvotes/, /^Feedback open/, /^Feedback handled/]);
+  // the kind is a small mark before the name (said to screen readers), names not ids under Belongs to
+  await expect(row.locator(".stat-kind.process")).toBeVisible();
+  await expect(row.locator(".stat-kind")).toHaveAttribute("title", "Process");
+  expect(c[0]).toBe(`Process: ${TITLE}`);
+  await expect(row.locator(".stat-belongs .stat-owner")).toHaveText("Cloud Platform team");
+  await expect(row.locator(".stat-belongs .stat-scope")).toHaveText(/^Google Cloud( · .+)?$/);
   expect(num(c[COL.views])).toBe(6);
   expect(num(c[COL.people])).toBe(6);
   expect(num(c[COL.downloads])).toBe(3);
@@ -137,7 +144,8 @@ test("the numbers of a process over the last 7 days, sorted and grouped", async 
   const kinds = page.getByRole("group", { name: "Kind" });
   await kinds.getByRole("button", { name: /^Standards/ }).click();
   await expect(row).toHaveCount(0);
-  for (const k of await table.locator("tbody tr td:nth-child(2)").allTextContents()) expect(k.trim()).toBe("Standard");
+  await expect(table.locator("tbody tr .stat-kind.process")).toHaveCount(0);
+  for (const k of await table.locator("tbody tr .stat-kind").all()) await expect(k).toHaveAttribute("title", "Standard");
   await kinds.getByRole("button", { name: /^Processes/ }).click();
   await expect(row).toHaveCount(1);
 
@@ -192,7 +200,7 @@ test("the trend of views per week has a text alternative", async ({ page }) => {
   const partial = trend.filter((w: { days: number }) => w.days < 7);
   expect(partial.length).toBeGreaterThanOrEqual(1); // 30 days are never whole weeks
   await expect(chart.locator("rect.stat-bar.partial")).toHaveCount(partial.length);
-  await expect(page.locator("p.stat-partial-note")).toHaveText("Lighter bars: weeks only partly inside the period (the first or the last).");
+  await expect(page.locator("p.stat-partial-note")).toHaveText("Faint bars with a dashed edge: weeks only partly inside the period (the first or the last).");
   const names = await alt.locator("tbody tr td:first-child").allTextContents();
   trend.forEach((w: { days: number }, i: number) => expect(names[i]).toMatch(w.days < 7 ? new RegExp(`^Week of .+, ${w.days} days?$`) : /^Week of \d+ \w+$/));
 });

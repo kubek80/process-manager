@@ -101,7 +101,7 @@ test("unpublished changes: saved as a draft only editors see, published with a n
   await expect(page.locator(".block").first()).not.toContainText("quokka");
   const line = page.locator(".draft-line");
   // to the person who saved them, in their own words
-  await expect(line).toContainText(/^You have unpublished changes \(saved \d\d:\d\d\)\. Readers see the published version\./);
+  await expect(line).toContainText(/^You have unpublished changes \(saved \d{4}-\d\d-\d\d \d\d:\d\d\)\. Readers see the published version\./);
   await line.getByRole("link", { name: "Continue editing" }).click();
   await expect(firstBlock(page)).toContainText("Ask for the quokka repository");
   await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\. Readers still see version 1\. Draft saved \d\d:\d\d\.$/);
@@ -399,7 +399,7 @@ test("More > Versions restores an old version into the draft; readers keep the p
   await more(page, "Versions");
   const versions = page.getByRole("dialog", { name: /Versions of/ });
   await expect(versions.locator(".history > li").first()).toContainText("Second summary");
-  await expect(versions).toContainText("Restoring one puts it into your draft on this screen: nothing is kept until you save the draft, and readers see nothing until you publish.");
+  await expect(versions).toContainText("Every published version is listed here; your saved draft is not. Restoring one puts it into your draft on this screen: nothing is kept until you save the draft, and readers see nothing until you publish.");
   await versions.locator(".history > li").nth(1).getByRole("button", { name: "Restore" }).click();
   await expect(page.locator(".toast", { hasText: "Version 1 is now in your draft" })).toBeVisible();
   await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\. Readers still see version 2\./);
@@ -592,13 +592,23 @@ test.describe("more of the editing screen", () => {
     await dana.close();
 
     await bar(page).getByRole("button", { name: "Save draft" }).click();
-    await page.getByRole("dialog", { name: "The unpublished changes are gone" }).getByRole("button", { name: "Save mine as a new draft" }).click();
+    const gone = page.getByRole("dialog", { name: "The unpublished changes are gone" });
+    // who published it, as which version and when
+    await expect(gone).toContainText(/Dana Admin published it as version 2 at \d{4}-\d\d-\d\d \d\d:\d\d, while you were editing\./);
+    await gone.getByRole("button", { name: "Save mine as a new draft" }).click();
     await expect(editState(page)).toHaveAttribute("aria-label", /^Unpublished changes\. Readers still see version 2\. Draft saved \d\d:\d\d\.$/);
     // the new draft is on the version his work came from, and the screen says so truthfully
     expect((await readWorkingDraft(page, "process", id))!.base).toBe(1);
     await expect(page.locator(".banner", { hasText: "Version 2 was published after these changes were started from version 1." })).toBeVisible();
     // publishing it does not silently undo what Dana published
     await bar(page).getByRole("button", { name: "Publish…" }).click();
+    // the Publish list marks the line that would take back Dana's summary, and only that one
+    const list = page.getByRole("dialog", { name: "Publish your changes" }).locator("ul.publish-changes");
+    const undoes = list.locator("li.undoes");
+    await expect(undoes).toHaveCount(1);
+    await expect(undoes).toContainText(/summary/i);
+    await expect(undoes.locator(".publish-undoes")).toHaveText("This would undo a change Dana Admin published since you started");
+    await expect(list.locator("li:not(.undoes)", { hasText: "Alex's further part" })).toHaveCount(1);
     await page.getByRole("dialog", { name: "Publish your changes" }).getByRole("button", { name: "Publish", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Somebody else published first" })).toBeVisible();
     expect((await readProcess(page, id))!.summary).toBe("Dana published this.");

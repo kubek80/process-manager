@@ -462,3 +462,69 @@ test("a long portal name never pushes the top bar over its edge", async ({ page,
     await request.put(`/api/admin/theme?rev=${now}`, { data: {}, headers: CSRF });
   }
 });
+
+// ---------- the fourth round: the Guide's contents on a phone, the Checklist's column, the taller editing map
+
+for (const theme of ["light", "dark"] as const) {
+  test(`the Guide on a phone, the Checklist beside its column and the editing map on a phone fit, in the ${theme} theme`, async ({ page }) => {
+    test.setTimeout(90_000);
+    await signIn(page, DANA);
+    await page.addInitScript((t) => { try { localStorage.setItem("pm:theme", t); } catch { /* ignore */ } }, theme);
+
+    // the Guide at 390: the contents bar sticks under the top bar, nothing sideways or on top of anything
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page, "/guide");
+    const contents = page.locator(".guide-contents-bar");
+    await expect(contents).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    expect(await sideways(page), `the Guide at 390, ${theme}`).toBe(0);
+    expect(await overlapping(page, ".guide-contents-bar"), "the contents bar").toEqual([]);
+    await page.mouse.wheel(0, 4000);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(1000);
+    await expect(contents.locator("button.guide-contents-btn")).toBeInViewport({ ratio: 1 });
+    const bar = (await contents.boundingBox())!;
+    const top = (await page.locator(".topbar").boundingBox())!;
+    expect(bar.y, "under the top bar").toBeGreaterThanOrEqual(top.y + top.height - 1);
+    expect(await overlapping(page, ".guide-section"), "the sections").toEqual([]);
+    await contents.locator("button.guide-contents-btn").click();
+    const sheet = page.getByRole("dialog", { name: "Contents" });
+    await expect(sheet).toBeVisible();
+    expect(await sideways(page), "the contents open").toBe(0);
+    for (const b of (await sheet.locator(".guide-toc-group button").all()).slice(0, 4)) expect((await b.boundingBox())!.height, "a touch target").toBeGreaterThanOrEqual(36);
+    await page.keyboard.press("Escape");
+
+    // the Checklist at 1440 and at 1100: the steps and, beside them, the column with the progress
+    for (const width of [1440, 1100]) {
+      await page.setViewportSize({ width, height: 900 });
+      await open(page, "/p/request-gcp-project/list");
+      const steps = page.locator(".list-view > ol.steps");
+      const side = page.locator(".list-view > .list-bar");
+      await expect(steps).toBeVisible();
+      const [s, b] = [(await steps.boundingBox())!, (await side.boundingBox())!];
+      expect(b.x, `the column beside the steps at ${width}`).toBeGreaterThanOrEqual(s.x + s.width - 1);
+      expect(s.width, `the steps at ${width}`).toBeLessThanOrEqual(1000);
+      expect(s.width, `the steps keep room at ${width}`).toBeGreaterThan(500);
+      expect(await sideways(page), `the Checklist at ${width}, ${theme}`).toBe(0);
+      expect(await overlapping(page, ".list-view"), `the Checklist at ${width}`).toEqual([]);
+    }
+    // narrower: the progress above the steps again
+    await page.setViewportSize({ width: 1000, height: 900 });
+    await open(page, "/p/request-gcp-project/list");
+    const [s, b] = [(await page.locator(".list-view > ol.steps").boundingBox())!, (await page.locator(".list-view > .list-bar").boundingBox())!];
+    expect(b.y + b.height, "above the steps at 1000").toBeLessThanOrEqual(s.y + 1);
+
+    // the editing screen at 390: the map takes the rest of the height
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page, "/p/request-gcp-project/edit");
+    await expect(page.locator(".edit-bar")).toBeVisible();
+    const map = page.locator(".edit-preview .flow-scroll");
+    await expect(map).toBeVisible();
+    const m = (await map.boundingBox())!;
+    expect(m.height, "the map's height on a phone").toBeGreaterThan(380);
+    expect(m.y + m.height, "the map ends within the window").toBeLessThanOrEqual(844 + 1);
+    expect(await sideways(page), `the editing screen at 390, ${theme}`).toBe(0);
+    expect(await overlapping(page, ".edit-preview .flow-head"), "the map's tools").toEqual([]);
+    // the legend is behind its button
+    await expect(page.locator(".edit-preview .legend-box").getByRole("button", { name: "Legend" })).toBeVisible();
+  });
+}

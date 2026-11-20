@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Check, Clock, Flag, Hand, Maximize2, Minus, Plus, User, Workflow, Wrench } from "lucide-react";
 import type { Feedback, Process, StepType } from "../types";
 import { diamondPoints, L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
@@ -271,13 +271,17 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   // the blocks are one stop for Tab: the selected one (or the first); the arrow keys go from step
   // to step in the order of their numbers, Enter opens the step
   const order = layout.nodes.map((n) => n.step.id);
-  const tabStop = selectedId && order.includes(selectedId) ? selectedId : order[0];
+  // the Tab stop follows the keyboard (a roving tabindex), until another step is selected
+  const [roamed, setRoamed] = useState<string | null>(null);
+  useEffect(() => { setRoamed(null); }, [selectedId]);
+  const tabStop = roamed && order.includes(roamed) ? roamed : selectedId && order.includes(selectedId) ? selectedId : order[0];
   const roam = (e: React.KeyboardEvent, id: string) => {
     const at = order.indexOf(id);
     const to = e.key === "ArrowRight" || e.key === "ArrowDown" ? at + 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? at - 1 : e.key === "Home" ? 0 : e.key === "End" ? order.length - 1 : null;
     if (to !== null) {
       e.preventDefault();
       const target = order[Math.max(0, Math.min(order.length - 1, to))];
+      setRoamed(target);
       const el = scroller.current?.querySelector<HTMLElement>(`[data-step="${CSS.escape(target)}"] .block-main`);
       el?.focus({ preventScroll: true });
       // the step that has the keyboard is brought into view
@@ -337,7 +341,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                   <div className="lane-head">
                     {fits.avatar && <span className="lane-avatar">{lane.actorIndex === 0 ? <User size={16} /> : (actor.name ?? "").trim().charAt(0).toUpperCase()}</span>}
                     <div className="lane-text">
-                      <strong aria-label={actor.name}>{lines.map((l, i) => <span key={i} className="lane-line" aria-hidden="true">{l}</span>)}</strong>
+                      <strong aria-label={actor.name}>{lines.map((l, i) => <Fragment key={i}>{i > 0 && " "}<span className="lane-line" aria-hidden="true">{l}</span></Fragment>)}</strong>
                       {fits.count && <span>{count} {count === 1 ? "step" : "steps"}</span>}
                     </div>
                   </div>

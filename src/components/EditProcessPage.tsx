@@ -305,5 +305,13 @@ function StartHere({ process, onSummary, onSteps, onFirst }: { process: Process;
 function placeOf(p: Process, path: string): string {
   const t = issueTarget("process", p, path);
   if (t.item) { const i = p.steps.findIndex((x) => x.id === t.item); return p.steps[i]?.title?.trim() ? `Step ${i + 1} “${p.steps[i].title}”` : `Step ${i + 1} (no name yet)`; }
+  // a participant, prerequisite or link: by its place, as Undo names it, so that two alike can be told apart
+  const listed = path.match(/^(actors|prerequisites|resources)\[(\d+)\]/);
+  if (listed) {
+    const i = Number(listed[2]);
+    const [what, name] = listed[1] === "actors" ? ["Participant", p.actors[i]?.name] : listed[1] === "prerequisites" ? ["Prerequisite", p.prerequisites[i]?.title] : ["Link", p.resources?.[i]?.title];
+    const named = typeof name === "string" ? name.trim() : "";
+    return named ? `${what} ${i + 1} “${named}”` : `${what} ${i + 1} (no name yet)`;
+  }
   return PROCESS_SECTIONS.find((x) => x.id === t.section)?.label ?? "About";
 }

@@ -230,7 +230,10 @@ test("Meaning puts first what is closest and opens the step or requirement that 
   const logging = card(page, "secure-logging");
   await expect(results(page).first()).toHaveAttribute("data-id", "secure-logging");
   const requirement = logging.locator("ul.card-hits a", { hasText: "SEC-LOG-02" });
-  await expect(requirement.locator(".card-hit-where")).toHaveText("Requirement SEC-LOG-02");
+  // "Requirement · its name · SEC-LOG-02": the code comes after the name
+  await expect(requirement.locator(".card-hit-where")).toHaveText("Requirement");
+  await expect(requirement.locator(".card-hit-code")).toHaveText("SEC-LOG-02");
+  expect(await requirement.evaluate((a) => [...a.querySelectorAll(".card-hit-where, .card-hit-label, .card-hit-code")].map((e) => e.className))).toEqual(["card-hit-where", "card-hit-label", "card-hit-code"]);
   await requirement.click();
   await expect(page).toHaveURL(/#\/s\/secure-logging\/doc\/SEC-LOG-02$/);
   await expect(page.locator("#req-SEC-LOG-02")).toHaveClass(/selected/);
@@ -598,14 +601,16 @@ test("when the filters hide what was found, dropping them is offered first", asy
   await expect(results(page)).toHaveCount(2);
   await expect(page).toHaveURL(/#\/search\?q=gcp&mode=meaning$/);
 
-  // a filter that hides them: each filter can be dropped, or all
+  // a filter that hides them: the count without them, and one primary "Clear all filters" first
   await open(page, "/search?q=gcp&mode=meaning&practice=security");
   await expect(empty.getByRole("heading", { name: "Nothing found" })).toBeVisible();
-  await expect(empty).toContainText("Nothing matches “gcp” with these filters. Without the filters there are 2 results.");
-  await expect(empty.getByRole("button").first()).toHaveText("Without Practice: Cyber security");
-  await expect(empty.getByRole("button").nth(1)).toHaveText("Clear all filters");
+  await expect(empty).toContainText("Nothing matches “gcp” with these filters. Without them there are 2 results.");
+  await expect(empty.getByRole("button").first()).toHaveText("Clear all filters");
+  await expect(empty.getByRole("button").first()).toHaveClass(/\bprimary\b/);
+  await expect(empty.getByRole("button", { name: /^Without / })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Clear all filters" })).toHaveCount(1);
   await expect(empty.locator(".search-try-other")).toHaveCount(0);
-  await empty.getByRole("button", { name: "Without Practice: Cyber security" }).click();
+  await empty.getByRole("button", { name: "Clear all filters" }).click();
   await expect(results(page)).toHaveCount(2);
 
   // nothing close at all, and no filter: the other way of searching is offered
