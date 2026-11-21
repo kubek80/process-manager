@@ -198,6 +198,10 @@ test("on a phone the map says nothing about dragging: a finger scrolls it", asyn
   await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page, SAM);
   await open(page, `/p/${GCP}/flow`);
+  // a phone opens a process on its checklist; the map is one tap away and stays once chosen
+  await expect(page.getByRole("tab", { name: "Checklist" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "Map" }).click();
+  await expect(page.getByRole("tab", { name: "Map" })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".map-hint")).toBeVisible();
   await expect(page.locator(".map-pan-hint")).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
