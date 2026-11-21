@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { addInOutline, ALEX, CSRF, deleteSelected, editState, fields, moveTo, open, openChecker, openEditor, outline, outlineNav, outlineTitles, pickKind, readWorkingDraft, RILEY, saveDraft, signIn } from "./helpers";
+import { addInOutline, ALEX, CSRF, DANA, deleteSelected, editState, fields, moveTo, open, openChecker, openEditor, outline, outlineNav, outlineTitles, pickKind, readWorkingDraft, RILEY, saveDraft, signIn } from "./helpers";
 
 // The editing screen of a process, part by part: adding steps by name, moving them in the flow,
 // decisions and their answers, deleting with Undo instead of a question, who does a step, its
@@ -845,4 +845,46 @@ test.describe("on a touch screen", () => {
     await expect(page.locator(".outline-tip")).toHaveCount(0);
     await expect(outlineNav(page)).not.toContainText("Alt + ↑ ↓");
   });
+});
+
+test("About: the team chosen, the level and the lead time show in “What readers will see”, in the words of the reader's page", async ({ page, request }) => {
+  const id = PREFIX + "owner";
+  await copyOf(request, LIB, id, "Editscreen demo owner");
+  await signIn(page, ALEX);
+  await openEditor(page, "process", id);
+  const head = page.locator(".edit-preview .preview-head");
+  const facts = head.locator(".preview-facts");
+  await expect(facts.locator(".preview-owner")).toHaveText("Source control · Owned by Developer Experience team");
+  await expect(facts).toContainText("Recommended");
+  await expect(facts).toContainText("1-2 working days");
+  // another team: said at once, before anything is saved
+  await fields(page).getByLabel("Owning team").selectOption({ label: "Cyber Security" });
+  await expect(facts.locator(".preview-owner")).toHaveText("Source control · Owned by Cyber Security");
+  await fields(page).getByLabel("Typical lead time").fill("3 working days");
+  await expect(facts).toContainText("3 working days");
+  // no team: said too, so that choosing one is seen to arrive
+  await fields(page).getByLabel("Owning team").selectOption({ label: "Not set" });
+  await expect(facts.locator(".preview-owner.none")).toHaveText("No owning team yet");
+  await fields(page).getByLabel("Owning team").selectOption({ label: "Cyber Security" });
+  // with a step chosen the head is one line again: the map keeps the height
+  await page.locator(".edit-outline .outline-item").nth(4).click();
+  await expect(page.locator(".edit-outline .outline-item[aria-current=true]")).not.toHaveText(/^About/);
+  await expect(facts).toHaveCount(0);
+  // and the reader's page says the same once it is published
+  await head.click();
+  await saveDraft(page);
+  await bar(page).getByRole("button", { name: /^Publish/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Publish/ }).click();
+  await open(page, `/p/${id}/flow`);
+  await expect(page.locator(".doc-kicker .doc-owner")).toHaveText("Source control · Owned by Cyber Security");
+});
+
+test("About of a standard: “Issued by” its team shows in “What readers will see”", async ({ page }) => {
+  await signIn(page, DANA);
+  await openEditor(page, "standard", "code-review");
+  const facts = page.locator(".edit-preview .preview-head .preview-facts");
+  await expect(facts.locator(".preview-owner")).toContainText("Issued by Developer Experience team");
+  await fields(page).getByLabel("Issued by").selectOption({ label: "Cyber Security" });
+  await expect(facts.locator(".preview-owner")).toContainText("Issued by Cyber Security");
+  // nothing is saved: the sample stays as it was
 });

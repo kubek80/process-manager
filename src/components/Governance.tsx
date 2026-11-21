@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { ArrowLeft, CalendarCheck, Code2, Compass, Layers, Rows3, Server, TriangleAlert } from "lucide-react";
 import type { DocMeta, Governed, Rigour, TargetKind } from "../types";
-import { categoryName, environmentLabel, languageLabel, platformName, practiceName, teamName, tierLabel, useCatalog } from "../lib/catalog";
+import { environmentLabel, languageLabel, ownedBy, platformName, practiceName, tierLabel, useCatalog } from "../lib/catalog";
 import { belongsChoice, belongsRefused, wouldLoseEdit, type Belongs, type BelongsField } from "../lib/rights";
 import { usePerms } from "../lib/session";
 import type { Profile } from "../lib/edit";
@@ -142,6 +142,25 @@ export function WhereFacts({ doc }: { doc: Governed }) {
 }
 
 /**
+ * On the editing screen, under the name of "What readers will see" while About is chosen: what the
+ * head of the reader's page will say about the fields of About - the category and the team that
+ * looks after it, in the same words, then `children` (the level, the lead time) and where it
+ * applies. A team not chosen yet is said, so that choosing one is seen to arrive here.
+ */
+export function PreviewFacts({ kind, doc, children }: { kind: TargetKind; doc: Governed; children?: ReactNode }) {
+  const { catalog } = useCatalog();
+  const said = ownedBy(catalog, kind, doc);
+  return (
+    <span className="preview-facts">
+      {said && <span className="preview-owner">{said}</span>}
+      {!doc.owner && <span className="preview-owner none">{kind === "process" ? "No owning team yet" : "Not issued by a team yet"}</span>}
+      {children}
+      <WhereFacts doc={doc} />
+    </span>
+  );
+}
+
+/**
  * The head of the reader's page of a process or standard, the same for both: the kind tag, the
  * category and who owns it in plain words, marks for what needs attention, the title, the
  * summary, the facts to compare first (`facts`, as on the card), where it applies, and when it
@@ -161,7 +180,7 @@ export function DocHead({ kind, doc, meta, review, facts, actions, notice, onBac
       <div className="doc-kicker">
         <button className="back" onClick={onBack}><ArrowLeft size={16} />All {kind === "process" ? "processes" : "standards"}</button>
         <KindTag kind={kind} />
-        {(doc.category || doc.owner) && <span className="doc-owner">{[doc.category ? categoryName(catalog, doc.category) : "", doc.owner ? `${kind === "process" ? "Owned by" : "Issued by"} ${teamName(catalog, doc.owner)}` : ""].filter(Boolean).join(" · ")}</span>}
+        {(doc.category || doc.owner) && <span className="doc-owner">{ownedBy(catalog, kind, doc)}</span>}
         {(status !== "active" || review.state === "soon" || review.state === "overdue") && (
           <span className="doc-marks">
             {status === "draft" && <span className="card-mark draft">Draft</span>}

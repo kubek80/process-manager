@@ -11,6 +11,7 @@ import { useCatalog } from "../lib/catalog";
 import { statusOf } from "../lib/lifecycle";
 import { href } from "../lib/store";
 import { openCount } from "./Feedback";
+import { PreviewFacts } from "./Governance";
 import { EditFrame, EditSection, focusSelectedInOutline, ItemIssues, Outline, focusFirstField } from "./EditFrame";
 import { EditSession, type Session } from "./EditSession";
 import { NoRight, StartHere, type StartItem } from "./EditProcessPage";
@@ -183,6 +184,7 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
         <span className="preview-label">What readers will see</span>
         <h2>{draft.title || <span className="muted">(no name yet)</span>}</h2>
         <p>{draft.summary && draft.summary !== EXAMPLE.standardSummary ? draft.summary : <span className="muted">No summary yet. Say what it protects or achieves.</span>}</p>
+        {sel.section === "about" && <PreviewFacts kind="standard" doc={draft} />}
       </button>
       {fresh && <StartHere items={standardStart(draft, () => {
         choose({ section: "about" });

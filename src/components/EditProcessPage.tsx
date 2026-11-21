@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ListChecks, ListPlus, PenLine, Plus, Send, UserRound } from "lucide-react";
+import { Check, ChevronDown, Clock3, ListChecks, ListPlus, PenLine, Plus, Send, UserRound } from "lucide-react";
 import type { DocMeta, Feedback, Process, Standard, Step } from "../types";
 import { appendStep, deleteStep, EXAMPLE, flowMoveBlocked, insertStep, movedHead, moveStepInFlow, newDecisionNotice, nudgeStep, renameStepId, restructureNotice, shortName, slugify, tidy, today, updateStep } from "../lib/edit";
 import { issueTarget, issuesByPlace, noteMove, issuesFor, PROCESS_SECTIONS, processOutline, selectionKey, withoutEarlySuggestions, type ProcessSection, type Selection } from "../lib/editing";
@@ -14,6 +14,8 @@ import { EditFrame, focusFirstField, focusSelectedInOutline, ItemIssues, Outline
 import { EditSession } from "./EditSession";
 import { editNotice } from "./Editing";
 import { FlowView } from "./FlowView";
+import { PreviewFacts } from "./Governance";
+import { Fact, LevelMark } from "./marks";
 import { BeforeYouStart, processAiSpec } from "./ProcessPage";
 import { ProcessAbout, ProcessBefore, ProcessLinks, ProcessPeople, ProcessStandards } from "./ProcessSections";
 import { markBackPath, StepFields } from "./StepFields";
@@ -181,6 +183,12 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
         <span className="preview-label">What readers will see</span>
         <h2>{draft.title || <span className="muted">(no name yet)</span>}</h2>
         <p>{draft.summary && draft.summary !== EXAMPLE.processSummary ? draft.summary : <span className="muted">No summary yet. Say what the reader has at the end.</span>}</p>
+        {sel.section === "about" && (
+          <PreviewFacts kind="process" doc={draft}>
+            {draft.rigour && <LevelMark level={draft.rigour} />}
+            {draft.estimatedDuration && <Fact icon={Clock3} label="Typical time">{draft.estimatedDuration}</Fact>}
+          </PreviewFacts>
+        )}
       </button>
       {fresh && <StartHere items={processStart(draft, () => {
         choose({ section: "about" });

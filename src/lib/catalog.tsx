@@ -37,6 +37,13 @@ export const teamName = (c: Catalog, id?: string) => nameOf(c.teams, id);
 export const practiceName = (c: Catalog, id?: string) => nameOf(c.practices ?? [], id);
 export const platformName = (c: Catalog, id?: string) => nameOf(c.platforms ?? [], id);
 export const categoryName = (c: Catalog, id?: string) => nameOf(c.categories ?? [], id);
+/**
+ * The category and the team that looks after a process or standard, as the head of its page says
+ * it: "Cloud · Owned by Cloud Platform team", "Security · Issued by Cyber Security". Empty when
+ * neither is set.
+ */
+export const ownedBy = (c: Catalog, kind: "process" | "standard", doc: { category?: string; owner?: string }) =>
+  [doc.category ? categoryName(c, doc.category) : "", doc.owner ? `${kind === "process" ? "Owned by" : "Issued by"} ${teamName(c, doc.owner)}` : ""].filter(Boolean).join(" · ");
 /** The name of a team, a platform or a practice. */
 export const groupName = (c: Catalog, kind: GroupKind, id?: string) =>
   kind === "team" ? teamName(c, id) : kind === "platform" ? platformName(c, id) : practiceName(c, id);
