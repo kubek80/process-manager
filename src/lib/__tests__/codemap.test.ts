@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CodeCategory } from "../../codemap/types";
 import {
   alsoIn, categoriesOf, commentCount, commentLineFlags, commentedLines, countLine, fileHome, fileIn, firstSentence, hitCount,
-  inlineParts, linesOf, neighbours, placeComments, searchMap, tableAnchor,
+  anchorOf, commentAt, fileAnchor, inlineParts, isOwnFile, linesOf, neighbours, placeComments, searchMap, tableAnchor, testedFiles,
 } from "../codemap";
 
 // made-up categories: the logic must not depend on what the real map holds at the moment
@@ -13,12 +13,13 @@ const cat = (id: string, over: Partial<CodeCategory> = {}): CodeCategory => ({
 const saving = cat("saving", {
   requirements: ["A save made from an outdated version is refused with 409."],
   files: [
-    { path: "server/internal/docs/store.go", role: "Saves versions.", requirements: [{ text: "Refuses an outdated save.", at: "func (s *Store) Save(" }] },
+    { path: "server/internal/docs/store.go", role: "Saves versions.", requirements: [{ text: "Refuses an outdated save.", at: "func (s *Store) Save(" }], tests: ["server/internal/docs/store_test.go"] },
     { path: "server/internal/docs/drafts.go", role: "Working drafts.", requirements: [] },
     { path: "src/lib/draft.ts", role: "useDraft in the app.", requirements: [] },
   ],
   tables: [{ name: "documents", purpose: "One row per document.", columns: [{ name: "body", type: "jsonb" }], createdIn: "server/internal/db/migrations/0001_init.sql", writtenBy: ["server/internal/docs/store.go"] }],
   charts: [{ process: { schemaVersion: "1.0", id: "code-x", title: "x", summary: "", prerequisites: [], actors: [], steps: [] }, caption: "c" }],
+  examples: [{ title: "A row becomes parts", caption: "From the table to the index.", stages: [] }],
 });
 const vectors = cat("vectors", {
   files: [{ path: "server/internal/docs/store.go", role: "Calls the index after a save.", requirements: [{ text: "Never indexes a draft." }] }],
@@ -134,7 +135,7 @@ describe("the search over the map", () => {
   it("finds a table by its name, its purpose or a column, and says which one", () => {
     const r = searchMap(all, "embedding");
     expect(r).toHaveLength(1);
-    expect(r[0].hits).toEqual([{ kind: "table", text: "pm_index.parts", detail: "Vectors of the parts.", table: "pm_index.parts" }]);
+    expect(r[0].hits).toEqual([{ kind: "table", text: "pm_index.parts", detail: "Vectors of the parts.", table: "pm_index.parts", at: "table-pm_index.parts" }]);
   });
   it("points a file's requirement at its file, a category's at the category", () => {
     const hits = searchMap(all, "outdated")[0].hits;
@@ -158,5 +159,59 @@ describe("text of the map", () => {
     expect(inlineParts("one ` alone")).toEqual([{ code: false, text: "one ` alone" }]);
     expect(inlineParts("empty `` pair")).toEqual([{ code: false, text: "empty `` pair" }]);
     expect(inlineParts("")).toEqual([]);
+  });
+});
+
+describe("tests as files of the map", () => {
+  it("open a test in the category of the file that names it, with a role that says what it tests", () => {
+    expect(testedFiles(saving, "server/internal/docs/store_test.go").map((f) => f.path)).toEqual(["server/internal/docs/store.go"]);
+    expect(fileIn(saving, "server/internal/docs/store_test.go")).toEqual({ path: "server/internal/docs/store_test.go", role: "Tests `server/internal/docs/store.go`.", requirements: [] });
+    expect(isOwnFile(saving, "server/internal/docs/store_test.go")).toBe(false);
+    expect(fileIn(look, "server/internal/docs/store_test.go")).toBeUndefined();
+    expect(fileHome(all, "look", "server/internal/docs/store_test.go")).toBe("saving");
+    expect(fileHome(all, "saving", "server/internal/docs/store_test.go")).toBe("saving");
+  });
+});
+
+describe("places a page opens at", () => {
+  it("stand for the element of a category's page", () => {
+    expect(anchorOf("must-2")).toBe("code-must-2");
+    expect(anchorOf("table-pm_index.parts")).toBe("code-table-pm-index-parts");
+    expect(anchorOf("file-server/internal/docs/store.go")).toBe(fileAnchor("server/internal/docs/store.go"));
+    expect(anchorOf("chart-code-x")).toBe("code-chart-code-x");
+    expect(anchorOf("example-0")).toBe("code-example-0");
+  });
+  it("lead a file's requirement to its comment on the line, or to its entry when it is not on one", () => {
+    expect(anchorOf("req-1", () => 41)).toBe("cm-c-42");
+    expect(anchorOf("req-1", () => -1)).toBe("cm-req-1");
+    expect(anchorOf("req-1")).toBe("cm-req-1");
+  });
+  it("ignore what they do not know", () => {
+    for (const at of [undefined, "", "must-x", "req-", "nothing-1", "example-a"]) expect(anchorOf(at)).toBeUndefined();
+  });
+  it("remember the line of each requirement in the order given", () => {
+    const p = placeComments(["a", "b", "c"], [{ text: "1", at: "c" }, { text: "2" }, { text: "3", at: "zz" }, { text: "4", at: "a" }]);
+    expect(p.lineOf).toEqual([2, -1, -1, 0]);
+  });
+  it("count the comment the reader is at", () => {
+    expect(commentAt([100, 400, 900], 50)).toBe(0);
+    expect(commentAt([100, 400, 900], 100)).toBe(1);
+    expect(commentAt([100, 400, 900], 500)).toBe(2);
+    expect(commentAt([-300, -100, 20], 200)).toBe(3);
+  });
+});
+
+describe("the search over summaries, charts and examples", () => {
+  it("finds a category by its title or summary, a chart by its title or caption, an example by its title", () => {
+    const words = (q: string) => searchMap(all, q).flatMap((r) => r.hits.map((h) => [r.category.id, h.kind, h.at ?? ""]));
+    expect(words("second sentence")).toEqual([["saving", "category", ""], ["vectors", "category", ""], ["look", "category", ""]]);
+    expect(words("row becomes")).toEqual([["saving", "example", "example-0"]]);
+    const chart = cat("charted", { charts: [{ process: { schemaVersion: "1.0", id: "code-y", title: "Indexing after a save", summary: "", prerequisites: [], actors: [], steps: [] }, caption: "Nothing waits for the provider." }] });
+    expect(searchMap([chart], "provider")[0].hits).toMatchObject([{ kind: "chart", text: "Indexing after a save", at: "chart-code-y" }]);
+  });
+  it("gives every requirement and table hit the place it lands on", () => {
+    const hits = searchMap(all, "outdated")[0].hits;
+    expect(hits.map((h) => h.at)).toEqual(["must-0", "req-0"]);
+    expect(searchMap(all, "embedding")[0].hits[0].at).toBe("table-pm_index.parts");
   });
 });

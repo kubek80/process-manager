@@ -1,17 +1,17 @@
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowLeft, Check, ChevronLeft, ChevronRight, Copy, FileCode2, FlaskConical, MessageSquareText, Search, Table2 } from "lucide-react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { ArrowDown, ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, FileCode2, FlaskConical, Layers, Maximize2, MessageSquareText, Search, Table2, Workflow } from "lucide-react";
 import { AREAS, CATEGORIES } from "../codemap";
-import type { CodeCategory, CodeChart, CodeExample, CodeFile, CodeTable, Requirement } from "../codemap/types";
+import type { CodeCategory, CodeChart, CodeExample, CodeFile, CodeTable } from "../codemap/types";
 import {
-  alsoIn, categoriesOf, categoryById, commentCount, commentLineFlags, countLine, fileHome, fileIn, firstSentence, hitCount,
-  inlineParts, linesOf, neighbours, placeComments, searchMap, tableAnchor, type MapHit, type Placement,
+  alsoIn, anchorOf, categoriesOf, categoryById, commentAt, commentCount, commentLineFlags, countLine, fileAnchor, fileHome, fileIn, firstSentence, hitCount,
+  inlineParts, isOwnFile, linesOf, neighbours, placeComments, searchMap, tableAnchor, testedFiles, type MapHit, type Placement,
 } from "../lib/codemap";
 import { useMedia } from "../lib/media";
 import { wordsOf } from "../lib/search";
 import { ApiError, copyText, go, href, loadSource, loadSystem, parseRoute, type CodeView } from "../lib/store";
 import { Marked } from "./DocCard";
 import { FlowView } from "./FlowView";
-import { LoadError, scrollBehavior } from "./ui";
+import { LoadError, Modal, scrollToStart } from "./ui";
 import "../codemap.css";
 
 /**
@@ -19,22 +19,36 @@ import "../codemap.css";
  * reviews it (`src/codemap`). The overview finds a file, a table or a word over the whole map;
  * a category shows what its part must do, its charts, tables, worked examples and files; a file
  * shows its text from the server (`GET /api/admin/source`) with its requirements as comments
- * above the lines they are about. Its logic is `src/lib/codemap.ts`.
+ * above the lines they are about. The address carries the place a page opens at (`?at=`), so a
+ * search hit lands on its sentence, its table or its line. Its logic is `src/lib/codemap.ts`.
  */
 
 /** The category list beside the page from this width; below it, a menu above the page. */
 const WIDE = "(min-width: 1120px)";
 /** At most this many hits of one category are shown before "Show all". */
 const HITS_SHOWN = 8;
+/** The smallest zoom a chart is drawn at on a category's page: a wider chart scrolls sideways. */
+const CHART_MIN = 0.9;
+/** The viewer's own choices on this page, kept in the browser (per viewer, never shared). */
+const WRAP_KEY = "pm.codemap.wrap", FILES_KEY = "pm.codemap.files";
+/** How long a place that was jumped to stays marked. */
+const FLASH_MS = 2400;
 
 const codeRoute = (v: CodeView) => href({ page: "admin", section: "code", ...v });
-const fileRoute = (category: string, file: string) => codeRoute({ category, file });
+const fileRoute = (category: string, file: string, at?: string) => codeRoute({ category, file, at });
+
+function readPref(key: string): string | null { try { return localStorage.getItem(key); } catch { return null; } }
+function writePref(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* private mode: not kept */ } }
+function usePref(key: string, fallback: string): [string, (v: string) => void] {
+  const [v, setV] = useState(() => readPref(key) ?? fallback);
+  return [v, (next: string) => { setV(next); writePref(key, next); }];
+}
 
 /** The part of the address that is the code map's, followed as it changes (the app passes only the section). */
 function useCodeView(): CodeView {
   const read = () => {
     const r = parseRoute(typeof location === "undefined" ? "" : location.hash);
-    return r.page === "admin" && r.section === "code" ? { category: r.category, file: r.file, q: r.q } : {};
+    return r.page === "admin" && r.section === "code" ? { category: r.category, file: r.file, q: r.q, at: r.at } : {};
   };
   const [view, setView] = useState<CodeView>(read);
   useEffect(() => {
@@ -45,6 +59,26 @@ function useCodeView(): CodeView {
   return view;
 }
 
+// the search of the overview, kept while a category or a file is open: "Overview" returns to it
+let lastQ = "";
+
+/** Puts the place into the current address without a step in the history (Back then returns there). */
+function keepPlace(v: CodeView) {
+  try { history.replaceState(history.state, "", codeRoute(v)); } catch { /* the address stays as it was */ }
+}
+
+/** Brings an element to the top of the window (the scroll is corrected once what is above has settled), focuses it and marks it a moment. */
+function land(el: HTMLElement | null, flash = true) {
+  if (!el) return;
+  scrollToStart(el);
+  el.focus({ preventScroll: true });
+  if (!flash) return;
+  el.classList.remove("cm-flash");
+  void el.offsetWidth; // start the mark again when the same place is jumped to twice
+  el.classList.add("cm-flash");
+  window.setTimeout(() => el.classList.remove("cm-flash"), FLASH_MS);
+}
+
 /** A text of the map: what its writer put between backticks is shown as code; `words` are marked. */
 function Txt({ text, words }: { text: string; words?: string[] }) {
   return <>{inlineParts(text).map((p, i) => {
@@ -53,14 +87,19 @@ function Txt({ text, words }: { text: string; words?: string[] }) {
   })}</>;
 }
 
-// A search hit for a table opens its category at the table: the place to go to, taken once by the category.
-let pendingAnchor: string | null = null;
-
-/** Brings an element of the page to the top of the window and puts the focus on it. */
-function bringTo(el: HTMLElement | null) {
-  if (!el) return;
-  el.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
-  el.focus({ preventScroll: true });
+/** Whether a box has more than it shows (and so must be reachable with the keyboard to scroll it). */
+function useOverflows(ref: RefObject<HTMLElement | null>, watch?: unknown): boolean {
+  const [over, setOver] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setOver(el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1);
+    check();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(check) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [ref, watch]);
+  return over;
 }
 
 export function CodeMapPage({ label, hint }: { label: string; hint: string }) {
@@ -68,24 +107,27 @@ export function CodeMapPage({ label, hint }: { label: string; hint: string }) {
   const wide = useMedia(WIDE);
   const heading = useRef<HTMLHeadingElement>(null);
   const category = categoryById(CATEGORIES, view.category);
+  const file = fileIn(category, view.file);
 
-  // a category or a file was opened: start at the top, with the focus on its heading
+  // a category or a file was opened: at the place the address names, else at the top with the
+  // focus on its heading. A file's place is reached by the file itself, once its text is there.
   const where = view.category ? `${view.category}/${view.file ?? ""}` : "";
   useEffect(() => {
     if (!where) return;
-    const target = pendingAnchor ? document.getElementById(pendingAnchor) : null;
-    pendingAnchor = null;
-    if (target) { bringTo(target); return; }
+    if (view.at && !view.file) {
+      const el = document.getElementById(anchorOf(view.at) ?? "");
+      if (el) { land(el); return; }
+    }
+    if (view.at && file) return;
     window.scrollTo({ top: 0 });
     heading.current?.focus({ preventScroll: true });
-  }, [where]);
+  }, [where, view.at]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!view.category) return <Overview label={label} hint={hint} q={view.q ?? ""} />;
 
-  const file = fileIn(category, view.file);
   let body: ReactNode;
   if (!category) {
-    body = <NotFound heading={heading} title="Not in the code map" text={<>There is no category “{view.category}” in the code map.</>} back={{ to: codeRoute({}), label: "Back to the code map" }} />;
+    body = <NotFound heading={heading} title="Not in the code map" text={<>There is no category “{view.category}” in the code map.</>} back={{ to: codeRoute({ q: lastQ || undefined }), label: "Back to the code map" }} />;
   } else if (view.file && !file) {
     const elsewhere = alsoIn(CATEGORIES, view.file, category.id);
     body = <NotFound heading={heading} title={`Not in ${category.title}`}
@@ -93,7 +135,7 @@ export function CodeMapPage({ label, hint }: { label: string; hint: string }) {
         {elsewhere.map((c, i) => <Fragment key={c.id}>{i > 0 && ", "}<a href={fileRoute(c.id, view.file!)}>{c.title}</a></Fragment>)}.</>}</>}
       back={{ to: codeRoute({ category: category.id }), label: `Back to ${category.title}` }} />;
   } else if (file) {
-    body = <FileView key={`${category.id}/${file.path}`} category={category} file={file} heading={heading} />;
+    body = <FileView key={`${category.id}/${file.path}`} category={category} file={file} heading={heading} at={view.at} />;
   } else {
     body = <CategoryView key={category.id} category={category} heading={heading} />;
   }
@@ -115,7 +157,7 @@ export function CodeMapPage({ label, hint }: { label: string; hint: string }) {
 function CategoryNav({ current }: { current?: string }) {
   return (
     <nav className="cm-cats" aria-label="Code map categories">
-      <a className="cm-cats-all" href={codeRoute({})}><ArrowLeft size={14} />Overview</a>
+      <a className="cm-cats-all" href={codeRoute({ q: lastQ || undefined })}><ArrowLeft size={14} aria-hidden="true" />{lastQ ? "Overview and search" : "Overview"}</a>
       {AREAS.map((a) => (
         <div key={a.id} className="cm-cats-area">
           <p className="cm-cats-title">{a.title}</p>
@@ -135,93 +177,116 @@ function Crumbs({ category, here }: { category?: CodeCategory; here?: boolean })
   const area = category && AREAS.find((a) => a.id === category.area);
   return (
     <p className="cm-crumbs">
-      <a href={codeRoute({})}>Code map</a>
+      <a href={codeRoute({ q: lastQ || undefined })}>Code map</a>
       {area && <><span aria-hidden="true">›</span><span>{area.title}</span></>}
       {category && !here && <><span aria-hidden="true">›</span><a href={codeRoute({ category: category.id })}>{category.title}</a></>}
     </p>
   );
 }
 
-function NotFound({ heading, title, text, back }: { heading: React.RefObject<HTMLHeadingElement | null>; title: string; text: ReactNode; back: { to: string; label: string } }) {
+function NotFound({ heading, title, text, back }: { heading: RefObject<HTMLHeadingElement | null>; title: string; text: ReactNode; back: { to: string; label: string } }) {
   return (
     <div className="cm-page cm-not-found">
       <Crumbs />
       <header className="admin-head"><h1 ref={heading} tabIndex={-1}>{title}</h1><p className="lead">{text}</p></header>
-      <a className="btn small" href={back.to}><ArrowLeft size={14} />{back.label}</a>
+      <a className="btn small cm-back" href={back.to}><ArrowLeft size={14} aria-hidden="true" />{back.label}</a>
     </div>
   );
 }
 
 // ---------- the overview
 
+/** The route through the map for a reviewer's first hour: the category and what it answers. */
+const FIRST_HOUR: [string, string][] = [
+  ["tables", "what is stored"],
+  ["saving", "how a row comes to be"],
+  ["vectors", "how rows become searchable by meaning"],
+  ["search", "the two searches and how they meet"],
+  ["rights", "who may do what, and where it is enforced"],
+  ["api", "the server, its routes and what it answers"],
+];
+
 function Overview({ label, hint, q }: { label: string; hint: string; q: string }) {
   const [text, setText] = useState(q);
-  useEffect(() => setText(q), [q]); // Back and Forward bring another search
+  useEffect(() => { setText(q); lastQ = q; }, [q]); // Back and Forward bring another search
   const results = useMemo(() => searchMap(CATEGORIES, text), [text]);
   const words = useMemo(() => wordsOf(text), [text]);
   const searching = words.length > 0;
   const n = hitCount(results);
-  const tables = categoryById(CATEGORIES, "tables"), vectors = categoryById(CATEGORIES, "vectors");
+  const [source, setSource] = useState<boolean | undefined>(undefined);
+  useEffect(() => { let live = true; showsSource().then((s) => { if (live) setSource(s); }); return () => { live = false; }; }, []);
+  const route = FIRST_HOUR.map(([id, line]) => ({ c: categoryById(CATEGORIES, id), line })).filter((r) => r.c);
   return (
     <div className="cm-page cm-overview">
       <header className="admin-head">
         <h1>{label}</h1>
         <p className="lead">{hint}: every part of it in a category that says what the part must do, shows how it works in flow charts and lists its files. Open a file to read it with its requirements as comments above the lines they are about.</p>
       </header>
+      {source === false && <p className="cm-nosource" role="status">Here the files themselves cannot be opened: the portal does not run beside its source code (<code>npm run dev</code> does). Their paths, what they must do, the charts and the tables are all here.</p>}
       <div className="cm-find">
         <label className="search">
           <Search size={15} aria-hidden="true" />
           <input type="search" value={text} placeholder="Find a file, a table or a word" aria-label="Find a file, a table or a word"
-            onChange={(e) => { setText(e.target.value); go({ page: "admin", section: "code", q: e.target.value }, { replace: true }); }} />
+            onChange={(e) => { setText(e.target.value); lastQ = e.target.value.trim() ? e.target.value : ""; go({ page: "admin", section: "code", q: e.target.value }, { replace: true }); }} />
         </label>
-        {!searching && tables && vectors && <p className="muted small">New to the code? Start with <a href={codeRoute({ category: tables.id })}>{tables.title}</a>, then <a href={codeRoute({ category: vectors.id })}>{vectors.title}</a>.</p>}
       </div>
       {searching
         ? <section className="cm-results" aria-labelledby="cm-results-h">
           <h2 id="cm-results-h" aria-live="polite">{n === 0 ? "Nothing found" : `${n} ${n === 1 ? "place" : "places"} in ${results.length} ${results.length === 1 ? "category" : "categories"}`}</h2>
-          {n === 0 && <p className="muted">No path, role, requirement or table contains all of “{text.trim()}”. Try fewer or shorter words.</p>}
+          {n === 0 && <p className="muted">No category, path, requirement, table, chart or example contains all of “{text.trim()}”. Try fewer or shorter words.</p>}
           {results.map((r) => <ResultGroup key={r.category.id} category={r.category} hits={r.hits} words={words} />)}
         </section>
-        : AREAS.map((a) => (
-          <section key={a.id} className="cm-area" aria-labelledby={`cm-area-${a.id}`}>
-            <div className="cm-area-head"><h2 id={`cm-area-${a.id}`}>{a.title}</h2><p className="muted">{a.hint}</p></div>
-            <ul className="cm-cards">
-              {categoriesOf(CATEGORIES, a.id).map((c) => (
-                <li key={c.id}>
-                  <a className="cm-card" href={codeRoute({ category: c.id })}>
-                    <h3>{c.title}</h3>
-                    <p>{c.summary ? <Txt text={firstSentence(c.summary)} /> : "Not written yet."}</p>
-                    <span className="cm-count">{countLine(c)}</span>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
+        : <>
+          {route.length > 0 && (
+            <section className="cm-first" aria-labelledby="cm-first-h">
+              <h2 id="cm-first-h">The first hour</h2>
+              <ol>
+                {route.map(({ c, line }) => <li key={c!.id}><a href={codeRoute({ category: c!.id })}>{c!.title}</a><span> - {line}</span></li>)}
+              </ol>
+            </section>
+          )}
+          {AREAS.map((a) => (
+            <section key={a.id} className="cm-area" aria-labelledby={`cm-area-${a.id}`}>
+              <div className="cm-area-head"><h2 id={`cm-area-${a.id}`}>{a.title}</h2><p className="muted">{a.hint}</p></div>
+              <ul className="cm-cards">
+                {categoriesOf(CATEGORIES, a.id).map((c) => (
+                  <li key={c.id}>
+                    <a className="cm-card" href={codeRoute({ category: c.id })}>
+                      <h3>{c.title}</h3>
+                      <p>{c.summary ? <Txt text={firstSentence(c.summary)} /> : "Not written yet."}</p>
+                      <span className="cm-count">{countLine(c)}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </>}
     </div>
   );
 }
 
-const HIT_ICON = { file: FileCode2, requirement: MessageSquareText, table: Table2 } as const;
-const HIT_WORD = { file: "File", requirement: "Requirement", table: "Table" } as const;
+const HIT_ICON = { category: Layers, file: FileCode2, requirement: MessageSquareText, table: Table2, chart: Workflow, example: ArrowDown } as const;
+const HIT_WORD = { category: "Category", file: "File", requirement: "Requirement", table: "Table", chart: "Chart", example: "Worked example" } as const;
 
 function ResultGroup({ category, hits, words }: { category: CodeCategory; hits: MapHit[]; words: string[] }) {
   const [all, setAll] = useState(false);
   const shown = all ? hits : hits.slice(0, HITS_SHOWN);
-  const target = (h: MapHit) => (h.file ? fileRoute(category.id, h.file) : codeRoute({ category: category.id }));
+  const target = (h: MapHit) => (h.file ? fileRoute(category.id, h.file, h.at) : codeRoute({ category: category.id, at: h.at }));
   return (
     <div className="cm-group">
       <h3><a href={codeRoute({ category: category.id })}>{category.title}</a><span className="cm-count">{hits.length}</span></h3>
       <ul className="cm-hits">
         {shown.map((h, i) => {
           const Icon = HIT_ICON[h.kind];
+          const prose = h.kind === "requirement" || h.kind === "category" || h.kind === "chart" || h.kind === "example";
           return (
             <li key={i}>
-              <a href={target(h)} onClick={() => { pendingAnchor = h.table ? tableAnchor(h.table) : h.kind === "requirement" && !h.file ? "code-must" : null; }}>
+              <a href={target(h)}>
                 <Icon size={15} aria-hidden="true" /><span className="cm-sr">{HIT_WORD[h.kind]}: </span>
                 <span className="cm-hit-text">
-                  <span className={h.kind === "requirement" ? "" : "cm-path"}>{h.kind === "requirement" ? <Txt text={h.text} words={words} /> : <Marked text={h.text} words={words} />}</span>
-                  {h.detail && <em><Txt text={h.detail} words={words} /></em>}
+                  <span className={prose ? "" : "cm-path"}>{prose ? <Txt text={h.text} words={words} /> : <Marked text={h.text} words={words} />}</span>
+                  {h.detail && <em><Txt text={h.kind === "category" ? firstSentence(h.detail) : h.detail} words={words} /></em>}
                 </span>
               </a>
             </li>
@@ -236,16 +301,16 @@ function ResultGroup({ category, hits, words }: { category: CodeCategory; hits: 
 // ---------- a category
 
 /** A requirement drawn as a review comment. */
-function Comment({ children, at, id, label }: { children: ReactNode; at?: ReactNode; id?: string; label?: string }) {
+function Comment({ children, at }: { children: ReactNode; at?: ReactNode }) {
   return (
-    <div className="cm-comment" role="note" id={id} tabIndex={id ? -1 : undefined} aria-label={label}>
+    <div className="cm-comment" role="note">
       <MessageSquareText size={15} aria-hidden="true" />
       <div><p>{children}</p>{at && <p className="cm-at">{at}</p>}</div>
     </div>
   );
 }
 
-/** A path that opens its file where the map describes it; plain text where no category does. */
+/** A path that opens its file where the map describes it (a test where a file names it); plain text where no category does. */
 function FileLink({ path, from }: { path: string; from?: string }) {
   const home = fileHome(CATEGORIES, from, path);
   return home ? <a className="cm-path" href={fileRoute(home, path)}>{path}</a> : <code className="cm-path">{path}</code>;
@@ -255,7 +320,16 @@ function PathList({ paths, from }: { paths: string[]; from?: string }) {
   return <>{paths.map((p, i) => <Fragment key={p}>{i > 0 && <span className="cm-sep" aria-hidden="true"> · </span>}<FileLink path={p} from={from} /></Fragment>)}</>;
 }
 
-function CategoryView({ category: c, heading }: { category: CodeCategory; heading: React.RefObject<HTMLHeadingElement | null> }) {
+/** A box that scrolls inside itself; a Tab stop only when it has more than it shows. */
+function ScrollBox({ className, label, children, as = "div" }: { className: string; label: string; children: ReactNode; as?: "div" | "pre" }) {
+  const ref = useRef<HTMLDivElement & HTMLPreElement>(null);
+  const over = useOverflows(ref);
+  const Tag = as;
+  return <Tag ref={ref} className={className} tabIndex={over ? 0 : undefined} role={over ? "region" : undefined} aria-label={over ? label : undefined}>{children}</Tag>;
+}
+
+function CategoryView({ category: c, heading }: { category: CodeCategory; heading: RefObject<HTMLHeadingElement | null> }) {
+  const [filesMode, setFilesMode] = usePref(FILES_KEY, "comments");
   const parts = [
     { id: "code-must", label: "What it must do", n: c.requirements.length },
     { id: "code-charts", label: "How it works", n: c.charts.length },
@@ -263,8 +337,17 @@ function CategoryView({ category: c, heading }: { category: CodeCategory; headin
     { id: "code-examples", label: "Examples", n: c.examples?.length ?? 0 },
     { id: "code-files", label: "Files", n: c.files.length },
   ].filter((p) => p.n > 0);
+  /** Jumps to a place of this page and keeps it in the address. */
+  const jump = (at: string) => { keepPlace({ category: c.id, at }); land(document.getElementById(anchorOf(at) ?? "")); };
+  // a link to a file (or anywhere in the map) from a block of this page: the address first keeps
+  // the block, so that the browser's Back returns to it
+  const remember = (e: React.MouseEvent) => {
+    const a = (e.target as Element).closest?.("a[href^='#/admin/code/']");
+    const block = a?.closest<HTMLElement>("[data-at]");
+    if (a && block?.dataset.at) keepPlace({ category: c.id, at: block.dataset.at });
+  };
   return (
-    <div className="cm-page cm-category">
+    <div className="cm-page cm-category" onClickCapture={remember}>
       <Crumbs category={c} here />
       <header className="admin-head">
         <h1 ref={heading} tabIndex={-1}>{c.title}</h1>
@@ -274,14 +357,14 @@ function CategoryView({ category: c, heading }: { category: CodeCategory; headin
       {parts.length > 1 && (
         <nav className="cm-jump" aria-label="On this page">
           {parts.map((p) => (
-            <button key={p.id} type="button" className="chip" onClick={() => bringTo(document.getElementById(p.id))}>{p.label}<span>{p.n}</span></button>
+            <button key={p.id} type="button" className="chip" onClick={() => land(document.getElementById(p.id), false)}>{p.label}<span>{p.n}</span></button>
           ))}
         </nav>
       )}
       {c.requirements.length > 0 && (
         <section id="code-must" className="cm-part" tabIndex={-1} aria-labelledby="code-must-h">
           <h2 id="code-must-h">What this part must do</h2>
-          <ul className="cm-reqs">{c.requirements.map((r, i) => <li key={i}><Comment><Txt text={r} /></Comment></li>)}</ul>
+          <ul className="cm-reqs">{c.requirements.map((r, i) => <li key={i} id={`code-must-${i}`} tabIndex={-1}><Comment><Txt text={r} /></Comment></li>)}</ul>
         </section>
       )}
       {c.charts.length > 0 && (
@@ -293,18 +376,35 @@ function CategoryView({ category: c, heading }: { category: CodeCategory; headin
       {(c.tables?.length ?? 0) > 0 && (
         <section id="code-tables" className="cm-part" tabIndex={-1} aria-labelledby="code-tables-h">
           <h2 id="code-tables-h">Tables</h2>
+          {c.tables!.length > 3 && (
+            <ul className="cm-index" aria-label="Tables of this part">
+              {c.tables!.map((t) => <li key={t.name}><button type="button" onClick={() => jump(`table-${t.name}`)}><span className="cm-path">{t.name}</span><em><Txt text={firstSentence(t.purpose)} /></em></button></li>)}
+            </ul>
+          )}
           {c.tables!.map((t) => <TableBlock key={t.name} table={t} from={c.id} />)}
         </section>
       )}
       {(c.examples?.length ?? 0) > 0 && (
         <section id="code-examples" className="cm-part" tabIndex={-1} aria-labelledby="code-examples-h">
           <h2 id="code-examples-h">Worked examples</h2>
-          {c.examples!.map((e) => <ExampleBlock key={e.title} example={e} from={c.id} />)}
+          {c.examples!.map((e, i) => <ExampleBlock key={e.title} example={e} index={i} from={c.id} />)}
         </section>
       )}
       <section id="code-files" className="cm-part" tabIndex={-1} aria-labelledby="code-files-h">
-        <h2 id="code-files-h">Files</h2>
-        <ul className="cm-files">{c.files.map((f) => <FileBlock key={f.path} file={f} category={c} />)}</ul>
+        <div className="cm-part-head">
+          <h2 id="code-files-h">Files</h2>
+          <div className="seg" role="group" aria-label="Show the files">
+            {([["comments", "With comments"], ["paths", "Paths only"]] as const).map(([k, l]) => (
+              <button key={k} type="button" className={`seg-item ${filesMode === k ? "on" : ""}`} aria-pressed={filesMode === k} onClick={() => setFilesMode(k)}>{l}</button>
+            ))}
+          </div>
+        </div>
+        {c.files.length > 6 && filesMode === "comments" && (
+          <ul className="cm-index" aria-label="Files of this part">
+            {c.files.map((f) => <li key={f.path}><button type="button" onClick={() => jump(`file-${f.path}`)}><span className="cm-path">{f.path}</span><em><Txt text={firstSentence(f.role)} /></em></button></li>)}
+          </ul>
+        )}
+        <ul className={`cm-files ${filesMode === "paths" ? "compact" : ""}`}>{c.files.map((f) => <FileBlock key={f.path} file={f} category={c} compact={filesMode === "paths"} />)}</ul>
       </section>
     </div>
   );
@@ -313,26 +413,37 @@ function CategoryView({ category: c, heading }: { category: CodeCategory; headin
 const NO_STEPS = new Set<string>();
 
 function Chart({ chart }: { chart: CodeChart }) {
+  const [big, setBig] = useState(false);
+  const at = `chart-${chart.process.id}`;
   return (
-    <figure className="cm-chart guide-fig">
-      <h3>{chart.process.title}</h3>
-      <FlowView bare editable={false} process={chart.process} selectedId={null} done={NO_STEPS} feedback={[]} onSelect={() => {}} />
+    <figure className="cm-chart guide-fig" id={anchorOf(at)} data-at={at} tabIndex={-1}>
+      <div className="cm-chart-head">
+        <h3>{chart.process.title}</h3>
+        <button type="button" className="btn small ghost" onClick={() => setBig(true)} aria-label={`Enlarge the chart “${chart.process.title}”`}><Maximize2 size={14} aria-hidden="true" />Enlarge</button>
+      </div>
+      <FlowView bare bareMin={CHART_MIN} editable={false} process={chart.process} selectedId={null} done={NO_STEPS} feedback={[]} onSelect={() => {}} />
       <figcaption><Txt text={chart.caption} /></figcaption>
+      {big && (
+        <Modal title={chart.process.title} subtitle={<Txt text={chart.caption} />} onClose={() => setBig(false)} className="cm-enlarge">
+          <FlowView editable={false} follow={false} process={chart.process} selectedId={null} done={NO_STEPS} feedback={[]} onSelect={() => {}} />
+        </Modal>
+      )}
     </figure>
   );
 }
 
 function TableBlock({ table: t, from }: { table: CodeTable; from: string }) {
+  const id = tableAnchor(t.name);
   return (
-    <article className="cm-table" id={tableAnchor(t.name)} tabIndex={-1} aria-labelledby={`${tableAnchor(t.name)}-h`}>
-      <h3 id={`${tableAnchor(t.name)}-h`}><Table2 size={16} aria-hidden="true" /><span className="cm-path">{t.name}</span></h3>
+    <article className="cm-table" id={id} data-at={`table-${t.name}`} tabIndex={-1} aria-labelledby={`${id}-h`}>
+      <h3 id={`${id}-h`}><Table2 size={16} aria-hidden="true" /><span className="cm-path">{t.name}</span></h3>
       <p><Txt text={t.purpose} /></p>
-      <div className="cm-scroll" tabIndex={0} role="region" aria-label={`Columns of ${t.name}`}>
+      <ScrollBox className="cm-scroll" label={`Columns of ${t.name}`}>
         <table className="cm-cols">
           <thead><tr><th scope="col">Column</th><th scope="col">Type</th><th scope="col">Note</th></tr></thead>
           <tbody>{t.columns.map((col) => <tr key={col.name}><td className="cm-path">{col.name}</td><td className="cm-path cm-type">{col.type}</td><td>{col.note ? <Txt text={col.note} /> : ""}</td></tr>)}</tbody>
         </table>
-      </div>
+      </ScrollBox>
       {(t.keys?.length ?? 0) > 0 && <><h4>Keys, references and indexes</h4><ul className="cm-plain">{t.keys!.map((k, i) => <li key={i}><Txt text={k} /></li>)}</ul></>}
       {(t.rules?.length ?? 0) > 0 && <><h4>What its rows keep true</h4><ul className="cm-reqs">{t.rules!.map((r, i) => <li key={i}><Comment><Txt text={r} /></Comment></li>)}</ul></>}
       <dl className="cm-facts">
@@ -344,10 +455,11 @@ function TableBlock({ table: t, from }: { table: CodeTable; from: string }) {
   );
 }
 
-function ExampleBlock({ example: e, from }: { example: CodeExample; from: string }) {
+function ExampleBlock({ example: e, index, from }: { example: CodeExample; index: number; from: string }) {
+  const at = `example-${index}`;
   return (
-    <article className="cm-example">
-      <h3>{e.title}</h3>
+    <article className="cm-example" id={anchorOf(at)} data-at={at} tabIndex={-1}>
+      <h3><Txt text={e.title} /></h3>
       <p className="muted"><Txt text={e.caption} /></p>
       <ol className="cm-stages">
         {e.stages.map((s, i) => (
@@ -356,7 +468,7 @@ function ExampleBlock({ example: e, from }: { example: CodeExample; from: string
             <div className="cm-stage">
               <p className="cm-stage-head"><span className="cm-stage-n">{i + 1}</span><strong><Txt text={s.label} /></strong>{s.where && <FileLink path={s.where} from={from} />}</p>
               {s.note && <p className="cm-stage-note"><Txt text={s.note} /></p>}
-              <pre className="cm-shape" tabIndex={0} aria-label={`${s.label}: the data`}>{s.shape}</pre>
+              <ScrollBox as="pre" className="cm-shape" label={`${s.label}: the data`}>{s.shape}</ScrollBox>
             </div>
           </li>
         ))}
@@ -376,25 +488,31 @@ function Tests({ tests, from }: { tests?: string[]; from: string }) {
   return <p className="cm-tests"><FlaskConical size={14} aria-hidden="true" /><span>Tested by:</span> <PathList paths={tests} from={from} /></p>;
 }
 
-function FileBlock({ file: f, category: c }: { file: CodeFile; category: CodeCategory }) {
+function FileBlock({ file: f, category: c, compact }: { file: CodeFile; category: CodeCategory; compact?: boolean }) {
+  const at = `file-${f.path}`;
   return (
-    <li className="cm-file">
+    <li className="cm-file" id={fileAnchor(f.path)} data-at={at} tabIndex={-1}>
       <div className="cm-file-head">
         <h3><a className="cm-path" href={fileRoute(c.id, f.path)}>{f.path}</a></h3>
         {c.start === f.path && <span className="cm-start">Read first</span>}
-        <a className="btn small ghost cm-open" href={fileRoute(c.id, f.path)} aria-label={`Open ${f.path}`}><FileCode2 size={14} aria-hidden="true" />Open</a>
+        {compact && f.requirements.length > 0 && <span className="cm-count">{f.requirements.length} {f.requirements.length === 1 ? "comment" : "comments"}</span>}
+        {!compact && <a className="btn small ghost cm-open" href={fileRoute(c.id, f.path)} aria-label={`Open ${f.path}`}><FileCode2 size={14} aria-hidden="true" />Open</a>}
       </div>
       <p className="cm-role"><Txt text={f.role} /></p>
-      {f.requirements.length > 0 && <ul className="cm-reqs">{f.requirements.map((r, i) => <li key={i}><Comment at={r.at ? <>at <code>{r.at}</code></> : undefined}><Txt text={r.text} /></Comment></li>)}</ul>}
-      <Tests tests={f.tests} from={c.id} />
-      <AlsoIn path={f.path} category={c.id} />
+      {!compact && <>
+        {f.requirements.length > 0 && <ul className="cm-reqs">{f.requirements.map((r, i) => (
+          <li key={i}><Comment at={r.at ? <>at <a href={fileRoute(c.id, f.path, `req-${i}`)}><code>{r.at}</code></a></> : undefined}><Txt text={r.text} /></Comment></li>
+        ))}</ul>}
+        <Tests tests={f.tests} from={c.id} />
+        <AlsoIn path={f.path} category={c.id} />
+      </>}
     </li>
   );
 }
 
 // ---------- a file
 
-type Source = { state: "loading" } | { state: "none" } | { state: "error"; message: string } | { state: "ok"; text: string };
+type Source = { state: "loading" } | { state: "off" } | { state: "missing" } | { state: "error"; message: string } | { state: "ok"; text: string };
 
 // whether this installation shows its source at all, asked once
 let canShow: Promise<boolean | undefined> | null = null;
@@ -407,11 +525,13 @@ function useSource(path: string): [Source, () => void] {
     let live = true;
     setSource({ state: "loading" });
     (async () => {
-      if ((await showsSource()) === false) return { state: "none" } as Source;
+      const shows = await showsSource();
+      if (shows === false) return { state: "off" } as Source;
       try {
         return { state: "ok", text: (await loadSource(path)).text } as Source;
       } catch (e) {
-        if (e instanceof ApiError && e.status === 404) return { state: "none" } as Source;
+        // the portal shows source, but not this file; where it is not known, a 404 means the source is off
+        if (e instanceof ApiError && e.status === 404) return { state: shows ? "missing" : "off" } as Source;
         return { state: "error", message: e instanceof Error ? e.message : String(e) } as Source;
       }
     })().then((s) => { if (live) setSource(s); });
@@ -431,15 +551,40 @@ function CopyPath({ path }: { path: string }) {
   );
 }
 
-function FileView({ category: c, file: f, heading }: { category: CodeCategory; file: CodeFile; heading: React.RefObject<HTMLHeadingElement | null> }) {
+function StepFiles({ c, prev, next }: { c: CodeCategory; prev?: CodeFile; next?: CodeFile }) {
+  return (
+    <span className="cm-step">
+      {prev && <a className="btn small ghost" href={fileRoute(c.id, prev.path)} title={prev.path} aria-label={`Previous file: ${prev.path}`}><ChevronLeft size={14} aria-hidden="true" />{baseName(prev.path)}</a>}
+      {next && <a className="btn small ghost" href={fileRoute(c.id, next.path)} title={next.path} aria-label={`Next file: ${next.path}`}>{baseName(next.path)}<ChevronRight size={14} aria-hidden="true" /></a>}
+    </span>
+  );
+}
+
+function FileView({ category: c, file: f, heading, at }: { category: CodeCategory; file: CodeFile; heading: RefObject<HTMLHeadingElement | null>; at?: string }) {
   const [source, retry] = useSource(f.path);
+  const own = isOwnFile(c, f.path);
   const { prev, next, index } = neighbours(c, f.path);
   const lines = useMemo(() => (source.state === "ok" ? linesOf(source.text) : null), [source]);
   const placed = useMemo(() => (lines ? placeComments(lines, f.requirements) : null), [lines, f.requirements]);
-  // without the text, every requirement is shown at the top, the anchored ones with the line they are about
-  const top: { r: Requirement; lost?: boolean }[] = placed
-    ? [...placed.top.map((r) => ({ r })), ...placed.lost.map((r) => ({ r, lost: true }))]
-    : f.requirements.map((r) => ({ r }));
+  const [wrap, setWrap] = usePref(WRAP_KEY, "0");
+  // Back to the category returns to this file's row (a test: to the row of the file that names it)
+  const row = own ? f.path : testedFiles(c, f.path)[0]?.path;
+  /** Jumps to a requirement's comment (or its entry when it is not on a line) and keeps it in the address. */
+  const toReq = useCallback((i: number) => {
+    keepPlace({ category: c.id, file: f.path, at: `req-${i}` });
+    land(document.getElementById(anchorOf(`req-${i}`, (n) => placed?.lineOf[n] ?? -1) ?? ""));
+  }, [c.id, f.path, placed]);
+
+  // the place in the address is reached once the text is there (or known not to come)
+  const arrived = useRef(false);
+  useEffect(() => {
+    if (!at || arrived.current || source.state === "loading") return;
+    arrived.current = true;
+    const id = anchorOf(at, (n) => placed?.lineOf[n] ?? -1);
+    const el = id ? document.getElementById(id) : null;
+    if (el) requestAnimationFrame(() => land(el)); else heading.current?.focus();
+  }, [at, source.state, placed]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="cm-page cm-file-page">
       <Crumbs category={c} />
@@ -448,71 +593,105 @@ function FileView({ category: c, file: f, heading }: { category: CodeCategory; f
         <p className="lead"><Txt text={f.role} /></p>
       </header>
       <div className="cm-file-bar">
-        <a className="btn small" href={codeRoute({ category: c.id })}><ArrowLeft size={14} aria-hidden="true" />Back to {c.title}</a>
+        <a className="btn small" href={codeRoute({ category: c.id, at: row ? `file-${row}` : undefined })}><ArrowLeft size={14} aria-hidden="true" />Back to {c.title}</a>
         <CopyPath path={f.path} />
-        <span className="cm-pos">File {index + 1} of {c.files.length}</span>
-        <span className="cm-step">
-          {prev ? <a className="btn small ghost" href={fileRoute(c.id, prev.path)} title={prev.path} aria-label={`Previous file: ${prev.path}`}><ChevronLeft size={14} aria-hidden="true" />{baseName(prev.path)}</a> : null}
-          {next ? <a className="btn small ghost" href={fileRoute(c.id, next.path)} title={next.path} aria-label={`Next file: ${next.path}`}>{baseName(next.path)}<ChevronRight size={14} aria-hidden="true" /></a> : null}
-        </span>
+        {own && <span className="cm-pos">File {index + 1} of {c.files.length}</span>}
+        {own && <StepFiles c={c} prev={prev} next={next} />}
       </div>
       <Tests tests={f.tests} from={c.id} />
       <AlsoIn path={f.path} category={c.id} />
-      {top.length > 0 && (
+      {f.requirements.length > 0 && (
         <section className="cm-part" aria-labelledby="cm-top-h">
           <h2 id="cm-top-h">What this file must do</h2>
           <ul className="cm-reqs">
-            {top.map(({ r, lost }, i) => (
-              <li key={i}>
-                <Comment at={lost ? <span className="cm-lost">Not placed: the line it points at was not found (<code>{r.at}</code>).</span> : !placed && r.at ? <>at <code>{r.at}</code></> : undefined}><Txt text={r.text} /></Comment>
-              </li>
-            ))}
+            {f.requirements.map((r, i) => {
+              const line = placed ? placed.lineOf[i] : -1;
+              const where = placed
+                ? line >= 0 ? <button type="button" className="link-btn cm-line-link" onClick={() => toReq(i)}>line {line + 1}</button>
+                  : r.at ? <span className="cm-lost">Not placed: the line it points at was not found (<code>{r.at}</code>).</span> : <>about the whole file</>
+                : r.at ? <>at <code>{r.at}</code></> : undefined;
+              return <li key={i} id={`cm-req-${i}`} tabIndex={-1}><Comment at={where}><Txt text={r.text} /></Comment></li>;
+            })}
           </ul>
         </section>
       )}
       <section className="cm-part" aria-labelledby="cm-source-h">
         <h2 id="cm-source-h">The file</h2>
         {source.state === "loading" && <p className="muted loading" role="status">Loading the file…</p>}
-        {source.state === "none" && <p className="cm-nosource" role="status">The file itself is shown only where the portal runs beside its source code (<code>npm run dev</code>). Its path and what it must do are above.</p>}
+        {source.state === "off" && <p className="cm-nosource" role="status">The file itself is shown only where the portal runs beside its source code (<code>npm run dev</code>). Its path and what it must do are above.</p>}
+        {source.state === "missing" && <p className="cm-nosource" role="status">This file cannot be shown here: it is not tracked by git yet, or it is not a text file the portal may show. Its path and what it must do are above.</p>}
         {source.state === "error" && <LoadError what="The file could not be loaded." error={source.message} onRetry={retry} />}
-        {lines && placed && <SourceText path={f.path} lines={lines} placed={placed} />}
+        {lines && placed && <>
+          <ReadBar placed={placed} wrap={wrap === "1"} setWrap={(on) => setWrap(on ? "1" : "0")} next={own ? next : undefined} c={c} />
+          <SourceText path={f.path} lines={lines} placed={placed} wrap={wrap === "1"} />
+          {own && (prev || next) && <div className="cm-file-foot"><span className="cm-pos">File {index + 1} of {c.files.length}</span><StepFiles c={c} prev={prev} next={next} /></div>}
+        </>}
       </section>
     </div>
   );
 }
 
-/** The text of a file with line numbers, its anchored requirements as comment blocks above their lines. */
-const SourceText = memo(function SourceText({ path, lines, placed }: { path: string; lines: string[]; placed: Placement }) {
-  const quiet = useMemo(() => commentLineFlags(path, lines), [path, lines]);
+/** The bar that stays in view while a file is read: from comment to comment, wrapping long lines, the next file. */
+function ReadBar({ placed, wrap, setWrap, next, c }: { placed: Placement; wrap: boolean; setWrap: (on: boolean) => void; next?: CodeFile; c: CodeCategory }) {
+  const bar = useRef<HTMLDivElement>(null);
   const marks = useMemo(() => [...placed.byLine.keys()].sort((a, b) => a - b), [placed]);
-  const commentId = (i: number) => `cm-c-${i + 1}`;
-  const count = marks.reduce((n, i) => n + placed.byLine.get(i)!.length, 0);
+  const [cur, setCur] = useState(0);
+  const els = () => marks.map((i) => document.getElementById(`cm-c-${i + 1}`));
+  const line = () => (bar.current?.getBoundingClientRect().bottom ?? 0) + 16;
+  useEffect(() => {
+    if (!marks.length) return;
+    let frame = 0;
+    const on = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setCur(commentAt(els().map((e) => e?.getBoundingClientRect().top ?? Infinity), line() + 24)));
+    };
+    on();
+    window.addEventListener("scroll", on, { passive: true });
+    return () => { window.removeEventListener("scroll", on); cancelAnimationFrame(frame); };
+  }, [marks]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the next comment is the first below the bar, the previous one the last above it
+  const go = (dir: 1 | -1) => {
+    const y = line(), tops = els().map((e) => e?.getBoundingClientRect().top ?? 0);
+    const to = dir === 1 ? tops.findIndex((t) => t > y + 8) : tops.map((t, i) => (t < y - 8 ? i : -1)).filter((i) => i >= 0).pop() ?? -1;
+    if (to >= 0) land(els()[to]);
+  };
   return (
-    <>
-      {count > 0 && (
-        <p className="cm-marks">
-          <span>{commentCount(count)}:</span>{" "}
-          {marks.map((i, k) => (
-            <Fragment key={i}>{k > 0 && <span className="cm-sep" aria-hidden="true"> · </span>}
-              <button type="button" className="link-btn" onClick={() => bringTo(document.getElementById(commentId(i)))}>{k === 0 ? `line ${i + 1}` : i + 1}</button>
-            </Fragment>
-          ))}
-        </p>
+    <div className="cm-readbar" ref={bar} role="toolbar" aria-label="Reading this file">
+      {marks.length > 0 && (
+        <span className="cm-readbar-comments">
+          <button type="button" className="icon-btn" onClick={() => go(-1)} aria-label="Previous comment"><ChevronUp size={16} aria-hidden="true" /></button>
+          <span className="cm-readbar-n" aria-live="polite">{cur > 0 ? `Comment ${cur} of ${marks.length}` : commentCount(marks.length)}</span>
+          <button type="button" className="icon-btn" onClick={() => go(1)} aria-label="Next comment"><ChevronDown size={16} aria-hidden="true" /></button>
+        </span>
       )}
-      <div className="cm-code" role="region" aria-label={`Source of ${path}`} tabIndex={0} style={{ "--cm-digits": String(lines.length).length } as React.CSSProperties}>
-        <div className="cm-code-inner">
-          {lines.map((line, i) => (
-            <Fragment key={i}>
-              {placed.byLine.has(i) && (
-                <div className="cm-inline" id={commentId(i)} tabIndex={-1} role="note" aria-label={`Requirement at line ${i + 1}`}>
-                  {placed.byLine.get(i)!.map((r, k) => <p key={k}><MessageSquareText size={14} aria-hidden="true" /><span><Txt text={r.text} /></span></p>)}
-                </div>
-              )}
-              <div className={quiet[i] ? "cm-line quiet" : "cm-line"}><span className="cm-ln" aria-hidden="true">{i + 1}</span><span className="cm-text">{line || " "}</span></div>
-            </Fragment>
-          ))}
-        </div>
+      <label className="switch cm-wrap">
+        <input type="checkbox" checked={wrap} onChange={(e) => setWrap(e.target.checked)} />
+        <span className="switch-ui" />Wrap lines
+      </label>
+      {next && <a className="btn small ghost cm-readbar-next" href={fileRoute(c.id, next.path)} title={next.path} aria-label={`Next file: ${next.path}`}>Next: {baseName(next.path)}<ChevronRight size={14} aria-hidden="true" /></a>}
+    </div>
+  );
+}
+
+/** The text of a file with line numbers, its anchored requirements as comment blocks above their lines. */
+const SourceText = memo(function SourceText({ path, lines, placed, wrap }: { path: string; lines: string[]; placed: Placement; wrap: boolean }) {
+  const quiet = useMemo(() => commentLineFlags(path, lines), [path, lines]);
+  const box = useRef<HTMLDivElement>(null);
+  const over = useOverflows(box, wrap);
+  return (
+    <div ref={box} className={`cm-code ${wrap ? "wrap" : ""}`} role="region" aria-label={`Source of ${path}`} tabIndex={over ? 0 : undefined} style={{ "--cm-digits": String(lines.length).length } as React.CSSProperties}>
+      <div className="cm-code-inner">
+        {lines.map((line, i) => (
+          <Fragment key={i}>
+            {placed.byLine.has(i) && (
+              <div className="cm-inline" id={`cm-c-${i + 1}`} tabIndex={-1} role="note" aria-label={`Requirement at line ${i + 1}`}>
+                {placed.byLine.get(i)!.map((r, k) => <p key={k}><MessageSquareText size={14} aria-hidden="true" /><span><Txt text={r.text} /></span></p>)}
+              </div>
+            )}
+            <div className={quiet[i] ? "cm-line quiet" : "cm-line"}><span className="cm-ln" aria-hidden="true">{i + 1}</span><span className="cm-text">{line || " "}</span></div>
+          </Fragment>
+        ))}
       </div>
-    </>
+    </div>
   );
 });

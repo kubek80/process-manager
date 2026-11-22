@@ -255,7 +255,7 @@ export function AdminPage({ section, processes, standards, feedback, meta }: {
     box.scrollLeft = Math.max(0, on.offsetLeft - box.offsetLeft - (box.clientWidth - on.offsetWidth) / 2);
   }, [current.id]);
   return (
-    <div className="page admin">
+    <div className={`page admin ${current.id === "code" ? "cm-admin" : ""}`}>
       <aside ref={nav} className="admin-nav" aria-label="Admin">
         <p className="admin-nav-title">Admin</p>
         {allowed.map((s) => (
