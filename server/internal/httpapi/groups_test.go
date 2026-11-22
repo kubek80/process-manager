@@ -75,17 +75,17 @@ func TestWhoMayDoWhatWithDrafts(t *testing.T) {
 		{"publishes it by a save", [6]int{403, 403, 403, 200, 200, 200}, put("/api/processes/np2?base=1", func(e *env) string { return e.variant("np2", "active", "Published") })},
 		{"stores it from its working draft, still a draft", [6]int{403, 200, 403, 200, 200, 200}, put("/api/processes/np4?base=1&draft=1", func(e *env) string { return e.variant("np4", "draft", "From the draft") })},
 		{"publishes it from its working draft", [6]int{403, 403, 403, 200, 200, 200}, put("/api/processes/np5?base=1&draft=1", func(e *env) string { return e.variant("np5", "active", "From the draft") })},
-		{"starts unpublished changes", [6]int{404, 200, 404, 200, 200, 200}, put("/api/processes/pubW/draft?rev=0", func(e *env) string { return e.variant("pubW", "active", "Changed") })},
-		{"is told of unpublished changes", [6]int{0, 1, 0, 1, 1, 1}, listed("pubD", func(m map[string]any) bool { return m["draft"] != nil })},
-		{"reads unpublished changes", [6]int{404, 200, 404, 200, 200, 200}, call("GET", "/api/processes/pubD/draft")},
-		{"discards unpublished changes", [6]int{404, 204, 404, 204, 204, 204}, call("DELETE", "/api/processes/pubD/draft?rev=1")},
-		{"publishes unpublished changes", [6]int{404, 403, 404, 200, 200, 200}, call("POST", "/api/processes/pubP/publish?rev=1")},
+		{"starts unpublished changes", [6]int{404, 200, 404, 200, 200, 200}, put("/api/processes/pub-w/draft?rev=0", func(e *env) string { return e.variant("pub-w", "active", "Changed") })},
+		{"is told of unpublished changes", [6]int{0, 1, 0, 1, 1, 1}, listed("pub-d", func(m map[string]any) bool { return m["draft"] != nil })},
+		{"reads unpublished changes", [6]int{404, 200, 404, 200, 200, 200}, call("GET", "/api/processes/pub-d/draft")},
+		{"discards unpublished changes", [6]int{404, 204, 404, 204, 204, 204}, call("DELETE", "/api/processes/pub-d/draft?rev=1")},
+		{"publishes unpublished changes", [6]int{404, 403, 404, 200, 200, 200}, call("POST", "/api/processes/pub-p/publish?rev=1")},
 		{"saves a published document", [6]int{403, 403, 403, 200, 200, 200}, put("/api/processes/pub1?base=1", func(e *env) string { return e.variant("pub1", "active", "Changed") })},
 		{"retires it", [6]int{403, 403, 403, 200, 200, 200}, put("/api/processes/pub2?base=1", func(e *env) string { return e.variant("pub2", "deprecated", "Title of pub2") })},
 		{"takes it back from readers", [6]int{403, 403, 403, 200, 200, 200}, put("/api/processes/pub3?base=1", func(e *env) string { return e.variant("pub3", "draft", "Title of pub3") })},
 		{"brings back a retired one", [6]int{403, 403, 403, 200, 200, 200}, put("/api/processes/old?base=1", func(e *env) string { return e.variant("old", "active", "Title of old") })},
 		{"deletes a never-published document", [6]int{404, 403, 404, 200, 200, 200}, call("DELETE", "/api/processes/np3?base=1")},
-		{"deletes a published document", [6]int{403, 403, 403, 200, 200, 200}, call("DELETE", "/api/processes/pub1?base=1")},
+		{"deletes a published document", [6]int{403, 403, 403, 200, 200, 200}, call("DELETE", "/api/processes/pub-w")},
 		{"confirms a review", [6]int{403, 403, 403, 200, 200, 200}, call("POST", "/api/processes/"+gcp+"/review?base=1")},
 		{"reads the history of a draft", [6]int{404, 200, 404, 200, 200, 200}, call("GET", "/api/history/process/np6")},
 		{"reads a version of a draft", [6]int{404, 200, 404, 200, 200, 200}, call("GET", "/api/history/process/np6/1")},
@@ -104,14 +104,14 @@ func TestWhoMayDoWhatWithDrafts(t *testing.T) {
 			for _, id := range []string{"np1", "np2", "np3", "np4", "np5", "np6"} {
 				e.store(id, "draft")
 			}
-			for _, id := range []string{"pub1", "pub2", "pub3", "pubW", "pubD", "pubP"} {
+			for _, id := range []string{"pub1", "pub2", "pub3", "pub-w", "pub-d", "pub-p"} {
 				e.store(id, "active")
 			}
 			e.store("old", "deprecated")
 			e.storeDraft("np4", "draft")
 			e.storeDraft("np5", "draft")
-			e.storeDraft("pubD", "active")
-			e.storeDraft("pubP", "active")
+			e.storeDraft("pub-d", "active")
+			e.storeDraft("pub-p", "active")
 			c := e.as(who)
 			for _, s := range steps {
 				if got, out := s.run(e, c); got != s.want[i] {
@@ -131,10 +131,10 @@ func TestAMemberIsToldWhoCanPublish(t *testing.T) {
 	m := e.as(morgan)
 	for _, c := range []struct{ method, path, body, want string }{
 		{"POST", "/api/processes/pub1/publish?rev=1", "", "Only an owner of the platform “Google Cloud”, or a process editor, can publish this process. Your draft is saved for them."},
-		{"PUT", "/api/processes/np1?base=1", e.variant("np1", "active", "x"), "Only an owner of the platform “Google Cloud”, or a process editor, can publish this process. Save it as a draft for them."},
-		{"PUT", "/api/processes/np1?base=1", e.variant("np1", "deprecated", "x"), "Only an owner of the platform “Google Cloud”, or a process editor, can retire this process."},
-		{"PUT", "/api/processes/pub1?base=1", e.variant("pub1", "draft", "x"), "Only an owner of the platform “Google Cloud”, or a process editor, can hide this process from readers."},
-		{"PUT", "/api/processes/old?base=1", e.variant("old", "active", "x"), "Only an owner of the platform “Google Cloud”, or a process editor, can publish this process. Save it as a draft for them."},
+		{"PUT", "/api/processes/np1?base=1", e.variant("np1", "active", "Xxx"), "Only an owner of the platform “Google Cloud”, or a process editor, can publish this process. Save it as a draft for them."},
+		{"PUT", "/api/processes/np1?base=1", e.variant("np1", "deprecated", "Xxx"), "Only an owner of the platform “Google Cloud”, or a process editor, can retire this process."},
+		{"PUT", "/api/processes/pub1?base=1", e.variant("pub1", "draft", "Xxx"), "Only an owner of the platform “Google Cloud”, or a process editor, can hide this process from readers."},
+		{"PUT", "/api/processes/old?base=1", e.variant("old", "active", "Xxx"), "Only an owner of the platform “Google Cloud”, or a process editor, can publish this process. Save it as a draft for them."},
 		{"DELETE", "/api/processes/np1?base=1", "", "Only an owner of the platform “Google Cloud”, or a process editor, can delete this process."},
 		// a standard of the platform and the practice: either owner can
 		{"POST", "/api/standards/" + iac + "/review?base=1", "", "Only the team that owns this, and the people who can edit it, can confirm its review."},
@@ -203,7 +203,6 @@ func TestADraftDoesNotExistForAMemberOfAnotherPlatform(t *testing.T) {
 			a, b = theirs("np1"), theirs("nothing-here")
 		}
 		s1, out1 := o.do(c.method, "/api/processes/np1"+c.query, a)
-		s2, out2 := o.do(c.method, "/api/processes/nothing-here"+c.query, b)
 		if c.query == "?base=0" || c.query == "" {
 			// creating under a taken id cannot be hidden: the same answer as for any taken id
 			if s1 != 409 || !strings.Contains(fmt.Sprint(out1["error"]), "Something else already has this id") {
@@ -211,9 +210,7 @@ func TestADraftDoesNotExistForAMemberOfAnotherPlatform(t *testing.T) {
 			}
 			continue
 		}
-		if c.method == "DELETE" && c.query == "?base=1" {
-			s2, out2 = 404, map[string]any{"error": "That does not exist."} // deleting what is not there
-		}
+		s2, out2 := o.do(c.method, "/api/processes/nothing-here"+c.query, b)
 		if s1 != s2 || fmt.Sprint(out1) != fmt.Sprint(out2) {
 			t.Errorf("%s %s: %d %v, but for an id that does not exist %d %v", c.method, c.query, s1, out1, s2, out2)
 		}

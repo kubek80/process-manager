@@ -218,7 +218,7 @@ type detailsInput struct {
 
 // detailsTries bounds how often a change of the details is applied again on the newest lists
 // when somebody else saved them at the same moment.
-const detailsTries = 5
+const detailsTries = 10
 
 // putDetails: PUT /api/groups/{teams|platforms|practices}/{id}/details. Changes the
 // description and how to reach one group, and nothing else, on the newest stored lists; saved
