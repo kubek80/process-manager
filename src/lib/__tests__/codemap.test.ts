@@ -138,7 +138,7 @@ describe("the search over the map", () => {
   });
   it("points a file's requirement at its file, a category's at the category", () => {
     const hits = searchMap(all, "outdated")[0].hits;
-    const own = hits.find((h) => h.detail === "SAVING");
+    const own = hits.find((h) => h.detail === "What this part must do");
     expect(own?.kind).toBe("requirement");
     expect(own?.file).toBeUndefined();
     expect(hits.find((h) => h.file)).toMatchObject({ kind: "requirement", file: "server/internal/docs/store.go" });

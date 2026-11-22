@@ -251,7 +251,7 @@ order by n.distance, n.kind, n.doc_id, n.part, n.item
       role: "Google Vertex AI: the :predict method of gemini-embedding-001 (by default), with retries and time limits. Never called by tests or CI.",
       requirements: [
         { text: "gemini-embedding models get one text per request (4 at a time); other models up to 250.", at: "func (v *vertex) perRequest() int {" },
-        { text: "One Embed call takes at most 20 s plus 2 s per further text; retrieval's own limit of 30 s per call is shorter for documents of more than 6 parts.", at: "func embedCeiling(n int) time.Duration {" },
+        { text: "One Embed call takes at most 20 s plus 2 s per further text; retrieval's own limit of 30 s per call (embedTimeout) is the shorter one as soon as more than 6 texts are embedded at once.", at: "func embedCeiling(n int) time.Duration {" },
         { text: "At most 3 tries, only for timeouts, broken connections, 429 and 5xx.", at: "func (v *vertex) call(ctx context.Context, texts []string, task string) ([][]float32, error) {" },
         { text: "Every vector is checked for its size and scaled to length 1.", at: "out[i] = normalise(p.Embeddings.Values)" },
       ],

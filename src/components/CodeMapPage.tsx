@@ -130,13 +130,14 @@ function CategoryNav({ current }: { current?: string }) {
   );
 }
 
-function Crumbs({ category }: { category?: CodeCategory }) {
+/** Where the page is: the map, the area, and (on a file's page) the category. */
+function Crumbs({ category, here }: { category?: CodeCategory; here?: boolean }) {
   const area = category && AREAS.find((a) => a.id === category.area);
   return (
     <p className="cm-crumbs">
       <a href={codeRoute({})}>Code map</a>
       {area && <><span aria-hidden="true">›</span><span>{area.title}</span></>}
-      {category && <><span aria-hidden="true">›</span><a href={codeRoute({ category: category.id })}>{category.title}</a></>}
+      {category && !here && <><span aria-hidden="true">›</span><a href={codeRoute({ category: category.id })}>{category.title}</a></>}
     </p>
   );
 }
@@ -264,7 +265,7 @@ function CategoryView({ category: c, heading }: { category: CodeCategory; headin
   ].filter((p) => p.n > 0);
   return (
     <div className="cm-page cm-category">
-      <Crumbs />
+      <Crumbs category={c} here />
       <header className="admin-head">
         <h1 ref={heading} tabIndex={-1}>{c.title}</h1>
         {c.summary && <p className="lead"><Txt text={c.summary} /></p>}

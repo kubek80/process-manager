@@ -42,6 +42,7 @@ code.cm-path { background: none; border: 0; padding: 0; color: var(--text-2); }
 /* the overview */
 .cm-find { display: grid; gap: 8px; }
 .cm-find .search { max-width: 560px; }
+.cm-find .search input { border: 0; height: auto; padding: 0; box-shadow: none; background: transparent; }
 .cm-find .search input::-webkit-search-cancel-button { cursor: pointer; }
 .cm-area { display: grid; gap: 12px; }
 .cm-area-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
@@ -91,7 +92,7 @@ code.cm-path { background: none; border: 0; padding: 0; color: var(--text-2); }
 .cm-cols th { text-align: left; font-size: 11.5px; font-weight: 650; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; padding: 6px 14px 6px 0; border-bottom: 1px solid var(--line-strong); }
 .cm-cols td { padding: 6px 14px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--text-2); }
 .cm-cols td.cm-path { color: var(--text); white-space: nowrap; overflow-wrap: normal; font-weight: 600; }
-.cm-cols td.cm-type { font-weight: 400; color: var(--text-2); }
+.cm-cols td.cm-type { font-weight: 400; color: var(--text-2); white-space: normal; max-width: 280px; }
 .cm-cols td:last-child { min-width: 220px; }
 .cm-plain { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 13.5px; color: var(--text-2); max-width: 90ch; }
 .cm-facts { margin: 0; display: grid; gap: 4px; font-size: 13px; }
@@ -147,6 +148,13 @@ code.cm-path { background: none; border: 0; padding: 0; color: var(--text-2); }
 .cm-inline > p svg { flex: none; margin-top: 2px; color: var(--info); }
 
 @media (max-width: 600px) {
+  /* the columns of a table as short blocks: name and type on a line, the note under them */
+  .cm-cols thead { display: none; }
+  .cm-cols tr { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .cm-cols td { padding: 0; border: 0; }
+  .cm-cols td.cm-type { max-width: none; overflow-wrap: anywhere; }
+  .cm-cols td:last-child { grid-column: 1 / -1; min-width: 0; }
+  .cm-cols td:last-child:empty { display: none; }
   .cm-file-title h1 { font-size: 18px; }
   .cm-step { margin-left: 0; }
   .cm-open { margin-left: 0; }

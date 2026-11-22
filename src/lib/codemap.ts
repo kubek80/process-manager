@@ -158,7 +158,7 @@ export function searchMap(categories: CodeCategory[], q: string): MapResult[] {
   const out: MapResult[] = [];
   for (const c of categories) {
     const files: MapHit[] = [], reqs: MapHit[] = [], tables: MapHit[] = [];
-    for (const r of c.requirements) if (hasAll(r, words)) reqs.push({ kind: "requirement", text: r, detail: c.title });
+    for (const r of c.requirements) if (hasAll(r, words)) reqs.push({ kind: "requirement", text: r, detail: "What this part must do" });
     for (const f of c.files) {
       if (hasAll(`${f.path} ${f.role}`, words)) files.push({ kind: "file", text: f.path, detail: f.role, file: f.path });
       for (const r of f.requirements) if (hasAll(r.text, words)) reqs.push({ kind: "requirement", text: r.text, detail: f.path, file: f.path });
