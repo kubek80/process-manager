@@ -192,6 +192,11 @@ func New(d Deps) http.Handler {
 
 	// who belongs to which team, platform and practice
 	mux.Handle("GET /api/members", user(a.listMembers))
+	// the owners of a platform or practice add and remove its members; the owners of a group
+	// (and lists managers) change its description and how to reach it
+	mux.Handle("POST /api/groups/{kind}/{id}/members", user(a.addMember))
+	mux.Handle("DELETE /api/groups/{kind}/{id}/members", user(a.removeMember))
+	mux.Handle("PUT /api/groups/{kind}/{id}/details", user(a.putDetails))
 
 	// admin panel
 	mux.Handle("GET /api/admin/users", admin(a.listUsers))

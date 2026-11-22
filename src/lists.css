@@ -362,3 +362,6 @@
   .search-box, .search-box.big { height: 54px; }
   .card.row .card-engage .engage-btn { height: 44px; }
 }
+
+/* Home › Browse: the number after a name is a count, not part of the name - quieter and in brackets */
+.chip .chip-count { margin-left: -1px; color: var(--text-3); font-weight: 400; font-variant-numeric: tabular-nums; }

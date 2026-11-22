@@ -5,7 +5,7 @@ import { appendStep, deleteStep, EXAMPLE, flowMoveBlocked, insertStep, movedHead
 import { issueTarget, issuesByPlace, noteMove, issuesFor, PROCESS_SECTIONS, processOutline, selectionKey, withoutEarlySuggestions, type ProcessSection, type Selection } from "../lib/editing";
 import { isDrawableProcess, processSchema, validateProcess } from "../lib/validate";
 import { useSelectedItem } from "../lib/selection";
-import { canEdit } from "../lib/rights";
+import { canDraft } from "../lib/rights";
 import { usePerms } from "../lib/session";
 import { useCatalog } from "../lib/catalog";
 import { href } from "../lib/store";
@@ -24,11 +24,15 @@ const stamp = (p: Process): Process => ({ ...p, updatedAt: today() });
 const NONE = new Set<string>();
 
 /** Who may not change a process is told so, with the way back. */
+/** Who may change a process or standard, for somebody who may not. */
+export const noRightText = (noun: string) =>
+  `You may not change this ${noun}. ${noun === "standard" ? "A standards editor" : "A process editor"} and the owners of its platform or practice can; the members of its platform or practice can save drafts of it for an owner to publish.`;
+
 export function NoRight({ noun, title, readHref }: { noun: string; title: string; readHref: string }) {
   return (
     <div className="page">
       <h1>{title}</h1>
-      <p className="muted">You may not change this {noun}. Its editors, and the owners of its platform or practice, can.</p>
+      <p className="muted">{noRightText(noun)}</p>
       <a className="btn" href={readHref}>Back to reading</a>
     </div>
   );
@@ -48,7 +52,7 @@ export function EditProcessPage(props: {
   const { catalog } = useCatalog();
   const ctx = useMemo(() => ({ processIds: all.map((p) => p.id), standardIds: standards.map((s) => s.id), catalog }), [all, standards, catalog]);
   const check = useCallback((p: Process) => validateProcess(p, ctx), [ctx]);
-  if (!canEdit(perms, "process", process)) return <NoRight noun="process" title={process.title} readHref={href({ page: "process", id: process.id, tab: "flow" })} />;
+  if (!canDraft(perms, "process", process)) return <NoRight noun="process" title={process.title} readHref={href({ page: "process", id: process.id, tab: "flow" })} />;
   return (
     <EditSession<Process> o={{
       kind: "process", doc: process, meta: props.meta, others: all, tidy, stamp, check, drawable: isDrawableProcess,

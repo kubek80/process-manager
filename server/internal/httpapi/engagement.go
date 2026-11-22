@@ -25,7 +25,7 @@ func (a *api) hiddenFor(ctx context.Context, s session) (hidden, error) {
 	}
 	out := hidden{}
 	for _, d := range drafts {
-		if !s.CanManageFeedback(d.Kind, rbac.Belongs{Owner: d.Owner, Platform: d.Platform, Practice: d.Practice}) {
+		if !s.CanSeeDraft(d.Kind, rbac.Belongs{Owner: d.Owner, Platform: d.Platform, Practice: d.Practice}) {
 			out[d.Key] = true
 		}
 	}

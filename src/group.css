@@ -1,0 +1,104 @@
+/* The page of a team, a platform or a practice (GroupPage.tsx), and the small parts that name one
+   elsewhere (GroupParts.tsx): the link to its page, the mark "You are an owner / a member", its
+   contact details. */
+
+/* ---------- the mark: what the person signed in is in a group ---------- */
+.rank-mark { display: inline-flex; align-items: center; gap: 5px; flex: none; height: 22px; padding: 0 9px 0 7px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; color: var(--accent); background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.rank-mark svg { flex: none; }
+/* a member: the same shape, quieter - outlined, not filled */
+.rank-mark.member { background: var(--surface); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+
+/* ---------- a name that leads to its page ---------- */
+a.group-link { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px; }
+a.group-link:hover { color: var(--accent); text-decoration-color: currentColor; }
+
+/* ---------- the head ---------- */
+.group-page .back { margin-bottom: 18px; }
+.group-head { display: grid; gap: 8px; }
+.group-kicker { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
+.group-kind { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.group-title-row { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 10px 20px; }
+.group-title-row h1 { flex: 1 1 320px; max-width: 900px; min-width: 0; font-size: 30px; letter-spacing: -.02em; line-height: 1.15; overflow-wrap: anywhere; }
+.group-lead { margin: 0; max-width: 72ch; white-space: pre-line; overflow-wrap: anywhere; }
+p.muted.group-lead { font-size: 15px; }
+
+/* ---------- the body: what belongs to it on the left; how to reach them and the people on the right ---------- */
+.group-body { display: grid; gap: 28px; margin-top: 28px; }
+.group-h, .group-people .cat-members h2 { font-size: 12px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+@media (min-width: 1000px) {
+  .group-body { grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); grid-template-rows: auto 1fr; grid-template-areas: "docs reach" "docs people"; gap: 24px 40px; align-items: start; }
+  .group-docs { grid-area: docs; }
+  .group-reach { grid-area: reach; }
+  .group-people { grid-area: people; }
+}
+.group-reach, .group-people { display: grid; gap: 12px; min-width: 0; padding: 18px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.group-people { gap: 0; }
+.group-people > .cat-members:first-child { padding-top: 0; border-top: 0; }
+.group-people > .cat-members + .cat-members { margin-top: 18px; }
+.group-people .cat-members h2 { display: flex; align-items: baseline; gap: 8px; }
+.group-people .cat-members h2 span { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- how to reach them ---------- */
+.contact-view { display: grid; gap: 14px; }
+.contact-form { justify-self: start; max-width: 100%; }
+.contact-form { white-space: normal; text-align: left; height: auto; min-height: 36px; padding-block: 7px; }
+.contact-list { margin: 0; display: grid; gap: 10px; }
+.contact-row { display: grid; gap: 2px; min-width: 0; }
+.contact-row dt { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.contact-row dt svg { flex: none; color: var(--text-3); }
+.contact-row dd { margin: 0 0 0 20px; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.contact-row[data-contact="other"] dd { margin-left: 0; color: var(--text-2); }
+.contact-row dd a { font-weight: 550; }
+.contact-none { margin: 0; font-size: 14px; }
+.contact-form-print { display: none; margin: 0; overflow-wrap: anywhere; }
+
+/* ---------- what belongs to it ---------- */
+.group-docs { min-width: 0; display: grid; gap: 14px; align-content: start; }
+.group-docs-head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; }
+.group-count { margin: 4px 0 0; font-size: 17px; font-weight: 650; color: var(--text); font-variant-numeric: tabular-nums; }
+.group-docs-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.group-docs .cards { margin: 0; }
+.group-more { justify-self: start; }
+.group-empty { margin: 0; padding: 22px 18px; border: 1px dashed var(--line-strong); border-radius: var(--r); text-align: center; }
+
+/* ---------- the details' fields (the group's page and Admin › Lists) ---------- */
+.contact-fields { display: grid; gap: 12px; }
+.contact-fields .field-label em { margin-left: 8px; }
+.contact-fields textarea { resize: vertical; }
+
+/* ---------- a phone ---------- */
+@media (max-width: 599px) {
+  .group-title-row h1 { font-size: 24px; }
+  .group-reach, .group-people { padding: 16px; }
+  .group-docs-head { align-items: flex-start; }
+}
+
+@media print {
+  .group-body { display: block; }
+  .group-reach, .group-people { border: 0; padding: 0; margin-bottom: 14px; }
+  .group-docs-tools, .group-more, .member-add, .contact-form { display: none !important; }
+  .contact-form-print { display: block !important; }
+  .contact-row:is([data-contact="slack"], [data-contact="chat"]) dd a::after { content: " (" attr(title) ")"; font-weight: 400; color: var(--text-3); }
+}
+
+/* ---------- Teams & tools and Admin › Lists: a team, platform or practice ---------- */
+.cat-item-text .rank-mark { align-self: flex-start; height: 19px; margin-top: 4px; padding: 0 7px 0 5px; font-size: 11px; }
+.cat-item-text .rank-mark svg { width: 12px; height: 12px; }
+.cat-detail-head .cat-rank { margin-top: 6px; }
+.cat-detail-head h2 a.group-link { text-decoration-color: color-mix(in srgb, currentColor 25%, transparent); }
+.cat-group-facts { display: grid; gap: 14px; }
+.cat-group-description { margin: 0; font-size: 15px; color: var(--text); white-space: pre-line; overflow-wrap: anywhere; }
+.cat-open-page { justify-self: start; }
+.cat-people { display: grid; gap: 18px; }
+.cat-people > .cat-members + .cat-members { padding-top: 16px; }
+/* a wide detail pane: the details and where it is used on the left, the people on the right */
+@container (min-width: 1240px) {
+  .cat-detail:has(> .cat-people) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px 36px; align-content: start; }
+  .cat-detail:has(> .cat-people) > * { max-width: none; grid-column: 1 / -1; }
+  .cat-detail:has(> .cat-people) > :is(.form, .cat-facts, .cat-group-facts, .cat-usage) { grid-column: 1; }
+  .cat-detail:has(> .cat-people) > .cat-people { grid-column: 2; grid-row: 2 / span 2; align-self: start; padding: 0 0 0 36px; border-left: 1px solid var(--line); margin-left: -18px; }
+  .cat-detail:has(> .cat-people) > .cat-people > .cat-members:first-child { padding-top: 0; border-top: 0; }
+  .cat-detail:has(> .cat-people) > .cat-danger { margin-top: 0; }
+}

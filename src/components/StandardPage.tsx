@@ -7,7 +7,7 @@ import { useSelectedItem } from "../lib/selection";
 import { useProfile } from "../lib/profile";
 import { reviewOf, statusOf } from "../lib/lifecycle";
 import { createStandardPrompt, modifyStandardPrompt } from "../lib/prompt";
-import { canEdit, canManage } from "../lib/rights";
+import { canDraft, canEdit, canManage } from "../lib/rights";
 import { usePerms } from "../lib/session";
 import { go, href, type StandardTab } from "../lib/store";
 import { isDrawableStandard, validateStandard } from "../lib/validate";
@@ -88,6 +88,8 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   const perms = usePerms();
   // a standards editor may change every standard; a platform or practice owner what belongs to theirs
   const editor = canEdit(perms, "standard", standard);
+  // "Edit" also for a member of its platform or practice: they save drafts there, an owner publishes
+  const drafts = canDraft(perms, "standard", standard);
   const manages = canManage(perms, "standard", standard);
   const doc = standard;
   const [reporting, setReporting] = useState(false);
@@ -124,7 +126,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
   const back = () => go({ page: "standards" });
   const giveFeedback = () => { setFocusFeedback(true); go({ page: "standard", id: standard.id, tab: "feedback" }); };
 
-  if (!renderable) return <NotShown kind="standard" title={doc.title || standard.id} editHref={editor ? editHref : undefined} back={back} problems={validateStandard(doc).length} />;
+  if (!renderable) return <NotShown kind="standard" title={doc.title || standard.id} editHref={drafts ? editHref : undefined} back={back} problems={validateStandard(doc).length} />;
 
   // printed: every requirement, whatever the level chosen or the reader's application
   const shown = doc.requirements.filter((r) => printing || !level || r.level === level);
@@ -153,13 +155,13 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
           {/* the review belongs to the team that issues the standard, and to whoever may edit it */}
           {(editor || manages) && review.state !== "none" && status !== "draft" && <button className={`btn ${review.state === "soon" || review.state === "overdue" ? "review-due" : "quiet"}`} onClick={() => onReviewed(meta?.version ?? 0)}
             title="Confirm that this standard is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
-          {editor && <a className="btn primary" href={editHref}><Pencil size={16} />Edit</a>}
+          {drafts && <a className="btn primary" href={editHref}><Pencil size={16} />Edit</a>}
         </>}>
         {status !== "draft" && <DocEngagement kind="standard" id={standard.id} title={doc.title} summary={doc.summary} actions={!actionsOnTabs}
           open={openCount(feedback)} resolvedHere={feedback.length - openCount(feedback)} onFeedback={giveFeedback} />}
       </DocHead>
 
-      <DraftLine meta={meta} status={status} editHref={editor ? editHref : undefined} noun="standard" />
+      <DraftLine meta={meta} status={status} editHref={drafts ? editHref : undefined} noun="standard" />
 
       <div className="tabs-row">
         <div className="tabs" role="tablist">

@@ -15,6 +15,7 @@ var DevUsers = []DevUser{
 	{User{"casey@example.com", "Casey Owner"}, "Owner for Cloud Platform team: confirms the reviews and answers the feedback of what the team maintains"},
 	{User{"riley@example.com", "Riley Security"}, "Practice owner for Cyber security and Owner for Cyber Security: edits what belongs to the practice"},
 	{User{"jordan@example.com", "Jordan Platform"}, "Platform owner for Google Cloud, Practice owner for Engineering and Owner for Cloud Platform team"},
+	{User{"morgan@example.com", "Morgan Member"}, "Platform member for Google Cloud and Practice member for Engineering: drafts what belongs to them, an owner publishes"},
 	{User{"dana@example.com", "Dana Admin"}, "Admin: everything, including who has access"},
 }
 
@@ -32,6 +33,8 @@ var DevRoles = []DevRole{
 	{"jordan@example.com", "platform-owner", "google-cloud"},
 	{"jordan@example.com", "practice-owner", "engineering"},
 	{"jordan@example.com", "owner", "cloud-platform-team"},
+	{"morgan@example.com", "platform-member", "google-cloud"},
+	{"morgan@example.com", "practice-member", "engineering"},
 }
 
 // DevUserByEmail finds a built-in user.

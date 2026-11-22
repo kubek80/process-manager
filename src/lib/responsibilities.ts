@@ -3,21 +3,24 @@ import { reviewOf, statusOf, type Dates, type ReviewInfo } from "./lifecycle";
 import type { GroupKind } from "./members";
 import { roleLine, type Groups, type UserRole } from "./users";
 
-/** A team, platform or practice somebody belongs to. */
-export interface Group { kind: GroupKind; id: string }
+/** A team, platform or practice somebody belongs to; `member`: only as a member (of a platform or practice), not as an owner. */
+export interface Group { kind: GroupKind; id: string; member?: boolean }
 /** A name for a group that is unique across the three kinds (a team and a practice may share an id). */
 export const groupKey = (g: Group) => `${g.kind}:${g.id}`;
 
 /**
  * What somebody answers for: what the teams they are Owner of maintain, and what belongs to the
- * platforms and practices they own. From these the "My responsibilities" page shows what needs
- * doing now and how everything else stands.
+ * platforms and practices they own or are a member of. From these the "My responsibilities" page
+ * shows what needs doing now and how everything else stands. What is theirs only as a member
+ * asks nothing of them but its drafts: reviews and feedback are the owners' job.
  */
 export interface Owned {
   kind: TargetKind;
   doc: Process | Standard;
   /** The groups of the person through which this is theirs, teams first. */
   groups: Group[];
+  /** Theirs only as a member of its platform or practice: they draft, an owner publishes and reviews. */
+  member: boolean;
   status: "draft" | "active" | "deprecated";
   review: ReviewInfo;
   /** Feedback that nobody marked as fixed yet, oldest first. */
@@ -36,24 +39,34 @@ export interface Task {
 const KIND_ORDER: GroupKind[] = ["team", "platform", "practice"];
 const sorted = (ids: string[] | undefined) => [...new Set(ids ?? [])].sort();
 
-/** The teams, platforms and practices somebody belongs to: teams first, then platforms, then practices. */
+const only = (ids: string[] | undefined, but: string[] | undefined) => sorted(ids).filter((id) => !(but ?? []).includes(id));
+
+/**
+ * The teams, platforms and practices somebody belongs to: teams first, then platforms, then
+ * practices; those they own before those they are only a member of (owning one wins).
+ */
 export function myGroups(perms: Perms): Group[] {
   return [
     ...sorted(perms.owns).map((id) => ({ kind: "team" as const, id })),
     ...sorted(perms.platforms).map((id) => ({ kind: "platform" as const, id })),
     ...sorted(perms.practices).map((id) => ({ kind: "practice" as const, id })),
+    ...only(perms.memberPlatforms, perms.platforms).map((id) => ({ kind: "platform" as const, id, member: true })),
+    ...only(perms.memberPractices, perms.practices).map((id) => ({ kind: "practice" as const, id, member: true })),
   ];
 }
 
 /**
  * Through which of the person's groups a process or standard is theirs: its team (when they are
- * Owner of it), its platform and its practice (when they own them). Empty: it is not theirs.
+ * Owner of it), its platform and its practice (when they own them or are a member: `member`).
+ * Owned groups first. Empty: it is not theirs.
  */
 export function groupsOf(perms: Perms, doc: { owner?: string; platform?: string; practice?: string }): Group[] {
   const out: Group[] = [];
   if (doc.owner && (perms.owns ?? []).includes(doc.owner)) out.push({ kind: "team", id: doc.owner });
   if (doc.platform && (perms.platforms ?? []).includes(doc.platform)) out.push({ kind: "platform", id: doc.platform });
   if (doc.practice && (perms.practices ?? []).includes(doc.practice)) out.push({ kind: "practice", id: doc.practice });
+  if (doc.platform && !out.some((g) => g.kind === "platform") && (perms.memberPlatforms ?? []).includes(doc.platform)) out.push({ kind: "platform", id: doc.platform, member: true });
+  if (doc.practice && !out.some((g) => g.kind === "practice") && (perms.memberPractices ?? []).includes(doc.practice)) out.push({ kind: "practice", id: doc.practice, member: true });
   return out;
 }
 
@@ -72,7 +85,7 @@ export function responsibilities(perms: Perms, only: string | null, processes: P
     const groups = groupsOf(perms, doc);
     if (!groups.length || (only !== null && !groups.some((g) => groupKey(g) === only))) return null;
     return {
-      kind, doc, groups, status: statusOf(doc), review: reviewOf(doc, since?.[kind]?.[doc.id], today),
+      kind, doc, groups, member: groups.every((g) => g.member), status: statusOf(doc), review: reviewOf(doc, since?.[kind]?.[doc.id], today),
       open: (feedback[kind][doc.id] ?? []).filter((f) => !f.resolved).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     };
   };
@@ -85,6 +98,8 @@ export function responsibilities(perms: Perms, only: string | null, processes: P
 
   const tasks: Task[] = [];
   for (const o of owned) {
+    // only a member: what waits for an owner is theirs to follow, nothing else asks for them
+    if (o.member) { if (o.status === "draft") tasks.push({ kind: "draft", item: o }); continue; }
     if (o.review.state === "overdue") tasks.push({ kind: "review-overdue", item: o });
     if (o.review.state === "soon") tasks.push({ kind: "review-soon", item: o });
     for (const f of o.open) tasks.push({ kind: "feedback", item: o, feedback: f });
@@ -128,6 +143,8 @@ export function accountRoles(p: Perms, groups: Groups): string[] {
     ...(p.standards && !p.admin ? [{ role: "standards-editor" as const, scope: "" }] : []),
     ...(p.platforms ?? []).map((scope) => ({ role: "platform-owner" as const, scope })),
     ...(p.practices ?? []).map((scope) => ({ role: "practice-owner" as const, scope })),
+    ...(p.memberPlatforms ?? []).map((scope) => ({ role: "platform-member" as const, scope })),
+    ...(p.memberPractices ?? []).map((scope) => ({ role: "practice-member" as const, scope })),
     ...(p.owns ?? []).map((scope) => ({ role: "owner" as const, scope })),
   ];
   return roles.length ? roles.map((r) => roleLine(r, groups)) : ["Reader"];

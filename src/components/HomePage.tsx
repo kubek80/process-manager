@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ArrowRight, Compass, Eye, History, ShieldCheck, Workflow } from "lucide-react";
-import type { FeedbackByTarget, Process, Standard } from "../types";
+import type { Catalog, FeedbackByTarget, Process, Standard } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { sortBookmarks, useEngagement } from "../lib/engagement";
 import { canEdit, useMe, usePerms } from "../lib/session";
@@ -8,6 +8,8 @@ import { agoText, mostViewed, recentlyUpdated, type MetaByKind } from "../lib/so
 import { rememberedMode } from "../lib/meaning";
 import { go, href } from "../lib/store";
 import { formatDate } from "../lib/dates";
+import type { GroupKind } from "../lib/members";
+import { groupEntry } from "../lib/groups";
 import { NO_CATEGORY_LABEL, search, type FilterKey, type Result } from "../lib/search";
 import { SearchBox } from "./SearchPage";
 import { DocCard, docHref } from "./DocCard";
@@ -23,11 +25,18 @@ const SHELF = 5;
 /** How many ways in each group of Browse shows before "Show all". */
 const BROWSE_FEW = 6;
 
-const WAYS: { key: Extract<FilterKey, "platform" | "practice" | "category">; title: string; hint: string }[] = [
+const WAYS: { key: Extract<FilterKey, "platform" | "practice" | "owner" | "category">; title: string; hint: string }[] = [
   { key: "platform", title: "By platform", hint: "Everything about one platform" },
   { key: "practice", title: "By practice", hint: "Everything a practice looks after" },
+  { key: "owner", title: "By team", hint: "Everything a team owns" },
   { key: "category", title: "By category", hint: "Everything on one subject" },
 ];
+/** Where a way in leads: a platform, a practice or a team to its own page, a category to the search with its filter. */
+const GROUP_OF_WAY: Partial<Record<(typeof WAYS)[number]["key"], GroupKind>> = { platform: "platform", practice: "practice", owner: "team" };
+const wayHref = (catalog: Catalog, key: (typeof WAYS)[number]["key"], value: string) => {
+  const group = GROUP_OF_WAY[key];
+  return group && groupEntry(catalog, group, value) ? href({ page: "group", kind: group, id: value }) : href({ page: "search", [key]: [value] });
+};
 
 /** The start: one search over processes and standards, what is new and used, and ways to browse. */
 export function HomePage({ processes, standards, feedback, meta }: {
@@ -159,8 +168,8 @@ export function HomePage({ processes, standards, feedback, meta }: {
                 <ul className="home-links" id={`home-links-${key}`}>
                   {(allWays[key] ? options : options.slice(0, BROWSE_FEW)).map((o) => (
                     <li key={o.value}>
-                      <a className="chip" href={href({ page: "search", [key]: [o.value] })} aria-label={`${o.label}, ${o.count} ${o.count === 1 ? "result" : "results"}`}>
-                        {o.label}<span>{o.count}</span>
+                      <a className="chip" href={wayHref(catalog, key, o.value)} aria-label={`${o.label}, ${o.count} ${o.count === 1 ? "result" : "results"}`}>
+                        {o.label}<span className="chip-count" aria-hidden="true">({o.count})</span>
                       </a>
                     </li>
                   ))}

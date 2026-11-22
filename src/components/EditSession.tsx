@@ -1,15 +1,17 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash2, TriangleAlert, Undo2 } from "lucide-react";
-import type { DocMeta, Issue, Process, Standard, TargetKind } from "../types";
+import { ArrowLeft, Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash2, TriangleAlert, Undo2, UserCheck } from "lucide-react";
+import type { DocMeta, Issue, Membership, Process, Standard, TargetKind } from "../types";
 import { conflictOf, useDraft, type Conflict, type Draft } from "../lib/draft";
-import { author, baseBehindSentence, clock, draftKindOf, draftMovedOn, draftRevisionToSend, draftSaveBase, saveCallOf, statusChangedSentence, editState, exampleIssues, isExampleIssue, issueText, statusChangeBlocked, steppedMessage, movedItem, movedMessage, moveOf, publishList, savedByText, type DraftKind } from "../lib/editing";
+import { author, baseBehindSentence, clock, draftKindOf, draftMovedOn, draftRevisionToSend, draftSaveBase, saveCallOf, statusChangedSentence, editState, exampleIssues, isExampleIssue, issueText, statusChangeBlocked, steppedMessage, movedItem, movedMessage, moveOf, publishList, savedByText, whoPublishesSentence, type DraftKind } from "../lib/editing";
 import { compare, describeChange, type Change } from "../lib/diff";
-import { belongsRefused } from "../lib/rights";
+import { belongsRefused, canPublish } from "../lib/rights";
+import { membersOf } from "../lib/members";
+import { platformName, practiceName } from "../lib/catalog";
 import { useMe, usePerms } from "../lib/session";
 import { useCatalog } from "../lib/catalog";
 import { statusOf } from "../lib/lifecycle";
 import {
-  ApiError, deleteWorkingDraft, go, guardLeaving, offerSaving, loadHistory, loadVersion, loadWorkingDraft, publishWorkingDraft, putDocReplacingDraft, putWorkingDraft, type WorkingDraft,
+  ApiError, deleteWorkingDraft, go, guardLeaving, offerSaving, loadHistory, loadMembers, loadVersion, loadWorkingDraft, publishWorkingDraft, putDocReplacingDraft, putWorkingDraft, type WorkingDraft,
 } from "../lib/store";
 import type { AiSpec } from "./AiDialog";
 import { BehindBanner, ChangeList, ConflictDialog, editNotice, EditingBoundary, HistoryDialog, savedWhen } from "./Editing";
@@ -397,6 +399,20 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
   };
 
   const keepStatus = (doc: T): T => ({ ...doc, status: unpublished ? "draft" : stored.status });
+  // A member of its platform or practice saves drafts like an owner, but cannot publish (nor
+  // retire, unpublish, bring back or delete): who can is said on the screen, by name
+  const mayPublish = canPublish(perms, kind, d.saved) && canPublish(perms, kind, d.draft);
+  const [owners, setOwners] = useState<Membership[] | null>(null);
+  useEffect(() => {
+    if (mayPublish || owners) return;
+    let live = true;
+    loadMembers().then((m) => { if (live) setOwners(m); }, () => { /* said without their names */ });
+    return () => { live = false; };
+  }, [mayPublish, owners]);
+  const publishRight = mayPublish ? "" : whoPublishesSentence(kind, ([
+    d.draft.platform ? { kind: "platform" as const, name: platformName(catalog, d.draft.platform), owners: owners ? membersOf(owners, "platform", d.draft.platform).map((m) => m.email) : [] } : null,
+    d.draft.practice ? { kind: "practice" as const, name: practiceName(catalog, d.draft.practice), owners: owners ? membersOf(owners, "practice", d.draft.practice).map((m) => m.email) : [] } : null,
+  ]).filter((g) => !!g), unsaved ? "unsaved" : working || unpublished ? "saved" : "none", !!owners);
   const rightsBlock = refused ? "Put the platform or practice back as it was (under About)." : losing ? "Keep it with a platform or practice of yours (under About)." : "";
   const jsonBlock = jsonPending ? "The JSON has changes with problems. Fix them there first." : "";
   const firstError = issues.find((i) => i.level === "error");
@@ -405,7 +421,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
     ? `First replace ${errors === 1 ? "the example text" : `the ${errors} example texts`} with your own words (under “${errors} to fix”).`
     : `First fix ${errors === 1 ? "the 1 thing" : `the ${errors} things`} listed under “${errors} to fix”.`;
   const saveBlocked = !d.dirty && !jsonPending ? "Nothing to save: all changes are saved." : undefined;
-  const publishBlocked = rightsBlock || jsonBlock || problemsBlock
+  const publishBlocked = rightsBlock || publishRight || jsonBlock || problemsBlock
     || (!unpublished && !working && !d.dirty ? "There are no changes to publish." : "") || undefined;
 
   // Save draft can always be pressed while there is something to save; when it cannot be saved
@@ -430,6 +446,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
     if (busy || d.saving) return;
     const why = rightsBlock || jsonBlock;
     if (why) return setNotice({ text: `This cannot be published yet. ${why}`, tone: "bad" });
+    if (publishRight) return setNotice({ text: publishRight, tone: "warn" });
     if (problemsBlock) { setNotice({ text: problemsBlock, tone: "bad", issue: firstError }); return goTo(firstError); }
     setDialog("publish");
   };
@@ -550,10 +567,10 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
     { label: "Change with AI", icon: <Sparkles size={16} />, hint: "Describe a change in plain words", run: () => setDialog("ai"), blocked: drawable ? undefined : "Repair the JSON first." },
     { label: json ? "Back to the editor" : "JSON", icon: <Braces size={16} />, hint: json ? undefined : "The text of the whole document", run: () => (jsonWanted ? void leaveJson() : setJsonWanted(true)), blocked: !drawable ? "It cannot be shown otherwise until the JSON is repaired." : undefined },
     ...(working ? [{ label: "Discard draft…", icon: <Undo2 size={16} />, hint: unpublished ? `Back to how it was last stored as the ${noun} itself` : `Readers keep version ${version}`, run: discardDraft, divider: true, danger: true }] : []),
-    ...(!unpublished && status === "active" ? [{ label: "Retire…", icon: <Archive size={16} />, hint: "Keep it for reference, marked as retired", run: () => setDialog("retire"), blocked: statusBlock, divider: !working }] : []),
-    ...(!unpublished && status === "deprecated" ? [{ label: "Bring back into use…", icon: <RotateCcw size={16} />, run: bringBack, blocked: statusBlock, divider: !working }] : []),
-    ...(!unpublished ? [{ label: "Unpublish…", icon: <EyeOff size={16} />, hint: "Hide it from readers again", run: unpublish, blocked: statusBlock }] : []),
-    { label: "Delete…", icon: <Trash2 size={16} />, run: remove, danger: true, divider: unpublished },
+    ...(mayPublish && !unpublished && status === "active" ? [{ label: "Retire…", icon: <Archive size={16} />, hint: "Keep it for reference, marked as retired", run: () => setDialog("retire"), blocked: statusBlock, divider: !working }] : []),
+    ...(mayPublish && !unpublished && status === "deprecated" ? [{ label: "Bring back into use…", icon: <RotateCcw size={16} />, run: bringBack, blocked: statusBlock, divider: !working }] : []),
+    ...(mayPublish && !unpublished ? [{ label: "Unpublish…", icon: <EyeOff size={16} />, hint: "Hide it from readers again", run: unpublish, blocked: statusBlock }] : []),
+    ...(mayPublish ? [{ label: "Delete…", icon: <Trash2 size={16} />, run: remove, danger: true, divider: unpublished }] : []),
   ];
 
   const discard: BarAction | undefined = d.dirty
@@ -581,9 +598,10 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
       )}
       {saidMeanwhile && <div className="check warn banner" role="status"><TriangleAlert size={16} /><span>{saidMeanwhile}</span></div>}
       {losing && <div className="check warn banner" role="alert"><TriangleAlert size={16} /><span>{losing}</span></div>}
+      {publishRight && !losing && !refused && <div className="check info banner publish-right"><UserCheck size={16} /><span>{publishRight}</span></div>}
     </>
   );
-  const hasBanners = !!saidMeanwhile || (unpublished && d.behind && d.dirty && !d.conflict) || (unpublished ? draftMoved : d.behind && d.dirty) && !!working || (!isGone && !!working && !rebaseTo.current && !!baseBehindSentence(working.base, version)) || !!losing;
+  const hasBanners = !!saidMeanwhile || (unpublished && d.behind && d.dirty && !d.conflict) || (unpublished ? draftMoved : d.behind && d.dirty) && !!working || (!isGone && !!working && !rebaseTo.current && !!baseBehindSentence(working.base, version)) || !!losing || !!publishRight;
 
   const replaceable = o.others.filter((x) => x.id !== id && x.status !== "draft" && x.status !== "deprecated");
   const dialogs = (

@@ -204,11 +204,12 @@ func (l *library) published(kind, id string) *entry {
 
 // Ref is an entry of one of the lists.
 type Ref struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Contact     string `json:"contact,omitempty" jsonschema:"how to reach them: channel, mailbox, queue"`
-	URL         string `json:"url,omitempty"`
-	Description string `json:"description,omitempty"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Contact     string         `json:"contact,omitempty" jsonschema:"how to reach them: channel, mailbox, queue (a free line)"`
+	Contacts    *docs.Contacts `json:"contacts,omitempty" jsonschema:"how to reach a team, platform or practice, each way on its own: email (group email), slack (channel name), slackUrl, chat (Google Chat space), chatUrl, confluence, page (their own page), form (where to ask them for something)"`
+	URL         string         `json:"url,omitempty"`
+	Description string         `json:"description,omitempty"`
 }
 
 // DocRef points at another process or standard. A title is only given for a published one.
@@ -271,10 +272,19 @@ func ref(list []docs.Named, id string) *Ref {
 	}
 	for _, n := range list {
 		if n.ID == id {
-			return &Ref{ID: n.ID, Name: n.Name, Contact: n.Contact, URL: n.URL}
+			return &Ref{ID: n.ID, Name: n.Name, Contact: n.Contact, Contacts: contactsOf(n), URL: n.URL}
 		}
 	}
 	return &Ref{ID: id, Name: id}
+}
+
+// contactsOf is how to reach an entry, nil when nothing is given.
+func contactsOf(n docs.Named) *docs.Contacts {
+	if n.Contacts.Empty() {
+		return nil
+	}
+	c := *n.Contacts
+	return &c
 }
 
 func refs(list []docs.Named, ids []string) []Ref {

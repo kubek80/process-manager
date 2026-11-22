@@ -49,7 +49,7 @@ func TestPrepareFillsAnEmptyDatabaseOnce(t *testing.T) {
 	if len(processes) != 7 || len(standards) != 3 {
 		t.Fatalf("imported %d processes, %d standards", len(processes), len(standards))
 	}
-	if roles, _ := st.roles.Count(ctx); roles != 8 {
+	if roles, _ := st.roles.Count(ctx); roles != 10 {
 		t.Fatalf("development roles: %d", roles)
 	}
 	riley, _ := st.roles.Perms(ctx, "riley@example.com")
@@ -79,7 +79,7 @@ func TestPrepareFillsAnEmptyDatabaseOnce(t *testing.T) {
 	if processes, _ := st.docs.List(ctx, docs.Process); len(processes) != 6 {
 		t.Fatalf("the seed was imported again: %d processes", len(processes))
 	}
-	if roles, _ := st.roles.Count(ctx); roles != 7 {
+	if roles, _ := st.roles.Count(ctx); roles != 9 {
 		t.Fatalf("roles were re-added: %d", roles)
 	}
 	// a built-in user without any role (one added to a database that already had roles) gets theirs
@@ -92,7 +92,7 @@ func TestPrepareFillsAnEmptyDatabaseOnce(t *testing.T) {
 	if err := prepare(ctx, cfg, st, quiet); err != nil {
 		t.Fatal(err)
 	}
-	if roles, _ := st.roles.Count(ctx); roles != 7 {
+	if roles, _ := st.roles.Count(ctx); roles != 9 {
 		t.Fatalf("roles after a built-in user had none: %d", roles)
 	}
 	if sk, _ := st.skills.Get(ctx, "process-request-gcp-project"); sk.Active {

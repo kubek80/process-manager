@@ -174,6 +174,7 @@ function ActivitySection({ processes, standards, feedback }: { processes: Proces
                 <time dateTime={e.at}>{formatDateTime(e.at)}</time>
                 <span>{d.person ? <b title={e.email}>{d.who}</b> : <span className="activity-portal">{d.who}</span>} {d.words}
                   {t && <> {t.code ? <code>{t.text}</code> : <span className={t.quoted ? "activity-doc" : ""} title={t.hint}>{t.text}</span>}</>}
+                  {d.after && <> {d.after}</>}
                   {d.detail && <em> · {detailParts(d.detail, names).map((p, i) => p.colour
                     ? <span key={i} className="activity-colour"><span className="activity-swatch" style={{ background: p.colour }} aria-hidden="true" />{p.text}</span>
                     : p.person ? <span key={i} title={p.person}>{p.text}</span> : p.text)}</em>}</span>

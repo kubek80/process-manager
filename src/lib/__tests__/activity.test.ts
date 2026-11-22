@@ -67,6 +67,23 @@ describe("the activity list in words a reader knows", () => {
     expect(describeEntry(entry("access.change", "morgan.lee@example.com"), titles, names).target).toEqual({ text: "Morgan Lee", hint: "morgan.lee@example.com" });
     expect(describeEntry(entry("access.change", "nobody@example.com"), titles, names).target).toEqual({ text: "nobody@example.com" });
   });
+  it("says that somebody was added to or removed from the members of a platform or practice", () => {
+    const names = { "morgan@example.com": "Morgan Member" };
+    expect(describeEntry(entry("access.grant", "morgan@example.com", { detail: "Platform member for the platform Google Cloud" }), titles, names)).toMatchObject({
+      words: "added", target: { text: "Morgan Member", hint: "morgan@example.com" }, after: "to the members of the platform Google Cloud",
+    });
+    const out = describeEntry(entry("access.revoke", "kim@example.com", { detail: "Practice member for the practice Engineering" }), titles);
+    expect(out).toMatchObject({ words: "removed", target: { text: "kim@example.com" }, after: "from the members of the practice Engineering" });
+    expect(out.detail).toBeUndefined();
+    // an owner role is still a role given
+    expect(describeEntry(entry("access.grant", "jo@example.com", { detail: "Platform owner for the platform Google Cloud" }), titles)).toMatchObject({ words: "gave a role to", detail: "Platform owner for the platform Google Cloud" });
+  });
+  it("says whose details were changed, not only that the lists were", () => {
+    const e = entry("lists.save", "catalog", { detail: "version 2: Details of the platform “Google Cloud” changed by Jordan Platform: description, Slack channel" });
+    expect(describeEntry(e, titles)).toEqual({ who: "Jordan Platform", person: true, words: "changed the details of the platform", target: { text: "“Google Cloud”", quoted: true }, detail: "description, Slack channel; version 2" });
+    expect(describeEntry(entry("lists.save", "catalog", { detail: "Details of the team “Network team” changed" }), titles)).toMatchObject({ words: "changed the details of the team", target: { text: "“Network team”" } });
+    expect(describeEntry(entry("lists.save", "catalog", { detail: "version 3" }), titles)).toMatchObject({ words: "changed the lists", detail: "version 3" });
+  });
   it("cuts the detail into words, people and colours", () => {
     expect(detailParts("reported by sam@example.com", { "sam@example.com": "Sam Consumer" })).toEqual([
       { text: "reported by " }, { text: "Sam Consumer", person: "sam@example.com" },

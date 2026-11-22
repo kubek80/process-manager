@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { Eye, ImageUp, Info, LayoutGrid, Loader2, Moon, Redo2, RotateCcw, Save, Search, Sun, TriangleAlert, Trash2, Undo2 } from "lucide-react";
+import { CircleAlert, CircleCheck, Eye, ImageUp, Info, LayoutGrid, Loader2, Moon, Redo2, RotateCcw, Save, Search, Sun, TriangleAlert, Trash2, Undo2 } from "lucide-react";
 import type { Process, Standard } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { search } from "../lib/search";
@@ -8,7 +8,7 @@ import { ICON_TYPES, iconContentType, iconFileProblem } from "../lib/icons";
 import { iconUrl, loadAdminLook, saveLook, uploadIcon, type SavedLook } from "../lib/store";
 import {
   confusion, DEFAULT_APPEARANCE, DEFAULT_COLOR, DEFAULT_NAME, derive, forgetOwnChoice, isDark, kindsAlikeText, lookProblems, lookProperties, MAX_NAME, nameOf,
-  normalizeHex, PALETTES, takeLook, tidyLook, underlineLinks, useLook, type Appearance, type ColorPart, type ColorUse, type Look,
+  normalizeHex, PALETTES, STATE_PARTS, takeLook, tidyLook, underlineLinks, useLook, type Appearance, type ColorPart, type ColorUse, type Font, type Look,
 } from "../lib/theme";
 import { BrandLogo } from "./Brand";
 import { DocCard } from "./DocCard";
@@ -17,6 +17,7 @@ import "../icons.css";
 import "../lists.css";
 import "../controls.css";
 import "../theme.css";
+import "../edit.css";
 import { formatDateTime } from "../lib/dates";
 
 /** Admin › Theming: the name, the logo, the colours and the appearance of the portal, with a live preview. */
@@ -31,10 +32,22 @@ export function ThemeSection({ processes, standards }: { processes: Process[]; s
 }
 
 const COLOR_TEXT: Record<ColorPart, { label: string; hint: string }> = {
-  brand: { label: "Brand colour", hint: "Buttons, links, focus rings and what is selected" },
+  brand: { label: "Brand colour", hint: "Links, focus rings, what is selected, and the main buttons unless they have a colour of their own" },
   process: { label: "Processes", hint: "The mark and tag of every process" },
   standard: { label: "Standards", hint: "The mark and tag of every standard" },
+  mainButton: { label: "Main buttons", hint: "The one main action of a view, such as Publish, Save or Search" },
+  otherButtons: { label: "Other buttons", hint: "The outlined buttons beside it, such as Cancel, Discard or Give feedback. Quiet buttons without an outline stay grey" },
+  success: { label: "Success", hint: "Published, saved, nothing to fix, done" },
+  warning: { label: "Warning", hint: "Review due, drafts, unsaved changes, a step that loops back" },
+  info: { label: "Information", hint: "Notices that only tell something, such as what readers still see" },
+  problem: { label: "Problem", hint: "Review overdue, what is to fix, errors, buttons that delete" },
 };
+/** What a colour left at its default does, where that is not simply the default colour. */
+const DEFAULT_TEXT: Partial<Record<ColorPart, string>> = { mainButton: "Follows the brand", info: "Follows the brand", otherButtons: "Neutral" };
+const FONT_CHOICES: { id: Font | undefined; label: string; family: string }[] = [
+  { id: undefined, label: "Default (Inter)", family: '"Inter Variable", Inter, system-ui, sans-serif' },
+  { id: "roboto", label: "Roboto", family: '"Roboto Variable", Roboto, system-ui, sans-serif' },
+];
 const APPEARANCES: { id: Appearance; label: string; icon?: typeof Sun }[] = [
   { id: "device", label: "As the device is set" },
   { id: "light", label: "Light", icon: Sun },
@@ -71,7 +84,7 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
   const backToDefault = async () => {
     const yes = await confirmDialog({
       title: "Go back to the default look?",
-      body: `Everyone sees the name “${DEFAULT_NAME}”, the default mark, the default colours and the appearance their device is set to, from their next page load.`
+      body: `Everyone sees the name “${DEFAULT_NAME}”, the default mark, the default colours and font, and the appearance their device is set to, from their next page load.`
         + (d.dirty ? " Your unsaved changes here are dropped." : ""),
       confirmLabel: "Go back to the default look", cancelLabel: "Keep this look", danger: true,
     });
@@ -105,9 +118,9 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
           </section>
 
           <section className="theme-group" aria-labelledby="theme-colours">
-            <h3 id="theme-colours">Colours</h3>
+            <h3 id="theme-colours">Brand and kinds</h3>
             <div className="palettes-head">
-              <span className="field-label">Ready-made colours</span>
+              <span className="field-label">Ready-made colours<em>They set the brand and the two kinds; buttons and states keep what you chose for them</em></span>
               <span className="palette-legend muted small" aria-hidden="true">
                 <span><i className="dot" />brand</span><span><i className="dot" />processes</span><span><i className="square" />standards</span>
               </span>
@@ -134,7 +147,37 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
             {derived.kindsAlike.length > 0 && (
               <p className="color-note warn" role="status"><TriangleAlert size={14} aria-hidden="true" /><span>{kindsAlikeText(derived.kindsAlike)}</span></p>
             )}
-            <p className="muted small">The colours for good, warning and problems stay as they are, so that they always mean the same.</p>
+          </section>
+
+          <section className="theme-group" aria-labelledby="theme-buttons">
+            <h3 id="theme-buttons">Buttons</h3>
+            {(["mainButton", "otherButtons"] as const).map((part) => (
+              <ColorField key={part} part={part} value={look[part]} fallback={part === "mainButton" ? look.brand : undefined} use={derived.colors.find((c) => c.part === part)} onChange={(v) => set({ [part]: v })} />
+            ))}
+          </section>
+
+          <section className="theme-group" aria-labelledby="theme-states">
+            <h3 id="theme-states">States</h3>
+            <p className="muted small">The same colour always means the same: choose colours that stay far apart. Icons beside them say the same for people who see colours differently.</p>
+            {STATE_PARTS.map((part) => (
+              <ColorField key={part} part={part} value={look[part]} fallback={part === "info" ? look.brand : undefined} use={derived.colors.find((c) => c.part === part)} onChange={(v) => set({ [part]: v })} />
+            ))}
+          </section>
+
+          <section className="theme-group" aria-labelledby="theme-font">
+            <h3 id="theme-font">Font</h3>
+            <div className="seg" role="radiogroup" aria-labelledby="theme-font">
+              {FONT_CHOICES.map((f) => {
+                const on = look.font === f.id;
+                return (
+                  <button key={f.label} type="button" role="radio" aria-checked={on} className={`seg-item ${on ? "on" : ""}`} style={{ fontFamily: f.family }}
+                    onClick={() => set({ font: f.id })}>
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+            {look.font && <button type="button" className="btn small ghost theme-font-default" onClick={() => set({ font: undefined })}>Back to the default</button>}
           </section>
 
           <section className="theme-group" aria-labelledby="theme-appearance">
@@ -258,9 +301,10 @@ function LogoField({ look, onChange }: { look: Look; onChange: (logo: string | u
   );
 }
 
-function ColorField({ part, value, use, onChange }: { part: ColorPart; value?: string; use?: ColorUse; onChange: (v: string | undefined) => void }) {
+function ColorField({ part, value, fallback, use, onChange }: { part: ColorPart; value?: string; fallback?: string; use?: ColorUse; onChange: (v: string | undefined) => void }) {
   const id = useId();
-  const shown = value ?? DEFAULT_COLOR[part];
+  // a part that follows another (the brand) shows that colour while it has none of its own
+  const shown = value ?? fallback ?? DEFAULT_COLOR[part];
   const [text, setText] = useState(shown);
   const [wrong, setWrong] = useState(false);
   // a palette, Undo or Discard changes the colour from outside: the field follows
@@ -277,14 +321,14 @@ function ColorField({ part, value, use, onChange }: { part: ColorPart; value?: s
     <div className="color-field" role="group" aria-labelledby={`${id}-l`}>
       <div className="color-head">
         <span className="field-label" id={`${id}-l`}>{label}<em>{hint}</em></span>
-        {!value && <span className="color-default">Default</span>}
+        {!value && <span className="color-default">{DEFAULT_TEXT[part] ?? "Default"}</span>}
       </div>
       <div className="color-inputs">
         <input type="color" className="color-swatch" value={shown} onChange={(e) => onChange(e.target.value.toLowerCase())} aria-label={`${label}: pick a colour`} />
         <input className={`color-hex mono ${wrong ? "invalid" : ""}`} value={text} spellCheck={false} maxLength={9} aria-label={`${label} as a code, e.g. #0055aa`}
           aria-invalid={wrong || undefined} aria-describedby={wrong ? `${id}-e` : undefined}
           onChange={(e) => typed(e.target.value)} onBlur={() => { if (!normalizeHex(text)) setWrong(true); else setText(normalizeHex(text)!); }} />
-        {value && <button type="button" className="btn small ghost" onClick={() => onChange(undefined)}>Use the default</button>}
+        {value && <button type="button" className="btn small ghost" onClick={() => onChange(undefined)} aria-label={`${label}: back to the default`}>Back to the default</button>}
       </div>
       {wrong && <span className="field-error" id={`${id}-e`}>Write the colour as # and six digits or letters a-f, e.g. #0055aa.</span>}
       {use && (
@@ -295,15 +339,11 @@ function ColorField({ part, value, use, onChange }: { part: ColorPart; value?: s
         </div>
       )}
       {adjusted && <p className="color-note"><Info size={14} aria-hidden="true" /><span>{adjustedText(use!)}</span></p>}
-      {use?.grey && (
-        <p className="color-note warn"><TriangleAlert size={14} aria-hidden="true" />
-          <span>{part === "brand"
-            ? "This colour is nearly grey: buttons and what is selected hardly stand out, so links are underlined to tell them from text."
-            : `This colour is nearly grey: the mark of ${part === "process" ? "processes" : "standards"} hardly stands out from ordinary text.`}</span>
-        </p>
-      )}
-      {use?.like.map((k) => (
+      {use && (part === "brand" || part === "process" || part === "standard") && use.like.map((k) => (
         <p key={k} className="color-note warn"><TriangleAlert size={14} aria-hidden="true" /><span>{confusion(part, k)}</span></p>
+      ))}
+      {use?.warnings.map((w) => (
+        <p key={w} className="color-note warn"><TriangleAlert size={14} aria-hidden="true" /><span>{w}</span></p>
       ))}
     </div>
   );
@@ -327,7 +367,7 @@ function OwnChoiceNote({ own, appearance }: { own: "light" | "dark" | null; appe
 export function adjustedText(u: ColorUse): string {
   const how = u.adjusted.light && u.adjusted.dark ? "darker in the light look and lighter in the dark look"
     : u.adjusted.light ? "darker in the light look" : "lighter in the dark look";
-  return `Made ${how}, so that text in this colour stays readable.`;
+  return u.part === "mainButton" ? `Made ${how}, so that the buttons stand out from the page.` : `Made ${how}, so that text in this colour stays readable.`;
 }
 
 /**
@@ -371,7 +411,27 @@ function LookPreview({ look, processes, standards }: { look: Look; processes: Pr
               <div className="pv-row">
                 <span className="btn small primary">Main button</span>
                 <span className="btn small">Other button</span>
+                <span className="btn small danger">Delete</span>
                 <span className="pv-link">A link</span>
+              </div>
+              <div className="pv-states">
+                <div className="check good"><CircleCheck size={15} /><span><b>Success:</b> published, everything is saved.</span></div>
+                <div className="check warn"><TriangleAlert size={15} /><span><b>Warning:</b> review due in 5 days.</span></div>
+                <div className="check info"><Info size={15} /><span><b>Information:</b> readers still see version 3.</span></div>
+                <div className="check bad"><CircleAlert size={15} /><span><b>Problem:</b> review overdue.</span></div>
+              </div>
+              <div className="pv-row pv-marks">
+                <span className="status good"><CircleCheck size={14} />Nothing to fix</span>
+                <span className="status warn">Review due</span>
+                <span className="status bad">2 to fix</span>
+                <span className="pv-count">Requests<span className="nav-count">3</span></span>
+              </div>
+              <div className="edit-bar state-changes pv-edit-bar">
+                <span className="state-pill changes">Unpublished changes</span>
+                <span className="eb-status bad"><CircleAlert size={14} />1 to fix</span>
+                <span className="spacer" />
+                <span className="eb-btn eb-save">Save draft</span>
+                <span className="eb-btn eb-publish">Publish…</span>
               </div>
               <div className="field pv-field">
                 <span className="field-label">A field, selected</span>

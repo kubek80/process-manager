@@ -30,7 +30,7 @@
 /* less room above the map: the tabs closer to the page head and to the map */
 .process-page > .tabs-row { margin: 8px 0 8px; }
 /* the page head: "Edit" is its one primary; "Mark as reviewed" is a quiet secondary until a review is due */
-.head-actions .btn.quiet { box-shadow: none; color: var(--text-2); }
+.head-actions .btn.quiet { box-shadow: none; color: var(--action-other, var(--text-2)); }
 .head-actions .btn.quiet:hover:not(:disabled) { color: var(--text); }
 /* retired, review overdue: directly under the title, before the facts */
 .doc-notices { display: grid; gap: 8px; margin: 12px 0 2px; max-width: 920px; }
@@ -105,8 +105,7 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
 .block-corner .block-flag { position: static; }
 .block-report { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--surface); color: var(--bad); box-shadow: var(--shadow-1); opacity: 0; transition: opacity .12s, background .12s; }
 .block:hover .block-report, .block:focus-within .block-report, .block.selected .block-report, .block-report:focus-visible { opacity: 1; }
-.block-report:hover, .block-report:focus-visible { background: var(--bad); border-color: var(--bad); color: #fff; }
-:root[data-theme="dark"] .block-report:hover, :root[data-theme="dark"] .block-report:focus-visible { color: #1a0a0e; }
+.block-report:hover, .block-report:focus-visible { background: var(--bad-fill); border-color: var(--bad-fill); color: var(--bad-ink); }
 @media (hover: none) { .block-report { opacity: 1; } }
 /* on a touch screen the flag can be hit with a finger: 44 pixels on the screen whatever the zoom, the visible flag stays small */
 @media (pointer: coarse) {

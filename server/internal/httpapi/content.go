@@ -80,11 +80,12 @@ func belongsOf(body []byte) rbac.Belongs {
 	return b
 }
 
-// canSee: a draft is only for the people who work on it - whoever may edit it and the team
-// that owns it. Everything else is for everyone who is signed in.
+// canSee: a draft is only for the people who work on it - whoever may edit it, the members of
+// its platform or practice, and the team that owns it. Everything else is for everyone who is
+// signed in.
 func canSee(s session, kind string, body []byte) bool {
 	b, status := headOf(body)
-	return status != "draft" || s.CanManageFeedback(kind, b)
+	return status != "draft" || s.CanSeeDraft(kind, b)
 }
 
 func (a *api) listDocs(kind, key string) http.HandlerFunc {
@@ -118,7 +119,7 @@ func (a *api) listDocs(kind, key string) http.HandlerFunc {
 			if at, ok := published[d.ID]; ok {
 				m.PublishedAt = &at
 			}
-			if info, ok := drafts[d.ID]; ok && s.CanEdit(kind, belongsOf(d.Body)) {
+			if info, ok := drafts[d.ID]; ok && s.CanDraft(kind, belongsOf(d.Body)) {
 				m.Draft = &info
 			}
 			meta[d.ID] = m
@@ -169,18 +170,79 @@ func denied(w http.ResponseWriter, kind string) {
 }
 
 // misplaced refuses a save that puts a document on a platform or in a practice, or takes it
-// off one, that the caller does not own while they edit it only through such ownership.
-type misplaced struct{ kind, field, name string }
+// off one, that the caller does not own while they edit it only through such ownership. For a
+// save that stays a draft (draft), being a member of it is enough as well.
+type misplaced struct {
+	kind, field, name string
+	draft             bool
+	member            bool // the person is a member of some platform or practice
+}
 
 func (m *misplaced) Error() string {
-	editor := "a process editor"
-	if m.kind == docs.Standard {
-		editor = "a standards editor"
+	who := "an owner"
+	if m.draft && m.member {
+		who = "an owner or member"
 	}
 	if m.field == "practice" {
-		return fmt.Sprintf("Only an owner of the practice “%s”, or %s, can put this %s in that practice or take it out of it.", m.name, editor, noun[m.kind])
+		return fmt.Sprintf("Only %s of the practice “%s”, or %s, can put this %s in that practice or take it out of it.", who, m.name, editorOf(m.kind), noun[m.kind])
 	}
-	return fmt.Sprintf("Only an owner of the platform “%s”, or %s, can put this %s on that platform or take it off it.", m.name, editor, noun[m.kind])
+	return fmt.Sprintf("Only %s of the platform “%s”, or %s, can put this %s on that platform or take it off it.", who, m.name, editorOf(m.kind), noun[m.kind])
+}
+
+// editorOf is the role that edits every document of the kind, in words.
+func editorOf(kind string) string {
+	if kind == docs.Standard {
+		return "a standards editor"
+	}
+	return "a process editor"
+}
+
+// notPublisher refuses a member of a platform or practice what only its owners and the
+// editors of the kind may do: publish, retire, unpublish, bring back or delete. It says who can.
+type notPublisher struct {
+	kind  string
+	b     rbac.Belongs
+	lists docs.Lists
+	does  string // "publish this process", "retire this standard", ...
+	after string // a sentence after it, or ""
+}
+
+func (e *notPublisher) Error() string {
+	var who []string
+	if e.b.Platform != "" {
+		who = append(who, "an owner of the platform “"+docs.Name(e.lists.Platforms, e.b.Platform)+"”")
+	}
+	if e.b.Practice != "" {
+		who = append(who, "an owner of the practice “"+docs.Name(e.lists.Practices, e.b.Practice)+"”")
+	}
+	who = append(who, editorOf(e.kind))
+	msg := fmt.Sprintf("Only %s, or %s, can %s.", strings.Join(who[:len(who)-1], ", "), who[len(who)-1], e.does)
+	if len(who) == 1 {
+		msg = fmt.Sprintf("Only %s can %s.", who[0], e.does)
+	}
+	if e.after != "" {
+		msg += " " + e.after
+	}
+	return msg
+}
+
+// publishWords says what a save does to readers that a member may not do: from the stored
+// status (storedDraft: never published, or new) to the new one.
+func publishWords(kind string, storedDraft bool, stored, next string, fromDraft bool) (does, after string) {
+	n := noun[kind]
+	switch {
+	case fromDraft:
+		return "publish this " + n, "Your draft is saved for them."
+	case storedDraft:
+		return "publish this " + n, "Save it as a draft for them."
+	case next == "draft":
+		return "hide this " + n + " from readers", ""
+	case next == "deprecated" && stored != "deprecated":
+		return "retire this " + n, ""
+	case next != "deprecated" && stored == "deprecated":
+		return "bring back this " + n, ""
+	}
+	return "change this " + n + " as readers see it", "Save your changes as a draft for them."
 }
 
 // placeName is the name of a platform or practice in the lists, or its id.
@@ -194,8 +256,16 @@ func placeName(l docs.Lists, field, id string) string {
 // deniedFor answers a save whose new content the caller may not store. Somebody who edits
 // for a platform or a practice is told what is missing: it has to stay with one of theirs.
 func deniedFor(w http.ResponseWriter, kind string, s session) {
-	if kind != docs.Catalog && s.EditsSome() {
+	switch {
+	case kind == docs.Catalog:
+	case s.EditsSome() && s.MemberOfSome():
+		writeError(w, 403, "You can only save a "+noun[kind]+" that belongs to a platform or practice you own or are a member of.")
+		return
+	case s.EditsSome():
 		writeError(w, 403, "You can only save a "+noun[kind]+" that belongs to a platform or practice you own.")
+		return
+	case s.MemberOfSome():
+		writeError(w, 403, "You can only save a draft of a "+noun[kind]+" that belongs to a platform or practice you are a member of.")
 		return
 	}
 	denied(w, kind)
@@ -280,7 +350,7 @@ func (a *api) deletion(r *http.Request, kind, id string) (docs.Deletion, bool) {
 		return docs.Deletion{}, false
 	}
 	del, err := a.Docs.LastDeleted(r.Context(), kind, id, seen)
-	if err != nil || !who(r).CanEdit(kind, belongsOf(del.Last)) {
+	if err != nil || !who(r).CanDraft(kind, belongsOf(del.Last)) {
 		return docs.Deletion{}, false
 	}
 	return del, true
@@ -526,18 +596,37 @@ type saving struct {
 func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 	kind, id, body := sv.kind, sv.id, sv.body
 	s := who(r)
-	// The right is needed for what it belongs to now and for what it is moved to: an owner of
-	// one platform can neither take over a document of another nor hand theirs away.
-	if !s.CanEdit(kind, belongsOf(body)) {
+	next, newStatus := headOf(body)
+	fromDraft := sv.drafts == docs.PublishDraft
+	// A save that stays a draft needs the right to work on drafts (members of its platform or
+	// practice have it); anything readers would see needs the right to edit. The right is needed
+	// for what it belongs to now and for what it is moved to: an owner of one platform can
+	// neither take over a document of another nor hand theirs away. What is refused here is
+	// decided by the body alone, so it is the same whether the id exists or not.
+	staysDraft := kind != docs.Catalog && !fromDraft && newStatus == "draft"
+	if !s.CanDraft(kind, next) {
 		deniedFor(w, kind, s)
+		return
+	}
+	lists, err := a.Docs.Lists(r.Context())
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if !staysDraft && !s.CanEdit(kind, next) {
+		// only a member of where it would be: who can publish it is said
+		does, after := publishWords(kind, true, "", newStatus, fromDraft)
+		if newStatus == "deprecated" {
+			does, after = "retire this "+noun[kind], ""
+		}
+		writeError(w, 403, (&notPublisher{kind: kind, b: next, lists: lists, does: does, after: after}).Error())
 		return
 	}
 	if err := a.validateFormat(kind, body); err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	lists, err := a.Docs.Lists(r.Context())
-	if err == nil && kind == docs.Catalog {
+	if kind == docs.Catalog {
 		err = json.Unmarshal(body, &lists) // the lists are checked against themselves
 	}
 	if err == nil {
@@ -563,16 +652,38 @@ func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 			// a draft somebody may not see is, for them, something that does not exist: every
 			// check below runs as for a new document, and only then is the save refused
 			hidden := current != nil && kind != docs.Catalog && !canSee(s, kind, current.Body)
+			storedStatus := ""
+			if current != nil && !hidden {
+				storedStatus = docs.StatusOf(current.Body)
+			}
+			storedDraft := current == nil || hidden || storedStatus == "draft"
+			// a never-published document saved as a draft: the right to work on drafts is enough
+			draftOnly := staysDraft && storedDraft
 			if current != nil && !hidden {
 				b := belongsOf(current.Body)
-				if !s.CanEdit(kind, b) {
+				switch {
+				case draftOnly && !s.CanDraft(kind, b):
 					return errDenied
+				case !draftOnly && !s.CanEdit(kind, b):
+					if kind != docs.Catalog && s.CanDraft(kind, b) {
+						does, after := publishWords(kind, storedDraft, storedStatus, newStatus, fromDraft)
+						return &notPublisher{kind: kind, b: b, lists: lists, does: does, after: after}
+					}
+					return errDenied
+				case !draftOnly && kind != docs.Catalog && !s.CanEdit(kind, next):
+					// taken back from readers onto a platform or practice the person is only a member of
+					does, after := publishWords(kind, storedDraft, storedStatus, newStatus, fromDraft)
+					return &notPublisher{kind: kind, b: next, lists: lists, does: does, after: after}
 				}
 				stored = &b
 			}
 			// a document shared with another platform or practice stays with it
-			if field, id := s.Misplaced(kind, stored, belongsOf(body)); field != "" {
-				return &misplaced{kind: kind, field: field, name: placeName(lists, field, id)}
+			misplacedBy := s.Misplaced
+			if draftOnly {
+				misplacedBy = s.MisplacedDraft
+			}
+			if field, id := misplacedBy(kind, stored, next); field != "" {
+				return &misplaced{kind: kind, field: field, name: placeName(lists, field, id), draft: draftOnly, member: s.MemberOfSome()}
 			}
 			if kind != docs.Catalog {
 				// a document readers do not see becomes published (active), never retired directly
@@ -609,11 +720,15 @@ func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 	})
 	var c *docs.Conflict
 	var m *misplaced
+	var np *notPublisher
 	var pending *docs.DraftPending
 	var dc *docs.DraftConflict
 	switch {
 	case errors.Is(err, errDenied):
 		denied(w, kind)
+		return
+	case errors.As(err, &np):
+		writeError(w, 403, np.Error())
 		return
 	case errors.Is(err, errHiddenDoc):
 		// what the same save of an id that does not exist would answer: "deleted meanwhile" for
@@ -745,16 +860,24 @@ func (a *api) deleteDoc(kind string) http.HandlerFunc {
 			return
 		}
 		s := who(r)
+		lists, err := a.Docs.Lists(r.Context()) // for the names in a refusal
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
 		// the document, its feedback, bookmarks and upvotes and the entry in the activity log go
 		// together or not at all
-		err := a.Docs.Remove(r.Context(), docs.Removal{
+		err = a.Docs.Remove(r.Context(), docs.Removal{
 			Kind: kind, ID: id, By: s.Email, Base: base,
 			Check: func(current *docs.Doc) error {
+				b := belongsOf(current.Body)
 				switch {
-				case s.CanEdit(kind, belongsOf(current.Body)):
+				case s.CanEdit(kind, b):
 					return nil
 				case !canSee(s, kind, current.Body):
 					return docs.ErrNotFound // a draft somebody cannot see does not exist for them
+				case s.CanDraft(kind, b):
+					return &notPublisher{kind: kind, b: b, lists: lists, does: "delete this " + noun[kind]}
 				}
 				return errDenied
 			},
@@ -774,9 +897,13 @@ func (a *api) deleteDoc(kind string) http.HandlerFunc {
 			},
 		})
 		var c *docs.Conflict
+		var np *notPublisher
 		switch {
 		case errors.Is(err, errDenied):
 			denied(w, kind)
+			return
+		case errors.As(err, &np):
+			writeError(w, 403, np.Error())
 			return
 		case errors.As(err, &c):
 			a.conflict(w, r, kind, id, c)
@@ -838,7 +965,7 @@ func (a *api) history(w http.ResponseWriter, r *http.Request) {
 		if v.Version < deleted && !s.EditsAll(kind) {
 			continue
 		}
-		if v.Deleted || v.Status != "draft" || s.CanManageFeedback(kind, rbac.Belongs{Owner: v.Owner, Platform: v.Platform, Practice: v.Practice}) {
+		if v.Deleted || v.Status != "draft" || s.CanSeeDraft(kind, rbac.Belongs{Owner: v.Owner, Platform: v.Platform, Practice: v.Practice}) {
 			shown = append(shown, v)
 		}
 	}

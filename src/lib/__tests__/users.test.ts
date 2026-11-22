@@ -16,6 +16,19 @@ describe("roles as readable lines", () => {
     expect(roleLine({ role: "owner", scope: "cloud-platform" }, groups)).toBe("Owner for Cloud Platform");
     expect(roleLine({ role: "admin", scope: "" }, groups)).toBe("Admin");
     expect(roleLine({ role: "practice-owner", scope: "gone" }, groups)).toBe("Practice owner for gone");
+    expect(roleLine({ role: "platform-member", scope: "gcp" }, groups)).toBe("Platform member for Google Cloud");
+    expect(roleLine({ role: "practice-member", scope: "engineering" }, groups)).toBe("Practice member for Engineering");
+  });
+  it("orders the member roles after the owner roles, and each needs its platform or practice", () => {
+    const morgan = [{ role: "practice-member" as const, scope: "engineering" }, { role: "platform-member" as const, scope: "gcp" }, { role: "owner" as const, scope: "cloud-platform" }, { role: "platform-owner" as const, scope: "akamai" }];
+    expect(normalRoles(morgan).map((r) => r.role)).toEqual(["platform-owner", "platform-member", "practice-member", "owner"]);
+    expect(normalRoles([{ role: "platform-member", scope: "" }])).toEqual([]);
+    const c = choicesOf([]);
+    c["practice-member"] = { on: true, scopes: [""] };
+    expect(roleProblems({ email: "new@example.com", users: [], groups, me: "dana@example.com", choices: c })).toEqual(["Choose the practice for Practice member, or remove that line."]);
+    c["practice-member"] = { on: true, scopes: ["engineering"] };
+    expect(rolesOf(c)).toEqual([{ role: "practice-member", scope: "engineering" }]);
+    expect(userMatches({ email: "m@example.com", bootstrap: false, roles: [{ role: "platform-member", scope: "gcp" }] }, "member google", groups)).toBe(true);
   });
   it("shows the admin role that comes from the server settings", () => {
     expect(shownRoles(dana)).toEqual([{ role: "admin", scope: "" }]);

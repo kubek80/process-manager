@@ -53,7 +53,7 @@ func TestSeedEngagementFillsAnEmptySetOnce(t *testing.T) {
 	}
 	// every built-in user has upvotes or bookmarks
 	var users int
-	if err := st.engagement.Pool.QueryRow(ctx, `select count(distinct email) from (select email from upvotes union select email from bookmarks) x where email not like 'colleague-%'`).Scan(&users); err != nil || users != 6 {
+	if err := st.engagement.Pool.QueryRow(ctx, `select count(distinct email) from (select email from upvotes union select email from bookmarks) x where email not like 'colleague-%'`).Scan(&users); err != nil || users != 7 {
 		t.Fatalf("built-in users with upvotes or bookmarks: %d %v", users, err)
 	}
 	list, err := st.requests.List(ctx, "sam@example.com")

@@ -240,7 +240,9 @@ func TestEveryoneCanSeeWhoBelongsToWhat(t *testing.T) {
 		`{"email":"casey@example.com","role":"owner","scope":"cloud-platform-team"},` +
 		`{"email":"jordan@example.com","role":"owner","scope":"cloud-platform-team"},` +
 		`{"email":"riley@example.com","role":"owner","scope":"security"},` +
+		`{"email":"morgan@example.com","role":"platform-member","scope":"google-cloud"},` +
 		`{"email":"jordan@example.com","role":"platform-owner","scope":"google-cloud"},` +
+		`{"email":"morgan@example.com","role":"practice-member","scope":"engineering"},` +
 		`{"email":"jordan@example.com","role":"practice-owner","scope":"engineering"},` +
 		`{"email":"riley@example.com","role":"practice-owner","scope":"security"}]}`
 	if status != 200 || strings.TrimSpace(string(raw)) != want {
@@ -254,7 +256,7 @@ func TestEveryoneCanSeeWhoBelongsToWhat(t *testing.T) {
 	status, body := e.as(dana).do("POST", "/api/admin/access", map[string]string{"email": sam, "role": "platform-owner", "scope": "google-cloud"})
 	wantStatus(t, status, 200, body)
 	_, body = e.as(sam).do("GET", "/api/members", nil)
-	if len(body["members"].([]any)) != 7 {
+	if len(body["members"].([]any)) != 9 {
 		t.Fatalf("members: %v", body)
 	}
 	_, body = e.as(sam).do("GET", "/api/me", nil)

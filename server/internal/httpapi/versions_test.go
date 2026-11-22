@@ -239,7 +239,17 @@ func TestListEntriesInUseCannotBeRemoved(t *testing.T) {
 			t.Fatalf("the lists do not contain %s", entry)
 		}
 		open := strings.LastIndex(body[:start], "{")
-		end := start + strings.Index(body[start:], "}") + 1
+		end, depth := open, 0 // the entry may hold an object of its own (contacts)
+		for i := open; i < len(body); i++ {
+			if body[i] == '{' {
+				depth++
+			} else if body[i] == '}' {
+				if depth--; depth == 0 {
+					end = i + 1
+					break
+				}
+			}
+		}
 		rest := strings.TrimLeft(body[end:], " \n")
 		if strings.HasPrefix(rest, ",") {
 			return body[:open] + strings.TrimLeft(rest[1:], " \n")

@@ -1,20 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpRight, Boxes, Code2, Compass, Server, ExternalLink, Layers, Plus, Search, Tag, Trash2, Users, Wrench } from "lucide-react";
-import type { Catalog, Membership, Process, Standard } from "../types";
+import type { Catalog, Contacts, Membership, Process, Standard } from "../types";
 import { GroupMembers } from "./TeamMembers";
+import { ContactFields } from "./ContactFields";
+import { ContactList, RankMark } from "./GroupParts";
 import { EntryIcon } from "./EntryIcon";
 import { IconField } from "./IconField";
-import { membersOf, type GroupKind } from "../lib/members";
+import { hasMembers, membersOf, type GroupKind } from "../lib/members";
+import { summaryLine, tidyContacts } from "../lib/groups";
+import { groupRank } from "../lib/rights";
+import { usePerms } from "../lib/session";
 import { slugify, uniqueId } from "../lib/edit";
 import { docCount, removeHint, useCatalog } from "../lib/catalog";
 import { useDraft } from "../lib/draft";
 import { BehindBanner, ConflictDialog, SaveBar } from "./Editing";
-import { go, loadMembers } from "../lib/store";
+import { go, href, loadMembers } from "../lib/store";
 import { hasErrors, validateCatalog } from "../lib/validate";
 import { Field, IssueList, notify, useScrollFade } from "./ui";
 
 type Key = "teams" | "practices" | "platforms" | "categories" | "tools" | "tiers" | "environments" | "languages";
-type Row = { id: string; name: string; contact?: string; url?: string; description?: string; icon?: string };
+type Row = { id: string; name: string; contact?: string; contacts?: Contacts; url?: string; description?: string; icon?: string };
 
 const KINDS: Record<Key, {
   title: string; noun: string; icon: typeof Users; blurb: string;
@@ -108,7 +113,11 @@ function usesOf(key: Key, id: string, processes: (Process | Standard)[]): Use[] 
 /** What uses something, counted by kind: "2 processes and 1 standard". */
 const countOf = (uses: Use[]) => docCount(uses.filter((u) => !("requirements" in u.process)).length, uses.filter((u) => "requirements" in u.process).length);
 
-const strip = (r: Row): Row => Object.fromEntries(Object.entries(r).filter(([k, v]) => k === "id" || k === "name" || (v ?? "").trim() !== "")) as Row;
+const strip = (r: Row): Row => {
+  const out = Object.fromEntries(Object.entries(r).filter(([k, v]) => k === "id" || k === "name" || (typeof v === "string" && v.trim() !== ""))) as Row;
+  const contacts = tidyContacts(r.contacts); // how to reach a team, platform or practice: the empty details left out
+  return contacts ? { ...out, contacts } : out;
+};
 /** The lists without empty optional fields: what is compared with the saved lists, and saved. */
 const tidyCatalog = (c: Catalog): Catalog =>
   ({
@@ -144,9 +153,10 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
   const current = adding ? undefined : rows.find((r) => r.id === selected) ?? shown[0];
   const uses = current ? usesOf(key, current.id, docs) : [];
   // people who are still members: the server refuses to remove an entry that roles point to
-  const stillMembers = current && GROUP_OF[key] && members ? membersOf(members, GROUP_OF[key]!, current.id).length : 0;
+  const stillMembers = current && GROUP_OF[key] && members ? membersOf(members, GROUP_OF[key]!, current.id).length + membersOf(members, GROUP_OF[key]!, current.id, "member").length : 0;
   const isNew = (id: string) => !((catalog[key] ?? []) as Row[]).some((r) => r.id === id);
   const group = GROUP_OF[key];
+  const perms = usePerms();
 
   const setRows = (next: Row[]) => setDraft({ ...draft, [key]: next });
   const upd = (patch: Partial<Row>) => current && setRows(rows.map((r) => (r.id === current.id ? { ...r, ...patch } : r)));
@@ -250,7 +260,8 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
                       fallback={<span className="cat-avatar">{ORDERED.includes(key) ? rank + (key === "tiers" ? 0 : 1) : r.name.slice(0, 1).toUpperCase()}</span>} />
                     <span className="cat-item-text">
                       <strong>{r.name || "Unnamed"}{isNew(r.id) && <i>new</i>}</strong>
-                      <em>{r.contact ?? r.url?.replace(/^https?:\/\//, "") ?? r.description ?? "No details yet"}</em>
+                      <em>{summaryLine(r)}</em>
+                      {group && !isNew(r.id) && <RankMark rank={groupRank(perms, group, r.id)} />}
                     </span>
                     <span className={`cat-uses ${n ? "" : "none"}`} title={n ? `Used by ${countOf(used)}` : "Not used by any process or standard"}>{n}</span>
                   </button>
@@ -287,7 +298,8 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
                   fallback={<span className="cat-avatar big">{ORDERED.includes(key) ? rows.findIndex((x) => x.id === current.id) + (key === "tiers" ? 0 : 1) : current.name.slice(0, 1).toUpperCase()}</span>} />
                 <div>
                   <span className="eyebrow">{kind.noun}</span>
-                  <h2>{current.name || "Unnamed"}</h2>
+                  <h2>{group && !isNew(current.id) ? <a className="group-link" href={href({ page: "group", kind: group, id: current.id })}>{current.name || "Unnamed"}</a> : current.name || "Unnamed"}</h2>
+                  {group && !isNew(current.id) && <RankMark rank={groupRank(perms, group, current.id)} className="cat-rank" />}
                   {editor && <p className="cat-id">Id <code>{current.id}</code></p>}
                 </div>
                 {editor && ORDERED.includes(key) && (
@@ -302,13 +314,21 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
                 <div className="form">
                   <Field label="Name"><input value={current.name} maxLength={40} onChange={(e) => upd({ name: e.target.value })} /></Field>
                   {WITH_ICON.includes(key) && <IconField key={current.id} icon={current.icon} name={current.name} onChange={(icon) => upd({ icon })} />}
-                  {kind.fields.map((f) => (
+                  {group && <ContactFields key={`${key}/${current.id}`} kind={group} idPrefix={`lists-${group}`} value={{ description: current.description, contact: current.contact, contacts: current.contacts }}
+                    onChange={(v) => upd({ description: v.description, contact: v.contact, contacts: v.contacts })} />}
+                  {!group && kind.fields.map((f) => (
                     <Field key={f.field} label={f.label}>
                       {f.long
                         ? <textarea rows={2} maxLength={200} value={current[f.field] ?? ""} placeholder={f.placeholder} onChange={(e) => upd({ [f.field]: e.target.value })} />
                         : <input value={current[f.field] ?? ""} placeholder={f.placeholder} onChange={(e) => upd({ [f.field]: e.target.value })} />}
                     </Field>
                   ))}
+                </div>
+              ) : group ? (
+                <div className="cat-group-facts">
+                  {current.description?.trim() ? <p className="cat-group-description">{current.description}</p> : null}
+                  <ContactList entry={current} name={current.name} empty="Nothing is known yet about how to reach them." />
+                  <a className="btn cat-open-page" href={href({ page: "group", kind: group, id: current.id })}>Open the page of {current.name}<ArrowUpRight size={15} aria-hidden="true" /></a>
                 </div>
               ) : (
                 <dl className="cat-facts">
@@ -338,7 +358,12 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
               </div>
 
               {/* who belongs to the team, platform or practice: everyone sees it, admins change it where the lists are managed */}
-              {group && <GroupMembers kind={group} id={current.id} name={current.name} saved={!isNew(current.id)} manage={editor} members={members} membersError={membersError} onChanged={reloadMembers} />}
+              {group && (
+                <div className="cat-people">
+                  <GroupMembers kind={group} id={current.id} name={current.name} saved={!isNew(current.id)} manage={editor} members={members} membersError={membersError} onChanged={reloadMembers} />
+                  {hasMembers(group) && <GroupMembers kind={group} id={current.id} name={current.name} rank="member" saved={!isNew(current.id)} manage={editor} members={members} membersError={membersError} onChanged={reloadMembers} />}
+                </div>
+              )}
 
               {editor && (
                 <div className="cat-danger">

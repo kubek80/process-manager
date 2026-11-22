@@ -89,7 +89,7 @@ func TestALookThatDoesNotFitIsRefusedWithAReasonPerProblem(t *testing.T) {
 	e := setup(t, nil)
 	d := e.as(dana)
 	status, out := d.do("PUT", "/api/admin/theme?rev=0", map[string]any{
-		"name": "A‮B", "brand": "blue", "process": "#12345", "standard": 7, "appearance": "sepia", "font": "Comic Sans",
+		"name": "A‮B", "brand": "blue", "process": "#12345", "standard": 7, "appearance": "sepia", "size": "large", "font": "Comic Sans", "problem": "red",
 	})
 	if status != 400 {
 		t.Fatalf("status %d %v", status, out)
@@ -99,12 +99,14 @@ func TestALookThatDoesNotFitIsRefusedWithAReasonPerProblem(t *testing.T) {
 		problems = append(problems, p.(string))
 	}
 	want := []string{
-		"The look has no setting “font”. Remove it and try again.",
+		"The look has no setting “size”. Remove it and try again.",
 		"The colour of standards must be a text.",
 		"The name contains characters that change the reading direction. Remove them and try again.",
 		"The brand colour must be written as # and six digits or letters a-f, e.g. #4f46e5.",
 		"The colour of processes must be written as # and six digits or letters a-f, e.g. #4f46e5.",
+		"The colour of problems must be written as # and six digits or letters a-f, e.g. #4f46e5.",
 		"The appearance must be “light”, “dark” or “device” (follow the device's setting).",
+		"The font must be “roboto”; leave it out to use the default font (Inter).",
 	}
 	if strings.Join(problems, "\n") != strings.Join(want, "\n") || out["error"] != strings.Join(want, " ") {
 		t.Fatalf("problems:\n%s", strings.Join(problems, "\n"))
@@ -124,6 +126,40 @@ func TestALookThatDoesNotFitIsRefusedWithAReasonPerProblem(t *testing.T) {
 	// nothing was stored
 	if status, out := e.anonymous().do("GET", "/api/theme", nil); status != 200 || out["revision"] != 0.0 {
 		t.Fatalf("after refusals: %d %v", status, out)
+	}
+}
+
+func TestButtonsStatesAndFontAreStoredAndServedToEveryone(t *testing.T) {
+	e := setup(t, nil)
+	d := e.as(dana)
+	look := map[string]string{"mainButton": "#15803D", "otherButtons": "#0369a1", "success": "#166534", "warning": "#ea580c", "info": "#2563eb", "problem": "#b91c1c", "font": "roboto"}
+	if status, out := d.do("PUT", "/api/admin/theme?rev=0", look); status != 200 {
+		t.Fatalf("%d %v", status, out)
+	}
+	status, out := e.anonymous().do("GET", "/api/theme", nil)
+	got, _ := out["look"].(map[string]any)
+	if status != 200 || got["mainButton"] != "#15803d" || got["otherButtons"] != "#0369a1" || got["success"] != "#166534" || got["warning"] != "#ea580c" ||
+		got["info"] != "#2563eb" || got["problem"] != "#b91c1c" || got["font"] != "roboto" || len(got) != 7 {
+		t.Fatalf("%d %v", status, out)
+	}
+	// back to the default for some parts: they are left out
+	if status, out := d.do("PUT", "/api/admin/theme?rev=1", map[string]string{"warning": "#ea580c"}); status != 200 {
+		t.Fatalf("%d %v", status, out)
+	}
+	_, out = e.anonymous().do("GET", "/api/theme", nil)
+	if got, _ := out["look"].(map[string]any); len(got) != 1 || got["warning"] != "#ea580c" {
+		t.Fatalf("%v", out)
+	}
+	var details []string
+	entries, err := e.deps.Audit.Recent(bg, 5)
+	must(t, err)
+	for _, en := range entries {
+		if en.Action == "theme.change" {
+			details = append(details, en.Detail)
+		}
+	}
+	if len(details) != 2 || !strings.Contains(strings.Join(details, "|"), "font back to the default (Inter)") {
+		t.Fatalf("%q", details)
 	}
 }
 

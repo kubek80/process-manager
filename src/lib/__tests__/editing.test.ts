@@ -356,3 +356,27 @@ describe("the delete button after the selection changed", () => {
     expect(deleteReady(1000, 5000)).toBe(true);
   });
 });
+
+import { peopleList, whoPublishesSentence } from "../editing";
+
+describe("who can publish what a member drafted", () => {
+  it("names the platform and practice with their owners", () => {
+    expect(whoPublishesSentence("process", [{ kind: "platform", name: "Google Cloud", owners: ["jordan@example.com"] }], "saved"))
+      .toBe("Only an owner of the platform “Google Cloud” (jordan@example.com), or a process editor, can publish this process. Your draft is saved for them.");
+    expect(whoPublishesSentence("standard", [
+      { kind: "platform", name: "Google Cloud", owners: ["jordan@example.com", "ann@example.com"] },
+      { kind: "practice", name: "Engineering", owners: [] },
+    ], "unsaved")).toBe("Only an owner of the platform “Google Cloud” (jordan@example.com and ann@example.com) or of the practice “Engineering” (it has no owner yet), or a standards editor, can publish this standard. Save draft keeps your changes for them.");
+  });
+  it("leaves the owners out while they are not known, and still names who can", () => {
+    expect(whoPublishesSentence("process", [{ kind: "practice", name: "Engineering", owners: [] }], "saved", false))
+      .toBe("Only an owner of the practice “Engineering”, or a process editor, can publish this process. Your draft is saved for them.");
+    expect(whoPublishesSentence("process", [], "none")).toBe("Only a process editor can publish this process. What you change and save as a draft waits for them.");
+  });
+  it("lists people briefly", () => {
+    expect(peopleList([])).toBe("");
+    expect(peopleList(["a"])).toBe("a");
+    expect(peopleList(["a", "b", "c"])).toBe("a, b and c");
+    expect(peopleList(["a", "b", "c", "d", "e"])).toBe("a, b, c and 2 more");
+  });
+});

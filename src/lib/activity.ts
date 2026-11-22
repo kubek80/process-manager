@@ -40,6 +40,8 @@ export interface ShownEntry {
   words: string;
   /** What it was done to: a title (`quoted`, with the id as `hint`), an id the app cannot name (`code`), or plain words. */
   target?: { text: string; hint?: string; code?: boolean; quoted?: boolean };
+  /** Words that finish the sentence after the target, e.g. "to the members of the platform Google Cloud". */
+  after?: string;
   detail?: string;
 }
 
@@ -53,6 +55,15 @@ export function describeEntry(e: AuditEntry, titles: Titles, names: Names = {}):
   const words = ACTION[e.action] ?? e.action.replace(/[._]/g, " ");
   const shown = shownTarget(e.action, e.target);
   const out: ShownEntry = { who, person, words, ...(e.detail ? { detail: e.detail } : {}) };
+  // the details of one team, platform or practice changed (by an owner or a lists manager): said as such
+  const details = e.action === "lists.save" ? /^(?:(version \d+): )?Details of the (team|platform|practice) “(.+?)” changed(?: by [^:]+)?(?:: (.+))?$/s.exec(e.detail) : null;
+  if (details) {
+    out.words = `changed the details of the ${details[2]}`;
+    out.target = { text: `“${details[3]}”`, quoted: true };
+    const rest = [details[4], details[1]].filter(Boolean).join("; ");
+    if (rest) out.detail = rest; else delete out.detail;
+    return out;
+  }
   if (!shown) return out;
   // a request is named by its title (the server writes it into the detail), its number as the hint
   if (e.action.startsWith("request.")) {
@@ -70,7 +81,15 @@ export function describeEntry(e: AuditEntry, titles: Titles, names: Names = {}):
   }
   // a person's address: their name where the page knows it, the address as the hint
   const name = names[shown.toLowerCase()];
+  // a member added to or removed from a platform or practice: said as such, not as a role
+  const member = /^(?:Platform|Practice) member for the (platform|practice) (.+)$/s.exec(e.detail);
+  if (member && (e.action === "access.grant" || e.action === "access.revoke")) {
+    out.words = e.action === "access.grant" ? "added" : "removed";
+    out.after = `${e.action === "access.grant" ? "to" : "from"} the members of the ${member[1]} ${member[2]}`;
+    delete out.detail;
+  }
   if (name && /@/.test(shown)) { out.target = { text: name, hint: shown }; return out; }
+  if (member) { out.target = { text: shown }; return out; }
   const [kind] = e.action.split(".");
   // a process or standard: by its title where the app knows it; feedback names "process <id>"
   const fb = kind === "feedback" ? /^(process|standard) (.+)$/.exec(shown) : null;

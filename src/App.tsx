@@ -10,7 +10,7 @@ import {
 import { CatalogContext, EMPTY_CATALOG, useCatalog } from "./lib/catalog";
 import { EngagementProvider } from "./lib/engagement";
 import { canOpenAdmin, FeedbackContext, MeContext, usePerms, type FeedbackActions } from "./lib/session";
-import { belongsRefused, canEdit, editsAll } from "./lib/rights";
+import { belongsRefused, canDraft, editsAll, newDocPlaces } from "./lib/rights";
 import { blankProcess, blankStandard, slugify, tidy, tidyStandard, today, uniqueId, type BelongsTo } from "./lib/edit";
 import { CatalogPage } from "./components/CatalogPage";
 import { Library } from "./components/Library";
@@ -21,6 +21,8 @@ import { StandardsLibrary } from "./components/StandardsLibrary";
 import { MinePage } from "./components/MinePage";
 import { accountRoles, myGroups, responsibilities, urgent } from "./lib/responsibilities";
 import { platformName, practiceName } from "./lib/catalog";
+import { groupEntry } from "./lib/groups";
+import type { GroupKind } from "./lib/members";
 import { chooseDialog, confirmDialog, ErrorBoundary, Field, LoadError, Loading, Modal, Notices, notify, useLayer } from "./components/ui";
 import { BrandLogo } from "./components/Brand";
 import { chooseDark, refreshLook, startLook, useLook } from "./lib/theme";
@@ -34,6 +36,7 @@ const AdminPage = lazy(() => import("./components/AdminPage").then((m) => ({ def
 const GuidePage = lazy(() => import("./components/GuidePage").then((m) => ({ default: m.GuidePage })));
 const HomePage = lazy(() => import("./components/HomePage").then((m) => ({ default: m.HomePage })));
 const SearchPage = lazy(() => import("./components/SearchPage").then((m) => ({ default: m.SearchPage })));
+const GroupPage = lazy(() => import("./components/GroupPage").then((m) => ({ default: m.GroupPage })));
 const RequestsPage = lazy(() => import("./components/RequestsPage").then((m) => ({ default: m.RequestsPage })));
 const EditProcessPage = lazy(() => import("./components/EditProcessPage").then((m) => ({ default: m.EditProcessPage })));
 const EditStandardPage = lazy(() => import("./components/EditStandardPage").then((m) => ({ default: m.EditStandardPage })));
@@ -43,14 +46,17 @@ const AiDialog = lazy(() => import("./components/AiDialog").then((m) => ({ defau
  * A page for something that is not there (deleted, or never existed). The lists in memory may be
  * older than the address - somebody may have created it since - so the server is asked once first.
  */
-function NotFound({ noun, recheck }: { noun: "process" | "standard"; recheck?: () => Promise<unknown> }) {
+function NotFound({ noun, recheck }: { noun: "process" | "standard" | GroupKind; recheck?: () => Promise<unknown> }) {
   const [checked, setChecked] = useState(!recheck);
   useEffect(() => { if (recheck) void recheck().catch(() => {}).finally(() => setChecked(true)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!checked) return <Loading page />;
+  const doc = noun === "process" || noun === "standard";
   return (
-    <div className="page not-found"><h1>{noun === "process" ? "Process" : "Standard"} not found</h1>
-      <p className="muted">This {noun} does not exist (any more). It may have been renamed or deleted.</p>
-      <a className="btn" href={href({ page: noun === "process" ? "library" : "standards" })}>Back to all {noun === "process" ? "processes" : "standards"}</a></div>
+    <div className="page not-found"><h1>{noun.slice(0, 1).toUpperCase()}{noun.slice(1)} not found</h1>
+      <p className="muted">This {noun} does not exist (any more). It may have been {doc ? "renamed or deleted" : "removed from the lists"}.</p>
+      {doc
+        ? <a className="btn" href={href({ page: noun === "process" ? "library" : "standards" })}>Back to all {noun === "process" ? "processes" : "standards"}</a>
+        : <a className="btn" href={href({ page: "catalog" })}>Back to Teams &amp; tools</a>}</div>
   );
 }
 
@@ -243,10 +249,10 @@ function NameDialog({ noun, from, onCreate, onClose }: {
   const [title, setTitle] = useState(from?.title ?? "");
   const [busy, setBusy] = useState(false);
   // the platforms and practices this person owns, for somebody who may not change everything
-  const yours = editsAll(perms, noun) ? [] : [
-    ...perms.platforms.map((id) => ({ value: `platform:${id}`, label: `Platform: ${platformName(catalog, id)}` })),
-    ...perms.practices.map((id) => ({ value: `practice:${id}`, label: `Practice: ${practiceName(catalog, id)}` })),
-  ];
+  const yours = newDocPlaces(perms, noun).map((x) => ({
+    value: `${x.kind}:${x.id}`,
+    label: `${x.kind === "platform" ? "Platform" : "Practice"}: ${x.kind === "platform" ? platformName(catalog, x.id) : practiceName(catalog, x.id)}${x.publishes ? "" : " (an owner publishes it)"}`,
+  }));
   const [belongs, setBelongs] = useState(yours[0]?.value ?? "");
   const teams = catalog.teams;
   const [owner, setOwner] = useState(() => {
@@ -262,14 +268,14 @@ function NameDialog({ noun, from, onCreate, onClose }: {
     try { await onCreate(title.trim(), choice); } catch { setBusy(false); }
   };
   return (
-    <Modal title={`New ${noun}`} subtitle={`It starts as a draft that only editors see. You can change everything later, except its link.`} onClose={onClose}
+    <Modal title={`New ${noun}`} subtitle={`It starts as a draft that only the people who may change it see. You can change everything later, except its link.`} onClose={onClose}
       footer={<><span className="spacer" /><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!ok || busy} onClick={create}>Create {noun}</button></>}>
       <form className="form" onSubmit={(e) => { e.preventDefault(); create(); }}>
         <Field label={`Name of the ${noun}`} hint={slugify(title).length >= 3 ? `Address: …/${from?.id ?? slugify(title)}` : noun === "process" ? "For example: Request a database" : "For example: Secure logging"}>
           <input autoFocus value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} />
         </Field>
         {yours.length > 0 && (
-          <Field label="It belongs to" hint={`you may change what belongs to your platforms and practices`}>
+          <Field label="It belongs to" hint="one of your platforms and practices">
             <select value={belongs} onChange={(e) => setBelongs(e.target.value)}>
               {yours.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -484,7 +490,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   // accident and never lands on top of something that exists.
   const createProcess = async (p: Process) => {
     // somebody who may only change what belongs to their platforms and practices first says which
-    if (!canEdit(perms, "process", p) || belongsRefused(perms, "process", undefined, p).length) { setPending(p); setAi(null); setNaming("process"); return; }
+    if (!canDraft(perms, "process", p) || belongsRefused(perms, "process", undefined, p).length) { setPending(p); setAi(null); setNaming("process"); return; }
     const id = uniqueId(p.id, all.map((x) => x.id));
     const doc = tidy({ ...p, id, status: "draft", $schema: "../schema/process.schema.json", updatedAt: today() });
     try { await saveProcess(doc, 0, "Created"); } catch (e) { notify.error("The process could not be created.", whyNotCreated(e, "process")); if ((e as ApiError).conflict) load(); throw e; }
@@ -492,7 +498,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     go({ page: "edit-process", id });
   };
   const createStandard = async (s: Standard) => {
-    if (!canEdit(perms, "standard", s) || belongsRefused(perms, "standard", undefined, s).length) { setPending(s); setAi(null); setNaming("standard"); return; }
+    if (!canDraft(perms, "standard", s) || belongsRefused(perms, "standard", undefined, s).length) { setPending(s); setAi(null); setNaming("standard"); return; }
     const id = uniqueId(s.id, standards.map((x) => x.id));
     const doc = tidyStandard({ ...s, id, status: "draft", $schema: "../schema/standard.schema.json", updatedAt: today() });
     try { await saveStandard(doc, 0, "Created"); } catch (e) { notify.error("The standard could not be created.", whyNotCreated(e, "standard")); if ((e as ApiError).conflict) load(); throw e; }
@@ -553,8 +559,8 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const standard = route.page === "standard" || route.page === "edit-standard" ? standards.find((s) => s.id === route.id) : undefined;
   // the editing screen is a screen of its own: its editing bar takes the place of the top bar
   // (somebody who may not change it gets the ordinary page, with the top bar, saying so)
-  const editing = (route.page === "edit-process" && !!process && canEdit(perms, "process", process))
-    || (route.page === "edit-standard" && !!standard && canEdit(perms, "standard", standard));
+  const editing = (route.page === "edit-process" && !!process && canDraft(perms, "process", process))
+    || (route.page === "edit-standard" && !!standard && canDraft(perms, "standard", standard));
   const on = (...pages: string[]) => (pages.includes(route.page) ? "on" : "");
   const current = (...pages: string[]) => (pages.includes(route.page) ? "page" as const : undefined);
 
@@ -566,12 +572,13 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     { key: "requests", pages: ["requests"], href: href({ page: "requests" }), label: "Requests", title: "Requests: ask for a process or standard that is missing, vote for what others asked for", icon: Lightbulb },
     ...(mine.length > 0 ? [{ key: "mine", pages: ["mine"], href: href({ page: "mine" }), label: "My responsibilities", title: "What you answer for: reviews to do, feedback to handle", icon: ClipboardCheck, count: waiting,
       name: waiting ? `My responsibilities, ${waiting} waiting` : "My responsibilities" }] : []),
-    { key: "catalog", pages: ["catalog"], href: href({ page: "catalog" }), label: "Teams & tools", title: "Teams & tools", icon: Users },
+    { key: "catalog", pages: ["catalog", "group"], href: href({ page: "catalog" }), label: "Teams & tools", title: "Teams & tools", icon: Users },
     { key: "guide", pages: ["guide"], href: href({ page: "guide" }), label: "Guide", title: "Guide", icon: BookOpen },
     ...(canOpenAdmin(perms) ? [{ key: "admin", pages: ["admin"], href: href({ page: "admin", section: perms.admin ? "access" : "lists" }), label: "Admin", title: "Admin", icon: Settings2 }] : []),
   ];
 
-  const title = pageTitle(route, { process: process?.title, standard: standard?.title, loading: !processes }, name);
+  const group = route.page === "group" ? groupEntry(catalog, route.kind, route.id) : undefined;
+  const title = pageTitle(route, { process: process?.title, standard: standard?.title, group: group?.name, loading: !processes }, name);
   useEffect(() => { document.title = title; }, [title]);
 
   // the page itself is the main region; the editing screen has a main region of its own inside
@@ -609,6 +616,9 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         <StandardsLibrary standards={standards} processes={all} feedback={feedback.standard} meta={standardMeta} onAi={() => setAi("standard")} onNew={newStandard} />
       )}
       {processes && route.page === "catalog" && <CatalogPage processes={all} standards={standards} editable={false} />}
+      {processes && route.page === "group" && (group
+        ? <GroupPage key={`${route.kind}/${route.id}`} kind={route.kind} id={route.id} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }} />
+        : <NotFound key={`g/${route.kind}/${route.id}`} noun={route.kind} recheck={refreshAll} />)}
       {processes && route.page === "requests" && <RequestsPage state={route.state} kind={route.kind} processes={all} standards={standards} />}
       {processes && route.page === "mine" && (
         <MinePage processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }}

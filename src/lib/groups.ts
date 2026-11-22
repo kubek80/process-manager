@@ -1,4 +1,4 @@
-import type { Catalog, Contacts, Platform, Practice, Process, Standard, Team } from "../types";
+import type { Catalog, Contacts, Platform, Practice, Team } from "../types";
 import type { GroupKind, GroupRank } from "./members";
 import { looksLikeEmail } from "./members";
 import type { Filters } from "./search";
@@ -44,7 +44,7 @@ export const rankText = (rank: GroupRank | undefined): string =>
 // ---------- contact details
 
 /** A link people typed is drawn as a link only when it is http or https, as the server checks it. */
-export const isWebLink = (v: unknown): v is string => typeof v === "string" && /^https?:\/\/\S+$/i.test(v.trim()) && v.trim().length <= 300;
+export const isWebLink = (v: unknown): v is string => typeof v === "string" && /^https?:\/\/\S+$/.test(v.trim()) && v.trim().length <= 300;
 
 /** The longest each contact detail may be, as the lists' format allows. */
 export const CONTACT_MAX: Record<keyof Contacts, number> = {
@@ -91,6 +91,9 @@ export function contactProblems(c: Contacts | undefined): Partial<Record<keyof C
   }
   return out;
 }
+
+/** Whether the contact details can be saved: no problem in any of them. */
+export const contactsOk = (c: Contacts | undefined) => Object.keys(contactProblems(c)).length === 0;
 
 /** A link shown short: without "https://", "www." and a trailing slash. The whole link is its tooltip. */
 export const shortLink = (url: string) => url.trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "");
@@ -151,5 +154,12 @@ export function countByKind(docs: { kind: "process" | "standard" }[]): { process
   return { process, standard };
 }
 
-/** Whether a process or standard is part of a group: used where the cards are not built through search. */
-export const docsOfGroup = <T extends Process | Standard>(kind: GroupKind, id: string, docs: T[]) => docs.filter((d) => belongsToGroup(kind, id, d));
+/**
+ * The owner line of a page head (`ownedBy`'s words) cut where the team's name starts, so that the
+ * name can be a link and the words stay exactly `ownedBy`'s. Without the name at the end, all of it
+ * is `before`.
+ */
+export function splitOwnerLine(said: string, team: string): { before: string; team: string } {
+  if (!team || !said.endsWith(team)) return { before: said, team: "" };
+  return { before: said.slice(0, said.length - team.length), team };
+}

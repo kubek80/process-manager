@@ -77,7 +77,13 @@
     {
       "id": "cloud-platform-team",
       "name": "Cloud Platform team",
-      "contact": "Slack #cloud-platform"
+      "contact": "Slack #cloud-platform",
+      "contacts": {
+        "email": "cloud-platform@example.com",
+        "slack": "#cloud-platform",
+        "slackUrl": "https://example.slack.com/archives/C0CLOUDPLAT"
+      },
+      "description": "Runs the Google Cloud platform: landing zones, projects, networks and the shared tooling around them."
     },
     {
       "id": "security",
@@ -117,12 +123,24 @@
       "id": "security",
       "name": "Cyber security",
       "contact": "Slack #security",
+      "contacts": {
+        "email": "security@example.com",
+        "slack": "#security",
+        "form": "https://forms.example.com/security/ask"
+      },
       "description": "Agrees how we keep systems and data safe."
     },
     {
       "id": "engineering",
       "name": "Engineering",
       "contact": "Slack #engineering-practice",
+      "contacts": {
+        "email": "engineering-practice@example.com",
+        "slack": "#engineering-practice",
+        "chat": "Engineering practice",
+        "chatUrl": "https://chat.google.com/room/AAAAengineering",
+        "confluence": "https://example.atlassian.net/wiki/spaces/ENG"
+      },
       "description": "Guild that agrees how we write and review code."
     },
     {
@@ -135,7 +153,15 @@
     {
       "id": "google-cloud",
       "name": "Google Cloud",
-      "contact": "Slack #cloud-platform"
+      "contact": "Slack #cloud-platform",
+      "contacts": {
+        "email": "cloud-platform@example.com",
+        "slack": "#cloud-platform",
+        "slackUrl": "https://example.slack.com/archives/C0CLOUDPLAT",
+        "confluence": "https://example.atlassian.net/wiki/spaces/CLOUD",
+        "form": "https://forms.example.com/cloud-platform/request"
+      },
+      "description": "Google Cloud as the company runs it: projects, networks and the guard rails around them. Ask the Cloud Platform team for a project, quota or access."
     },
     {
       "id": "azure",
@@ -152,6 +178,11 @@
       "id": "akamai",
       "name": "Akamai",
       "contact": "Slack #edge-cdn",
+      "contacts": {
+        "email": "edge-cdn@example.com",
+        "slack": "#edge-cdn",
+        "page": "https://intranet.example.com/edge-cdn"
+      },
       "description": "Edge, CDN and web application firewall."
     },
     {

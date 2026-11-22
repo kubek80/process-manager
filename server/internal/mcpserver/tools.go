@@ -448,6 +448,8 @@ func (s *Server) skill(ctx context.Context, in SkillInput) (SkillOut, error) {
 type Group struct {
 	Ref
 	Members []string `json:"members,omitempty" jsonschema:"emails of the people with a role for it; only given to callers that present the shared secret"`
+	// Drafters: the members of a platform or practice, who write drafts its owners publish.
+	Drafters []string `json:"drafters,omitempty" jsonschema:"platforms and practices: emails of its members, who may write drafts that an owner publishes; only given to callers that present the shared secret"`
 }
 
 // Catalog is the answer of get_catalog.
@@ -466,7 +468,7 @@ type Catalog struct {
 func plain(list []docs.Named) []Ref {
 	out := []Ref{}
 	for _, n := range list {
-		out = append(out, Ref{ID: n.ID, Name: n.Name, Contact: n.Contact, URL: n.URL, Description: n.Description})
+		out = append(out, Ref{ID: n.ID, Name: n.Name, Contact: n.Contact, Contacts: contactsOf(n), URL: n.URL, Description: n.Description})
 	}
 	return out
 }
@@ -492,7 +494,7 @@ func (s *Server) catalog(ctx context.Context) (Catalog, error) {
 			members[key] = append(members[key], m.Email)
 		}
 	}
-	groups := func(list []docs.Named, role string) []Group {
+	groups := func(list []docs.Named, role, member string) []Group {
 		out := []Group{}
 		for _, r := range plain(list) {
 			g := Group{Ref: r}
@@ -501,13 +503,19 @@ func (s *Server) catalog(ctx context.Context) (Catalog, error) {
 				if g.Members == nil {
 					g.Members = []string{}
 				}
+				if member != "" {
+					g.Drafters = members[member+"/"+r.ID]
+					if g.Drafters == nil {
+						g.Drafters = []string{}
+					}
+				}
 			}
 			out = append(out, g)
 		}
 		return out
 	}
 	return Catalog{
-		Teams: groups(lists.Teams, rbac.Owner), Practices: groups(lists.Practices, rbac.PracticeOwner), Platforms: groups(lists.Platforms, rbac.PlatformOwner),
+		Teams: groups(lists.Teams, rbac.Owner, ""), Practices: groups(lists.Practices, rbac.PracticeOwner, rbac.PracticeMember), Platforms: groups(lists.Platforms, rbac.PlatformOwner, rbac.PlatformMember),
 		Categories: plain(lists.Categories), Tools: plain(lists.Tools), Tiers: plain(lists.Tiers), Environments: plain(lists.Environments), Languages: plain(lists.Languages),
 		MembersShown: show,
 	}, nil

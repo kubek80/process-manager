@@ -50,7 +50,9 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
   const [busy, setBusy] = useState<string | null>(null);
   const only = group && groups.some((g) => groupKey(g) === group) ? group : null;
   const nameOf = (g: Group) => groupName(catalog, g.kind, g.id);
-  const via = (o: Owned) => o.groups.map(nameOf).join(", ");
+  const via = (o: Owned) => o.groups.map((g) => (g.member ? `${nameOf(g)} (member)` : nameOf(g))).join(", ");
+  // somebody who is only a member of platforms and practices: they draft, the owners publish, review and answer feedback
+  const onlyMember = groups.length > 0 && groups.every((g) => g.member);
   const { owned, tasks } = useMemo(() => responsibilities(perms, only, processes, standards, feedback, undefined, meta), [perms, only, processes, standards, feedback, meta]);
 
   const of = (...kinds: Task["kind"][]) => tasks.filter((t) => kinds.includes(t.kind));
@@ -82,6 +84,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
           <li><Users size={15} /><span>You are <b>Owner</b> of the team that maintains it: you confirm its reviews and answer its feedback.</span></li>
           <li><Boxes size={15} /><span>You are <b>Platform owner</b> of the platform it belongs to: you may also change it.</span></li>
           <li><Compass size={15} /><span>You are <b>Practice owner</b> of the practice it belongs to: you may also change it.</span></li>
+          <li><Boxes size={15} /><span>You are <b>Platform member</b> or <b>Practice member</b> of the platform or practice it belongs to: you may create drafts and suggest changes, which an owner publishes.</span></li>
         </ul>
         <p className="muted">Who belongs to which team, platform and practice is shown under <a href={href({ page: "catalog" })}>Teams &amp; tools</a>.</p>
       </div>
@@ -92,27 +95,31 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
     <div className="page mine">
       <header className="mine-head">
         <h1>My responsibilities</h1>
-        <p className="lead">The processes and standards of {groups.length === 1 ? <b>{nameOf(groups[0])}</b> : "your teams, platforms and practices"}: what needs you now, and how everything else stands.</p>
+        <p className="lead">The processes and standards of {groups.length === 1 ? <b>{nameOf(groups[0])}</b> : groups.some((g) => g.kind === "team") ? "your teams, platforms and practices" : "your platforms and practices"}: {onlyMember ? "the drafts that wait for an owner to publish them" : "what needs you now"}, and how everything else stands.</p>
+        {groups.some((g) => g.member) && <p className="muted small mine-member">Where you are a member, you create drafts and suggest changes; an owner of the platform or practice publishes them, confirms reviews and answers feedback.</p>}
         {groups.length > 1 && (
           <div className="seg mine-groups" role="group" aria-label="Show what belongs to">
             <button className={`seg-item ${only === null ? "on" : ""}`} aria-pressed={only === null} onClick={() => setGroup(null)}>All of mine</button>
             {groups.map((g) => {
               const Icon = GROUP_ICON[g.kind];
-              return <button key={groupKey(g)} className={`seg-item ${only === groupKey(g) ? "on" : ""}`} aria-pressed={only === groupKey(g)} title={GROUP_TITLE[g.kind]} onClick={() => setGroup(groupKey(g))}><Icon size={13} aria-label={GROUP_TITLE[g.kind]} />{nameOf(g)}</button>;
+              return <button key={groupKey(g)} className={`seg-item ${only === groupKey(g) ? "on" : ""}`} aria-pressed={only === groupKey(g)} title={g.member ? `${GROUP_TITLE[g.kind]}: you are a member` : GROUP_TITLE[g.kind]} onClick={() => setGroup(groupKey(g))}><Icon size={13} aria-label={GROUP_TITLE[g.kind]} />{nameOf(g)}</button>;
             })}
           </div>
         )}
       </header>
 
       <div className="stat-row">
-        {(() => { const t = reviewsDue(overdue.length, soon.length); return <div className={`stat ${t.tone}`}><strong>{t.count}</strong><span>{t.label}</span>{t.split && <span className="stat-split">{t.split}</span>}</div>; })()}
-        <div className={`stat ${open.length ? "warn" : "good"}`}><strong>{open.length}</strong><span>open feedback</span></div>
+        {!onlyMember && (() => { const t = reviewsDue(overdue.length, soon.length); return <div className={`stat ${t.tone}`}><strong>{t.count}</strong><span>{t.label}</span>{t.split && <span className="stat-split">{t.split}</span>}</div>; })()}
+        {!onlyMember && <div className={`stat ${open.length ? "warn" : "good"}`}><strong>{open.length}</strong><span>open feedback</span></div>}
         <div className="stat"><strong>{owned.filter((o) => o.status === "draft").length}</strong><span>drafts not yet published</span></div>
+        {onlyMember && <div className="stat"><strong>{changed.length}</strong><span>with unpublished changes</span></div>}
         <div className="stat"><strong>{owned.length}</strong><span>{owned.length === 1 ? "process or standard is yours" : "processes and standards are yours"}</span></div>
       </div>
 
       {tasks.length === 0 && owned.length > 0 && (
-        <div className="check good banner"><CircleCheck size={16} /><span><b>Nothing needs you right now.</b> Every review is up to date and no feedback is waiting.</span></div>
+        <div className="check good banner"><CircleCheck size={16} /><span>{onlyMember
+          ? <><b>No draft is waiting for an owner.</b> Create one with “New process” or “New standard”, or suggest a change with “Edit” on what belongs to your platforms and practices.</>
+          : <><b>Nothing needs you right now.</b> Every review is up to date and no feedback is waiting.</>}</span></div>
       )}
 
       {(overdue.length > 0 || soon.length > 0) && (
@@ -166,7 +173,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
                 <li key={"changes" + o.kind + o.doc.id} className="mine-changes">
                   <Icon o={o} />
                   <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a>
-                    <em>Changed by {d.updatedByName || changedBy(d.updatedBy, names)} on <span className="nowrap">{day(d.updatedAt)}</span>. Readers still see version {meta[o.kind][o.doc.id]?.version}.</em></span>
+                    <em>Changed by {d.updatedByName || changedBy(d.updatedBy, names)} on <span className="nowrap">{day(d.updatedAt)}</span>. Readers still see version {meta[o.kind][o.doc.id]?.version}.{o.member && " An owner publishes the changes."}</em></span>
                   <span className="tier-tag unpublished">Unpublished changes</span>
                   <a className="btn small" href={editPage(o)}>Continue editing<ArrowUpRight size={13} /></a>
                 </li>
@@ -176,9 +183,9 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
               <li key={kind + o.kind + o.doc.id}>
                 <Icon o={o} />
                 <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a>
-                  <em>{kind === "draft" ? "A draft: readers do not see it until it is published." : "In use, but nobody is asked to review it: no review rhythm is set under About when editing it."}</em></span>
+                  <em>{kind === "draft" ? (o.member ? "A draft waiting for an owner to publish it. Readers do not see it yet." : "A draft: readers do not see it until it is published.") : "In use, but nobody is asked to review it: no review rhythm is set under About when editing it."}</em></span>
                 <span className={`tier-tag ${kind === "draft" ? "status-draft" : "review-soon"}`}>{kind === "draft" ? "Draft" : "No review rhythm"}</span>
-                <a className="btn small" href={pageOf(o)}>Open<ArrowUpRight size={13} /></a>
+                {o.member ? <a className="btn small" href={editPage(o)}>Continue editing<ArrowUpRight size={13} /></a> : <a className="btn small" href={pageOf(o)}>Open<ArrowUpRight size={13} /></a>}
               </li>
             ))}
           </ul>

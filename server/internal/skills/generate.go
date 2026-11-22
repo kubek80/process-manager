@@ -191,10 +191,26 @@ func (c Context) team(id string) string {
 		}
 		return id
 	}
-	if t.Contact != "" {
-		return t.Name + " (" + t.Contact + ")"
+	return withReach(t)
+}
+
+// withReach is the name of an entry of the lists with how to reach it, when that is given:
+// "Cloud Platform team (Group email: cloud@example.com; Slack: #cloud-platform)".
+func withReach(n docs.Named) string {
+	if reach := n.Reach(); reach != "" {
+		return n.Name + " (" + reach + ")"
 	}
-	return t.Name
+	return n.Name
+}
+
+// named is an entry of a list by name, with how to reach it; the id when it is not in the list.
+func named(list []docs.Named, id string) string {
+	for _, n := range list {
+		if n.ID == id {
+			return withReach(n)
+		}
+	}
+	return id
 }
 
 // rigour says in plain words how binding a process is.
@@ -211,10 +227,10 @@ func (c Context) placement(b *strings.Builder, category, practice, platform stri
 		fmt.Fprintf(b, "- Category: %s\n", docs.Name(c.Lists.Categories, category))
 	}
 	if practice != "" {
-		fmt.Fprintf(b, "- Practice: %s\n", docs.Name(c.Lists.Practices, practice))
+		fmt.Fprintf(b, "- Practice: %s\n", named(c.Lists.Practices, practice))
 	}
 	if platform != "" {
-		fmt.Fprintf(b, "- Platform: %s\n", docs.Name(c.Lists.Platforms, platform))
+		fmt.Fprintf(b, "- Platform: %s\n", named(c.Lists.Platforms, platform))
 	}
 }
 

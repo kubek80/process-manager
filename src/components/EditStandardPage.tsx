@@ -5,7 +5,7 @@ import { addRequirement, appendRequirement, deleteRequirement, EXAMPLE, moveRequ
 import { issueTarget, issuesByPlace, issuesFor, noteMove, selectionKey, STANDARD_SECTIONS, standardOutline, withoutEarlySuggestions, type Selection, type StandardSection } from "../lib/editing";
 import { isDrawableStandard, standardSchema, validateStandard } from "../lib/validate";
 import { useSelectedItem } from "../lib/selection";
-import { canEdit } from "../lib/rights";
+import { canDraft } from "../lib/rights";
 import { usePerms } from "../lib/session";
 import { useCatalog } from "../lib/catalog";
 import { statusOf } from "../lib/lifecycle";
@@ -38,7 +38,7 @@ export function EditStandardPage(props: {
   const { catalog } = useCatalog();
   const ctx = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds: all.map((s) => s.id), catalog }), [processes, all, catalog]);
   const check = useCallback((s: Standard) => validateStandard(s, ctx), [ctx]);
-  if (!canEdit(perms, "standard", standard)) return <NoRight noun="standard" title={standard.title} readHref={href({ page: "standard", id: standard.id, tab: "doc" })} />;
+  if (!canDraft(perms, "standard", standard)) return <NoRight noun="standard" title={standard.title} readHref={href({ page: "standard", id: standard.id, tab: "doc" })} />;
   return (
     <EditSession<Standard> o={{
       kind: "standard", doc: standard, meta: props.meta, others: all, tidy: tidyStandard, stamp, check, drawable: isDrawableStandard,

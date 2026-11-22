@@ -222,7 +222,7 @@ func TestMeShowsRights(t *testing.T) {
 	e := setup(t, nil)
 	c := e.anonymous()
 	_, me := c.do("GET", "/api/me", nil)
-	if me["authenticated"] != false || me["provider"] != "dev" || len(me["devUsers"].([]any)) != 6 || me["user"] != nil || me["perms"] != nil {
+	if me["authenticated"] != false || me["provider"] != "dev" || len(me["devUsers"].([]any)) != 7 || me["user"] != nil || me["perms"] != nil {
 		t.Fatalf("anonymous me: %v", me)
 	}
 	status, body := c.do("POST", "/auth/dev/login", map[string]string{"email": "mallory@example.com"})
@@ -246,7 +246,7 @@ func TestMeShowsRights(t *testing.T) {
 	if p := perms(riley); p["practices"].([]any)[0] != "security" || len(p["platforms"].([]any)) != 0 || p["owns"].([]any)[0] != "security" || p["standards"] != false {
 		t.Fatalf("riley: %v", p)
 	}
-	if p := perms(jordan); fmt.Sprint(p) != "map[admin:false catalog:false owns:[cloud-platform-team] platforms:[google-cloud] practices:[engineering] processes:false standards:false]" {
+	if p := perms(jordan); fmt.Sprint(p) != "map[admin:false catalog:false memberPlatforms:[] memberPractices:[] owns:[cloud-platform-team] platforms:[google-cloud] practices:[engineering] processes:false standards:false]" {
 		t.Fatalf("jordan: %v", p)
 	}
 	if p := perms(dana); p["admin"] != true || p["processes"] != true || p["standards"] != true || p["catalog"] != true {
@@ -865,8 +865,8 @@ func TestAccessIsManagedByAdminsAndTakesEffectAtOnce(t *testing.T) {
 	}
 	admin := e.as(dana)
 	status, body := admin.do("GET", "/api/admin/access", nil)
-	if status != 200 || len(body["assignments"].([]any)) != 8 || body["bootstrapAdmins"].([]any)[0] != dana ||
-		fmt.Sprint(body["roles"]) != "[admin catalog-manager process-editor standards-editor owner platform-owner practice-owner]" {
+	if status != 200 || len(body["assignments"].([]any)) != 10 || body["bootstrapAdmins"].([]any)[0] != dana ||
+		fmt.Sprint(body["roles"]) != "[admin catalog-manager process-editor standards-editor owner platform-owner practice-owner platform-member practice-member]" {
 		t.Fatalf("access: %d %v", status, body)
 	}
 
@@ -876,13 +876,13 @@ func TestAccessIsManagedByAdminsAndTakesEffectAtOnce(t *testing.T) {
 	status, _ = samClient.do("PUT", "/api/standards/"+review, changed)
 	wantStatus(t, status, 403, nil)
 	status, body = admin.do("POST", "/api/admin/access", map[string]string{"email": " Sam@Example.com ", "role": "practice-owner", "scope": "engineering"})
-	if status != 200 || len(body["assignments"].([]any)) != 9 {
+	if status != 200 || len(body["assignments"].([]any)) != 11 {
 		t.Fatalf("grant: %d %v", status, body)
 	}
 	status, body = samClient.do("PUT", "/api/standards/"+review, changed) // same session, no new sign-in
 	wantStatus(t, status, 200, body)
 	status, body = admin.do("DELETE", "/api/admin/access", map[string]string{"email": sam, "role": "practice-owner", "scope": "engineering"})
-	if status != 200 || len(body["assignments"].([]any)) != 8 {
+	if status != 200 || len(body["assignments"].([]any)) != 10 {
 		t.Fatalf("revoke: %d %v", status, body)
 	}
 	status, _ = samClient.do("PUT", "/api/standards/"+review, e.body(docs.Standard, review, "about 300", "about 200"))
@@ -941,7 +941,7 @@ func TestSystemOverview(t *testing.T) {
 	e.as(sam).report(docs.Process, gcp, "", "One open item.")
 	status, body := e.as(dana).do("GET", "/api/admin/system", nil)
 	if status != 200 || body["provider"] != "dev" || body["processes"] != float64(7) || body["standards"] != float64(3) || body["skills"] != float64(13) ||
-		body["assignments"] != float64(8) || body["openFeedback"] != float64(1) || body["baseUrl"] != "http://pm.test" {
+		body["assignments"] != float64(10) || body["openFeedback"] != float64(1) || body["baseUrl"] != "http://pm.test" {
 		t.Fatalf("%d %v", status, body)
 	}
 }

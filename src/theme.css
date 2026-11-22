@@ -101,7 +101,7 @@
 .theme-preview-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .theme-preview-head h3 { font-size: 15px; font-weight: 650; }
 .preview-panes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
-.preview-pane { position: relative; display: grid; align-content: start; overflow: hidden; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line-strong); border-radius: 14px; }
+.preview-pane { position: relative; display: grid; align-content: start; overflow: hidden; min-width: 0; background: var(--bg); color: var(--text); font-family: var(--font-family); border: 1px solid var(--line-strong); border-radius: 14px; }
 /* each pane says it is a sample: a caption above it, and a dashed frame unlike anything that can be used */
 .preview-frame { margin: 0; display: grid; gap: 6px; min-width: 0; }
 .pv-caption { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-2); }
@@ -125,6 +125,16 @@
 .pv-lines .pv-link { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
 .pv-field .pv-focused { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .pv-body .seg, .theme-group > .seg { justify-self: start; }
+/* the states as the app draws them: notices, status pills, a count, and the dark editing bar */
+.pv-states { display: grid; gap: 6px; }
+.pv-states .check { margin: 0; padding: 7px 10px; font-size: 12.5px; }
+.pv-marks { gap: 6px; }
+.pv-marks .status { height: 26px; padding: 0 9px; font-size: 12px; }
+.pv-count { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 550; color: var(--text-2); }
+.pv-edit-bar.edit-bar { min-height: 0; padding: 8px 10px; gap: 8px; border-radius: 10px; flex-wrap: wrap; }
+.pv-edit-bar .eb-btn { height: 30px; padding: 0 10px; font-size: 12.5px; }
+.pv-edit-bar .eb-status { height: 26px; font-size: 12px; }
+.theme-font-default { justify-self: start; }
 .pv-cards { display: grid; gap: 10px; }
 .pv-cards > * { min-width: 0; }
 

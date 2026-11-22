@@ -9,7 +9,7 @@ export function Library({ processes, standardIds, onNew, onAi, feedback, meta }:
   meta?: Record<string, DocMeta | undefined>;
 }) {
   const perms = usePerms();
-  // the buttons to create one: for a process editor, and for whoever owns a platform or practice
+  // the buttons to create one: for a process editor, and for whoever owns or is a member of a platform or practice
   const editor = canCreate(perms, "process");
   return (
     <div className="page library">

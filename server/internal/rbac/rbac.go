@@ -25,10 +25,15 @@ const (
 	Owner           = "owner"            // reviews, feedback and drafts of what one team owns (scope: a team)
 	PlatformOwner   = "platform-owner"   // edits what belongs to one platform (scope: a platform)
 	PracticeOwner   = "practice-owner"   // edits what belongs to one practice (scope: a practice)
+	PlatformMember  = "platform-member"  // drafts of what belongs to one platform (scope: a platform)
+	PracticeMember  = "practice-member"  // drafts of what belongs to one practice (scope: a practice)
 )
 
 // Roles in the order the Admin panel shows them.
-var Roles = []string{Admin, CatalogManager, ProcessEditor, StandardsEditor, Owner, PlatformOwner, PracticeOwner}
+var Roles = []string{Admin, CatalogManager, ProcessEditor, StandardsEditor, Owner, PlatformOwner, PracticeOwner, PlatformMember, PracticeMember}
+
+// Scoped are the roles limited to one team, platform or practice: the people of a group.
+var Scoped = []string{Owner, PlatformOwner, PracticeOwner, PlatformMember, PracticeMember}
 
 // ScopeList names the list the scope of a role comes from ("teams", "platforms" or
 // "practices"); "" for a role that takes no scope.
@@ -36,9 +41,9 @@ func ScopeList(role string) string {
 	switch role {
 	case Owner:
 		return "teams"
-	case PlatformOwner:
+	case PlatformOwner, PlatformMember:
 		return "platforms"
-	case PracticeOwner:
+	case PracticeOwner, PracticeMember:
 		return "practices"
 	}
 	return ""
@@ -49,9 +54,9 @@ func ScopeNoun(role string) string {
 	switch role {
 	case Owner:
 		return "team"
-	case PlatformOwner:
+	case PlatformOwner, PlatformMember:
 		return "platform"
-	case PracticeOwner:
+	case PracticeOwner, PracticeMember:
 		return "practice"
 	}
 	return ""
@@ -87,11 +92,15 @@ type Perms struct {
 	Owns      []string `json:"owns"`      // teams: reviews, feedback and drafts of what they own
 	Platforms []string `json:"platforms"` // edit the processes and standards of these platforms
 	Practices []string `json:"practices"` // edit the processes and standards of these practices
+	// MemberPlatforms and MemberPractices: see and save the drafts of what belongs to these
+	// platforms and practices, never publish.
+	MemberPlatforms []string `json:"memberPlatforms"`
+	MemberPractices []string `json:"memberPractices"`
 }
 
 // PermsFrom combines assignments. bootstrap marks an admin named in the server settings.
 func PermsFrom(assignments []Assignment, bootstrap bool) Perms {
-	p := Perms{Admin: bootstrap, Owns: []string{}, Platforms: []string{}, Practices: []string{}}
+	p := Perms{Admin: bootstrap, Owns: []string{}, Platforms: []string{}, Practices: []string{}, MemberPlatforms: []string{}, MemberPractices: []string{}}
 	for _, a := range assignments {
 		// A role that covers everything gives nothing when it carries a scope: such an
 		// assignment can only come from an earlier version (a restored backup, an older server
@@ -114,6 +123,10 @@ func PermsFrom(assignments []Assignment, bootstrap bool) Perms {
 			p.Platforms = append(p.Platforms, a.Scope)
 		case PracticeOwner:
 			p.Practices = append(p.Practices, a.Scope)
+		case PlatformMember:
+			p.MemberPlatforms = append(p.MemberPlatforms, a.Scope)
+		case PracticeMember:
+			p.MemberPractices = append(p.MemberPractices, a.Scope)
 		}
 	}
 	if p.Admin {
@@ -122,6 +135,8 @@ func PermsFrom(assignments []Assignment, bootstrap bool) Perms {
 	sort.Strings(p.Owns)
 	sort.Strings(p.Platforms)
 	sort.Strings(p.Practices)
+	sort.Strings(p.MemberPlatforms)
+	sort.Strings(p.MemberPractices)
 	return p
 }
 
@@ -160,10 +175,33 @@ func (p Perms) CanEdit(kind string, b Belongs) bool {
 	return false
 }
 
+// MemberFor reports whether the person is a member of the platform or the practice of b.
+func (p Perms) MemberFor(b Belongs) bool {
+	return in(p.MemberPlatforms, b.Platform) || in(p.MemberPractices, b.Practice)
+}
+
+// CanDraft reports whether the person may work on drafts of a process or standard that
+// belongs to b: save a never-published one as a draft, and read, save and discard its working
+// draft. Whoever may edit it, and the members of its platform or practice. Publishing,
+// retiring, unpublishing, bringing back and deleting need CanEdit.
+func (p Perms) CanDraft(kind string, b Belongs) bool {
+	if kind != "process" && kind != "standard" {
+		return p.CanEdit(kind, b)
+	}
+	return p.CanEdit(kind, b) || p.MemberFor(b)
+}
+
 // CanManageFeedback: whoever may edit the thing, and the team that owns it. The same people
-// confirm its reviews and see it while it is a draft.
+// confirm its reviews.
 func (p Perms) CanManageFeedback(kind string, b Belongs) bool {
 	return p.CanEdit(kind, b) || in(p.Owns, b.Owner)
+}
+
+// CanSeeDraft reports whether the person may see a process or standard that belongs to b
+// while it is a draft: whoever manages its feedback, and the members of its platform or
+// practice. For everybody else a draft does not exist.
+func (p Perms) CanSeeDraft(kind string, b Belongs) bool {
+	return p.CanManageFeedback(kind, b) || ((kind == "process" || kind == "standard") && p.MemberFor(b))
 }
 
 // EditsAll reports whether the person edits every document of this kind: admins, process
@@ -187,6 +225,27 @@ func (p Perms) EditsAll(kind string) bool {
 // The result names the first field ("platform" or "practice") and the id that is not theirs;
 // field is "" when the save is fine. People who edit every document of the kind are not limited.
 func (p Perms) Misplaced(kind string, before *Belongs, after Belongs) (field, id string) {
+	return p.misplaced(kind, before, after, p.Platforms, p.Practices)
+}
+
+// MisplacedDraft is Misplaced for a save that stays a draft (a never-published document saved
+// as a draft, or a working draft): there the platforms and practices somebody is a member of
+// count as well as the ones they own.
+func (p Perms) MisplacedDraft(kind string, before *Belongs, after Belongs) (field, id string) {
+	return p.misplaced(kind, before, after, union(p.Platforms, p.MemberPlatforms), union(p.Practices, p.MemberPractices))
+}
+
+func union(a, b []string) []string {
+	out := append([]string{}, a...)
+	for _, v := range b {
+		if !in(out, v) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+func (p Perms) misplaced(kind string, before *Belongs, after Belongs, platforms, practices []string) (field, id string) {
 	if p.EditsAll(kind) {
 		return "", ""
 	}
@@ -206,10 +265,10 @@ func (p Perms) Misplaced(kind string, before *Belongs, after Belongs) (field, id
 		}
 		return ""
 	}
-	if id := check(p.Platforms, was.Platform, after.Platform); id != "" {
+	if id := check(platforms, was.Platform, after.Platform); id != "" {
 		return "platform", id
 	}
-	if id := check(p.Practices, was.Practice, after.Practice); id != "" {
+	if id := check(practices, was.Practice, after.Practice); id != "" {
 		return "practice", id
 	}
 	return "", ""
@@ -218,6 +277,9 @@ func (p Perms) Misplaced(kind string, before *Belongs, after Belongs) (field, id
 // EditsSome reports whether the person may edit some, but not necessarily all, documents of
 // this kind: through a platform or a practice.
 func (p Perms) EditsSome() bool { return len(p.Platforms)+len(p.Practices) > 0 }
+
+// MemberOfSome reports whether the person is a member of some platform or practice.
+func (p Perms) MemberOfSome() bool { return len(p.MemberPlatforms)+len(p.MemberPractices) > 0 }
 
 // Store keeps the assignments.
 type Store struct {
@@ -271,7 +333,7 @@ type Member struct {
 // what; who gave a role and when is for admins.
 func (s *Store) Members(ctx context.Context) ([]Member, error) {
 	rows, err := s.Pool.Query(ctx, `select email, role, scope from role_assignments where role = any($1) order by role collate "C", scope collate "C", email collate "C"`,
-		[]string{Owner, PlatformOwner, PracticeOwner})
+		Scoped)
 	if err != nil {
 		return nil, err
 	}
@@ -313,6 +375,10 @@ func Label(role string) string {
 		return "Platform owner"
 	case PracticeOwner:
 		return "Practice owner"
+	case PlatformMember:
+		return "Platform member"
+	case PracticeMember:
+		return "Practice member"
 	}
 	return role
 }
@@ -337,7 +403,7 @@ func Check(a Assignment) error {
 		if a.Scope != "" {
 			return fmt.Errorf("%w: %s: it cannot be limited to a team, platform or practice.", ErrInvalid, covers[a.Role])
 		}
-	case Owner, PlatformOwner, PracticeOwner:
+	case Owner, PlatformOwner, PracticeOwner, PlatformMember, PracticeMember:
 		noun := ScopeNoun(a.Role)
 		article := "A"
 		if a.Role == Owner {

@@ -10,7 +10,7 @@ export function StandardsLibrary({ standards, processes, feedback, onNew, onAi, 
   meta?: Record<string, DocMeta | undefined>;
 }) {
   const perms = usePerms();
-  // the buttons to create one: for a standards editor, and for whoever owns a platform or practice
+  // the buttons to create one: for a standards editor, and for whoever owns or is a member of a platform or practice
   const editor = canCreate(perms, "standard");
   const standardIds = useMemo(() => standards.map((s) => s.id), [standards]);
   return (

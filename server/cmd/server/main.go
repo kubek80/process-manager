@@ -586,14 +586,7 @@ func devRoles(ctx context.Context, st stores, log *slog.Logger) error {
 		return err
 	}
 	known := func(role, scope string) bool {
-		list := lists.Teams
-		switch role {
-		case rbac.PlatformOwner:
-			list = lists.Platforms
-		case rbac.PracticeOwner:
-			list = lists.Practices
-		}
-		for _, n := range list {
+		for _, n := range lists.ByKey(rbac.ScopeList(role)) {
 			if n.ID == scope {
 				return true
 			}

@@ -1,5 +1,6 @@
 // The look of the portal (Admin > Theming): its name, logo, brand colour, the colours of the two
-// kinds and the appearance for people who have not chosen light or dark themselves.
+// kinds, of the buttons and of the states (success, warning, information, problem), the font and
+// the appearance for people who have not chosen light or dark themselves.
 //
 // The server keeps only what the admin chose. Everything else is worked out here, for light and
 // for dark: the readable variant of each colour on the surfaces of that theme (text at least
@@ -20,14 +21,36 @@ export interface Look {
   brand?: string;
   process?: string;
   standard?: string;
+  /** The one main button of a view (default: the brand colour). */
+  mainButton?: string;
+  /** The other, outlined buttons (default: neutral). */
+  otherButtons?: string;
+  success?: string;
+  warning?: string;
+  info?: string;
+  problem?: string;
   appearance?: Appearance;
+  /** The font (default: Inter, the portal's own). */
+  font?: Font;
 }
-export type ColorPart = "brand" | "process" | "standard";
+export type Font = "roboto";
+export const FONTS: Font[] = ["roboto"];
+/** What the font custom property is set to for each font: the chosen family, then the fallbacks of styles.css follow. */
+export const FONT_FAMILY: Record<Font, string> = { roboto: '"Roboto Variable", Roboto' };
+export type StatePart = "success" | "warning" | "info" | "problem";
+export type ButtonPart = "mainButton" | "otherButtons";
+export type ColorPart = "brand" | "process" | "standard" | ButtonPart | StatePart;
+/** Every colour of a look, in the order the section shows them. */
+export const COLOR_PARTS: ColorPart[] = ["brand", "process", "standard", "mainButton", "otherButtons", "success", "warning", "info", "problem"];
+export const STATE_PARTS: StatePart[] = ["success", "warning", "info", "problem"];
 
 export const DEFAULT_NAME = "Process Manager";
 export const MAX_NAME = 40;
 /** The colours of the default look, as the colour pickers show them. */
-export const DEFAULT_COLOR: Record<ColorPart, string> = { brand: "#4f46e5", process: "#0f766e", standard: "#6d28d9" };
+export const DEFAULT_COLOR: Record<ColorPart, string> = {
+  brand: "#4f46e5", process: "#0f766e", standard: "#6d28d9", mainButton: "#4f46e5", otherButtons: "#171a26",
+  success: "#15803d", warning: "#b45309", info: "#4f46e5", problem: "#be123c",
+};
 export const DEFAULT_APPEARANCE: Appearance = "device";
 const HEX = /^#[0-9a-f]{6}$/i;
 const ICON_ID = /^[a-f0-9]{64}$/;
@@ -37,6 +60,8 @@ export const SURFACES = {
   light: { bg: "#f4f5f9", surface: "#ffffff", surface2: "#f8f9fc" },
   dark: { bg: "#0f1118", surface: "#181b25", surface2: "#1e222e" },
 } as const;
+/** The editing bar, dark in both themes (edit.css): the colours of buttons and states must also read on it. */
+export const BAR = ["#1c1d22", "#24262d"] as const;
 /** The two inks a filled colour can carry. */
 const INK = { white: "#ffffff", black: "#11121c" } as const;
 
@@ -143,13 +168,16 @@ export const ALIKE = 25;
 /** A change smaller than this (CIELAB distance) cannot be seen: it is not reported as an adjustment. */
 export const VISIBLE = 4;
 
-/** The semantic colours (styles.css), not themable: what a chosen colour must not be mistaken for. */
+/** The default colours of the states (styles.css), as text in each theme: what a colour must not be mistaken for. */
 export const SEMANTIC = {
   bad: { light: "#be123c", dark: "#fb7185" },
   warn: { light: "#b45309", dark: "#fbbf24" },
   good: { light: "#15803d", dark: "#4ade80" },
 } as const;
 export type Semantic = keyof typeof SEMANTIC;
+/** The token (styles.css) of each state: success is --good, warning --warn, problem --bad, information --info. */
+export const STATE_TOKEN: Record<StatePart, Semantic | "info"> = { success: "good", warning: "warn", info: "info", problem: "bad" };
+const SEMANTIC_PART: Record<Semantic, StatePart> = { good: "success", warn: "warning", bad: "problem" };
 /** The default colours of the kinds in each theme (lists.css): what an unchosen kind looks like. */
 const KIND_DEFAULT = { process: { light: "#0f766e", dark: "#5eead4" }, standard: { light: "#6d28d9", dark: "#c4b5fd" } } as const;
 
@@ -169,6 +197,11 @@ export interface ColorUse {
   like: Semantic[];
   /** It is nearly grey: marks and links in it hardly stand out from ordinary text. */
   grey: boolean;
+  /**
+   * Plain sentences on what will be mistaken for what (its grey included); a brand or kind colour
+   * that looks like a state is in `like`, worded by `confusion`.
+   */
+  warnings: string[];
 }
 export interface Derived {
   /** Custom properties for each theme, without the `--theme-<mode>-` prefix: only for chosen colours. */
@@ -179,12 +212,16 @@ export interface Derived {
 }
 
 /** How much of the colour goes into its soft tint and into its line, per theme. */
-const TINT = { accent: { light: 0.1, dark: 0.18 }, kind: { light: 0.12, dark: 0.16 }, line: { light: 0.4, dark: 0.32 } };
+const TINT = { accent: { light: 0.1, dark: 0.18 }, kind: { light: 0.12, dark: 0.16 }, state: { light: 0.1, dark: 0.16 }, line: { light: 0.4, dark: 0.32 } };
+const stateTokens = (t: string) => [t, `${t}-bg`, `${t}-fill`, `${t}-ink`];
 /** Which custom properties a colour part sets. */
 export const TOKENS: Record<ColorPart, string[]> = {
   brand: ["accent", "accent-fill", "accent-ink", "accent-soft"],
   process: ["kind-process", "kind-process-fill", "kind-process-ink", "kind-process-bg", "kind-process-line"],
   standard: ["kind-standard", "kind-standard-fill", "kind-standard-ink", "kind-standard-bg", "kind-standard-line"],
+  mainButton: ["action-fill", "action-ink"],
+  otherButtons: ["action-other", "action-other-line", "action-other-soft"],
+  success: stateTokens("good"), warning: stateTokens("warn"), info: stateTokens("info"), problem: stateTokens("bad"),
 };
 
 /**
@@ -193,9 +230,9 @@ export const TOKENS: Record<ColorPart, string[]> = {
  * black ink) unless it would vanish into the surface (a navy button on the dark surface), then it
  * is the readable variant.
  */
-export function deriveColor(chosen: string, mode: Mode, tint: number): { text: string; fill: string; ink: string; soft: string; line: string } {
+export function deriveColor(chosen: string, mode: Mode, tint: number, also: readonly string[] = []): { text: string; fill: string; ink: string; soft: string; line: string } {
   const s = SURFACES[mode];
-  const base = [s.bg, s.surface, s.surface2];
+  const base = [s.bg, s.surface, s.surface2, ...also];
   let text = readable(chosen, base);
   // the tint of the light theme comes from the chosen colour itself (a yellow stays a pale yellow);
   // in the dark theme from the readable one, since a dark colour would vanish in a dark surface
@@ -205,7 +242,7 @@ export function deriveColor(chosen: string, mode: Mode, tint: number): { text: s
     text = readable(text, [...base, soft]);
     if (mode === "dark") soft = mix(text, s.surface, tint);
   }
-  const fill = contrast(chosen, s.surface) >= FILL_MIN ? chosen.toLowerCase() : text;
+  const fill = [s.surface, ...also].every((b) => contrast(chosen, b) >= FILL_MIN) ? chosen.toLowerCase() : text;
   return { text, fill, ink: inkOn(fill), soft, line: mix(text, s.surface, TINT.line[mode]) };
 }
 /** A fill must stand this far from the surface (contrast ratio) to be kept as chosen. */
@@ -215,53 +252,150 @@ export const FILL_MIN = 1.4;
 export function derive(look: Look): Derived {
   const tokens: Derived["tokens"] = { light: {}, dark: {} };
   const colors: ColorUse[] = [];
-  const kindUsed: Record<"process" | "standard", Record<Mode, string>> = { process: { ...KIND_DEFAULT.process }, standard: { ...KIND_DEFAULT.standard } };
-  for (const part of ["brand", "process", "standard"] as const) {
+  for (const part of COLOR_PARTS) {
     const chosen = look[part];
     if (!isHex(chosen)) continue;
     const c = chosen.toLowerCase();
     const used = {} as Record<Mode, string>, fill = {} as Record<Mode, string>, adjusted = {} as Record<Mode, boolean>;
     for (const mode of ["light", "dark"] as const) {
-      const d = deriveColor(c, mode, part === "brand" ? TINT.accent[mode] : TINT.kind[mode]);
-      used[mode] = d.text;
+      // buttons and states also stand on the dark editing bar
+      const also = mode === "dark" && !["brand", "process", "standard"].includes(part) ? BAR : [];
+      const tint = part === "brand" || part === "otherButtons" || part === "mainButton" ? TINT.accent[mode] : part === "process" || part === "standard" ? TINT.kind[mode] : TINT.state[mode];
+      const d = deriveColor(c, mode, tint, also);
+      // a main button is a fill: what it shows is the fill, not a text colour
+      used[mode] = part === "mainButton" ? d.fill : d.text;
       fill[mode] = d.fill;
-      adjusted[mode] = distance(d.text, c) >= VISIBLE;
-      if (part === "brand") Object.assign(tokens[mode], { accent: d.text, "accent-fill": d.fill, "accent-ink": d.ink, "accent-soft": d.soft });
+      adjusted[mode] = distance(used[mode], c) >= VISIBLE;
+      const t = tokens[mode];
+      if (part === "brand") Object.assign(t, { accent: d.text, "accent-fill": d.fill, "accent-ink": d.ink, "accent-soft": d.soft });
+      else if (part === "process" || part === "standard") Object.assign(t, { [`kind-${part}`]: d.text, [`kind-${part}-fill`]: d.fill, [`kind-${part}-ink`]: d.ink, [`kind-${part}-bg`]: d.soft, [`kind-${part}-line`]: d.line });
+      else if (part === "mainButton") Object.assign(t, { "action-fill": d.fill, "action-ink": d.ink });
+      else if (part === "otherButtons") Object.assign(t, { "action-other": d.text, "action-other-line": d.line, "action-other-soft": d.soft });
       else {
-        Object.assign(tokens[mode], { [`kind-${part}`]: d.text, [`kind-${part}-fill`]: d.fill, [`kind-${part}-ink`]: d.ink, [`kind-${part}-bg`]: d.soft, [`kind-${part}-line`]: d.line });
-        kindUsed[part][mode] = d.text;
+        const k = STATE_TOKEN[part];
+        Object.assign(t, { [k]: d.text, [`${k}-bg`]: d.soft, [`${k}-fill`]: d.fill, [`${k}-ink`]: d.ink });
       }
     }
-    const like = (Object.keys(SEMANTIC) as Semantic[]).filter((k) =>
-      distance(c, SEMANTIC[k].light) < ALIKE || (["light", "dark"] as const).some((m) => distance(used[m], SEMANTIC[k][m]) < ALIKE || distance(fill[m], SEMANTIC[k][m]) < ALIKE));
-    colors.push({ part, chosen: c, used, fill, adjusted, like, grey: chroma(c) < GREY });
+    colors.push({ part, chosen: c, used, fill, adjusted, like: [], grey: part !== "otherButtons" && chroma(c) < GREY, warnings: [] });
   }
-  const kindsAlike = (["light", "dark"] as const).filter((m) => distance(kindUsed.process[m], kindUsed.standard[m]) < ALIKE);
+  // what each part looks like in use, chosen or not
+  const eff = effective(look, colors);
+  const byPart = (p: ColorPart) => colors.find((c) => c.part === p);
+  for (const c of colors) {
+    if (c.part === "brand" || c.part === "process" || c.part === "standard") {
+      c.like = (Object.keys(SEMANTIC) as Semantic[]).filter((k) => {
+        const state = SEMANTIC_PART[k];
+        return (!look[state] && distance(c.chosen, SEMANTIC[k].light) < ALIKE) || alike(eff[c.part], eff[state]);
+      });
+    }
+  }
+  // pairs that will be confused: the warning stands with the later of the two chosen parts
+  const pair = (a: ColorPart, b: ColorPart, text: string, test = alike) => {
+    const at = [byPart(a), byPart(b)].filter((c) => !!c).sort((x, y) => COLOR_PARTS.indexOf(y!.part) - COLOR_PARTS.indexOf(x!.part))[0];
+    if (at && test(eff[a], eff[b])) at.warnings.push(text);
+  };
+  pair("mainButton", "problem", "Main buttons will look like buttons that delete: “Publish” and “Delete” will have nearly the same colour.");
+  pair("otherButtons", "problem", "Other buttons will look like buttons that delete, which are drawn in the colour of problems.");
+  pair("success", "warning", "Success and warnings will be hard to tell apart: “Published” and “Review due” will have nearly the same colour.");
+  pair("warning", "problem", "Warnings and problems will be hard to tell apart: “Review due” and “Review overdue” will have nearly the same colour.");
+  if (alike(eff.success, eff.problem)) pair("success", "problem", "Success and problems will be hard to tell apart: “Nothing to fix” and “1 to fix” will have nearly the same colour.");
+  else pair("success", "problem", "People who cannot tell red from green will hardly see a difference between success and problems: the two colours differ almost only in their hue. The icons beside them still tell them apart; making one of the two clearly lighter or darker helps more.", alikeToColourBlind);
+  pair("info", "success", "Notices that only inform will look like confirmations.");
+  pair("info", "warning", "Notices that only inform will look like warnings.");
+  pair("info", "problem", "Notices that only inform will look like problems.");
+  // a chosen state close to the brand or a kind left at its default (a chosen brand or kind says it itself)
+  for (const state of ["success", "warning", "problem"] as const) {
+    const c = byPart(state);
+    if (!c) continue;
+    const k = STATE_TOKEN[state] as Semantic;
+    if (!look.brand && alike(eff.brand, eff[state])) c.warnings.push(`This looks like the brand colour: ${STATE_PLURAL[state]} will look like buttons and links, and will no longer stand out.`);
+    for (const kind of ["process", "standard"] as const) {
+      if (!look[kind] && alike(eff[kind], eff[state])) c.warnings.push(`This looks like the colour of ${kind === "process" ? "processes" : "standards"}: ${KIND_EFFECT[kind][k]}`);
+    }
+  }
+  for (const c of colors) if (c.grey) c.warnings.push(GREY_TEXT[c.part]);
+  const kindsAlike = (["light", "dark"] as const).filter((m) => distance(eff.process.text[m], eff.standard.text[m]) < ALIKE);
   return { tokens, colors, kindsAlike };
 }
 
-const SEMANTIC_NAME: Record<Semantic, string> = { bad: "the red that marks problems", warn: "the amber of warnings such as “Review due”", good: "the green of good news such as “Published”" };
-/** What a colour that looks like a semantic colour will be confused with, in plain words. */
-export function confusion(part: ColorPart, like: Semantic): string {
+/** A colour as it is used in each theme: as text and as a fill. */
+interface InUse { text: Record<Mode, string>; fill: Record<Mode, string> }
+const both = (light: string, dark: string): InUse => ({ text: { light, dark }, fill: { light, dark } });
+/** The defaults of the look (styles.css, lists.css) where nothing was chosen. */
+const DEFAULT_USE: Record<"brand" | "process" | "standard" | Semantic, InUse> = {
+  brand: both("#4f46e5", "#8b8cf8"), process: both(KIND_DEFAULT.process.light, KIND_DEFAULT.process.dark), standard: both(KIND_DEFAULT.standard.light, KIND_DEFAULT.standard.dark),
+  good: both(SEMANTIC.good.light, SEMANTIC.good.dark), warn: both(SEMANTIC.warn.light, SEMANTIC.warn.dark), bad: both(SEMANTIC.bad.light, SEMANTIC.bad.dark),
+};
+function effective(look: Look, colors: ColorUse[]): Record<ColorPart, InUse> {
+  const of = (p: ColorPart): InUse | undefined => { const c = colors.find((x) => x.part === p); return c && { text: c.used, fill: c.fill }; };
+  const brand = of("brand") ?? DEFAULT_USE.brand;
+  return {
+    brand, process: of("process") ?? DEFAULT_USE.process, standard: of("standard") ?? DEFAULT_USE.standard,
+    // a main button without its own colour is in the brand colour; information too
+    mainButton: of("mainButton") ?? { text: brand.fill, fill: brand.fill }, info: of("info") ?? brand,
+    otherButtons: of("otherButtons") ?? both("#171a26", "#eceef5"),
+    success: of("success") ?? DEFAULT_USE.good, warning: of("warning") ?? DEFAULT_USE.warn, problem: of("problem") ?? DEFAULT_USE.bad,
+  };
+}
+const MODES = ["light", "dark"] as const;
+/** Two colours that will be mistaken for each other in either theme, as text or as a fill. */
+function alike(a: InUse, b: InUse): boolean {
+  return MODES.some((m) => distance(a.text[m], b.text[m]) < ALIKE || distance(a.fill[m], b.fill[m]) < ALIKE);
+}
+/**
+ * How a colour looks to somebody who cannot tell red from green (complete deuteranopia or
+ * protanopia, after Machado, Oliveira and Fernandes 2009), in linear RGB.
+ */
+const COLOUR_BLIND = {
+  deuteranopia: [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.01182, 0.04294, 0.968881]],
+  protanopia: [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
+} as const;
+export function seenWithout(hex: string, kind: keyof typeof COLOUR_BLIND): string {
+  const lin = hexToRgb(hex).map((v) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  const out = COLOUR_BLIND[kind].map((row) => Math.min(1, Math.max(0, row[0] * lin[0] + row[1] * lin[1] + row[2] * lin[2])));
+  return rgbToHex(out.map((c) => 255 * (c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055)) as RGB);
+}
+/** Two colours that people who cannot tell red from green will mistake for each other, as text in either theme. */
+function alikeToColourBlind(a: InUse, b: InUse): boolean {
+  return MODES.some((m) => (["deuteranopia", "protanopia"] as const).some((k) => distance(seenWithout(a.text[m], k), seenWithout(b.text[m], k)) < ALIKE));
+}
+const STATE_PLURAL: Record<StatePart, string> = { success: "confirmations", warning: "warnings", info: "notices", problem: "problems" };
+const KIND_EFFECT: Record<"process" | "standard", Record<Semantic, string>> = {
+  process: {
+    bad: "every process will look as if something were wrong with it.",
+    warn: "every process will look as if its review were due.",
+    good: "processes will look like confirmations, and good news will no longer stand out.",
+  },
+  standard: {
+    bad: "every standard will look as if something were wrong with it.",
+    warn: "every standard will look as if its review were due.",
+    good: "standards will look like confirmations, and good news will no longer stand out.",
+  },
+};
+const GREY_TEXT: Record<ColorPart, string> = {
+  brand: "This colour is nearly grey: buttons and what is selected hardly stand out, so links are underlined to tell them from text.",
+  process: "This colour is nearly grey: the mark of processes hardly stands out from ordinary text.",
+  standard: "This colour is nearly grey: the mark of standards hardly stands out from ordinary text.",
+  mainButton: "This colour is nearly grey: the main button of a view hardly stands out from the other buttons.",
+  otherButtons: "",
+  success: "This colour is nearly grey: confirmations hardly stand out from ordinary text.",
+  warning: "This colour is nearly grey: warnings hardly stand out from ordinary text.",
+  info: "This colour is nearly grey: notices hardly stand out from ordinary text.",
+  problem: "This colour is nearly grey: problems hardly stand out from ordinary text.",
+};
+
+const SEMANTIC_NAME: Record<Semantic, string> = { bad: "the colour that marks problems", warn: "the colour of warnings such as “Review due”", good: "the colour of good news such as “Published”" };
+/** What a brand or kind colour that looks like a state will be confused with, in plain words. */
+export function confusion(part: "brand" | "process" | "standard", like: Semantic): string {
   const what = part === "brand" ? "the brand colour" : `the colour of ${part === "process" ? "processes" : "standards"}`;
-  const effect: Record<ColorPart, Record<Semantic, string>> = {
-    brand: {
+  const effect = part === "brand"
+    ? {
       bad: "Buttons that save or approve will look like buttons that delete, and links like error messages.",
       warn: "Buttons and links will look like warnings, and a warning will no longer stand out.",
       good: "Buttons and links will look like confirmations, and “all is well” will no longer stand out.",
-    },
-    process: {
-      bad: "Every process will look as if something were wrong with it.",
-      warn: "Every process will look as if its review were due.",
-      good: "Processes will look like confirmations, and good news will no longer stand out.",
-    },
-    standard: {
-      bad: "Every standard will look as if something were wrong with it.",
-      warn: "Every standard will look as if its review were due.",
-      good: "Standards will look like confirmations, and good news will no longer stand out.",
-    },
-  };
-  return `This looks like ${SEMANTIC_NAME[like]}: ${effect[part][like]} You can still use ${what}.`;
+    }[like]
+    : KIND_EFFECT[part][like].replace(/^./, (x) => x.toUpperCase());
+  return `This looks like ${SEMANTIC_NAME[like]}: ${effect} You can still use ${what}.`;
 }
 /** The sentence for processes and standards that look alike. */
 export function kindsAlikeText(modes: Mode[]): string {
@@ -269,8 +403,10 @@ export function kindsAlikeText(modes: Mode[]): string {
   return `Processes and standards will be hard to tell apart${where}: their marks and tags have nearly the same colour. Choose colours further apart.`;
 }
 
+/** The custom property that carries the chosen font (styles.css puts the fallbacks after it). */
+export const FONT_PROPERTY = "--theme-font";
 /** Every custom property the look may set on an element, chosen or not. */
-export const ALL_PROPERTIES = (["light", "dark"] as const).flatMap((m) => Object.values(TOKENS).flat().map((t) => `--theme-${m}-${t}`));
+export const ALL_PROPERTIES = [...(["light", "dark"] as const).flatMap((m) => Object.values(TOKENS).flat().map((t) => `--theme-${m}-${t}`)), FONT_PROPERTY];
 
 /**
  * The custom properties of a look for an element's `style`: the chosen colours, and `initial`
@@ -282,6 +418,7 @@ export function lookProperties(look: Look): Record<string, string> {
   const out: Record<string, string> = {};
   for (const p of ALL_PROPERTIES) out[p] = "initial";
   for (const mode of ["light", "dark"] as const) for (const [k, v] of Object.entries(tokens[mode])) out[`--theme-${mode}-${k}`] = v;
+  if (look.font) out[FONT_PROPERTY] = FONT_FAMILY[look.font];
   return out;
 }
 
@@ -297,8 +434,9 @@ export function cleanLook(x: unknown): Look {
   const out: Look = {};
   if (typeof o.name === "string" && o.name.trim() && o.name.trim().length <= MAX_NAME) out.name = o.name.trim();
   if (typeof o.logo === "string" && ICON_ID.test(o.logo)) out.logo = o.logo;
-  for (const p of ["brand", "process", "standard"] as const) if (isHex(o[p])) out[p] = (o[p] as string).toLowerCase();
+  for (const p of COLOR_PARTS) if (isHex(o[p])) out[p] = (o[p] as string).toLowerCase();
   if (o.appearance === "light" || o.appearance === "dark" || o.appearance === "device") out.appearance = o.appearance;
+  if (FONTS.includes(o.font as Font)) out.font = o.font as Font;
   return out;
 }
 
@@ -307,10 +445,17 @@ export function tidyLook(l: Look): Look {
   const out: Look = {};
   if (l.name?.trim()) out.name = l.name.trim();
   if (l.logo) out.logo = l.logo;
-  for (const p of ["brand", "process", "standard"] as const) if (l[p]) out[p] = l[p]!.toLowerCase();
+  for (const p of COLOR_PARTS) if (l[p]) out[p] = l[p]!.toLowerCase();
   if (l.appearance) out.appearance = l.appearance;
+  if (l.font) out.font = l.font;
   return out;
 }
+
+/** Each colour in a sentence, as the server says it. */
+export const COLOR_WHAT: Record<ColorPart, string> = {
+  brand: "The brand colour", process: "The colour of processes", standard: "The colour of standards", mainButton: "The colour of main buttons", otherButtons: "The colour of other buttons",
+  success: "The colour of success", warning: "The colour of warnings", info: "The colour of information", problem: "The colour of problems",
+};
 
 /** What is wrong with a look before it is saved, one plain sentence per problem (the server checks again). */
 export function lookProblems(l: Look): string[] {
@@ -320,10 +465,10 @@ export function lookProblems(l: Look): string[] {
   // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f-\u009f]/.test(name)) out.push("The name contains control characters. Remove them and try again.");
   if (/[‪-‮⁦-⁩]/.test(name)) out.push("The name contains characters that change the reading direction. Remove them and try again.");
-  const what: Record<ColorPart, string> = { brand: "The brand colour", process: "The colour of processes", standard: "The colour of standards" };
-  for (const p of ["brand", "process", "standard"] as const) {
-    if (l[p] !== undefined && !isHex(l[p])) out.push(`${what[p]} must be written as # and six digits or letters a-f, e.g. #4f46e5.`);
+  for (const p of COLOR_PARTS) {
+    if (l[p] !== undefined && !isHex(l[p])) out.push(`${COLOR_WHAT[p]} must be written as # and six digits or letters a-f, e.g. #4f46e5.`);
   }
+  if (l.font !== undefined && !FONTS.includes(l.font)) out.push("The font must be Roboto, or the default font.");
   return out;
 }
 
@@ -383,6 +528,7 @@ function apply() {
   const { tokens } = derive(state.look);
   for (const p of ALL_PROPERTIES) root.style.removeProperty(p);
   for (const mode of ["light", "dark"] as const) for (const [k, v] of Object.entries(tokens[mode])) root.style.setProperty(`--theme-${mode}-${k}`, v);
+  if (state.look.font) root.style.setProperty(FONT_PROPERTY, FONT_FAMILY[state.look.font]);
   root.dataset.theme = isDark(state.own, state.look.appearance, state.deviceDark) ? "dark" : "light";
   root.toggleAttribute("data-link-lines", underlineLinks(state.look));
 }

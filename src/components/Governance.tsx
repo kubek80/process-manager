@@ -2,13 +2,14 @@ import type { ReactNode } from "react";
 import { ArrowLeft, CalendarCheck, Code2, Compass, Layers, Rows3, Server, TriangleAlert } from "lucide-react";
 import type { DocMeta, Governed, Rigour, TargetKind } from "../types";
 import { environmentLabel, languageLabel, ownedBy, platformName, practiceName, tierLabel, useCatalog } from "../lib/catalog";
-import { belongsChoice, belongsRefused, wouldLoseEdit, type Belongs, type BelongsField } from "../lib/rights";
+import { belongsChoice, belongsRefused, placesOf, wouldLoseEdit, type Belongs, type BelongsField } from "../lib/rights";
 import { usePerms } from "../lib/session";
 import type { Profile } from "../lib/edit";
 import { quietReview, statusOf, type ReviewInfo } from "../lib/lifecycle";
 import { Field } from "./ui";
 import { Fact, KindTag } from "./marks";
 import { VersionTag } from "./Editing";
+import { GroupLink, OwnedBy } from "./GroupParts";
 import { formatDate } from "../lib/dates";
 import { printedLine } from "../lib/media";
 import "../lists.css";
@@ -128,12 +129,14 @@ export function ReviewMark({ review }: { review: ReviewInfo }) {
 }
 
 /** Where it applies and who looks after it, as the cards say it: platform, practice, tiers, and environments and languages when narrowed. */
-export function WhereFacts({ doc }: { doc: Governed }) {
+export function WhereFacts({ doc, links }: { doc: Governed; links?: boolean }) {
   const { catalog } = useCatalog();
+  // on the reader's page the platform and the practice lead to their pages (not in the editing preview, which is a button)
+  const named = (kind: "platform" | "practice", id: string, name: string) => (links ? <GroupLink kind={kind} id={id}>{name}</GroupLink> : name);
   return (
     <>
-      {doc.platform && <Fact icon={Layers} label="Platform">{platformName(catalog, doc.platform)}</Fact>}
-      {doc.practice && <Fact icon={Compass} label="Practice">{practiceName(catalog, doc.practice)}</Fact>}
+      {doc.platform && <Fact icon={Layers} label="Platform" title={`Platform: ${platformName(catalog, doc.platform)}`}>{named("platform", doc.platform, platformName(catalog, doc.platform))}</Fact>}
+      {doc.practice && <Fact icon={Compass} label="Practice" title={`Practice: ${practiceName(catalog, doc.practice)}`}>{named("practice", doc.practice, practiceName(catalog, doc.practice))}</Fact>}
       <Fact icon={Rows3} label="Application tiers">{tierLabel(catalog, doc.tiers)}</Fact>
       {!!doc.environments?.length && <Fact icon={Server} label="Environments">{environmentLabel(catalog, doc.environments)}</Fact>}
       {!!doc.languages?.length && <Fact icon={Code2} label="Languages">{languageLabel(catalog, doc.languages)}</Fact>}
@@ -180,7 +183,7 @@ export function DocHead({ kind, doc, meta, review, facts, actions, notice, onBac
       <div className="doc-kicker">
         <button className="back" onClick={onBack}><ArrowLeft size={16} />All {kind === "process" ? "processes" : "standards"}</button>
         <KindTag kind={kind} />
-        {(doc.category || doc.owner) && <span className="doc-owner">{ownedBy(catalog, kind, doc)}</span>}
+        {(doc.category || doc.owner) && <span className="doc-owner"><OwnedBy kind={kind} doc={doc} /></span>}
         {(status !== "active" || review.state === "soon" || review.state === "overdue") && (
           <span className="doc-marks">
             {status === "draft" && <span className="card-mark draft">Draft</span>}
@@ -197,7 +200,7 @@ export function DocHead({ kind, doc, meta, review, facts, actions, notice, onBac
         {actions && <div className="head-actions">{actions}</div>}
       </div>
       {notice && <div className="doc-notices">{notice}</div>}
-      <div className="doc-facts">{facts}<WhereFacts doc={doc} /></div>
+      <div className="doc-facts">{facts}<WhereFacts doc={doc} links /></div>
       <div className="doc-foot">
         <p className="doc-when">
           {doc.updatedAt && <span className="doc-changed" title="When what it says last changed. Versions lists every time it was stored: saved, imported or confirmed in a review.">Content changed {formatDate(doc.updatedAt)}</span>}
@@ -238,15 +241,15 @@ export function useBelongsWarning(kind: TargetKind, saved: Belongs, now: Belongs
   if (refused.length) {
     const name = (f: BelongsField, id?: string) => (id ? `“${f === "platform" ? platformName(catalog, id) : practiceName(catalog, id)}”` : "none");
     const parts = refused.map((f) => `the ${f} (it was ${name(f, saved[f])}, now ${name(f, now[f])})`);
-    return `Only the owners of a platform or practice, or an editor, can change ${parts.join(" and ")}. Put it back as it was under About.`;
+    return `Only an editor, or an owner or member of the platforms and practices involved, can change ${parts.join(" and ")}. Put it back as it was under About.`;
   }
   if (!wouldLoseEdit(perms, kind, saved, now)) return "";
-  const yours = [...perms.platforms.map((id) => `the platform ${platformName(catalog, id)}`), ...perms.practices.map((id) => `the practice ${practiceName(catalog, id)}`)];
-  return `You may change this ${kind} because it belongs to a platform or practice you own. With this platform and practice it would no longer be yours, so you could not save it. Keep it with ${yours.join(" or ") || "one of yours"}.`;
+  const yours = [...placesOf(perms, "platform").map((id) => `the platform ${platformName(catalog, id)}`), ...placesOf(perms, "practice").map((id) => `the practice ${practiceName(catalog, id)}`)];
+  return `You may change this ${kind} because it belongs to a platform or practice of yours. With this platform and practice it would no longer be yours, so you could not save it. Keep it with ${yours.join(" or ") || "one of yours"}.`;
 }
 
 /** The hint beside a platform or practice picker that the person may not change. */
-export const LOCKED_HINT = "Only its owners or an editor can change this";
+export const LOCKED_HINT = "Only its owners and members, or an editor, can change this";
 
 /** Category, practice and platform (and for a process its rigour), as they are picked in Details. */
 export function BelongsEditor({ kind, doc, saved, onChange }: {
@@ -259,8 +262,8 @@ export function BelongsEditor({ kind, doc, saved, onChange }: {
   const perms = usePerms();
   type Row = { id: string; name: string; description?: string };
   const select = (field: "category" | BelongsField, list: Row[], choice: "any" | "own" | "locked") => {
-    const mine = field === "platform" ? perms.platforms : field === "practice" ? perms.practices : [];
-    // somebody who edits only through their platforms and practices is offered only their own
+    const mine = field === "platform" || field === "practice" ? placesOf(perms, field) : [];
+    // somebody who works only through their platforms and practices (as an owner or a member) is offered only their own
     const offered = choice === "any" ? list : choice === "own" ? list.filter((x) => mine.includes(x.id)) : [];
     const value = doc[field] ?? "";
     return (

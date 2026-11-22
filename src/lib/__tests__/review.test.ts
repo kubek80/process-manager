@@ -33,7 +33,7 @@ describe("the first review", () => {
 });
 
 describe("My responsibilities and the first review", () => {
-  const perms: Perms = { admin: false, catalog: false, processes: false, standards: false, owns: ["cloud-platform-team"], platforms: [], practices: [] };
+  const perms: Perms = { admin: false, catalog: false, processes: false, standards: false, owns: ["cloud-platform-team"], platforms: [], practices: [], memberPlatforms: [], memberPractices: [] };
   const fresh = { ...base(), id: "fresh", title: "Fresh", review: { intervalMonths: 6 } };
   const old = { ...base(), id: "old", title: "Old", review: { intervalMonths: 6 } };
   const since = { process: { fresh: { createdAt: "2026-11-19T10:00:00Z" }, old: { createdAt: "2025-01-01T10:00:00Z" } } };
@@ -68,7 +68,7 @@ describe("when the first review is counted from", () => {
     const meta = { createdAt: "2025-01-01T10:00:00Z", publishedAt: "2026-11-20T08:00:00Z" };
     expect(reviewLine(doc, TODAY, meta)).toBe("");
     expect(reviewLine(doc, TODAY, { createdAt: meta.createdAt })).toBe("Overdue since 2025-07-01");
-    const perms: Perms = { admin: false, catalog: false, processes: false, standards: false, owns: ["cloud-platform-team"], platforms: [], practices: [] };
+    const perms: Perms = { admin: false, catalog: false, processes: false, standards: false, owns: ["cloud-platform-team"], platforms: [], practices: [], memberPlatforms: [], memberPractices: [] };
     const { tasks } = responsibilities(perms, null, [doc], [], { process: {}, standard: {} }, TODAY, { process: { fresh: meta } });
     expect(tasks).toEqual([]);
   });

@@ -777,3 +777,32 @@ export function publishList(kind: TargetKind, current: Process | Standard, draft
 const movedBy = new WeakMap<object, string>();
 export const noteMove = (doc: object, id: string) => { movedBy.set(doc, id); };
 export const moveOf = (doc: unknown): string | undefined => (doc && typeof doc === "object" ? movedBy.get(doc) : undefined);
+
+/** A platform or practice a document belongs to, with the addresses of its owners, for `whoPublishesSentence`. */
+export interface PublishingGroup { kind: "platform" | "practice"; name: string; owners: string[] }
+
+/** "a", "a and b", "a, b and c", "a, b, c and 2 more". */
+export function peopleList(people: string[], most = 3): string {
+  const shown = people.slice(0, most), rest = people.length - shown.length;
+  const parts = rest > 0 ? [...shown, `${rest} more`] : shown;
+  return parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * Who can publish a document the person may only save drafts of (a member of its platform or
+ * practice), in plain words, naming its platform and practice and their owners as far as they
+ * are known (`owners` false: not loaded yet). `draft`: "saved" when the person's draft is saved,
+ * "unsaved" while changes on the screen are not, "none" when there is no draft yet.
+ * E.g. "Only an owner of the platform “Google Cloud” (jordan@example.com), or a process editor,
+ * can publish this process. Your draft is saved for them."
+ */
+export function whoPublishesSentence(kind: TargetKind, groups: PublishingGroup[], draft: "saved" | "unsaved" | "none", owners = true): string {
+  const editor = kind === "process" ? "a process editor" : "a standards editor";
+  const of = groups.map((g, i) => {
+    const who = !owners ? "" : g.owners.length ? ` (${peopleList(g.owners)})` : " (it has no owner yet)";
+    return `${i === 0 ? "an owner of" : "of"} the ${g.kind} “${g.name}”${who}`;
+  });
+  const whom = of.length ? `${of.join(" or ")}, or ${editor},` : editor;
+  const tail = draft === "saved" ? "Your draft is saved for them." : draft === "unsaved" ? "Save draft keeps your changes for them." : "What you change and save as a draft waits for them.";
+  return `Only ${whom} can publish this ${kind}. ${tail}`;
+}

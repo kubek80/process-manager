@@ -5,7 +5,7 @@ import { prerequisiteKeys } from "../lib/edit";
 import { isDrawableProcess, validateProcess } from "../lib/validate";
 import { go, useProgress, type Tab } from "../lib/store";
 import { useSelectedItem } from "../lib/selection";
-import { canEdit, canManage } from "../lib/rights";
+import { canDraft, canEdit, canManage } from "../lib/rights";
 import { reviewOf, statusOf } from "../lib/lifecycle";
 import { RESOURCE_KINDS } from "./Resources";
 import { FeedbackForm, FeedbackTab, openCount, processTarget } from "./Feedback";
@@ -48,6 +48,8 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
   const perms = usePerms();
   // a process editor may change every process; a platform or practice owner what belongs to theirs
   const editor = canEdit(perms, "process", process);
+  // "Edit" also for a member of its platform or practice: they save drafts there, an owner publishes
+  const drafts = canDraft(perms, "process", process);
   const manages = canManage(perms, "process", process);
   const me = useMe();
   const { done, toggle, reset } = useProgress(process.id);
@@ -98,7 +100,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
   const hasExtras = renderable && (doc.prerequisites.length > 0 || !!doc.resources?.length || !!doc.standards?.length);
   const readyCount = renderable ? doc.prerequisites.filter((_, i) => hasPre(i)).length : 0;
 
-  if (!renderable) return <NotShown kind="process" title={doc.title || process.id} editHref={editor ? editHref : undefined} back={back}
+  if (!renderable) return <NotShown kind="process" title={doc.title || process.id} editHref={drafts ? editHref : undefined} back={back}
     problems={validateProcess(doc).length} />;
 
   return (
@@ -123,13 +125,13 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
           {/* the review belongs to the team that owns the process, and to whoever may edit it */}
           {(editor || manages) && review.state !== "none" && status !== "draft" && <button className={`btn ${review.state === "soon" || review.state === "overdue" ? "review-due" : "quiet"}`} onClick={() => onReviewed(meta?.version ?? 0)}
             title="Confirm that this process is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
-          {editor && <a className="btn primary" href={editHref}><Pencil size={16} />Edit</a>}
+          {drafts && <a className="btn primary" href={editHref}><Pencil size={16} />Edit</a>}
         </>}>
         {status !== "draft" && <DocEngagement kind="process" id={process.id} title={doc.title} summary={doc.summary} actions={!actionsOnTabs}
           open={openCount(feedback)} resolvedHere={feedback.length - openCount(feedback)} onFeedback={giveFeedback} />}
       </DocHead>
 
-      <DraftLine meta={meta} status={status} editHref={editor ? editHref : undefined} noun="process" />
+      <DraftLine meta={meta} status={status} editHref={drafts ? editHref : undefined} noun="process" />
 
       <div className="tabs-row">
         <div className="tabs" role="tablist">

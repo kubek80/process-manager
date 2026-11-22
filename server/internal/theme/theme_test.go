@@ -37,6 +37,28 @@ func TestParseKeepsOnlyWhatWasChosen(t *testing.T) {
 	}
 }
 
+func TestParseTakesTheButtonsTheStatesAndTheFont(t *testing.T) {
+	look, problems := theme.Parse([]byte(`{"mainButton": "#15803D", "otherButtons": "#0369a1", "success": "#166534", "warning": "#EA580C", "info": "#2563eb", "problem": "#b91c1c", "font": "roboto"}`))
+	want := theme.Look{MainButton: "#15803d", OtherButtons: "#0369a1", Success: "#166534", Warning: "#ea580c", Info: "#2563eb", Problem: "#b91c1c", Font: "roboto"}
+	if len(problems) != 0 || look != want {
+		t.Fatalf("%+v %v", look, problems)
+	}
+	_, problems = theme.Parse([]byte(`{"mainButton": "green", "success": "#12345", "warning": 7, "info": "#2563eb", "problem": "#xyzxyz", "font": "Comic Sans"}`))
+	wantProblems := []string{
+		"The colour of warnings must be a text.",
+		"The colour of main buttons must be written as # and six digits or letters a-f, e.g. #4f46e5.",
+		"The colour of success must be written as # and six digits or letters a-f, e.g. #4f46e5.",
+		"The colour of problems must be written as # and six digits or letters a-f, e.g. #4f46e5.",
+		"The font must be “roboto”; leave it out to use the default font (Inter).",
+	}
+	if strings.Join(problems, "|") != strings.Join(wantProblems, "|") {
+		t.Fatalf("%q", problems)
+	}
+	if _, problems := theme.Parse([]byte(`{"font": ""}`)); len(problems) != 1 {
+		t.Fatal(problems)
+	}
+}
+
 func TestDescribeSaysWhatChanged(t *testing.T) {
 	logo, other := strings.Repeat("a", 64), strings.Repeat("b", 64)
 	for _, c := range []struct {
@@ -50,6 +72,9 @@ func TestDescribeSaysWhatChanged(t *testing.T) {
 		{theme.Look{Logo: logo, Name: "A"}, theme.Look{Name: "A"}, "logo removed"},
 		{theme.Look{Name: "A", Process: "#111111"}, theme.Look{Name: "B", Standard: "#222222", Appearance: "device"},
 			"name “B”; colour of processes back to the default (teal); colour of standards #222222; appearance for new visitors as the device is set"},
+		{theme.Look{Success: "#166534", Font: "roboto"}, theme.Look{MainButton: "#15803d", OtherButtons: "#0369a1", Warning: "#ea580c", Info: "#2563eb", Problem: "#b91c1c"},
+			"colour of main buttons #15803d; colour of other buttons #0369a1; colour of success back to the default (green); colour of warnings #ea580c; colour of information #2563eb; colour of problems #b91c1c; font back to the default (Inter)"},
+		{theme.Look{}, theme.Look{Font: "roboto"}, "font Roboto"},
 		{theme.Look{Name: "A", Appearance: "dark"}, theme.Look{Brand: "#0055aa"}, "name back to the default (“Process Manager”); brand colour #0055aa; appearance for new visitors back to the default (light)"},
 	} {
 		if got := theme.Describe(c.old, c.new); got != c.want {

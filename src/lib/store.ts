@@ -199,7 +199,7 @@ export const loadMembers = async () => (await call<{ members?: Membership[] }>("
 // a team, platform or practice changed from its own page
 const groupPath = (kind: GroupKind, id: string) => `/api/groups/${kind === "team" ? "teams" : kind === "platform" ? "platforms" : "practices"}/${encodeURIComponent(id)}`;
 /** What `PUT …/details` takes: a field left out is not changed, "" removes it. */
-export interface GroupDetails { description?: string; contact?: string; contacts?: Contacts }
+export interface GroupDetails { description?: string; contact?: string; contacts?: Contacts | null }
 /** Changes the description and the contact details of one group; the answer is the lists as stored. */
 export const putGroupDetails = (kind: GroupKind, id: string, d: GroupDetails) =>
   call<{ catalog: Catalog; version: number }>("PUT", `${groupPath(kind, id)}/details`, d);

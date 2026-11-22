@@ -17,7 +17,12 @@
     --kind-process-bg: var(--theme-light-kind-process-bg, #e2f3f0); --kind-process-line: var(--theme-light-kind-process-line, #9fd6cd);
     --kind-standard: var(--theme-light-kind-standard, #6d28d9); --kind-standard-fill: var(--theme-light-kind-standard-fill, #6d28d9); --kind-standard-ink: var(--theme-light-kind-standard-ink, #ffffff);
     --kind-standard-bg: var(--theme-light-kind-standard-bg, #f1ebfd); --kind-standard-line: var(--theme-light-kind-standard-line, #cdb9f5);
-    --good: #15803d; --good-bg: #e9f7ee; --warn: #b45309; --warn-bg: #fdf3e1; --bad: #be123c; --bad-bg: #fdecef; --bad-ink: #ffffff;
+    --action-fill: var(--theme-light-action-fill, var(--accent-fill)); --action-ink: var(--theme-light-action-ink, var(--accent-ink));
+    --action-other: var(--theme-light-action-other); --action-other-line: var(--theme-light-action-other-line); --action-other-soft: var(--theme-light-action-other-soft);
+    --good: var(--theme-light-good, #15803d); --good-bg: var(--theme-light-good-bg, #e9f7ee); --good-fill: var(--theme-light-good-fill, #15803d); --good-ink: var(--theme-light-good-ink, #ffffff);
+    --warn: var(--theme-light-warn, #b45309); --warn-bg: var(--theme-light-warn-bg, #fdf3e1); --warn-fill: var(--theme-light-warn-fill, #b45309); --warn-ink: var(--theme-light-warn-ink, #ffffff);
+    --bad: var(--theme-light-bad, #be123c); --bad-bg: var(--theme-light-bad-bg, #fdecef); --bad-fill: var(--theme-light-bad-fill, #be123c); --bad-ink: var(--theme-light-bad-ink, #ffffff);
+    --info: var(--theme-light-info, var(--accent)); --info-bg: var(--theme-light-info-bg, var(--accent-soft)); --info-fill: var(--theme-light-info-fill, var(--accent-fill)); --info-ink: var(--theme-light-info-ink, var(--accent-ink));
     --shadow-1: none; --shadow-2: none; --shadow-3: none;
     --seg-on: #ffffff; --seg-on-line: var(--line-strong); --search-mark: #fdeca6;
     color-scheme: light;
@@ -26,7 +31,6 @@
   html:root[data-theme="dark"] .type-icon { color: var(--c); background: color-mix(in srgb, var(--c) 14%, var(--surface)); }
   html:root[data-theme="dark"] .step-kicker .who, html:root[data-theme="dark"] .block-type { color: color-mix(in srgb, var(--c) 72%, #000); }
   html:root[data-theme="dark"] .instructions li > span { color: color-mix(in srgb, var(--c) 72%, #000); }
-  html:root[data-theme="dark"] .tick.on { color: #fff; }
 
   /* colours, fills and marks print as on the screen (tags, level bars, ticks, kind colours) */
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }

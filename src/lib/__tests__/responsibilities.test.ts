@@ -3,7 +3,7 @@ import { accountRoles, changedBy, groupsOf, myGroups, responsibilities, reviewsD
 import type { Feedback, FeedbackByTarget, Perms } from "../../types";
 import { base, baseStandard } from "./fixtures";
 
-const perms = (p: Partial<Perms>): Perms => ({ admin: false, catalog: false, processes: false, standards: false, owns: [], platforms: [], practices: [], ...p });
+const perms = (p: Partial<Perms>): Perms => ({ admin: false, catalog: false, processes: false, standards: false, owns: [], platforms: [], practices: [], memberPlatforms: [], memberPractices: [], ...p });
 const fb = (id: string, targetId: string, createdAt: string, resolved = false): Feedback => ({
   id, targetKind: "process", targetId, kind: "broken", text: `Problem ${id}`, author: { name: "Sam", email: "sam@example.com" }, createdAt,
   resolved, alsoHit: 0, alsoHitByMe: false, stale: false, mine: false, canManage: true,
@@ -139,5 +139,40 @@ describe("the reviews tile", () => {
     expect(reviewsDue(1, 0)).toEqual({ count: 1, tone: "bad", label: "review due", split: "it is overdue" });
     expect(reviewsDue(3, 0).split).toBe("all overdue");
     expect(reviewsDue(0, 0)).toMatchObject({ count: 0, tone: "good", split: "" });
+  });
+});
+
+describe("what a member of a platform or practice answers for", () => {
+  const morgan = perms({ memberPlatforms: ["google-cloud"], memberPractices: ["engineering"] });
+  const draft = { ...base(), id: "draft", title: "Draft", platform: "google-cloud", status: "draft" as const };
+  const overdue = { ...base(), id: "overdue", title: "Overdue", platform: "google-cloud", review: { intervalMonths: 6, lastReviewedAt: "2020-01-01" } };
+  const noRhythm = { ...base(), id: "no-rhythm", title: "No rhythm", practice: "engineering", review: undefined };
+  const elsewhere = { ...base(), id: "elsewhere", title: "Elsewhere", platform: "azure", status: "draft" as const };
+  const feedback: FeedbackByTarget = { process: { overdue: [fb("x", "overdue", "2026-11-01T10:00:00Z")] }, standard: {} };
+
+  it("lists their platforms and practices after what they own, owning one winning", () => {
+    expect(myGroups(morgan)).toEqual([{ kind: "platform", id: "google-cloud", member: true }, { kind: "practice", id: "engineering", member: true }]);
+    const both = perms({ platforms: ["google-cloud"], memberPlatforms: ["google-cloud", "azure"], owns: ["t"] });
+    expect(myGroups(both)).toEqual([{ kind: "team", id: "t" }, { kind: "platform", id: "google-cloud" }, { kind: "platform", id: "azure", member: true }]);
+    expect(groupsOf(both, { platform: "google-cloud" })).toEqual([{ kind: "platform", id: "google-cloud" }]);
+    expect(groupsOf(morgan, { platform: "google-cloud", practice: "engineering" })).toEqual([{ kind: "platform", id: "google-cloud", member: true }, { kind: "practice", id: "engineering", member: true }]);
+  });
+
+  it("asks only about drafts waiting for an owner: reviews and feedback are the owners' job", () => {
+    const r = responsibilities(morgan, null, [draft, overdue, noRhythm, elsewhere], [], feedback, TODAY);
+    expect(r.owned.map((o) => [o.doc.id, o.member])).toEqual([["draft", true], ["overdue", true], ["no-rhythm", true]]);
+    expect(r.tasks.map((t) => `${t.kind}:${t.item.doc.id}`)).toEqual(["draft:draft"]);
+    expect(urgent(r.tasks)).toBe(0);
+  });
+
+  it("asks an owner of the team that maintains it as before, even when they are also a member", () => {
+    const r = responsibilities(perms({ owns: ["cloud-platform-team"], memberPlatforms: ["google-cloud"] }), null, [overdue], [], feedback, TODAY);
+    expect(r.owned[0].member).toBe(false);
+    expect(r.tasks.map((t) => t.kind)).toEqual(["review-overdue", "feedback"]);
+  });
+
+  it("names the member roles in the account menu", () => {
+    const groups = { team: [], platform: [{ id: "google-cloud", name: "Google Cloud" }], practice: [{ id: "engineering", name: "Engineering" }] };
+    expect(accountRoles(morgan, groups)).toEqual(["Platform member for Google Cloud", "Practice member for Engineering"]);
   });
 });

@@ -70,7 +70,7 @@ func (v *viewer) target(kind, id string) *docs.Target {
 // hidden: feedback on a draft is for the people who can see the draft.
 func (v *viewer) hidden(kind, id string) bool {
 	t := v.target(kind, id)
-	return t != nil && t.Status == "draft" && !v.s.CanManageFeedback(kind, belongsTo(t))
+	return t != nil && t.Status == "draft" && !v.s.CanSeeDraft(kind, belongsTo(t))
 }
 
 func belongsTo(t *docs.Target) rbac.Belongs {

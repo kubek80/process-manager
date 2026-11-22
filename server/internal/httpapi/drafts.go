@@ -120,9 +120,10 @@ func draftPending(w http.ResponseWriter, kind string, p *docs.DraftPending) {
 	})
 }
 
-// editable reads the published document and checks that the caller may edit it. It answers the
-// request when not.
-func (a *api) editable(w http.ResponseWriter, r *http.Request, kind string) (docs.Doc, bool) {
+// editable reads the published document and checks that the caller may work on its drafts
+// (publish: may edit it). It answers the request when not: "does not exist" for whoever may not
+// work on its drafts; to a member of its platform or practice who asks to publish, who can.
+func (a *api) editable(w http.ResponseWriter, r *http.Request, kind string, publish bool) (docs.Doc, bool) {
 	id := r.PathValue("id")
 	if !docs.ValidID(id) {
 		notThere(w)
@@ -136,8 +137,17 @@ func (a *api) editable(w http.ResponseWriter, r *http.Request, kind string) (doc
 	case err != nil:
 		a.fail(w, r, err)
 		return cur, false
-	case !who(r).CanEdit(kind, belongsOf(cur.Body)):
+	case !who(r).CanDraft(kind, belongsOf(cur.Body)):
 		notThere(w)
+		return cur, false
+	case publish && !who(r).CanEdit(kind, belongsOf(cur.Body)):
+		lists, err := a.Docs.Lists(r.Context())
+		if err != nil {
+			a.fail(w, r, err)
+			return cur, false
+		}
+		e := notPublisher{kind: kind, b: belongsOf(cur.Body), lists: lists, does: "publish this " + noun[kind], after: "Your draft is saved for them."}
+		writeError(w, 403, e.Error())
 		return cur, false
 	}
 	return cur, true
@@ -145,7 +155,7 @@ func (a *api) editable(w http.ResponseWriter, r *http.Request, kind string) (doc
 
 func (a *api) getDraft(kind string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cur, ok := a.editable(w, r, kind)
+		cur, ok := a.editable(w, r, kind, false)
 		if !ok {
 			return
 		}
@@ -193,18 +203,19 @@ func (a *api) putDraft(kind string) http.HandlerFunc {
 		var m *misplaced
 		d, err := a.Docs.SaveDraft(r.Context(), docs.DraftChange{
 			Kind: kind, ID: id, Body: body, By: s.Email, ByName: nameOf(s), Revision: rev, Base: base,
-			// the same rule as a save: the published document and what the draft makes of it
+			// the same rule as a save that stays a draft: the published document and what the
+			// draft makes of it, for whoever may work on its drafts (its members too)
 			Check: func(current docs.Doc) error {
 				stored := belongsOf(current.Body)
-				if !s.CanEdit(kind, stored) {
+				if !s.CanDraft(kind, stored) {
 					return errHidden
 				}
 				next := belongsOf(body)
-				if !s.CanEdit(kind, next) {
+				if !s.CanDraft(kind, next) {
 					return errContent
 				}
-				if field, place := s.Misplaced(kind, &stored, next); field != "" {
-					return &misplaced{kind: kind, field: field, name: placeName(lists, field, place)}
+				if field, place := s.MisplacedDraft(kind, &stored, next); field != "" {
+					return &misplaced{kind: kind, field: field, name: placeName(lists, field, place), draft: true, member: s.MemberOfSome()}
 				}
 				return nil
 			},
@@ -252,7 +263,7 @@ func (a *api) deleteDraft(kind string) http.HandlerFunc {
 		var stored docs.Doc
 		err := a.Docs.DiscardDraft(r.Context(), kind, id, rev,
 			func(current docs.Doc) error {
-				if !s.CanEdit(kind, belongsOf(current.Body)) {
+				if !s.CanDraft(kind, belongsOf(current.Body)) {
 					return errHidden
 				}
 				stored = current
@@ -299,7 +310,7 @@ func (a *api) publishDraft(kind string) http.HandlerFunc {
 			}
 			over = &n
 		}
-		cur, ok := a.editable(w, r, kind)
+		cur, ok := a.editable(w, r, kind, true)
 		if !ok {
 			return
 		}
