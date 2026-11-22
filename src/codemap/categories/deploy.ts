@@ -13,7 +13,7 @@ export const deploy: CodeCategory = {
     "With `entra` or `google`, the server refuses to start without the OAuth client, `PM_ADMINS`, a `PM_SESSION_SECRET` of 32 or more characters that is not a placeholder, and a `PM_BASE_URL` on https (http only for localhost); `google` also needs a domain limit.",
     "Without `PM_ADDR` the server listens on `0.0.0.0:$PORT` when `PORT` is set (Cloud Run), otherwise on `127.0.0.1:8080`; the image sets `PM_ADDR=0.0.0.0:8080`.",
     "The server listens only after it has reached the database (waiting up to 30 seconds), upgraded the tables and filled an empty database (no documents at all) from `PM_SEED_DIR`, each under a lock; `/healthz` answering means it has started, `/readyz` also checks the database.",
-    "Search by meaning never delays the start: the index is caught up in the background after the server listens.",
+    "Search by meaning never delays the start: only its tables are made before listening (`Ensure`); the index is caught up in the background, started just before listening and never waited for.",
     "Asked to stop (SIGTERM, Ctrl+C), the server gives requests in progress 15 seconds and waits for skills being regenerated and notifications being sent.",
     "`PM_SOURCE_DIR` is set only by `npm run dev` and the browser tests; the image and `service.yaml` do not set it and the image holds no source, so a deployment shows no source code.",
     "`PM_SOURCE_DIR` must be an absolute path to the top of a git checkout owned by the server's user (git refuses a checkout of another owner); otherwise one warning at start says why and the portal shows no source.",
@@ -21,7 +21,7 @@ export const deploy: CodeCategory = {
   ],
   charts: [
     {
-      caption: "What the server does from the moment it is started until it answers (`run` in `server/cmd/server/main.go`). One-off commands (`-import`, `-export`, `-migrate`, `-reindex`) leave this path before listening and exit. With search by meaning on, the index's tables are made before listening; the catching up comes after.",
+      caption: "What the server does from the moment it is started until it answers (`run` in `server/cmd/server/main.go`). One-off commands (`-import`, `-export`, `-migrate`, `-reindex`) leave this path before listening and exit. With search by meaning on, the index's tables are made before listening; the catching up is started in the background just before, and nothing waits for it.",
       process: flow("code-deploy-start", "Start the server", "The start-up order, from settings to listening.",
         [["server", "Server"], ["pg", "Postgres"], ["provider", "Embedding provider"]],
         [
@@ -29,10 +29,10 @@ export const deploy: CodeCategory = {
           s("refuse", "Stop and list every problem", "server", "communication", []),
           s("connect", "Wait for the database", "pg", "wait", ["upgrade"], "up to 30 s"),
           s("upgrade", "Upgrade tables, convert content", "pg", "automation", ["prepare"], "under a lock"),
-          s("prepare", "Fill an empty database, regenerate skills", "pg", "automation", ["warn"], "LockPrepare"),
+          s("prepare", "Fill an empty database, regenerate skills", "pg", "automation", ["catchup"], "LockPrepare"),
+          s("catchup", "Start catching up the search index", "provider", "automation", ["warn"], "in the background, not waited for"),
           s("warn", "Warn about missing app files or source", "server", "communication", ["listen"], "StaticProblem, SourceProblem"),
-          s("listen", "Listen and answer /healthz", "server", "automation", ["catchup"]),
-          s("catchup", "Catch up the search index", "provider", "automation", [], "in the background"),
+          s("listen", "Listen and answer /healthz", "server", "automation", []),
         ]),
     },
     {
@@ -107,7 +107,7 @@ export const deploy: CodeCategory = {
         { text: "A configuration problem ends the start here with exit status 1, before any connection to the database: nothing half-configured ever answers a request.", at: 'return fmt.Errorf("configuration: %w", err)' },
         { text: "Waits up to 30 seconds for a database that is still starting (docker compose, a database restart); after that the start fails with the reason instead of serving errors.", at: "if time.Now().After(deadline) {" },
         { text: "Several instances may start at once (`maxScale` 3 on Cloud Run): the lock makes the others wait and then find the database filled, so the sample is imported once.", at: "if err := db.WithLock(ctx, pool, db.LockPrepare, func() error { return prepare(ctx, cfg, st, log) }); err != nil {" },
-        { text: "The index is caught up only after the server listens, in a goroutine: a slow or unreachable provider never delays the start (`hang_test.go` shows the server answering while the provider hangs).", at: "st.index.LogCatchUp(ctx)" },
+        { text: "The index is caught up in a goroutine started just before the server listens, which the start never waits for: a slow or unreachable provider never delays the start (`hang_test.go` shows the server answering while the provider hangs).", at: "st.index.LogCatchUp(ctx)" },
         { text: "When `PM_SOURCE_DIR` is set but no source can be shown (not a folder, not the top of a git checkout, git missing, or git refusing a checkout of another owner), one warning says why; the server starts all the same.", at: 'if problem := httpapi.SourceProblem(cfg.SourceDir); problem != "" {' },
         { text: "Stopping waits for the skills still being regenerated after a save before the database is closed, within the same 15 seconds as the requests in progress.", at: "background.Wait() // skills that are still being regenerated after a save" },
       ],

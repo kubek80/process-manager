@@ -33,7 +33,7 @@ export const saving: CodeCategory = {
         [
           s("send", "Save the document with base=N", "browser", "task", ["checks"], "PUT …?base=N&note="),
           s("checks", "Check rights, format and checker", "server", "verify", ["stored"], "before the lock"),
-          s("stored", "Lock it, check rights on the stored one", "pg", "verify", ["base"], "Change.Check"),
+          s("stored", "Lock it, check rights on the stored one", "server", "verify", ["base"], "advisory lock, then Change.Check"),
           s("base", "Is N still the current version?", "server", "decision", [["draft", "Yes"], ["conflict", "No"]]),
           s("conflict", "Answer 409 with who saved", "server", "communication", [], "nothing written"),
           s("draft", "Has it a working draft?", "server", "decision", [["pending", "Yes"], ["write", "No"]]),
@@ -42,7 +42,7 @@ export const saving: CodeCategory = {
         ],
       ),
       caption:
-        "`docs.SaveIn` with `Drafts: RefuseIfDraft`, as `putDoc` calls it. Everything from the lock to the write is one transaction. A body equal to the stored one writes nothing and answers `changed: false`. After the commit `syncSkills` regenerates the skills and starts the index's sync in the background.",
+        "`docs.SaveIn` with `Drafts: RefuseIfDraft`, as `putDoc` calls it. Everything from the lock to the write is one transaction. A body equal to the stored one writes nothing and answers `changed: false`. After the commit `syncSkills` starts the index's sync in the background, then regenerates the skills.",
     },
     {
       process: flow(
@@ -131,7 +131,7 @@ export const saving: CodeCategory = {
         { text: "A person's ordinary save is refused while a working draft exists; letting it through would hide the unpublished changes under a version their author never saw.", at: "case c.Drafts == RefuseIfDraft && draft != nil:" },
         { text: "An unchanged body makes no version; when it came from a working draft the draft is still removed and `DraftDropped` records it, so a draft never vanishes silently.", at: "if cur != nil && bytes.Equal(cur.Body, pretty) {" },
         { text: "The next number is taken over every row of the document, deletions included, so a document deleted and created again never reuses a number.", at: "select coalesce(max(version), 0) + 1 from document_versions" },
-        { text: "`changes_by` stays empty unless it is an email different from the saver's: a person publishing their own draft, an import or the conversion is never named as somebody else.", at: "if !strings.Contains(changesBy, \"@\") || strings.EqualFold(strings.TrimSpace(changesBy), strings.TrimSpace(c.By)) {" },
+        { text: "`changes_by` stays empty unless it is an email different from the saver's: a person publishing their own draft is not named as somebody else, and a never-published version stored by an import or the conversion (`system`, no email) names nobody.", at: "if !strings.Contains(changesBy, \"@\") || strings.EqualFold(strings.TrimSpace(changesBy), strings.TrimSpace(c.By)) {" },
       ],
       tests: ["server/internal/docs/docs_test.go", "server/internal/httpapi/versions_test.go"],
     },
@@ -156,7 +156,7 @@ export const saving: CodeCategory = {
         { text: "A person's ordinary save of a process or standard uses `RefuseIfDraft`; `draft=R` makes it `ReplaceDraft`. The lists (`catalog`) have no working draft and keep `KeepDraft`.", at: "rule = docs.RefuseIfDraft" },
         { text: "Every save of a person runs the checker on the server, whatever the app checked: a body naming a list entry that does not exist is refused here.", at: "err = docs.Check(kind, body, lists)" },
         { text: "A draft that leaves without a version is logged as a discard (`process.discard`), in the same transaction.", at: "DraftDropped: func(ctx context.Context, tx pgx.Tx, d docs.WorkingDraft) error {" },
-        { text: "A review confirmation moves a draft based on the reviewed version, in the save's transaction: otherwise the next publish would meet a conflict that is only a review.", at: "if err := docs.MoveDraftBaseIn(ctx, tx, kind, id, current.Version, saved.Version); err != nil {" },
+        { text: "A review confirmation moves a draft based on the reviewed version, in the save's transaction: otherwise the editing screen would say a newer version was published since the draft began (`baseBehindSentence`) when only a review came in between. Publishing itself would still go through: `publishDraft` moves the base when `OnlyReviewDiffers`.", at: "if err := docs.MoveDraftBaseIn(ctx, tx, kind, id, current.Version, saved.Version); err != nil {" },
         { text: "A delete removes feedback, bookmarks, upvotes and counts, marks views and downloads, marks a request it answered (`linked_gone`), and records the delete, all in one transaction: none of them can outlive the document half-way.", at: "if err := engagement.DeleteByTargetIn(ctx, tx, kind, id); err != nil {" },
       ],
       tests: ["server/internal/httpapi/versions_test.go", "server/internal/httpapi/review_test.go", "server/internal/httpapi/review2_test.go", "server/internal/httpapi/neverpublished_test.go"],
@@ -167,7 +167,7 @@ export const saving: CodeCategory = {
       requirements: [
         { text: "Publishing saves on top of the draft's base; only when nothing but the review differs is the base moved to the current version. Anything else that changed meanwhile is a conflict the person decides (`over=V`), never overwritten unseen.", at: "if err == nil && docs.OnlyReviewDiffers(was, cur.Body) {" },
         { text: "Publishing is the ordinary save with `PublishDraft`: the same rights, format, checker and activity entry, so there is no second way to make a version.", at: "action: \"publish\", drafts: docs.PublishDraft, revision: rev})" },
-        { text: "Whoever may not draft the document gets 404 \"That does not exist.\" for every call here: the existence of a working draft is never revealed.", at: "case !who(r).CanDraft(kind, belongsOf(cur.Body)):" },
+        { text: "Whoever may not draft the document gets 404 \"That does not exist.\": here for reading and publishing (`editable`); `putDraft` and `deleteDraft` answer the same through their `Check` (`errHidden`). The existence of a working draft is never revealed.", at: "case !who(r).CanDraft(kind, belongsOf(cur.Body)):" },
         { text: "Saving a draft writes no activity entry: it happens every few seconds while somebody types.", at: "// saving a draft is not in the activity log: it happens every few seconds" },
       ],
       tests: ["server/internal/httpapi/drafts_test.go", "server/internal/httpapi/neverpublished2_test.go"],

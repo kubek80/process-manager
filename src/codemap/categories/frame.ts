@@ -15,7 +15,7 @@ export const frame: CodeCategory = {
     "The places of the top bar are one list (`places` in `App.tsx`) used by the desktop bar and the Menu that replaces it below 1120 pixels.",
     "An answer of the server that was on its way while this tab saved something is dropped (the `writes` counter in `Shell`), so it never puts older content back on screen.",
     "The search, the filters of the panel, a chosen order, the page and a chosen page size are in the address (`ListState`, `SearchState`); \"Only my bookmarks\" and \"Only what needs a review\" are kept for the tab (sessionStorage), My application in this browser (localStorage).",
-    "Browser storage holds only per-person conveniences (My application, the last page size, order and search mode, cards or rows, checklist ticks, the last look, light or dark), each read and written in try/catch.",
+    "Browser storage holds only per-person conveniences (such as My application, the last page size, order and search mode, cards or rows, checklist ticks, the last look, light or dark), each read and written in try/catch.",
     "Rights in the app (`usePerms`, `src/lib/rights.ts`) only show or hide controls; every refusal is the server's (`server/internal/rbac`, `server/internal/httpapi`).",
   ],
   charts: [

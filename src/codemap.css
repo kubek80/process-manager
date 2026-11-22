@@ -221,3 +221,15 @@ code.cm-path { background: none; border: 0; padding: 0; color: var(--text-2); }
 /* long lines wrapped on request (the viewer's choice, kept in the browser) */
 .cm-code.wrap .cm-code-inner { width: auto; }
 .cm-code.wrap .cm-text { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; flex: 1; }
+@media (max-width: 600px) {
+  /* one line on a phone: the next file is under the code */
+  .cm-readbar { gap: 6px 10px; padding: 4px 6px; }
+  .cm-readbar-next { display: none; }
+  .cm-readbar-n { min-width: 0; font-size: 12.5px; }
+}
+/* a long name in a comment breaks instead of widening the page */
+.cm-reqs { grid-template-columns: minmax(0, 1fr); }
+.cm-comment p, .cm-inline > p span { overflow-wrap: anywhere; }
+.cm-results, .cm-group { grid-template-columns: minmax(0, 1fr); }
+.cm-group > * { max-width: 100%; }
+.cm-hit-text > span, .cm-hit-text em, .cm-index .cm-path { overflow-wrap: anywhere; }
