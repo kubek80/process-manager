@@ -248,6 +248,9 @@ func (a *api) resolveFeedback(w http.ResponseWriter, r *http.Request) {
 	s := who(r)
 	v := a.viewer(r)
 	it, err := a.Feedback.Get(r.Context(), r.PathValue("id"))
+	if err == nil && v.hidden(it.TargetKind, it.TargetID) {
+		err = feedback.ErrNotFound // feedback on a draft somebody cannot see does not exist for them
+	}
 	if err != nil {
 		a.fail(w, r, err)
 		return
@@ -279,12 +282,16 @@ func (a *api) resolveFeedback(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) deleteFeedback(w http.ResponseWriter, r *http.Request) {
 	s := who(r)
+	v := a.viewer(r)
 	it, err := a.Feedback.Get(r.Context(), r.PathValue("id"))
+	if err == nil && v.hidden(it.TargetKind, it.TargetID) {
+		err = feedback.ErrNotFound // also for its author: to them the draft does not exist
+	}
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	if !strings.EqualFold(it.AuthorEmail, s.Email) && !a.viewer(r).canManage(it.TargetKind, it.TargetID) {
+	if !strings.EqualFold(it.AuthorEmail, s.Email) && !v.canManage(it.TargetKind, it.TargetID) {
 		writeError(w, 403, "You can only delete your own feedback.")
 		return
 	}

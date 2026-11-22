@@ -193,13 +193,69 @@ func (a *api) system(w http.ResponseWriter, r *http.Request) {
 
 // ---------- skills and review agents
 
+// A skill of a draft - a process or standard never published, or taken back to draft - is for
+// whoever may see that draft only. To everybody else it does not exist: it is left out of the
+// list, and every route of a single skill answers as for an id that was never used. A skill of
+// a retired document and of a deleted one is served as before, marked as not active.
+
+// skillSource returns the status of the document a skill is generated from ("" when that no
+// longer exists) and whether the person of the request may see it.
+func (a *api) skillSource(r *http.Request, sk skills.Skill) (status string, visible bool, err error) {
+	d, err := a.Docs.Get(r.Context(), sk.SourceKind, sk.SourceID)
+	if errors.Is(err, docs.ErrNotFound) {
+		return "", true, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	_, status = headOf(d.Body)
+	return status, canSee(who(r), sk.SourceKind, d.Body), nil
+}
+
+// visibleSkill is Skills.Get for the person of the request: skills.ErrNotFound for a skill of a
+// draft they may not see, as for an id that does not exist.
+func (a *api) visibleSkill(r *http.Request, id string) (skills.Skill, string, error) {
+	sk, err := a.Skills.Get(r.Context(), id)
+	if err != nil {
+		return sk, "", err
+	}
+	status, visible, err := a.skillSource(r, sk)
+	if err != nil {
+		return sk, "", err
+	}
+	if !visible {
+		return skills.Skill{}, "", skills.ErrNotFound
+	}
+	return sk, status, nil
+}
+
 func (a *api) listSkills(w http.ResponseWriter, r *http.Request) {
 	list, err := a.Skills.List(r.Context())
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"skills": list})
+	// the drafts this person may not see, read once per kind
+	hidden := map[string]bool{}
+	for _, kind := range []string{docs.Process, docs.Standard} {
+		all, err := a.Docs.List(r.Context(), kind)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		for _, d := range all {
+			if !canSee(who(r), kind, d.Body) {
+				hidden[kind+"/"+d.ID] = true
+			}
+		}
+	}
+	out := make([]skills.Skill, 0, len(list))
+	for _, sk := range list {
+		if !hidden[sk.SourceKind+"/"+sk.SourceID] {
+			out = append(out, sk)
+		}
+	}
+	writeJSON(w, 200, map[string]any{"skills": out})
 }
 
 func (a *api) getSkill(w http.ResponseWriter, r *http.Request) {
@@ -207,7 +263,7 @@ func (a *api) getSkill(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) writeSkill(w http.ResponseWriter, r *http.Request, id string) {
-	sk, err := a.Skills.Get(r.Context(), id)
+	sk, _, err := a.visibleSkill(r, id)
 	if err != nil {
 		a.fail(w, r, err)
 		return
@@ -231,6 +287,10 @@ func (a *api) getSkillVersion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "That does not exist.")
 		return
 	}
+	if _, _, err := a.visibleSkill(r, r.PathValue("id")); err != nil {
+		a.fail(w, r, err)
+		return
+	}
 	content, err := a.Skills.Content(r.Context(), r.PathValue("id"), n)
 	if err != nil {
 		a.fail(w, r, err)
@@ -240,7 +300,7 @@ func (a *api) getSkillVersion(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) downloadSkill(w http.ResponseWriter, r *http.Request) {
-	sk, err := a.Skills.Get(r.Context(), r.PathValue("id"))
+	sk, status, err := a.visibleSkill(r, r.PathValue("id"))
 	if err != nil {
 		a.fail(w, r, err)
 		return
@@ -263,6 +323,10 @@ func (a *api) downloadSkill(w http.ResponseWriter, r *http.Request) {
 	// this, the latest text as a file, is a download; reading an older version in the app is not.
 	// A failure to count never fails the download.
 	// At most once per person, skill and day: downloading again and again adds nothing.
+	// Never for a draft: counts must not show that it exists.
+	if status == "draft" {
+		return
+	}
 	_, err = a.Engagement.CountDownload(context.WithoutCancel(r.Context()), sk.ID, sk.SourceKind, sk.SourceID, who(r).Email, engagement.ViaDownload, time.Now())
 	if err != nil && !errors.Is(err, engagement.ErrNoDocument) {
 		a.Log.Warn("download not counted", "skill", sk.ID, "error", err)
@@ -294,7 +358,7 @@ func (a *api) putSkillExtra(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "The text contains characters that cannot be stored.")
 		return
 	}
-	sk, err := a.Skills.Get(r.Context(), r.PathValue("id"))
+	sk, _, err := a.visibleSkill(r, r.PathValue("id"))
 	if err != nil {
 		a.fail(w, r, err)
 		return

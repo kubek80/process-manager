@@ -184,7 +184,7 @@ export const api: CodeCategory = {
       path: "server/internal/httpapi/source.go",
       role: "Route: GET /api/admin/source?path=… for Admin › Code map: one source file of the checkout named by PM_SOURCE_DIR.",
       requirements: [
-        { text: "No PM_SOURCE_DIR (or not a folder): 404 for every path; otherwise one identical 404 for a path that is not allowed, missing or not a regular file.", at: "func (a *api) source(w http.ResponseWriter, r *http.Request) {" },
+        { text: "No PM_SOURCE_DIR, or no git checkout there whose files can be listed: 404 for every path; otherwise one identical 404 for a path that is not allowed, not tracked by git, missing or not a regular file; at most 300 files a person a minute (429).", at: "func (a *api) source(w http.ResponseWriter, r *http.Request) {" },
         { text: "At most 400 KB a file; the answer is {path, text, bytes} with no-store, and reading is not written to Activity.", at: "const maxSourceBytes = 400 * 1024" },
       ],
       tests: ["server/internal/httpapi/source_test.go"],
