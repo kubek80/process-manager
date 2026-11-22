@@ -214,7 +214,7 @@ test("who is an Owner is changed by admins only: somebody who only manages the l
   await open(page, "/admin/lists");
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   const owners = page.locator('.cat-members[data-rank="owner"]');
-  await expect(owners).toContainText("Owners review what this team looks after and answer its feedback.");
+  await expect(owners).toContainText("Owners review what this team looks after and answer its feedback. An admin gives and takes this role.");
   await expect(owners.locator("li", { hasText: "Casey Owner" })).toBeVisible();
   await expect(owners.locator("li", { hasText: "Jordan Platform" })).toBeVisible();
   await expect(page.locator(".cat-members").getByRole("textbox")).toHaveCount(0);

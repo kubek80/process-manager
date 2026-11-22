@@ -164,7 +164,7 @@ export function GroupMembers({ kind, id, name, rank = "owner", saved, manage, me
     return (
       <div className="cat-members" data-rank={rank}>
         <H>{title} {members && <span>{list.length}</span>}</H>
-        {what && <p className="muted small">{what}{rank === "owner" && manage && " An admin gives and takes this role."}</p>}
+        {what && <p className="muted small">{what}{rank === "owner" && manage && (acts || perms.catalog) && " An admin gives and takes this role."}</p>}
         {membersError && <p className="muted">The {title.toLowerCase()} could not be loaded: {membersError}</p>}
         {!members && !membersError && <Loading />}
         {list.length > 0 && <ul className="people">{list.map((m) => <Person key={m.email} email={m.email} name={nameOf(m.email)} you={isMe(m.email)} />)}</ul>}
