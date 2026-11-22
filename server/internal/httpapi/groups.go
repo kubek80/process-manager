@@ -97,6 +97,9 @@ func (a *api) people(ctx context.Context, g group) ([]rbac.Member, error) {
 
 func (a *api) answerPeople(w http.ResponseWriter, r *http.Request, g group, note string) {
 	list, err := a.people(r.Context(), g)
+	if err == nil {
+		err = a.withMemberNames(r.Context(), list)
+	}
 	if err != nil {
 		a.fail(w, r, err)
 		return

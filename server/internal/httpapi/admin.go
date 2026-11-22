@@ -119,11 +119,31 @@ func (a *api) revokeAccess(w http.ResponseWriter, r *http.Request) {
 // change what belongs to a platform or a practice.
 func (a *api) listMembers(w http.ResponseWriter, r *http.Request) {
 	list, err := a.Roles.Members(r.Context())
+	if err == nil {
+		err = a.withMemberNames(r.Context(), list)
+	}
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"members": list})
+}
+
+// withMemberNames fills in the names of the people in a list of members, where the portal knows
+// them (the same sources as Admin › Access). Everybody signed in sees the addresses already.
+func (a *api) withMemberNames(ctx context.Context, list []rbac.Member) error {
+	emails := make([]string, 0, len(list))
+	for _, m := range list {
+		emails = append(emails, m.Email)
+	}
+	names, err := a.names(ctx, emails)
+	if err != nil {
+		return err
+	}
+	for i := range list {
+		list[i].Name = names[list[i].Email]
+	}
+	return nil
 }
 
 func (a *api) listAudit(w http.ResponseWriter, r *http.Request) {

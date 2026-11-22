@@ -100,3 +100,31 @@ func TestDecisionsAreCheckedInTheAppsWords(t *testing.T) {
 		}
 	}
 }
+
+func TestHowToReachAGroupIsChecked(t *testing.T) {
+	lists := func(contacts string) []byte {
+		return []byte(`{"tiers":[],"environments":[],"languages":[],"tools":[],"teams":[],"practices":[],"platforms":[{"id":"p","name":"P","contacts":` + contacts + `}]}`)
+	}
+	if err := docs.Check(docs.Catalog, lists(`{"email":"p@example.com","slackUrl":"https://x.slack.com/a","form":"http://forms.example.com"}`), docs.Lists{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{`{"page":"javascript:alert(1)"}`, `{"form":"data:text/html,x"}`, `{"confluence":"ftp://x"}`, `{"chatUrl":"https://a b"}`, `{"email":"not-an-email"}`} {
+		if err := docs.Check(docs.Catalog, lists(bad), docs.Lists{}); err == nil || !errors.Is(err, docs.ErrInvalid) || !strings.Contains(err.Error(), "the platform “P”") {
+			t.Errorf("%s: %v", bad, err)
+		}
+	}
+}
+
+func TestReachIsOneRepeatableLine(t *testing.T) {
+	n := docs.Named{Name: "P", Contact: "Desk 4", Contacts: &docs.Contacts{Form: "https://f", Email: "p@example.com", Slack: "#p", SlackURL: "https://s", ChatURL: "https://c"}}
+	want := "Group email: p@example.com; Slack: #p (https://s); Google Chat: https://c; Request form: https://f; Other: Desk 4"
+	if got := n.Reach(); got != want {
+		t.Fatalf("%q", got)
+	}
+	if got := (docs.Named{Contact: "Slack #x"}).Reach(); got != "Slack #x" {
+		t.Fatalf("%q", got)
+	}
+	if got := (docs.Named{Contacts: &docs.Contacts{}}).Reach(); got != "" {
+		t.Fatalf("%q", got)
+	}
+}

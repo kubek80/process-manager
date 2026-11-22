@@ -187,7 +187,8 @@ export interface Me {
 
 export type Role = "admin" | "catalog-manager" | "process-editor" | "standards-editor" | "owner" | "platform-owner" | "practice-owner" | "platform-member" | "practice-member";
 /** A person in one of the groups people belong to. Readable by everyone who is signed in. */
-export interface Membership { email: string; role: "owner" | "platform-owner" | "practice-owner" | "platform-member" | "practice-member"; scope: string }
+/** `name`: the person's name where the portal knows it; left out when it does not. */
+export interface Membership { email: string; role: "owner" | "platform-owner" | "practice-owner" | "platform-member" | "practice-member"; scope: string; name?: string }
 export interface Assignment { email: string; role: Role; scope: string; grantedBy: string; grantedAt: string }
 export interface AuditEntry { id: number; at: string; email: string; name: string; action: string; target: string; detail: string }
 export interface DocVersion {

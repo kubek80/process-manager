@@ -326,6 +326,8 @@ type Member struct {
 	Email string `json:"email"`
 	Role  string `json:"role"`
 	Scope string `json:"scope"`
+	// Name is the person's name where the portal knows it; filled in by the caller.
+	Name string `json:"name,omitempty"`
 }
 
 // Members lists every assignment of the roles that are limited to a team, platform or

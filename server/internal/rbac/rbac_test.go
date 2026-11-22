@@ -239,3 +239,74 @@ func TestMisplaced(t *testing.T) {
 		t.Fatal("a process editor has no say over standards")
 	}
 }
+
+func TestMembersWorkOnDraftsAndPublishNothing(t *testing.T) {
+	m := rbac.PermsFrom([]rbac.Assignment{
+		{Email: "m@x.io", Role: rbac.PracticeMember, Scope: "engineering"},
+		{Email: "m@x.io", Role: rbac.PlatformMember, Scope: "google-cloud"},
+		{Email: "m@x.io", Role: rbac.PlatformMember, Scope: "azure"},
+	}, false)
+	if strings.Join(m.MemberPlatforms, ",") != "azure,google-cloud" || strings.Join(m.MemberPractices, ",") != "engineering" || !m.MemberOfSome() || m.EditsSome() {
+		t.Fatalf("%+v", m)
+	}
+	if none := rbac.PermsFrom(nil, true); none.MemberPlatforms == nil || none.MemberPractices == nil || len(none.MemberPlatforms) != 0 {
+		t.Fatalf("an admin gets no member lists filled, and never null: %+v", none)
+	}
+	gcp, eng, other := B{Platform: "google-cloud"}, B{Practice: "engineering"}, B{Platform: "github", Owner: "team"}
+	for _, kind := range []string{"process", "standard"} {
+		if !m.CanDraft(kind, gcp) || !m.CanDraft(kind, eng) || m.CanDraft(kind, other) {
+			t.Fatalf("%s: drafts of their platform and practice only", kind)
+		}
+		if m.CanEdit(kind, gcp) || m.CanManageFeedback(kind, gcp) || !m.CanSeeDraft(kind, gcp) || m.CanSeeDraft(kind, other) {
+			t.Fatalf("%s: a member sees drafts and changes nothing readers see", kind)
+		}
+	}
+	if m.CanDraft("catalog", B{}) || m.CanSeeDraft("catalog", gcp) {
+		t.Fatal("members do not change the lists")
+	}
+	// the team's owners see drafts as before; they still work on none
+	owner := rbac.PermsFrom([]rbac.Assignment{{Email: "o@x.io", Role: rbac.Owner, Scope: "team"}}, false)
+	if !owner.CanSeeDraft("process", other) || owner.CanDraft("process", other) {
+		t.Fatal("team owner")
+	}
+	// placing a draft: where they are a member or an owner; publishing: where they own
+	if f, id := m.MisplacedDraft("process", nil, B{Platform: "azure", Practice: "engineering"}); f != "" {
+		t.Fatalf("a member may put a draft on their platform: %s %s", f, id)
+	}
+	if f, id := m.MisplacedDraft("process", &B{Practice: "engineering"}, B{Platform: "github", Practice: "engineering"}); f != "platform" || id != "github" {
+		t.Fatalf("not their platform: %s %s", f, id)
+	}
+	if f, _ := m.Misplaced("process", nil, B{Platform: "azure"}); f != "platform" {
+		t.Fatal("Misplaced counts owners only")
+	}
+	both := rbac.PermsFrom([]rbac.Assignment{{Email: "b@x.io", Role: rbac.PlatformOwner, Scope: "azure"}, {Email: "b@x.io", Role: rbac.PlatformMember, Scope: "google-cloud"}}, false)
+	if f, _ := both.MisplacedDraft("process", &B{Platform: "azure"}, B{Platform: "google-cloud"}); f != "" {
+		t.Fatal("an owner who is a member elsewhere may move a draft there")
+	}
+	if f, _ := both.Misplaced("process", &B{Platform: "azure"}, B{Platform: "google-cloud"}); f != "platform" {
+		t.Fatal("but not publish it there")
+	}
+}
+
+func TestMemberRolesAreCheckedLikeOwnerRoles(t *testing.T) {
+	for _, role := range []string{rbac.PlatformMember, rbac.PracticeMember} {
+		if err := rbac.Check(rbac.Assignment{Email: "a@x.io", Role: role}); err == nil || !strings.Contains(err.Error(), "needs the") {
+			t.Fatalf("%s without a scope: %v", role, err)
+		}
+		if err := rbac.Check(rbac.Assignment{Email: "a@x.io", Role: role, Scope: "google-cloud"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if rbac.Label(rbac.PlatformMember) != "Platform member" || rbac.Label(rbac.PracticeMember) != "Practice member" ||
+		rbac.ScopeList(rbac.PlatformMember) != "platforms" || rbac.ScopeNoun(rbac.PracticeMember) != "practice" {
+		t.Fatal("words")
+	}
+	s := &rbac.Store{Pool: dbtest.NewPool(t)}
+	if err := s.Grant(ctx, rbac.Assignment{Email: "m@x.io", Role: rbac.PlatformMember, Scope: "google-cloud", GrantedBy: "t"}); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.Members(ctx)
+	if err != nil || len(list) != 1 || list[0].Role != rbac.PlatformMember {
+		t.Fatalf("%v %v", list, err)
+	}
+}
