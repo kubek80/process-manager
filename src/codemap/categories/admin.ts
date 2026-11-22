@@ -7,7 +7,7 @@ export const admin: CodeCategory = {
   title: "Admin",
   summary: "The Admin panel (`#/admin/{section}`): who may do what, the lists, skills, health, activity, statistics, look and set-up of the portal. Each section is a view over calls the server guards (every `/api/admin/…` route is for admins only, `server/internal/httpapi/api.go`); the lists are edited with the same `useDraft` as a process, and the activity log is put into words by `src/lib/activity.ts`.",
   requirements: [
-    "A section is shown only to whom it is for: those marked `admin` (Access, Activity, Statistics, Theming, System) to admins only, Lists to whoever manages the lists (every admin does: `rbac.PermsFrom` sets `Catalog` for an admin), Skills and Health to everyone who reaches the panel; the panel itself is reached only by admins and lists managers (`canOpenAdmin`). This only hides: the server guards every `/api/admin/…` call again (`admin(…)` in `server/internal/httpapi/api.go`).",
+    "A section is shown only to whom it is for: those marked `admin` (Access, Activity, Statistics, Theming, System, Code map) to admins only, Lists to whoever manages the lists (every admin does: `rbac.PermsFrom` sets `Catalog` for an admin), Skills and Health to everyone who reaches the panel; the panel itself is reached only by admins and lists managers (`canOpenAdmin`). This only hides: the server guards every `/api/admin/…` call again (`admin(…)` in `server/internal/httpapi/api.go`).",
     "The lists are saved as a whole through `useDraft` (`PUT /api/catalog?base=N`): a save from an outdated version is refused (`409`) and compared, never overwritten; Save is off while `validateCatalog` finds an error.",
     "An entry of the lists that a visible process or standard uses, or that still has owners or members, cannot be removed in the app (`usesOf`, `removeHint`); the server refuses the same (`stillUsed` in `server/internal/httpapi/content.go`, `400`), counting drafts the person cannot see without naming them.",
     "Removing an entry takes effect only when the lists are saved, and says so with Undo, which puts the entry back where it was.",
@@ -26,7 +26,7 @@ export const admin: CodeCategory = {
           s("reach", "Admin or lists manager?", "app", "decision", [["admin", "Yes"], ["none", "No"]], "canOpenAdmin"),
           s("none", "Show no Admin panel", "app", "communication", [], "no place in the top bar"),
           s("admin", "Admin?", "app", "decision", [["all", "Yes"], ["lists", "No"]]),
-          s("all", "List every section", "app", "automation", ["guard"], "Access … System"),
+          s("all", "List every section", "app", "automation", ["guard"], "Access … Code map"),
           s("lists", "List Lists, Skills and Health", "app", "automation", ["guard"]),
           s("guard", "Check the rights on every call", "server", "verify", [], "/api/admin/… admins only"),
         ]),

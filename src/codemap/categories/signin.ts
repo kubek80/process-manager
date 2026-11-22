@@ -19,7 +19,7 @@ export const signin: CodeCategory = {
     "An email the provider marks as not verified is ignored; with Entra ID only the sign-in name (`preferred_username`, `upn`) counts. The address must end in one of `PM_ALLOWED_EMAIL_DOMAINS` when set, and Google sign-in needs `PM_GOOGLE_HOSTED_DOMAIN` or allowed domains.",
     "A failed sign-in puts only a plain sentence in the address bar (`?signin_error=`); the provider's answer goes to the log.",
     "`PM_AUTH=dev` lets anybody be any built-in user, so the server refuses to start with it on an address reachable from the network, unless `PM_DEV_AUTH_ON_NETWORK=i-understand`.",
-    "With Entra ID or Google the server does not start without `PM_ADMINS`, a random `PM_SESSION_SECRET` of at least 32 characters and an https `PM_BASE_URL`.",
+    "With Entra ID or Google the server does not start without `PM_ADMINS`, a random `PM_SESSION_SECRET` of at least 32 characters and an https `PM_BASE_URL` (http only for localhost).",
   ],
   charts: [
     {
@@ -76,7 +76,7 @@ export const signin: CodeCategory = {
       keys: ["primary key (email)"],
       createdIn: "server/internal/db/migrations/003_version_notes_sessions.sql",
       writtenBy: ["server/internal/auth/signout.go"],
-      readBy: ["server/internal/httpapi/api.go"],
+      readBy: ["server/internal/auth/signout.go", "server/internal/httpapi/api.go"],
       rules: [
         "The moment only moves forward (`greatest(signed_out.at, excluded.at)`).",
         "A new session is dated no earlier than this moment (`IssueNotBefore`), so signing in right after signing out works.",
@@ -152,7 +152,7 @@ select email, role, scope, granted_by, granted_at from role_assignments where em
       path: "server/internal/auth/dev.go",
       role: "The built-in users of local development and the roles they get on a local database.",
       requirements: [
-        { text: "Seven users, one per kind of rights, so every right can be tried locally; Dana has no stored role and is admin only because `config.Load` names `dana@example.com` in `PM_ADMINS` with `PM_AUTH=dev`.", at: "var DevUsers = []DevUser{" },
+        { text: "Seven users, one per kind of rights, so every right can be tried locally; Dana has no stored role and is admin only because `config.Load` makes `dana@example.com` the admin of the server settings when `PM_ADMINS` is empty with `PM_AUTH=dev`.", at: "var DevUsers = []DevUser{" },
         { text: "Given only by `devRoles` in `server/cmd/server/main.go`, with `PM_AUTH=dev`, to a user who has no role at all and only for a scope the lists have. Test: `TestNoDevelopmentRolesWithARealProvider`.", at: "var DevRoles = []DevRole{" },
       ],
       tests: ["server/internal/auth/auth_test.go", "server/cmd/server/main_test.go"],
@@ -173,7 +173,7 @@ select email, role, scope, granted_by, granted_at from role_assignments where em
         { text: "Set on every answer, also errors and the app's files; an icon replaces it with `iconPolicy`. Inline styles are allowed (the map and the code editor position things), inline scripts and `eval` are not, which is why the format checks are generated ahead of time. Test: `TestEveryAnswerCarriesSecurityHeaders`.", at: "h.Set(\"Content-Security-Policy\", contentSecurityPolicy)" },
         { text: "HSTS only when `PM_BASE_URL` is https, so a local http server is never pinned.", at: "if a.Cfg.Secure() {" },
         { text: "A database that cannot say whether the session was ended gives 503, not 401: an outage must not look like being signed out, nor let an ended session through. Test: `TestAnOutageIsNotShownAsSignedOut`.", at: "return session{}, errUnavailable" },
-        { text: "The picker's route exists only with `PM_AUTH=dev`; with a real provider `/auth/dev/login` is 404.", at: "mux.HandleFunc(\"POST /auth/dev/login\", a.devLogin)" },
+        { text: "The picker's route exists only with `PM_AUTH=dev`; with a real provider `POST /auth/dev/login` reaches no sign-in (404, or 405 from the app's files where `PM_STATIC_DIR` is set). Test: `TestOIDCSignInSetsASessionWithRolesFromTheDatabase`.", at: "mux.HandleFunc(\"POST /auth/dev/login\", a.devLogin)" },
         { text: "Only a built-in user can be chosen, never an address the browser makes up.", at: "u, ok := auth.DevUserByEmail(in.Email)" },
         { text: "Only a session that still counts marks the sign-out, so an ended copy of a cookie cannot throw the person out again and again. Test: `TestAnEndedSessionCannotSignThePersonOutAgain`.", at: "if err == nil && a.SignOuts != nil {" },
         { text: "The built-in users are listed only with `PM_AUTH=dev`; with a real provider `/api/me` gives nothing about other people.", at: "out[\"devUsers\"] = auth.DevUsers" },

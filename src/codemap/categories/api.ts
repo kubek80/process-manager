@@ -76,7 +76,7 @@ export const api: CodeCategory = {
       role: "Routes: `GET /api/processes`, `/api/standards`, `/api/catalog`; `PUT` and `DELETE /api/{processes|standards}/{id}`; `PUT /api/catalog`; `POST …/{id}/review`; `GET /api/history/{kind}/{id}[/{version}]`.",
       requirements: [
         { text: "Every save, whatever the call (`PUT`, `?draft=R`, publish, the lists), goes through `save` and `docs.Store.Save`: a second way to save would skip rights, the format or the lists still in use. Test: `TestASaveFromAnOutdatedVersionIsRefused`.", at: "func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {" },
-        { text: "A 409 names who saved or deleted first; who deleted something only to somebody who could edit its last version. Test: `TestWhoDeletedOrRetiredItIsSaid`.", at: "writeJSON(w, 409, map[string]any{\"error\": msg, \"conflict\": info})" },
+        { text: "A 409 names who saved or deleted first; who deleted something only to somebody who could draft its last version (`CanDraft`) and names a version of it they had (`base` or `known`). Test: `TestWhoDeletedOrRetiredItIsSaid`.", at: "writeJSON(w, 409, map[string]any{\"error\": msg, \"conflict\": info})" },
         { text: "The regeneration is detached from the request (`WithoutCancel`), so a person closing the tab does not leave skills out of date. Test: `TestSkillsFollowASaveEvenWhenTheClientIsGone`.", at: "ctx = context.WithoutCancel(ctx)" },
         { text: "The answer waits for the skills at most `syncWait` (20 s) and never for the index, so a slow provider cannot slow a save. Test: `TestAHangingProviderNeitherSlowsASaveNorBlocksThePortal`.", at: "case <-time.After(syncWait):" },
         { text: "Before the lists were ever saved, `GET /api/catalog` is version 0 with the empty lists, so the first save is made from version 0 like any other.", at: "w.Header().Set(VersionHeader, \"0\")" },
@@ -178,7 +178,7 @@ export const api: CodeCategory = {
       role: "Routes: `GET /api/admin/statistics` and `/api/admin/statistics.csv`.",
       requirements: [
         { text: "Periods 7, 30, 90, 365 days or `all` (400 otherwise), ending today in UTC.", at: "var periods = map[string]int{\"7\": 7, \"30\": 30, \"90\": 90, \"365\": 365, \"all\": 0}" },
-        { text: "A text cell starting with `=`, `+`, `-` or `@` gets an apostrophe, so a title cannot run a formula when the file is opened in a spreadsheet. Test: `TestCSVCellGuard`.", at: "func csvCell(s string) string {" },
+        { text: "A text cell starting with `=`, `+`, `-` or `@` (also after leading spaces), or with a tab or line break, gets an apostrophe, so a title cannot run a formula when the file is opened in a spreadsheet. Test: `TestCSVCellGuard`.", at: "func csvCell(s string) string {" },
       ],
       tests: ["server/internal/httpapi/statistics_test.go"],
     },
@@ -221,7 +221,7 @@ export const api: CodeCategory = {
       path: "server/internal/config/config.go",
       role: "Every setting of the server, read from the environment, with every problem said at once.",
       requirements: [
-        { text: "With `PORT` set (Cloud Run) the server listens on all addresses; otherwise `PM_ADDR`, else `127.0.0.1:8080`. Test: `TestListenAddressFromPort`.", at: "c.Addr = net.JoinHostPort(\"0.0.0.0\", port)" },
+        { text: "`PM_ADDR` wins when set; without it, `PORT` (Cloud Run) makes the server listen on all addresses, else it listens on `127.0.0.1:8080`. Test: `TestListenAddressFromPort`.", at: "c.Addr = net.JoinHostPort(\"0.0.0.0\", port)" },
         { text: "All problems are collected and returned together, so a deployment is fixed in one round instead of one setting at a time. Test: `TestLoadRejects`.", at: "return c, errors.New(strings.Join(problems, \"; \"))" },
         { text: "Vector sizes above 2000 are refused: pgvector cannot index them. Test: `TestEmbeddingSettings`.", at: "if err != nil || n < minDimensions || n > maxDimensions {" },
         { text: "`PM_SOURCE_DIR` must be absolute: a relative path would depend on where the server was started. Test: `TestSourceDir`.", at: "if !filepath.IsAbs(c.SourceDir) {" },

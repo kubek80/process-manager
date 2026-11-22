@@ -14,7 +14,7 @@ export const reading: CodeCategory = {
     "A filter value in an address that names nothing that exists is dropped, the address corrected in place and a notice shown once (`useLinkFilters` with `knownFilters`).",
     "Whether a review is due is decided by `reviewOf` / `needsReview` on every page: from the last review, or for one never reviewed from its first publication (`meta.publishedAt`); due within 30 days is a warning, past the date a problem. The MCP server decides the same in its own `reviewOf`.",
     "Views, bookmarks, upvotes and downloads are read only through `useEngagement`; they are counts, never who; while they are not known no number is shown, because a 0 would look like a fact.",
-    "A view is recorded once per page load and document, never for a draft; the server counts the same person once a day (`document_views`).",
+    "The app records a view once per page load and document, never for a draft (the page of a draft has no use line; `recordView` in `server/internal/httpapi/engagement.go` refuses only what the person may not see); the server counts the same person once a day (`document_views`).",
     "The reader's page changes nothing: it offers Edit (to whoever may draft) and Mark as reviewed (to whoever may edit it or owns its team); every change happens on the editing screen.",
     "The map's zoom rules are one module (`src/lib/zoom.ts`) for the reader's map, the editing map and the Guide's charts; the blocks are one Tab stop and the arrow keys move between steps.",
   ],
@@ -194,7 +194,7 @@ export const reading: CodeCategory = {
       role: "The reader's page of a process: head, map, checklist, feedback and skills tabs, the open step in a side panel, Before you start.",
       requirements: [
         { text: "Edit appears by `canDraft`, so members of its platform or practice get it too (they save drafts, an owner publishes); the server refuses everyone else.", at: "{drafts && <a className=\"btn primary\" href={editHref}><Pencil size={16} />Edit</a>}" },
-        { text: "A draft has no use line, so no view of a draft is ever recorded.", at: "{status !== \"draft\" && <DocEngagement kind=\"process\"" },
+        { text: "A draft has no use line, so the app never records a view of a draft (the server alone would count one from whoever may see it).", at: "{status !== \"draft\" && <DocEngagement kind=\"process\"" },
         { text: "Printed, the page is the checklist with every step, whatever tab is open.", at: "{printing && <ListView process={doc}" },
         { text: "A process stored broken is not drawn (the map would fail); whoever may draft it gets a link to repair it.", at: "const renderable = useMemo(() => isDrawableProcess(doc), [doc]);" },
       ],
@@ -258,7 +258,7 @@ export const reading: CodeCategory = {
       role: "The reader's page of a standard: head, requirements by level and by My application, feedback and skills tabs, the open requirement in a side panel.",
       requirements: [
         { text: "Printed, every requirement is shown, whatever level or application is chosen on screen.", at: "const shown = doc.requirements.filter((r) => printing || !level || r.level === level);" },
-        { text: "A draft has no use line, so no view of a draft is ever recorded.", at: "{status !== \"draft\" && <DocEngagement kind=\"standard\"" },
+        { text: "A draft has no use line, so the app never records a view of a draft (the server alone would count one from whoever may see it).", at: "{status !== \"draft\" && <DocEngagement kind=\"standard\"" },
       ],
       tests: ["e2e/standards.spec.ts", "e2e/pages.spec.ts"],
     },
