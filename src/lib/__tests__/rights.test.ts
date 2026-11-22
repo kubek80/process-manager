@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { belongsChoice, belongsRefused, canCreate, canEdit, canManage, canOpenAdmin, completePerms, editsAll, NO_PERMS, roleLabel, wouldLoseEdit } from "../rights";
+import { belongsChoice, belongsRefused, canChangeDetails, canCreate, canDraft, canEdit, canManage, canManageMembers, canOpenAdmin, canPublish, completePerms, editsAll, groupRank, isMember, newDocPlaces, NO_PERMS, placesOf, roleLabel, seesDrafts, wouldLoseEdit, wouldLosePublish } from "../rights";
 import type { Perms } from "../../types";
 
 const perms = (p: Partial<Perms>): Perms => ({ ...NO_PERMS, ...p });
@@ -87,6 +87,7 @@ describe("who may change a process or standard", () => {
     expect(p).toEqual({ ...NO_PERMS, processes: true });
     expect(canEdit({ admin: false, catalog: false, processes: false, standards: false } as Perms, "process", gcp)).toBe(false);
     expect(completePerms(undefined)).toEqual(NO_PERMS);
+    expect(completePerms({ memberPlatforms: ["google-cloud"] }).memberPractices).toEqual([]);
   });
 
   it("somebody who edits only through ownership sets a platform or practice only from one of theirs to one of theirs", () => {
@@ -114,5 +115,108 @@ describe("who may change a process or standard", () => {
     // general editors are not restricted
     expect(belongsRefused(perms({ standards: true }), "standard", library, { platform: "azure", practice: "security" })).toEqual([]);
     expect(belongsRefused(perms({ admin: true }), "process", library, {})).toEqual([]);
+  });
+
+  it("keeps everybody who is not a member where they were with drafts", () => {
+    const jordan = perms({ platforms: ["google-cloud"] });
+    const casey = perms({ owns: ["cloud-platform-team"] });
+    expect(canDraft(jordan, "process", gcp)).toBe(true);
+    expect(canDraft(jordan, "process", azure)).toBe(false);
+    expect(canDraft(casey, "process", gcp)).toBe(false); // a team's Owner reviews, does not change
+    expect(seesDrafts(casey, "process", gcp)).toBe(true);
+    expect(seesDrafts(casey, "process", azure)).toBe(false);
+    expect(seesDrafts(NO_PERMS, "process", gcp)).toBe(false);
+    expect(canPublish).toBe(canEdit);
+    expect(isMember(jordan)).toBe(false);
+  });
+});
+
+describe("a member of a platform or a practice", () => {
+  const morgan = perms({ memberPlatforms: ["google-cloud"], memberPractices: ["engineering"] });
+
+  it("drafts and sees the drafts of what belongs to theirs, but publishes and manages nothing", () => {
+    for (const kind of ["process", "standard"] as const) {
+      expect(canDraft(morgan, kind, gcp)).toBe(true);
+      expect(canDraft(morgan, kind, engineering)).toBe(true);
+      expect(canDraft(morgan, kind, azure)).toBe(false);
+      expect(canDraft(morgan, kind, {})).toBe(false);
+      expect(canPublish(morgan, kind, gcp)).toBe(false);
+      expect(canEdit(morgan, kind, gcp)).toBe(false);
+      expect(canManage(morgan, kind, gcp)).toBe(false); // no reviews to confirm, no feedback to answer
+      expect(seesDrafts(morgan, kind, gcp)).toBe(true);
+      expect(seesDrafts(morgan, kind, azure)).toBe(false);
+      expect(canCreate(morgan, kind)).toBe(true);
+    }
+    expect(isMember(morgan)).toBe(true);
+    expect(canOpenAdmin(morgan)).toBe(false);
+    expect(roleLabel(morgan)).toBe("Platform member · Practice member");
+  });
+
+  it("places a draft only on their platforms and practices, and is told before it would leave their reach", () => {
+    expect(placesOf(morgan, "platform")).toEqual(["google-cloud"]);
+    expect(belongsChoice(morgan, "process", "platform", "google-cloud")).toBe("own");
+    expect(belongsChoice(morgan, "process", "platform", undefined)).toBe("own");
+    expect(belongsChoice(morgan, "process", "platform", "azure")).toBe("locked");
+    expect(belongsRefused(morgan, "process", undefined, { platform: "google-cloud", practice: "engineering" })).toEqual([]);
+    expect(belongsRefused(morgan, "process", undefined, { platform: "azure" })).toEqual(["platform"]);
+    expect(belongsRefused(morgan, "process", gcp, { ...gcp, platform: "azure" })).toEqual(["platform"]);
+    expect(wouldLoseEdit(morgan, "process", gcp, { ...gcp, platform: undefined })).toBe(true);
+    expect(wouldLoseEdit(morgan, "process", gcp, { platform: undefined, practice: "engineering" })).toBe(false);
+    expect(wouldLosePublish(morgan, "process", gcp, engineering)).toBe(false); // never could publish
+  });
+
+  it("an owner who moves something to where they are only a member is told they can no longer publish it", () => {
+    const both = perms({ platforms: ["google-cloud"], memberPractices: ["engineering"] });
+    expect(wouldLosePublish(both, "process", gcp, { platform: undefined, practice: "engineering" })).toBe(true);
+    expect(wouldLoseEdit(both, "process", gcp, { platform: undefined, practice: "engineering" })).toBe(false);
+    expect(wouldLosePublish(both, "process", gcp, gcp)).toBe(false);
+    expect(wouldLosePublish(both, "process", gcp, azure)).toBe(false); // that one is out of reach altogether
+    expect(placesOf(perms({ platforms: ["b", "a"], memberPlatforms: ["a", "c"] }), "platform")).toEqual(["a", "b", "c"]);
+  });
+
+  it("chooses where a new document goes among their own, owned first; a general editor does not choose", () => {
+    const both = perms({ platforms: ["google-cloud"], memberPlatforms: ["azure", "google-cloud"], memberPractices: ["engineering"] });
+    expect(newDocPlaces(both, "process")).toEqual([
+      { kind: "platform", id: "google-cloud", publishes: true },
+      { kind: "platform", id: "azure", publishes: false },
+      { kind: "practice", id: "engineering", publishes: false },
+    ]);
+    expect(newDocPlaces(perms({ processes: true, memberPlatforms: ["azure"] }), "process")).toEqual([]);
+    expect(newDocPlaces(NO_PERMS, "process")).toEqual([]);
+  });
+
+  it("is told apart from an owner in a group, the stronger winning", () => {
+    const both = perms({ platforms: ["google-cloud"], memberPlatforms: ["google-cloud", "azure"], owns: ["cloud-platform-team"] });
+    expect(groupRank(both, "platform", "google-cloud")).toBe("owner");
+    expect(groupRank(both, "platform", "azure")).toBe("member");
+    expect(groupRank(both, "practice", "azure")).toBeUndefined();
+    expect(groupRank(both, "team", "cloud-platform-team")).toBe("owner");
+    expect(groupRank(both, "platform", "")).toBeUndefined();
+  });
+});
+
+describe("who manages the people and details of a group", () => {
+  const jordan = perms({ platforms: ["google-cloud"], owns: ["cloud-platform-team"] });
+  const morgan = perms({ memberPlatforms: ["google-cloud"] });
+  it("members are added by an admin or an owner of that platform or practice", () => {
+    expect(canManageMembers(perms({ admin: true }), "platform", "azure")).toBe(true);
+    expect(canManageMembers(jordan, "platform", "google-cloud")).toBe(true);
+    expect(canManageMembers(jordan, "platform", "azure")).toBe(false);
+    expect(canManageMembers(jordan, "practice", "google-cloud")).toBe(false);
+    expect(canManageMembers(morgan, "platform", "google-cloud")).toBe(false);
+    expect(canManageMembers(perms({ catalog: true }), "platform", "google-cloud")).toBe(false);
+    // a team has no members, only Owners, who are given by admins
+    expect(canManageMembers(perms({ admin: true }), "team", "cloud-platform-team")).toBe(false);
+    expect(canManageMembers(jordan, "team", "cloud-platform-team")).toBe(false);
+  });
+  it("details are changed by an admin, a lists manager or an owner of that group", () => {
+    expect(canChangeDetails(perms({ admin: true }), "practice", "security")).toBe(true);
+    expect(canChangeDetails(perms({ catalog: true }), "team", "network-team")).toBe(true);
+    expect(canChangeDetails(jordan, "platform", "google-cloud")).toBe(true);
+    expect(canChangeDetails(jordan, "team", "cloud-platform-team")).toBe(true);
+    expect(canChangeDetails(jordan, "team", "network-team")).toBe(false);
+    expect(canChangeDetails(jordan, "platform", "azure")).toBe(false);
+    expect(canChangeDetails(morgan, "platform", "google-cloud")).toBe(false);
+    expect(canChangeDetails(NO_PERMS, "team", "")).toBe(false);
   });
 });

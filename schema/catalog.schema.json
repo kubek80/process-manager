@@ -122,9 +122,12 @@
           "maxLength": 120,
           "description": "How to reach the team: channel, mailbox, queue."
         },
+        "contacts": {
+          "$ref": "#/$defs/contacts"
+        },
         "description": {
           "type": "string",
-          "maxLength": 200
+          "maxLength": 600
         }
       }
     },
@@ -149,9 +152,12 @@
           "maxLength": 120,
           "description": "How to reach the people behind the practice: channel, mailbox."
         },
+        "contacts": {
+          "$ref": "#/$defs/contacts"
+        },
         "description": {
           "type": "string",
-          "maxLength": 200
+          "maxLength": 600
         }
       }
     },
@@ -176,9 +182,12 @@
           "maxLength": 120,
           "description": "How to reach the people behind the platform: channel, mailbox, queue."
         },
+        "contacts": {
+          "$ref": "#/$defs/contacts"
+        },
         "description": {
           "type": "string",
-          "maxLength": 200
+          "maxLength": 600
         }
       }
     },
@@ -281,6 +290,61 @@
         "description": {
           "type": "string",
           "maxLength": 200
+        }
+      }
+    },
+    "contacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How to reach them, each way on its own. Every link starts with http:// or https://.",
+      "properties": {
+        "email": {
+          "type": "string",
+          "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+          "maxLength": 120,
+          "description": "Group email address."
+        },
+        "slack": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Slack channel name, e.g. #cloud-platform."
+        },
+        "slackUrl": {
+          "type": "string",
+          "pattern": "^https?://\\S+$",
+          "maxLength": 300,
+          "description": "Link to that Slack channel."
+        },
+        "chat": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Google Chat space name."
+        },
+        "chatUrl": {
+          "type": "string",
+          "pattern": "^https?://\\S+$",
+          "maxLength": 300,
+          "description": "Link to that Google Chat space."
+        },
+        "confluence": {
+          "type": "string",
+          "pattern": "^https?://\\S+$",
+          "maxLength": 300,
+          "description": "Link to their Confluence page."
+        },
+        "page": {
+          "type": "string",
+          "pattern": "^https?://\\S+$",
+          "maxLength": 300,
+          "description": "Link to their own page or site."
+        },
+        "form": {
+          "type": "string",
+          "pattern": "^https?://\\S+$",
+          "maxLength": 300,
+          "description": "Link to the form where people ask them for something."
         }
       }
     }

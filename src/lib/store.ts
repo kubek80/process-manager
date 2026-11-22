@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Assignment, AuditEntry, Catalog, DocMeta, DocVersion, Feedback, FeedbackByTarget, Me, Membership, Process, Role, Skill, SkillDetail, Standard, TargetKind } from "../types";
+import type { Assignment, AuditEntry, Catalog, Contacts, DocMeta, DocVersion, Feedback, FeedbackByTarget, Me, Membership, Process, Role, Skill, SkillDetail, Standard, TargetKind } from "../types";
 import type { Conflict } from "./draftState";
+import type { GroupKind } from "./members";
 import { completeCatalog } from "./catalog";
 import { completePerms } from "./rights";
 import { parseRequestsQuery, requestsQuery, type DocRequest, type NewRequest, type RequestState, type RequestsView } from "./requests";
@@ -195,6 +196,20 @@ export const putSkillExtra = (id: string, extra: string) => call<SkillDetail>("P
 /** Who belongs to which team, platform and practice. Everyone who is signed in may read it. */
 export const loadMembers = async () => (await call<{ members?: Membership[] }>("GET", "/api/members")).members ?? [];
 
+// a team, platform or practice changed from its own page
+const groupPath = (kind: GroupKind, id: string) => `/api/groups/${kind === "team" ? "teams" : kind === "platform" ? "platforms" : "practices"}/${encodeURIComponent(id)}`;
+/** What `PUT …/details` takes: a field left out is not changed, "" removes it. */
+export interface GroupDetails { description?: string; contact?: string; contacts?: Contacts }
+/** Changes the description and the contact details of one group; the answer is the lists as stored. */
+export const putGroupDetails = (kind: GroupKind, id: string, d: GroupDetails) =>
+  call<{ catalog: Catalog; version: number }>("PUT", `${groupPath(kind, id)}/details`, d);
+/** The people of a platform or practice after adding or removing a member; `note` says when nothing changed. */
+export interface GroupPeople { members?: Membership[]; note?: string }
+export const addGroupMember = (kind: "platform" | "practice", id: string, email: string) =>
+  call<GroupPeople>("POST", `${groupPath(kind, id)}/members`, { email });
+export const removeGroupMember = (kind: "platform" | "practice", id: string, email: string) =>
+  call<GroupPeople>("DELETE", `${groupPath(kind, id)}/members?email=${encodeURIComponent(email)}`);
+
 // admin panel
 export interface Access { assignments: Assignment[]; bootstrapAdmins: string[]; roles: Role[] }
 export const loadAccess = () => call<Access>("GET", "/api/admin/access");
@@ -278,7 +293,9 @@ export type Route =
   | { page: "standard"; id: string; tab: StandardTab; item?: string }
   /** The editing screen; `item` is the step or requirement that is selected. */
   | { page: "edit-process"; id: string; item?: string }
-  | { page: "edit-standard"; id: string; item?: string };
+  | { page: "edit-standard"; id: string; item?: string }
+  /** The page of a team, a platform or a practice. */
+  | { page: "group"; kind: GroupKind; id: string };
 
 /**
  * What the results page shows: the words searched for and the filters. Several values of one
@@ -363,6 +380,8 @@ const parse = (h: string = location.hash): Route => {
   if (h.startsWith("#/guide")) return { page: "guide" };
   if (h.startsWith("#/mine")) return { page: "mine" };
   if (h.startsWith("#/standards")) return { page: "standards" };
+  const group = h.match(/^#\/(team|platform|practice)\/([a-z0-9-]+)\/?$/);
+  if (group) return { page: "group", kind: group[1] as GroupKind, id: group[2] };
   const requests = h.match(/^#\/requests(?:\?(.*))?$/);
   if (requests) return { page: "requests", ...parseRequestsQuery(requests[1] ?? "") };
   const admin = h.match(/^#\/admin(?:\/(access|lists|skills|health|activity|statistics|theming|system))?/);
@@ -542,6 +561,7 @@ export const href = (r: Route): string => {
     case "process": return r.tab === "json" ? `#/p/${r.id}/edit` : `#/p/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
     case "edit-process": return `#/p/${r.id}/edit${r.item ? `/${r.item}` : ""}`;
     case "edit-standard": return `#/s/${r.id}/edit${r.item ? `/${r.item}` : ""}`;
+    case "group": return `#/${r.kind}/${r.id}`;
   }
 };
 /**
@@ -552,7 +572,7 @@ export const href = (r: Route): string => {
 export const go = (r: Route, opts: { replace?: boolean } = {}) => { void moveTo(href(r), opts.replace); };
 
 /** What the browser tab says for a page: the thing being read first, the portal's name (Admin › Theming) last. */
-export function pageTitle(r: Route, names: { process?: string; standard?: string; loading?: boolean } = {}, app = portalName()): string {
+export function pageTitle(r: Route, names: { process?: string; standard?: string; group?: string; loading?: boolean } = {}, app = portalName()): string {
   const APP = app;
   const of = (name: string | undefined, missing: string) => name ?? (names.loading ? "" : missing);
   let here: string;
@@ -570,6 +590,7 @@ export function pageTitle(r: Route, names: { process?: string; standard?: string
     case "standard": here = of(names.standard, "Standard not found"); break;
     case "edit-process": here = names.process ? `Editing ${names.process}` : of(undefined, "Process not found"); break;
     case "edit-standard": here = names.standard ? `Editing ${names.standard}` : of(undefined, "Standard not found"); break;
+    case "group": here = of(names.group, `${r.kind === "team" ? "Team" : r.kind === "platform" ? "Platform" : "Practice"} not found`); break;
   }
   return here ? `${here} · ${APP}` : APP;
 }

@@ -655,12 +655,30 @@ func Fingerprint(v any) string {
 
 // Named is an entry of one of the lists.
 type Named struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Contact     string `json:"contact,omitempty"`
-	URL         string `json:"url,omitempty"`
-	Description string `json:"description,omitempty"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Contact string `json:"contact,omitempty"`
+	// Contacts: how to reach a team, platform or practice, each way on its own.
+	Contacts    *Contacts `json:"contacts,omitempty"`
+	URL         string    `json:"url,omitempty"`
+	Description string    `json:"description,omitempty"`
 }
+
+// Contacts is how to reach a team, platform or practice (schema/catalog.schema.json): every
+// link is http:// or https:// only.
+type Contacts struct {
+	Email      string `json:"email,omitempty"`
+	Slack      string `json:"slack,omitempty"`
+	SlackURL   string `json:"slackUrl,omitempty"`
+	Chat       string `json:"chat,omitempty"`
+	ChatURL    string `json:"chatUrl,omitempty"`
+	Confluence string `json:"confluence,omitempty"`
+	Page       string `json:"page,omitempty"`
+	Form       string `json:"form,omitempty"`
+}
+
+// Empty reports whether no way to reach them is given.
+func (c *Contacts) Empty() bool { return c == nil || *c == Contacts{} }
 
 // Lists is the catalog document. A list that is missing is empty.
 type Lists struct {

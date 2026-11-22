@@ -98,9 +98,28 @@ export interface Tier { id: string; name: string; description?: string }
 export interface Environment { id: string; name: string; description?: string }
 /** `icon`: id of an uploaded square image (see `iconUrl` in the store). */
 export interface Language { id: string; name: string; icon?: string; description?: string }
-export interface Team { id: string; name: string; contact?: string; description?: string }
-export interface Practice { id: string; name: string; contact?: string; description?: string }
-export interface Platform { id: string; name: string; contact?: string; description?: string }
+/**
+ * How to reach a team, platform or practice. Every link is `http://` or `https://` only (checked by
+ * the schema and the server); `contact` beside it stays the free line "Other ways to reach them".
+ */
+export interface Contacts {
+  /** Group email address. */
+  email?: string;
+  /** Slack channel name, e.g. "#cloud-platform". */
+  slack?: string;
+  slackUrl?: string;
+  /** Google Chat space name. */
+  chat?: string;
+  chatUrl?: string;
+  confluence?: string;
+  /** Their own page or site. */
+  page?: string;
+  /** The form where one asks them for something. */
+  form?: string;
+}
+export interface Team { id: string; name: string; contact?: string; contacts?: Contacts; description?: string }
+export interface Practice { id: string; name: string; contact?: string; contacts?: Contacts; description?: string }
+export interface Platform { id: string; name: string; contact?: string; contacts?: Contacts; description?: string }
 export interface Category { id: string; name: string; description?: string }
 export interface Tool { id: string; name: string; icon?: string; url?: string; description?: string }
 /** The lists. `practices`, `platforms` and `categories` are always present in the app (the loader fills in empty ones). */
@@ -146,6 +165,10 @@ export interface Perms {
   platforms: string[];
   /** Practices this person is owner of: may change the processes and standards that belong to them. */
   practices: string[];
+  /** Platforms this person is a member of: may see and save drafts of what belongs to them, not publish. */
+  memberPlatforms: string[];
+  /** Practices this person is a member of: may see and save drafts of what belongs to them, not publish. */
+  memberPractices: string[];
 }
 
 export interface Me {
@@ -162,9 +185,9 @@ export interface Me {
   search?: { meaning: boolean; outside: boolean; provider?: "builtin" | "vertex" };
 }
 
-export type Role = "admin" | "catalog-manager" | "process-editor" | "standards-editor" | "owner" | "platform-owner" | "practice-owner";
+export type Role = "admin" | "catalog-manager" | "process-editor" | "standards-editor" | "owner" | "platform-owner" | "practice-owner" | "platform-member" | "practice-member";
 /** A person in one of the groups people belong to. Readable by everyone who is signed in. */
-export interface Membership { email: string; role: "owner" | "platform-owner" | "practice-owner"; scope: string }
+export interface Membership { email: string; role: "owner" | "platform-owner" | "practice-owner" | "platform-member" | "practice-member"; scope: string }
 export interface Assignment { email: string; role: Role; scope: string; grantedBy: string; grantedAt: string }
 export interface AuditEntry { id: number; at: string; email: string; name: string; action: string; target: string; detail: string }
 export interface DocVersion {

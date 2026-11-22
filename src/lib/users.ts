@@ -5,18 +5,20 @@ import { groupKindOf, looksLikeEmail, type GroupKind } from "./members";
 // person's roles at once. The server has the last word; what can be told before sending is told
 // here, in plain words.
 
-/** The roles, what they allow in plain words, and for the three that are limited to a group: which list it is picked from. */
+/** The roles, what they allow in plain words, and for the five that are limited to a group: which list it is picked from. */
 export const ROLES: Record<Role, { label: string; can: string; scope: "none" | "required"; scopeLabel?: string; always?: string }> = {
   admin: { label: "Admin", can: "Everything, including who has access", scope: "none" },
   "catalog-manager": { label: "Lists manager", can: "Teams, practices, platforms, categories, tools, tiers, environments, languages", scope: "none" },
   "process-editor": { label: "Process editor", can: "Create and change every process; close its feedback", scope: "none" },
   "standards-editor": { label: "Standards editor", can: "Create and change every standard; close its feedback", scope: "none" },
-  "platform-owner": { label: "Platform owner", can: "Create and change the processes and standards that belong to a platform; confirm their reviews and close their feedback", scope: "required", scopeLabel: "For the platform", always: "Always for one platform" },
-  "practice-owner": { label: "Practice owner", can: "Create and change the processes and standards that belong to a practice; confirm their reviews and close their feedback", scope: "required", scopeLabel: "For the practice", always: "Always for one practice" },
+  "platform-owner": { label: "Platform owner", can: "Create, change and publish the processes and standards that belong to a platform; confirm their reviews, close their feedback and add its members", scope: "required", scopeLabel: "For the platform", always: "Always for one platform" },
+  "practice-owner": { label: "Practice owner", can: "Create, change and publish the processes and standards that belong to a practice; confirm their reviews, close their feedback and add its members", scope: "required", scopeLabel: "For the practice", always: "Always for one practice" },
+  "platform-member": { label: "Platform member", can: "Create drafts of processes and standards on a platform and suggest changes to what belongs to it; an owner publishes them", scope: "required", scopeLabel: "For the platform", always: "Always for one platform" },
+  "practice-member": { label: "Practice member", can: "Create drafts of processes and standards in a practice and suggest changes to what belongs to it; an owner publishes them", scope: "required", scopeLabel: "For the practice", always: "Always for one practice" },
   owner: { label: "Owner", can: "Confirm reviews and close feedback on what a team maintains; see its drafts", scope: "required", scopeLabel: "For the team", always: "Always for one team" },
 };
 /** The order roles are shown in: the widest first. */
-export const ROLE_ORDER: Role[] = ["admin", "catalog-manager", "process-editor", "standards-editor", "platform-owner", "practice-owner", "owner"];
+export const ROLE_ORDER: Role[] = ["admin", "catalog-manager", "process-editor", "standards-editor", "platform-owner", "practice-owner", "platform-member", "practice-member", "owner"];
 
 export interface UserRole { role: Role; scope: string }
 /** One person in Admin > Access, as `GET /api/admin/users` sends it. */

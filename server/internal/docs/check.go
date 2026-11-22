@@ -240,6 +240,15 @@ func Check(kind string, body []byte, l Lists) error {
 				seen[n.ID] = true
 			}
 		}
+		// links people follow are http:// or https:// only, also when the format was not checked
+		for _, g := range []struct {
+			noun string
+			list []Named
+		}{{"team", c.Teams}, {"practice", c.Practices}, {"platform", c.Platforms}} {
+			for _, n := range g.list {
+				problems = append(problems, n.Contacts.Problems(fmt.Sprintf("the %s “%s”", g.noun, n.Name))...)
+			}
+		}
 		sort.Strings(problems) // the lists are visited in no fixed order
 	}
 	if len(problems) == 0 {
