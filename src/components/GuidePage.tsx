@@ -4,7 +4,7 @@ import type { Process } from "../types";
 import { STEP_META, STEP_TYPES } from "../lib/stepMeta";
 import { aiFlow, automationFlow, changeFlow, feedbackFlow, followFlow, meaningFlow, memberFlow, requestFlow, reviewFlow, rightsFlow, signInFlow, standardFlow, themeFlow, versionFlow } from "../guide/flows";
 import { FlowView } from "./FlowView";
-import { Modal, scrollBehavior, TypeIcon } from "./ui";
+import { Modal, scrollBehavior, scrollToStart, TypeIcon } from "./ui";
 
 const GROUPS: { title: string; items: [string, string][] }[] = [
   { title: "Using it", items: [
@@ -100,7 +100,7 @@ export function GuidePage() {
     return () => window.removeEventListener("scroll", on);
   }, []);
   const [sheet, setSheet] = useState(false);
-  const jump = (id: string) => document.getElementById(`guide-${id}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+  const jump = (id: string) => { const el = document.getElementById(`guide-${id}`); if (el) scrollToStart(el); };
   const activeTitle = SECTIONS.find(([id]) => id === active)?.[1] ?? "";
 
   return (

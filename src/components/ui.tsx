@@ -26,6 +26,36 @@ export function TypeIcon({ type, size = 36 }: { type: StepType; size?: number })
 export const prefersReducedMotion = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 export const scrollBehavior = (): ScrollBehavior => (prefersReducedMotion() ? "auto" : "smooth");
 
+/**
+ * Scrolls a part of the page to the top and makes sure it is there when the scroll has come to
+ * rest: on a long page, what is passed on the way can change its height (charts that are drawn
+ * as they come into view), so a smooth scroll can end beside its target. The correction is
+ * made at once, at most twice, and never after the person has scrolled themselves.
+ */
+export function scrollToStart(el: HTMLElement) {
+  el.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+  let last = window.scrollY, still = 0, corrections = 0, ticks = 0, stopped = false;
+  const stop = () => { stopped = true; };
+  const mine = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+  mine.forEach((e) => window.addEventListener(e, stop, { passive: true, once: true }));
+  const timer = window.setInterval(() => {
+    const y = window.scrollY;
+    still = y === last ? still + 1 : 0;
+    last = y;
+    if (!stopped && still >= 2) {
+      const want = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+      const off = Math.abs(el.getBoundingClientRect().top - want) > 8;
+      const atEnd = y + window.innerHeight >= document.documentElement.scrollHeight - 2;
+      if (off && !atEnd && corrections < 2) { corrections++; still = 0; el.scrollIntoView({ behavior: "auto", block: "start" }); return; }
+      stopped = true;
+    }
+    if (stopped || ++ticks > 60) {
+      window.clearInterval(timer);
+      mine.forEach((e) => window.removeEventListener(e, stop));
+    }
+  }, 100);
+}
+
 /** Which edges of a strip that scrolls sideways have more behind them: "start", "end", both, or none. */
 export function cutEdges(scrollLeft: number, scrollWidth: number, clientWidth: number): string {
   if (scrollWidth - clientWidth < 2) return "";
