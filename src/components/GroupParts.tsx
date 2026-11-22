@@ -65,7 +65,7 @@ export function ContactList({ entry, name, empty }: { entry: { contact?: string;
               <div key={i.key} className="contact-row" data-contact={i.key}>
                 <dt><Icon size={14} aria-hidden="true" />{i.label}</dt>
                 <dd>{i.href
-                  ? <a href={i.href} title={i.href.replace(/^mailto:/, "")} {...(i.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>{i.text}</a>
+                  ? <a href={i.href} title={i.href.replace(/^mailto:/, "")} className="contact-link" {...(i.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}><span className="contact-text">{i.text}</span>{i.external && <ExternalLink size={12} aria-hidden="true" className="contact-out" />}</a>
                   : i.text}</dd>
               </div>
             );

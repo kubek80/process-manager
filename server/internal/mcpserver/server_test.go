@@ -148,7 +148,8 @@ func setup(t *testing.T, secret string, index Index, change ...func(*Options)) *
 		t.Fatal(err)
 	}
 	roles := &rbac.Store{Pool: pool}
-	for _, a := range []rbac.Assignment{{Email: "casey@example.com", Role: rbac.Owner, Scope: "cloud-platform-team"}, {Email: "jordan@example.com", Role: rbac.PlatformOwner, Scope: "google-cloud"}} {
+	for _, a := range []rbac.Assignment{{Email: "casey@example.com", Role: rbac.Owner, Scope: "cloud-platform-team"}, {Email: "jordan@example.com", Role: rbac.PlatformOwner, Scope: "google-cloud"},
+		{Email: "morgan@example.com", Role: rbac.PlatformMember, Scope: "google-cloud"}} {
 		a.GrantedBy = "test"
 		if err := roles.Grant(ctx, a); err != nil {
 			t.Fatal(err)
@@ -620,6 +621,12 @@ func TestGetCatalog(t *testing.T) {
 	if c.MembersShown || c.Teams[2].Members != nil {
 		t.Fatalf("%+v", c.Teams[2])
 	}
+	// how to reach a group, each way on its own, beside the free line
+	for _, g := range c.Platforms {
+		if g.ID == "google-cloud" && (g.Drafters != nil || g.Contacts == nil || g.Contacts.Email != "cloud-platform@example.com" || g.Contacts.Form == "" || g.Contact == "") {
+			t.Fatalf("%+v", g)
+		}
+	}
 	s := setup(t, testSecret, nil)
 	mustCall(t, s.session(s.authorised("")), "get_catalog", nil, &c)
 	var cloud, gcp Group
@@ -633,7 +640,8 @@ func TestGetCatalog(t *testing.T) {
 			gcp = g
 		}
 	}
-	if !c.MembersShown || !slices.Equal(cloud.Members, []string{"casey@example.com"}) || !slices.Equal(gcp.Members, []string{"jordan@example.com"}) {
+	if !c.MembersShown || !slices.Equal(cloud.Members, []string{"casey@example.com"}) || !slices.Equal(gcp.Members, []string{"jordan@example.com"}) ||
+		!slices.Equal(gcp.Drafters, []string{"morgan@example.com"}) || cloud.Drafters != nil {
 		t.Fatalf("%+v %+v", cloud, gcp)
 	}
 }
