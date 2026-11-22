@@ -37,6 +37,12 @@ test("the Guide on a phone: a Contents button that opens the list, jumps, marks 
   const title = (await target.innerText()).trim();
   await target.click();
   await expect(sheet).toHaveCount(0);
+  // the smooth scroll passes the charts above, whose height changes while they come into view: wait until it has come to rest
+  await expect.poll(async () => {
+    const a = await page.evaluate(() => scrollY);
+    await page.waitForTimeout(250);
+    return a === (await page.evaluate(() => scrollY));
+  }, { timeout: 10_000 }).toBe(true);
   const heading = page.locator(".guide-section h2", { hasText: new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) });
   await expect(heading).toBeInViewport();
   // the bar stays at the top and says where you are; the list marks it

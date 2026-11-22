@@ -5,12 +5,12 @@ import { ALEX, CSRF, DANA, JORDAN, SAM, answer, open, signIn } from "./helpers";
 // a person's roles at once, and Delete that takes them all away. The protections are said in the
 // page and kept by the server.
 
-const NEW = "morgan@example.com"; // nobody in the sample
+const NEW = "quinn@example.com"; // nobody in the sample
 
 async function as(request: APIRequestContext, email: string) {
   await request.post("/auth/dev/login", { data: { email }, headers: CSRF });
 }
-/** Jordan and Sam back as they were, Morgan without roles. */
+/** Jordan and Sam back as they were, Quinn (who is not in the sample) without roles. */
 async function reset(request: APIRequestContext) {
   await as(request, DANA);
   const put = (email: string, roles: { role: string; scope: string }[]) => request.put(`/api/admin/users/${email}`, { data: { roles }, headers: CSRF });
@@ -31,9 +31,9 @@ test("Access lists people with their roles in words, and can be searched", async
   await expect(row("Jordan Platform")).toContainText(JORDAN);
 
   const search = page.getByRole("searchbox", { name: "Search people" });
+  await expect(row("Morgan Member").locator(".user-roles li")).toHaveText(["Platform member for Google Cloud", "Practice member for Engineering"]);
   await search.fill("google");
-  await expect(page.locator("li.user-row")).toHaveCount(1);
-  await expect(page.locator("li.user-row")).toContainText("Jordan Platform");
+  await expect(page.locator("li.user-row")).toHaveText([/Jordan Platform/, /Morgan Member/]);
   await search.fill("riley");
   await expect(page.locator("li.user-row")).toHaveText([/Riley Security/]);
   await search.fill("nobody at all");
@@ -99,7 +99,7 @@ test("Edit adds a second platform and takes a role away in one save; the summary
   // the activity log says it in words
   await open(page, "/admin/activity");
   await expect(page.locator(".activity li").first()).toContainText("changed the roles of Jordan Platform");
-  await expect(page.locator(".activity li").first()).toContainText("added Platform owner for the platform Azure; removed Practice owner for the practice Engineering");
+  await expect(page.locator(".activity li").first()).toContainText("· added Platform owner for Azure; removed Practice owner for Engineering");
 });
 
 test("on a small laptop the roles dialog keeps its summary, Cancel and Save in view, with many lines", async ({ page }) => {
@@ -197,21 +197,23 @@ test("nobody but an admin gets the people with their roles, or changes them", as
   expect((await wrong.json()).error).toContain("There is no platform “mars” in the lists.");
 });
 
-test("the Members section of a platform still adds and removes", async ({ page }) => {
+test("the Owners section of a platform still adds and removes, as Access does", async ({ page }) => {
   await signIn(page, DANA);
   await open(page, "/admin/lists");
   await page.locator(".cat-kinds").getByRole("tab", { name: /^Platforms/ }).click();
   await page.locator(".cat-item", { hasText: "Akamai" }).click();
-  const members = page.locator(".cat-members");
-  await members.getByLabel("Email of the new member").fill(NEW);
-  await members.getByRole("button", { name: "Add member" }).click();
-  await expect(members.getByRole("button", { name: `Remove ${NEW} as Platform owner` })).toBeVisible();
+  const owners = page.locator('.cat-members[data-rank="owner"]');
+  await owners.getByLabel("Email of the new owner").fill(NEW);
+  await owners.getByRole("button", { name: "Add owner" }).click();
+  await expect(owners.getByRole("button", { name: `Remove ${NEW} as Platform owner` })).toBeVisible();
+  // nobody of that address has used the portal yet: said, and added all the same
+  await expect(owners.locator(".member-note")).toHaveText("Nobody with this address has done anything in the portal yet. Check it is right.");
   await open(page, "/admin/access");
   await expect(page.locator("li.user-row", { hasText: NEW }).locator(".user-roles li")).toHaveText(["Platform owner for Akamai"]);
   await open(page, "/admin/lists");
   await page.locator(".cat-kinds").getByRole("tab", { name: /^Platforms/ }).click();
   await page.locator(".cat-item", { hasText: "Akamai" }).click();
-  await members.getByRole("button", { name: `Remove ${NEW} as Platform owner` }).click();
-  await page.getByRole("dialog", { name: "Remove this member?" }).getByRole("button", { name: "Remove", exact: true }).click();
-  await expect(members.locator("li", { hasText: NEW })).toHaveCount(0);
+  await owners.getByRole("button", { name: `Remove ${NEW} as Platform owner` }).click();
+  await page.getByRole("dialog", { name: "Remove this owner?" }).getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(owners.locator("li", { hasText: NEW })).toHaveCount(0);
 });

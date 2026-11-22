@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Info, Plus, Trash2, UserPlus } from "lucide-react";
 import type { Membership } from "../types";
 import { GROUP, knownNames, looksLikeEmail, membersOf, OWNER_ROLE, personLabel, type GroupKind, type GroupRank } from "../lib/members";
-import { addedNote } from "../lib/groups";
+import { addedNote, nameFromMembers } from "../lib/groups";
 import { PersonLink } from "./PersonLink";
 import { canManageMembers, groupRank } from "../lib/rights";
 import { useMe, usePerms } from "../lib/session";
-import { addGroupMember, grantAccess, loadAccess, loadUsers, removeGroupMember, revokeAccess, type Access } from "../lib/store";
+import { addGroupMember, grantAccess, loadAccess, loadMembers, loadUsers, removeGroupMember, revokeAccess, type Access } from "../lib/store";
 import { confirmDialog, LoadError, Loading, notify } from "./ui";
 import { formatDate } from "../lib/dates";
 
@@ -230,8 +230,10 @@ export function GroupMembers({ kind, id, name, rank = "owner", saved, manage, me
       if (list.some((m) => m.email === who)) { setNote(isMe(who) ? `You are already an owner of ${name}.` : `${shown(who)} is already an owner of ${name}: nothing changed.`); return true; }
       setAccess(await grantAccess({ email: who, role, scope: id }));
       onChanged?.();
-      notify.info(`${shown(who)} is now ${kind === "team" ? "an Owner" : `a ${roleName}`} of ${name}.`);
-      if (!nameOf(who)) setNote(UNKNOWN_ADDRESS);
+      // the name, where the portal knows the person (also somebody who had no role until now)
+      const known = nameOf(who) ?? nameFromMembers(await loadMembers().catch(() => undefined), who);
+      notify.info(`${personLabel({ email: who, name: known })} is now ${kind === "team" ? "an Owner" : `a ${roleName}`} of ${name}.`);
+      if (!known) setNote(UNKNOWN_ADDRESS);
       return true;
     } catch (e) { notify.error(`${who} could not be added.`, e); return false; /* what was typed stays in the field */ } finally { setBusy(false); }
   };

@@ -56,8 +56,10 @@ const contrast = (a: number[], b: number[]) => { const [x, y] = [luminance(a), l
 
 const section = (page: Page) => page.locator(".theme-section");
 const saveBar = (page: Page) => page.getByRole("region", { name: "Unsaved changes" });
-async function saveForEveryone(page: Page) {
+/** "Save for everyone"; `warned`: the look has warnings, so Save asks once and is answered "Save anyway". */
+async function saveForEveryone(page: Page, warned = false) {
   await saveBar(page).getByRole("button", { name: "Save for everyone" }).click();
+  if (warned) await page.getByRole("dialog", { name: /^Save with \d+ warnings?\?$/ }).getByRole("button", { name: "Save anyway" }).click();
   await expect(saveBar(page)).toHaveCount(0);
 }
 async function openTheming(page: Page) {
@@ -148,9 +150,10 @@ test("name, colours and logo: the preview follows before saving; saved, everyone
   await expect(section(page).getByRole("button", { name: "Use the default mark" })).toBeVisible();
   await expect(section(page).locator(".theme-logo-tile img").first()).toBeVisible();
 
-  // nothing is stored before "Save for everyone"
+  // nothing is stored before "Save for everyone"; a yellow brand is warned about, as it looks like the warnings
   expect((await stored(page.request)).look).toEqual({});
-  await saveForEveryone(page);
+  await expect(section(page).locator(".color-field", { hasText: "Brand colour" }).locator(".color-note.warn")).toContainText("This looks like the colour of warnings such as “Review due”");
+  await saveForEveryone(page, true);
   const now = await stored(page.request);
   expect(now.look).toMatchObject({ name: "Acme Ways of Working", brand: "#ffd400" });
   expect(now.look.logo).toMatch(/^[0-9a-f]{64}$/);
@@ -421,8 +424,8 @@ test("the colours of buttons and states reach the app, in light and dark; “Bac
     await section(page).getByRole("button", { name: `${label}: back to the default` }).click();
     await expect(section(page).getByRole("button", { name: `${label}: back to the default` })).toHaveCount(0);
   }
-  await expect(section(page).locator(".color-field", { hasText: "Main buttons" })).toContainText("Follows the brand");
-  await expect(section(page).locator(".color-field", { hasText: "Other buttons" })).toContainText("Neutral");
+  await expect(section(page).getByRole("group", { name: /^Main buttons / })).toContainText("Follows the brand");
+  await expect(section(page).getByRole("group", { name: /^Other buttons / })).toContainText("Neutral");
   await saveForEveryone(page);
   expect((await stored(page.request)).look).toEqual({});
   const v = await visitor(browser, ALEX, { own: "light" });
@@ -433,20 +436,21 @@ test("the colours of buttons and states reach the app, in light and dark; “Bac
 
 test("warnings: main buttons like success; a careless look counts its warnings and asks once on Save", async ({ page }) => {
   await openTheming(page);
-  const field = (label: string) => section(page).locator(".color-field", { has: page.getByText(label, { exact: true }) });
+  const field = (label: string) => section(page).getByRole("group", { name: new RegExp(`^${label} `) });
   const code = (label: string) => field(label).getByRole("textbox", { name: /as a code/ });
-  await code("Success").fill("#15803d");
-  await code("Main buttons").fill("#15803d");
-  await expect(field("Main buttons").locator(".color-note.warn", { hasText: "Main buttons will look like good news: “Publish…” and “Nothing to fix” will have nearly the same colour." })).toBeVisible();
+  await code("Success").fill("#1a7f37");
+  await code("Main buttons").fill("#1a7f37");
+  await expect(section(page).locator(".color-note.warn", { hasText: "Main buttons will look like good news: “Publish…” and “Nothing to fix” will have nearly the same colour." })).toBeVisible();
   // the preview's editing bar follows the unsaved colour of main buttons
   const publish = page.getByRole("group", { name: "Preview, light" }).locator(".pv-edit-bar .eb-publish");
   await expect.poll(async () => publish.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(await tokenColour(page, "background-color", "--action-fill-on-dark", ".theme-preview .pv-edit-bar"));
   const fillNow = await publish.evaluate((e) => getComputedStyle(e).backgroundColor);
-  await code("Main buttons").fill("#b45309");
+  await code("Main buttons").fill("#a15c07");
   await expect.poll(async () => publish.evaluate((e) => getComputedStyle(e).backgroundColor)).not.toBe(fillNow);
 
   // a careless look: warnings counted in the save bar, the link goes to the first
-  await code("Warning").fill("#b45309");
+  await code("Warning").fill("#a15c07");
+  await expect(section(page).locator(".color-note.warn", { hasText: "Main buttons will look like warnings: “Publish…” and “Review due” will have nearly the same colour." })).toBeVisible();
   await code("Problem").fill("#b91c1c");
   const count = saveBar(page).locator(".theme-warnings");
   await expect(count).toHaveText(/^\d+ warnings?$/);
@@ -464,7 +468,7 @@ test("warnings: main buttons like success; a careless look counts its warnings a
   await saveBar(page).getByRole("button", { name: "Save for everyone" }).click();
   await ask.getByRole("button", { name: "Save anyway" }).click();
   await expect(saveBar(page)).toHaveCount(0);
-  expect((await stored(page.request)).look).toMatchObject({ success: "#15803d", mainButton: "#b45309", warning: "#b45309", problem: "#b91c1c" });
+  expect((await stored(page.request)).look).toMatchObject({ success: "#1a7f37", mainButton: "#a15c07", warning: "#a15c07", problem: "#b91c1c" });
 
   // a look without warnings saves in one click
   for (const label of ["Main buttons", "Warning", "Problem", "Success"]) await section(page).getByRole("button", { name: `${label}: back to the default` }).click();

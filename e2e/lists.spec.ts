@@ -97,16 +97,17 @@ test("an admin adds a platform, a practice and a category, uses them, and can re
     expect(after.categories.map((p: { id: string }) => p.id)).not.toContain("containers");
 });
 
-test("an admin makes somebody a member of a platform and of a practice, and takes it back", async ({ page }) => {
+test("an admin makes somebody an owner of a platform and of a practice, and takes it back", async ({ page }) => {
   await signIn(page, DANA);
   await open(page, "/admin/lists");
   await tab(page, "Platforms").click();
   await item(page, "Azure").click();
-  const members = page.locator(".cat-members");
-  await expect(members).toContainText("Nobody yet. Until somebody is added, only the editors can change what belongs to this platform.");
-  await members.getByLabel("Email of the new member").fill(SAM);
-  await members.getByRole("button", { name: "Add member" }).click();
-  await expect(members.getByRole("button", { name: `Remove ${SAM} as Platform owner` })).toBeVisible();
+  const owners = page.locator('.cat-members[data-rank="owner"]');
+  await expect(owners).toContainText("Nobody yet. Until somebody is added, only the editors can publish what belongs to this platform.");
+  await owners.getByLabel("Email of the new owner").fill(SAM);
+  await owners.getByRole("button", { name: "Add owner" }).click();
+  await expect(owners.getByRole("button", { name: `Remove ${SAM} as Platform owner` })).toBeVisible();
+  await expect(page.locator(".toast", { hasText: "Sam Consumer is now a Platform owner of Azure." })).toBeVisible();
 
   // Sam can now change what belongs to Azure, and only that
   await signIn(page, SAM);
@@ -124,9 +125,9 @@ test("an admin makes somebody a member of a platform and of a practice, and take
   await open(page, "/admin/lists");
   await tab(page, "Practices").click();
   await item(page, "Service management").click();
-  await members.getByLabel("Email of the new member").fill(SAM);
-  await members.getByRole("button", { name: "Add member" }).click();
-  await expect(members.getByRole("button", { name: `Remove ${SAM} as Practice owner` })).toBeVisible();
+  await owners.getByLabel("Email of the new owner").fill(SAM);
+  await owners.getByRole("button", { name: "Add owner" }).click();
+  await expect(owners.getByRole("button", { name: `Remove ${SAM} as Practice owner` })).toBeVisible();
   await signIn(page, SAM);
   await open(page, "/p/raise-servicenow-request/flow");
   await expect(page.getByRole("link", { name: "Edit", exact: true })).toBeVisible();
@@ -136,14 +137,14 @@ test("an admin makes somebody a member of a platform and of a practice, and take
   await open(page, "/admin/lists");
   await tab(page, "Practices").click();
   await item(page, "Service management").click();
-  await members.getByRole("button", { name: `Remove ${SAM} as Practice owner` }).click();
-  await page.getByRole("dialog", { name: "Remove this member?" }).getByRole("button", { name: "Remove", exact: true }).click();
-  await expect(members.locator("li", { hasText: SAM })).toHaveCount(0);
+  await owners.getByRole("button", { name: `Remove ${SAM} as Practice owner` }).click();
+  await page.getByRole("dialog", { name: "Remove this owner?" }).getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(owners.locator("li", { hasText: "Sam Consumer" })).toHaveCount(0);
   await tab(page, "Platforms").click();
   await item(page, "Azure").click();
-  await members.getByRole("button", { name: `Remove ${SAM} as Platform owner` }).click();
-  await page.getByRole("dialog", { name: "Remove this member?" }).getByRole("button", { name: "Remove", exact: true }).click();
-  await expect(members.locator("li", { hasText: SAM })).toHaveCount(0);
+  await owners.getByRole("button", { name: `Remove ${SAM} as Platform owner` }).click();
+  await page.getByRole("dialog", { name: "Remove this owner?" }).getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(owners.locator("li", { hasText: "Sam Consumer" })).toHaveCount(0);
 
   await signIn(page, SAM);
   await open(page, "/p/request-azure-landing-zone/flow");
@@ -156,26 +157,33 @@ test("everyone sees who the members of a platform, a practice and a team are", a
   expect((await page.request.get("/api/members")).ok()).toBeTruthy();
   await open(page, "/catalog");
   const members = page.locator(".cat-members");
-  const check = async (list: string, name: string, people: [string, string][]) => {
+  const check = async (list: string, name: string, owners: string[], drafters: string[] = []) => {
     await tab(page, list).click();
     await item(page, name).click();
     await expect(page.locator(".cat-detail h2")).toHaveText(name);
-    await expect(members.locator("li")).toHaveCount(people.length);
-    // the members' role is said once, by the heading and its sentence, not on every member
-    for (const [email] of people) await expect(members.locator("li", { hasText: email })).toHaveText(email.slice(0, 1).toUpperCase() + email);
+    // by name, each a mail link; the role is said once, by the heading and its sentence, not on every person
+    for (const [rank, people] of [["owner", owners], ["member", drafters]] as const) {
+      const block = page.locator(`.cat-people .cat-members[data-rank="${rank}"]`);
+      if (!people.length && rank === "member") { await expect(block).toHaveCount(0); continue; }
+      await expect(block.locator("li")).toHaveCount(people.length);
+      for (const who of people) await expect(block.locator("li", { hasText: who }).locator("a.person-link")).toHaveText(who);
+    }
   };
-  await check("Platforms", "Google Cloud", [[JORDAN, "Platform owner"]]);
-  await check("Practices", "Engineering", [[JORDAN, "Practice owner"]]);
-  await check("Practices", "Cyber security", [["riley@example.com", "Practice owner"]]);
-  await check("Teams", "Cloud Platform team", [["casey@example.com", "Owner"], [JORDAN, "Owner"]]);
-  await expect(members).toContainText("Members confirm the reviews of what this team maintains and answer its feedback. They find this under “My responsibilities”.");
+  await check("Platforms", "Google Cloud", ["Jordan Platform"], ["Morgan Member"]);
+  await expect(page.locator('.cat-members[data-rank="owner"]')).toContainText("Owners decide what is published here.");
+  await expect(page.locator('.cat-members[data-rank="member"]')).toContainText("Members write drafts for the owners.");
+  await check("Practices", "Engineering", ["Jordan Platform"], ["Morgan Member"]);
+  await check("Practices", "Cyber security", ["Riley Security"]);
+  await check("Teams", "Cloud Platform team", ["Casey Owner", "Jordan Platform"]);
+  await expect(members).toContainText("Owners review what this team looks after and answer its feedback.");
   // reading only: nothing to add or remove
   await expect(members.getByLabel("Email of the new member")).toHaveCount(0);
   await expect(members.getByRole("button")).toHaveCount(0);
+  await expect(members.getByRole("textbox")).toHaveCount(0);
   await tab(page, "Platforms").click();
   await item(page, "Azure").click();
-  await expect(members).toContainText("Nobody yet.");
-  await expect(members).toContainText("Members change the processes and standards that belong to this platform, confirm their reviews and answer their feedback");
+  // no owner: one line, which points at the ways to reach them; no Members block when there are none
+  await expect(members).toHaveText(["No owner yet."]);
   await expect(page.locator(".cat-usage")).toContainText("Request an Azure landing zone");
 });
 
@@ -319,33 +327,39 @@ test("a platform that still has members cannot be removed until they are gone", 
   await page.locator(".cat-new").getByLabel("Name").fill("Mainframe");
   await page.keyboard.press("Enter");
   await save(page);
-  const members = page.locator(".cat-members");
+  const members = page.locator('.cat-members[data-rank="member"]');
   await members.getByLabel("Email of the new member").fill(SAM);
   await members.getByRole("button", { name: "Add member" }).click();
-  await expect(members.locator("li", { hasText: SAM })).toBeVisible();
+  await expect(members.locator("li", { hasText: "Sam Consumer" })).toBeVisible();
 
   // nothing belongs to it, but somebody does: it is not safe to remove
   await expect(page.locator(".cat-usage")).toContainText("nothing yet");
   await expect(page.getByRole("button", { name: "Remove this platform" })).toBeDisabled();
-  await expect(page.locator(".cat-danger")).toContainText("1 person is still a member of this platform. Remove them from the members first");
+  await expect(page.locator(".cat-danger")).toContainText("1 person is still one of its owners or members. Take their roles first, then it can be removed.");
+  // the server refuses it too, in words
+  const lists = await readCatalog(page);
+  const version = Number((await page.request.get("/api/catalog")).headers()["x-document-version"]);
+  const refused = await page.request.put(`/api/catalog?base=${version}`, { data: { ...lists, platforms: lists.platforms.filter((p: { id: string }) => p.id !== "mainframe") }, headers: CSRF });
+  expect(refused.ok()).toBeFalsy();
+  expect((await refused.json()).error).toBe("cannot remove what is still in use: 1 person is still one of the owners or members of “mainframe” (sam@example.com). Take their roles first, then it can be removed.");
 
   // a lists manager who is not an admin sees the same, from the members everyone may read
   await signIn(page, ALEX);
   await open(page, "/admin/lists");
   await tab(page, "Platforms").click();
   await item(page, "Mainframe").click();
-  await expect(members.locator("li", { hasText: SAM })).toBeVisible();
+  await expect(members.locator("li", { hasText: "Sam Consumer" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Remove this platform" })).toBeDisabled();
-  await expect(page.locator(".cat-danger")).toContainText("1 person is still a member of this platform");
+  await expect(page.locator(".cat-danger")).toContainText("1 person is still one of its owners or members");
 
   await signIn(page, DANA);
   await open(page, "/admin/lists");
   await tab(page, "Platforms").click();
   // without its member it goes
   await item(page, "Mainframe").click();
-  await members.getByRole("button", { name: `Remove ${SAM} as Platform owner` }).click();
+  await members.getByRole("button", { name: `Remove ${SAM} as Platform member` }).click();
   await page.getByRole("dialog", { name: "Remove this member?" }).getByRole("button", { name: "Remove", exact: true }).click();
-  await expect(members.locator("li", { hasText: SAM })).toHaveCount(0);
+  await expect(members.locator("li", { hasText: "Sam Consumer" })).toHaveCount(0);
   await page.getByRole("button", { name: "Remove this platform" }).click();
   await save(page);
   expect((await readCatalog(page)).platforms.map((p: { id: string }) => p.id)).not.toContain("mainframe");

@@ -78,7 +78,8 @@ test("a reader sees a platform's page: how to reach it, who is behind it, what b
   await signIn(page, SAM);
   await open(page, `/platform/${GC}`);
   await expect(page).toHaveTitle(/^Google Cloud/);
-  await expect(page.getByRole("link", { name: "Teams & tools" }).first()).toHaveAttribute("href", "#/catalog/platforms/google-cloud");
+  await expect(page.locator("a.back")).toHaveText("Teams & tools");
+  await expect(page.locator("a.back")).toHaveAttribute("href", "#/catalog/platforms/google-cloud");
   await expect(page.locator(".group-kind")).toHaveText("Platform");
   await expect(page.locator(".rank-mark")).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Google Cloud");
@@ -445,6 +446,7 @@ test("an admin adds and removes owners on the page; an owner as a member is a no
 
 test("Teams & tools: own groups first with a mark, “N yours” on the tabs, the entry in the address", async ({ page }) => {
   await signIn(page, JORDAN);
+  await open(page, "/");
   await navigate(page, "Teams & tools");
   await expect(page).toHaveURL(/#\/catalog(\/teams)?$/);
   const tabs = page.getByRole("tablist", { name: "Lists" });
@@ -480,7 +482,7 @@ test("Teams & tools: own groups first with a mark, “N yours” on the tabs, th
   await expect(page.locator(".cat-detail .rank-mark")).toHaveText("You are an owner");
   await page.locator(".cat-detail").getByRole("link", { name: "Open the page of Google Cloud" }).click();
   await expect(page).toHaveURL(/#\/platform\/google-cloud$/);
-  await page.getByRole("link", { name: "Teams & tools" }).first().click();
+  await page.locator("a.back").click();
   await expect(page).toHaveURL(/#\/catalog\/platforms\/google-cloud$/);
   await expect(tabs.getByRole("tab", { name: /^Platforms/ })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".cat-detail h2")).toHaveText("Google Cloud");

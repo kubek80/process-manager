@@ -124,22 +124,26 @@ test("a practice owner sees what belongs to the practice; somebody who owns noth
   await expect(page.locator(".lead")).toContainText("Nothing is assigned to you");
 });
 
-test("an admin adds and removes the members of a team on the team itself", async ({ page }) => {
+test("an admin adds and removes the Owners of a team on the team itself", async ({ page }) => {
   await signIn(page, DANA);
   await open(page, "/admin/lists");
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
-  const members = page.locator(".cat-members");
-  // members by name, the address small, and a button to remove each (the role is the section's)
-  await expect(members.locator("li", { hasText: JORDAN })).toContainText("Jordan Platform");
-  await expect(members.getByRole("button", { name: `Remove ${CASEY} as Owner` })).toBeVisible();
-  await expect(members.getByRole("button", { name: `Remove ${JORDAN} as Owner` })).toBeVisible();
+  const owners = page.locator('.cat-members[data-rank="owner"]');
+  // owners by name (a mail link), since when and by whom, and a button to remove each (the role is the section's)
+  await expect(owners.locator("h3")).toHaveText("Owners 2");
+  await expect(owners.locator("li", { hasText: "Jordan Platform" }).locator("a.person-link")).toHaveAttribute("href", `mailto:${JORDAN}`);
+  await expect(owners.locator("li", { hasText: "Jordan Platform" })).toContainText(/since \d{4}-\d\d-\d\d, added by/);
+  await expect(owners.getByRole("button", { name: `Remove ${CASEY} as Owner` })).toBeVisible();
+  await expect(owners.getByRole("button", { name: `Remove ${JORDAN} as Owner` })).toBeVisible();
+  await expect(page.locator('.cat-members[data-rank="member"]')).toHaveCount(0); // a team has no members
 
-  // one more member: a team can have as many as it needs
-  await members.getByLabel("Email of the new member").fill("Sam@Example.com ");
-  await members.getByRole("button", { name: "Add member" }).click();
-  await expect(members.getByRole("button", { name: `Remove ${SAM} as Owner` })).toBeVisible();
-  await expect(members.locator("h3")).toContainText("3");
-  await expect(members.getByLabel("Email of the new member")).toHaveValue("");
+  // one more Owner: a team can have as many as it needs
+  await owners.getByLabel("Email of the new owner").fill("Sam@Example.com ");
+  await owners.getByRole("button", { name: "Add owner" }).click();
+  await expect(owners.getByRole("button", { name: `Remove ${SAM} as Owner` })).toBeVisible();
+  await expect(page.locator(".toast", { hasText: "Sam Consumer is now an Owner of Cloud Platform team." })).toBeVisible();
+  await expect(owners.locator("h3")).toHaveText("Owners 3");
+  await expect(owners.getByLabel("Email of the new owner")).toHaveValue("");
 
   // it takes effect at once: Sam now answers for what the team owns
   await signIn(page, SAM);
@@ -151,64 +155,71 @@ test("an admin adds and removes the members of a team on the team itself", async
   await signIn(page, DANA);
   await open(page, "/admin/lists");
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
-  await page.locator(".cat-members").getByRole("button", { name: `Remove ${SAM} as Owner` }).click();
-  await page.getByRole("dialog", { name: "Remove this member?" }).getByRole("button", { name: "Cancel" }).click();
-  await expect(page.locator(".cat-members li", { hasText: SAM })).toBeVisible();
-  await page.locator(".cat-members").getByRole("button", { name: `Remove ${SAM} as Owner` }).click();
-  await page.getByRole("dialog", { name: "Remove this member?" }).getByRole("button", { name: "Remove", exact: true }).click();
-  await expect(page.locator(".cat-members li", { hasText: SAM })).toHaveCount(0);
+  await owners.getByRole("button", { name: `Remove ${SAM} as Owner` }).click();
+  const ask = page.getByRole("dialog", { name: "Remove this owner?" });
+  await expect(ask).toContainText("Sam Consumer will no longer be an Owner of Cloud Platform team. What the team maintains will no longer be among their responsibilities.");
+  await ask.getByRole("button", { name: "Cancel" }).click();
+  await expect(owners.locator("li", { hasText: "Sam Consumer" })).toBeVisible();
+  await owners.getByRole("button", { name: `Remove ${SAM} as Owner` }).click();
+  await ask.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(owners.locator("li", { hasText: "Sam Consumer" })).toHaveCount(0);
   await signIn(page, SAM);
   await open(page, "/");
   await expect(page.getByRole("link", { name: /My responsibilities/ })).toHaveCount(0);
 });
 
-test("a practice has members, each with the one role it gives; a new team needs saving first", async ({ page }) => {
+test("a practice has owners and members, each with the one role it gives; a new team needs saving first", async ({ page }) => {
   await signIn(page, DANA);
   await open(page, "/admin/lists");
   // the team Cyber Security: Riley is its Owner
   await page.locator(".cat-item", { hasText: "Cyber Security" }).click();
   await expect(page.locator(".cat-members").getByRole("button", { name: `Remove ${RILEY} as Owner` })).toBeVisible();
-  // the practice Cyber security: Riley is its Practice owner; every group has one member role, nothing to choose
+  // the practice Cyber security: Riley is its Practice owner; each list gives one role, nothing to choose
   await page.getByRole("tab", { name: /Practices/ }).click();
   await page.locator(".cat-item", { hasText: "Cyber security" }).click();
-  const members = page.locator(".cat-members");
-  await expect(members.getByRole("button", { name: `Remove ${RILEY} as Practice owner` })).toBeVisible();
-  await expect(members.getByLabel("As", { exact: true })).toHaveCount(0);
+  const owners = page.locator('.cat-members[data-rank="owner"]');
+  const members = page.locator('.cat-members[data-rank="member"]');
+  await expect(owners.getByRole("button", { name: `Remove ${RILEY} as Practice owner` })).toBeVisible();
+  await expect(page.getByLabel("As", { exact: true })).toHaveCount(0);
+  await expect(members).toContainText("Nobody yet. Add the people who write drafts for this practice.");
   await members.getByLabel("Email of the new member").fill("kim@example.com");
   await members.getByRole("button", { name: "Add member" }).click();
-  await expect(members.getByRole("button", { name: "Remove kim@example.com as Practice owner" })).toBeVisible();
-  // something that is not an address cannot be added
+  await expect(members.getByRole("button", { name: "Remove kim@example.com as Practice member" })).toBeVisible();
+  await expect(members.locator(".member-note")).toHaveText("Nobody with this address has done anything in the portal yet. Check it is right.");
+  // something that is not an address is not added, and says why
   await members.getByLabel("Email of the new member").fill("not an address");
-  await expect(members.getByRole("button", { name: "Add member" })).toBeDisabled();
+  await members.getByRole("button", { name: "Add member" }).click();
+  await expect(members.locator(".member-problem")).toHaveText("Write one email address, like team@company.com.");
   await members.getByLabel("Email of the new member").fill("");
-  await members.getByRole("button", { name: "Remove kim@example.com as Practice owner" }).click();
+  await members.getByRole("button", { name: "Remove kim@example.com as Practice member" }).click();
   await page.getByRole("dialog", { name: "Remove this member?" }).getByRole("button", { name: "Remove", exact: true }).click();
   await expect(members.locator("li", { hasText: "kim@example.com" })).toHaveCount(0);
 
   // a team nobody belongs to
   await page.getByRole("tab", { name: /Teams/ }).click();
   await page.locator(".cat-item", { hasText: "Service Management" }).click();
-  await expect(page.locator(".cat-members")).toContainText("Nobody yet");
+  await expect(owners).toContainText("Nobody yet");
 
   // a team that was added but not saved does not exist yet for anybody to belong to
   await page.getByRole("button", { name: "New team" }).click();
   await page.locator(".cat-new").getByLabel("Name").fill("Data Platform team");
   await page.keyboard.press("Enter");
-  await expect(page.locator(".cat-members")).toContainText("Save the lists first");
-  await expect(page.locator(".cat-members").getByLabel("Email of the new member")).toHaveCount(0);
+  await expect(owners).toContainText("Save the lists first");
+  await expect(owners.getByLabel("Email of the new owner")).toHaveCount(0);
   await page.getByRole("button", { name: "Discard" }).click();
 });
 
-test("who is a member is changed by admins only: somebody who only manages the lists sees them and is told who adds them", async ({ page }) => {
+test("who is an Owner is changed by admins only: somebody who only manages the lists sees them, nothing to change", async ({ page }) => {
   await signIn(page, ALEX);
   await open(page, "/admin/lists");
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
-  const members = page.locator(".cat-members");
-  await expect(members).toContainText("An admin adds and removes them");
-  await expect(members.locator("li", { hasText: CASEY })).toBeVisible();
-  await expect(members.locator("li", { hasText: JORDAN })).toBeVisible();
-  await expect(members.getByLabel("Email of the new member")).toHaveCount(0);
-  await expect(members.getByRole("button", { name: /^Remove / })).toHaveCount(0);
+  const owners = page.locator('.cat-members[data-rank="owner"]');
+  await expect(owners).toContainText("Owners review what this team looks after and answer its feedback.");
+  await expect(owners.locator("li", { hasText: "Casey Owner" })).toBeVisible();
+  await expect(owners.locator("li", { hasText: "Jordan Platform" })).toBeVisible();
+  await expect(page.locator(".cat-members").getByRole("textbox")).toHaveCount(0);
+  await expect(page.locator(".cat-members").getByRole("button", { name: /^Remove / })).toHaveCount(0);
   // and the server agrees
   expect((await page.request.post("/api/admin/access", { data: { email: SAM, role: "owner", scope: "cloud-platform-team" }, headers: CSRF })).status()).toBe(403);
+  expect((await page.request.post("/api/groups/practices/security/members", { data: { email: SAM }, headers: CSRF })).status()).toBe(403);
 });

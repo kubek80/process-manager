@@ -126,7 +126,8 @@ test("the numbers of a process over the last 7 days, sorted and grouped", async 
   expect(num(await total("upvotes").innerText())).toBeGreaterThanOrEqual(1);
   expect(num(await total("feedback given").innerText())).toBeGreaterThanOrEqual(1);
 
-  // sorted by views, the largest first: it is at the top (six views is the most there can be today)
+  // sorted by views, the largest first: it comes before everything with fewer than its six views (seven, one
+  // per built-in user, is the most there can be today, after other tests had everyone open a page)
   await table.getByRole("button", { name: /^Name/ }).click();
   await expect(table.locator("th", { has: page.getByRole("button", { name: /^Name/ }) })).toHaveAttribute("aria-sort", "ascending");
   const views = table.locator("th", { has: page.getByRole("button", { name: /^Views/ }) });
@@ -136,9 +137,10 @@ test("the numbers of a process over the last 7 days, sorted and grouped", async 
   const column = async () => (await table.locator(`tbody tr td:nth-child(${COL.views + 1})`).allTextContents()).map(num);
   let shown = await column();
   expect(shown).toEqual([...shown].sort((a, b) => b - a));
-  expect(shown[0]).toBe(6);
+  expect(shown[0]).toBeGreaterThanOrEqual(6);
+  expect(shown[0]).toBeLessThanOrEqual(7);
   const names = await table.locator("tbody tr td:first-child a").allTextContents();
-  expect(names.indexOf(TITLE)).toBeLessThan(shown.filter((v) => v === 6).length);
+  expect(names.indexOf(TITLE)).toBeLessThan(shown.filter((v) => v >= 6).length);
   // and the other way round
   await views.getByRole("button").click();
   await expect(views).toHaveAttribute("aria-sort", "ascending");

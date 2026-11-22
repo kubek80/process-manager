@@ -34,12 +34,18 @@ test("Home searches processes and standards and offers ways in", async ({ page }
   await expect(all).toHaveCount(2);
   await expect(all.filter({ hasText: "All processes" }).locator(".home-entry-count")).toHaveText("7 processes");
   await expect(all.filter({ hasText: "All standards" }).locator(".home-entry-count")).toHaveText("3 standards");
-  // by platform, practice and category: each way in says how much it leads to, and leads there
-  for (const way of ["platform", "practice", "category"]) await expect(home.locator(`section.home-group[data-browse="${way}"] a.chip`).first()).toBeVisible();
+  // by platform, practice, team and category: each way in says how much it leads to, and leads there
+  for (const way of ["platform", "practice", "owner", "category"]) await expect(home.locator(`section.home-group[data-browse="${way}"] a.chip`).first()).toBeVisible();
   const gcp = home.locator('section.home-group[data-browse="platform"]').getByRole("link", { name: "Google Cloud, 2 results" });
   await gcp.click();
-  await expect(page).toHaveURL(/#\/search\?platform=google-cloud$/);
-  await expect(results(page)).toHaveCount(2);
+  await expect(page).toHaveURL(/#\/platform\/google-cloud$/); // a platform opens its page
+  await expect(page.locator("section.group-docs .card")).toHaveCount(2);
+  await page.goBack();
+  const category = home.locator('section.home-group[data-browse="category"]').getByRole("link").first();
+  const n = Number(/, (\d+) results?$/.exec((await category.getAttribute("aria-label"))!)![1]);
+  await category.click();
+  await expect(page).toHaveURL(/#\/search\?category=/); // a category runs the search
+  await expect(results(page)).toHaveCount(n);
   await page.goBack();
   await all.filter({ hasText: "All standards" }).click();
   await expect(page.getByRole("heading", { name: "What must I meet?" })).toBeVisible();

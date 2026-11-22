@@ -70,6 +70,7 @@ test("a member creates a draft from the Processes list, saves it, and an owner r
 
     // the content, complete, then a change on the screen and Save draft
     expect((await putDoc(m, "process", id, await draftBody(m, id, "Morgans quota increase", { platform: "google-cloud" }))).ok()).toBeTruthy();
+    await m.goto("about:blank"); // a fresh start of the app, which reads what was just stored
     await openEditor(m, "process", id);
     await outline(m, "About");
     await fields(m).getByLabel(/^Summary/).fill("More quota for a Google Cloud project, drafted by a member.");
@@ -298,7 +299,7 @@ test("Admin › Lists: contact fields are saved with the lists, an emptied one l
     // Google Cloud has an owner and a member: the button says why it cannot go
     await page.locator(".cat-item", { hasText: "Google Cloud" }).click();
     await expect(detail.getByRole("button", { name: "Remove this platform" })).toBeDisabled();
-    await expect(page.locator(".cat-danger")).toContainText("2 people are still its owners or members. Take their roles first, then it can be removed.");
+    await expect(page.locator(".cat-danger")).toContainText("Still used by 1 process and 1 standard, and 2 people are still its owners or members. Change those first and take their roles, then it can be removed.");
   } finally {
     const cat = await (await page.request.get("/api/catalog")).json();
     const sn = cat.platforms.find((p: { id: string }) => p.id === "servicenow");

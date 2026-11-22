@@ -224,3 +224,12 @@ export function addedNote(o: { note?: string; self: boolean; selfRank?: GroupRan
   if (o.self && o.selfRank) return `You are already ${o.selfRank === "owner" ? "an owner" : "a member"} of ${o.group}.`;
   return o.note ?? "";
 }
+
+/**
+ * The name the portal knows for an address, from what `GET /api/members` answered (it names the
+ * people the portal knows, also those without a role); undefined when nobody of that address is known.
+ */
+export function nameFromMembers(members: readonly { email: string; name?: string }[] | undefined, email: string): string | undefined {
+  const e = email.trim().toLowerCase();
+  return members?.find((m) => m.email.toLowerCase() === e && !!m.name?.trim())?.name?.trim();
+}

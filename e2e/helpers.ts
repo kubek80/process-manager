@@ -33,6 +33,8 @@ export async function signIn(page: Page, email: string) {
  */
 export async function navigate(page: Page, place: string) {
   const bar = page.locator("nav.nav").getByRole("link", { name: place, exact: true });
+  // the top bar or its Menu button, once the app has drawn one of them
+  await expect(bar.or(page.locator("button.menu-btn")).first()).toBeVisible();
   if (await bar.isVisible()) return bar.click();
   await page.locator("button.menu-btn").click();
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: new RegExp(`^${place}(,|$)`) }).click();

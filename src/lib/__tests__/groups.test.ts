@@ -3,7 +3,7 @@ import type { Catalog, Process } from "../../types";
 import { ownedBy } from "../catalog";
 import {
   belongsHeading, belongsToGroup, contactProblems, contactsOk, contactView, countByKind, groupEntry, groupFilter, isWebLink, rankText,
-  addedNote, ownFirst, repeatsDetail, shortLink, splitOwnerLine, summaryLine, tidyContacts, withScheme,
+  addedNote, nameFromMembers, ownFirst, repeatsDetail, shortLink, splitOwnerLine, summaryLine, tidyContacts, withScheme,
 } from "../groups";
 import { search } from "../search";
 import { href, pageTitle, parseRoute, type Route } from "../store";
@@ -253,6 +253,16 @@ describe("what adding somebody answered", () => {
     expect(addedNote({ note: "jordan@example.com is already an owner …", self: true, selfRank: "owner", group: "Google Cloud" })).toBe("You are already an owner of Google Cloud.");
     expect(addedNote({ note: "x", self: true, selfRank: "member", group: "Engineering" })).toBe("You are already a member of Engineering.");
     expect(addedNote({ note: "ann@example.com is already a member of the platform “Google Cloud”: nothing changed.", self: false, group: "Google Cloud" })).toBe("ann@example.com is already a member of the platform “Google Cloud”: nothing changed.");
+  });
+});
+
+describe("the name of somebody just added", () => {
+  it("comes from what the portal knows of people, whatever the case of the address; nothing for a stranger", () => {
+    const members = [{ email: "sam@example.com", role: "platform-owner", scope: "azure", name: "Sam Consumer" }, { email: "kim@example.com", role: "owner", scope: "x" }];
+    expect(nameFromMembers(members, "Sam@Example.com ")).toBe("Sam Consumer");
+    expect(nameFromMembers(members, "kim@example.com")).toBeUndefined();
+    expect(nameFromMembers(members, "quinn@example.com")).toBeUndefined();
+    expect(nameFromMembers(undefined, "sam@example.com")).toBeUndefined();
   });
 });
 
