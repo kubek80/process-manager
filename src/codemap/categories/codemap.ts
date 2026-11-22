@@ -7,7 +7,7 @@ import type { CodeCategory } from "../types";
 export const codemap: CodeCategory = {
   id: "codemap",
   area: "around",
-  title: "This page",
+  title: "The code map itself",
   summary:
     "Admin › Code map sorts the portal's own source into categories, each with what its part must do, flow charts, tables, worked examples and its files with their requirements. " +
     "The words are TypeScript data in `src/codemap`, kept true to the code by a unit test; the files themselves come from the server one at a time, to admins only, and only where the portal runs beside its source (`PM_SOURCE_DIR`).",
