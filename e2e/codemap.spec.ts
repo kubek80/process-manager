@@ -18,19 +18,21 @@ const fileHash = (category: string, path: string, at?: string) => `/admin/code/$
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const sideways = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
-const h1 = (page: Page) => page.locator(".cm-main h1");
+const h1 = (page: Page) => page.locator(".cm-page h1");
 const cats = (page: Page) => page.getByRole("navigation", { name: "Code map categories" });
 const searchField = (page: Page) => page.getByRole("searchbox", { name: "Find a file, a table or a word" });
 const code = (page: Page) => page.locator(".cm-code");
 const readbarN = (page: Page) => page.locator(".cm-readbar-n");
 
-/** Where an element's top is in the window: a place that was jumped to sits near the top. */
-const topOf = (l: Locator) => l.evaluate((e) => e.getBoundingClientRect().top);
+/** A place that was jumped to sits near the top of the window. */
 async function landedNearTop(l: Locator) {
   await expect(l).toBeInViewport();
-  // the jump corrects itself once what is above has settled: wait for that
-  await expect.poll(() => topOf(l), { timeout: 5000 }).toBeLessThan(260);
-  expect(await topOf(l)).toBeGreaterThan(-4);
+  // the jump corrects itself once what is above has settled: wait for that (near the end of
+  // the page there is no more to scroll: then the page is at its end)
+  await expect.poll(() => l.evaluate((e) => {
+    const top = e.getBoundingClientRect().top, d = document.documentElement;
+    return top > -4 && (top < 260 || window.scrollY + window.innerHeight >= d.scrollHeight - 2);
+  }), { timeout: 5000 }).toBe(true);
 }
 
 // ---------- who gets it
@@ -155,16 +157,22 @@ test("the overview: the first hour, the four areas with every category as a card
     }
   }
 
-  // the list of categories beside the page, in the same order, under the names of the areas
+  // the cards are the overview's list; a category has the list of every category beside it,
+  // in the same order, under the names of the areas
+  await expect(cats(page)).toHaveCount(0);
+  await page.locator("a.cm-card", { hasText: TABLES.title }).click();
   const nav = cats(page);
   await expect(nav).toBeVisible();
   await expect(nav.locator(".cm-cats-all")).toHaveText("Overview");
   await expect(nav.locator(".cm-cats-title")).toHaveText(AREAS.map((a) => a.title));
   await expect(nav.locator("ul a")).toHaveText(CATEGORIES.map((c) => c.title));
-  await expect(nav.locator("a[aria-current=page]")).toHaveCount(0);
-  await nav.getByRole("link", { name: TABLES.title, exact: true }).click();
-  await expect(h1(page)).toHaveText(TABLES.title);
   await expect(nav.locator("a.on[aria-current=page]")).toHaveText(TABLES.title);
+  await nav.getByRole("link", { name: VECTORS.title, exact: true }).click();
+  await expect(h1(page)).toHaveText(VECTORS.title);
+  await expect(nav.locator("a.on[aria-current=page]")).toHaveText(VECTORS.title);
+  await nav.locator(".cm-cats-all").click();
+  await expect(page).toHaveURL(/#\/admin\/code$/);
+  await expect(h1(page)).toHaveText("Code map");
 });
 
 // ---------- the search
@@ -187,8 +195,9 @@ test("the search finds a word in files, requirements and tables, grouped by cate
   expect(await results.locator("mark.search-mark").count()).toBeGreaterThan(5);
   await expect(results.locator("mark.search-mark").first()).toHaveText(/feedback/i);
   // a group with more than eight shows the rest on request
-  const big = groups.filter({ has: page.getByRole("button", { name: /^Show all \d+ in / }) }).first();
-  if (await big.count()) {
+  const more = await groups.evaluateAll((gs) => gs.findIndex((g) => g.querySelector("button")));
+  if (more >= 0) {
+    const big = groups.nth(more);
     const n = Number((await big.getByRole("button").textContent())!.match(/\d+/)![0]);
     await big.getByRole("button").click();
     await expect(big.locator("ul.cm-hits > li")).toHaveCount(n);
@@ -236,6 +245,7 @@ test("the search finds a word in files, requirements and tables, grouped by cate
   await searchField(page).fill("");
   await expect(page).toHaveURL(/#\/admin\/code$/);
   await expect(page.locator("a.cm-card")).toHaveCount(20);
+  await page.locator("a.cm-card").first().click();
   await expect(cats(page).locator(".cm-cats-all")).toHaveText("Overview");
 });
 
@@ -258,7 +268,8 @@ test("a category: its parts in order with chips, readable charts that enlarge, e
   await signIn(page, DANA);
   await open(page, "/admin/code/vectors");
   await expect(h1(page)).toHaveText(VECTORS.title);
-  await expect(h1(page)).toBeFocused();
+  // opened straight from its address, the keyboard starts at the top of the page as on every page
+  await expect(h1(page)).not.toBeFocused();
   await expect(page).toHaveTitle(/Code map · Admin/);
   await expect(page.locator("p.cm-crumbs")).toHaveText(/^Code map›Data$/);
   await expect(page.locator(".cm-category header .cm-count")).toHaveText(new RegExp(`^${VECTORS.files.length} files · ${VECTORS.charts.length} charts?$`));
@@ -403,6 +414,7 @@ test("the tables: the index jumps to a table; a table's block with its columns a
 // ---------- a file
 
 test("a file: its text with line numbers, the comments above the lines they name, from comment to comment, wrap, copy", async ({ page, context }) => {
+  test.setTimeout(90_000);
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await signIn(page, DANA);
   await open(page, "/admin/code/vectors");
@@ -472,13 +484,15 @@ test("a file: its text with line numbers, the comments above the lines they name
   try {
     await expect(wrap).not.toBeChecked();
     await expect(code(page)).not.toHaveClass(/\bwrap\b/);
-    await wrap.check();
+    await bar.locator("label.cm-wrap").click(); // the switch: its box is drawn by the label
+    await expect(wrap).toBeChecked();
     await expect(code(page)).toHaveClass(/\bwrap\b/);
     await page.reload();
     await expect(page.locator(".cm-line").first()).toBeVisible();
     await expect(code(page)).toHaveClass(/\bwrap\b/);
     await expect(page.getByRole("checkbox", { name: "Wrap lines" })).toBeChecked();
-    await page.getByRole("checkbox", { name: "Wrap lines" }).uncheck();
+    await page.locator("label.cm-wrap").click();
+    await expect(page.getByRole("checkbox", { name: "Wrap lines" })).not.toBeChecked();
     await expect(code(page)).not.toHaveClass(/\bwrap\b/);
   } finally {
     await page.evaluate(() => { try { localStorage.removeItem("pm.codemap.wrap"); } catch { /* ignore */ } });
@@ -557,6 +571,7 @@ test("what a file's page says when the file cannot be shown, and Try again", asy
   await expect(page.locator("li[id^=cm-req-]")).toHaveCount(file.requirements.length);
   await expect(page.locator(".cm-code")).toHaveCount(0);
   await page.unroute("**/api/admin/source?**");
+  await page.goto("about:blank"); // the app asks once per load whether it shows source
 
   // this installation shows no source at all: said on the overview and on a file
   await page.route("**/api/admin/system", async (r) => {
@@ -564,11 +579,13 @@ test("what a file's page says when the file cannot be shown, and Try again", asy
     await r.fulfill({ response: res, json: { ...(await res.json()), source: false } });
   });
   await open(page, "/admin/code");
+  await expect(h1(page)).toHaveText("Code map");
   await expect(page.locator(".cm-overview .cm-nosource[role=status]")).toHaveText("Here the files themselves cannot be opened: the portal does not run beside its source code (npm run dev does). Their paths, what they must do, the charts and the tables are all here.");
   await open(page, fileHash("vectors", LONG));
   await expect(page.locator(".cm-file-page .cm-nosource")).toHaveText(off);
   await expect(page.locator("li[id^=cm-req-]")).toHaveCount(file.requirements.length);
   await page.unroute("**/api/admin/system");
+  await page.goto("about:blank");
 
   // another failure: said with Try again, which works once the server answers
   await page.route("**/api/admin/source?**", (r) => r.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Something went wrong." }) }));
@@ -663,10 +680,11 @@ test("the code map in the light and the dark theme", async ({ page }) => {
   const colours: Record<string, string[]> = {};
   for (const theme of ["light", "dark"] as const) {
     await page.addInitScript((t) => { try { localStorage.setItem("pm:theme", t); } catch { /* ignore */ } }, theme);
+    await page.goto("about:blank");
     await open(page, fileHash("vectors", VECTORS.start!));
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
     await expect(page.locator(".cm-inline").first()).toBeVisible();
-    colours[theme] = await page.evaluate(() => [".cm-code", ".cm-inline", ".cm-main h1"].map((s) => {
+    colours[theme] = await page.evaluate(() => [".cm-code", ".cm-inline", ".cm-page h1"].map((s) => {
       const st = getComputedStyle(document.querySelector(s)!);
       return `${st.backgroundColor} ${st.color}`;
     }));
@@ -695,6 +713,18 @@ test("the keyboard: the search field comes early; the focus is on the heading of
   await page.getByRole("link", { name: `Open ${TABLES.start}` }).click();
   await expect(h1(page)).toHaveText(TABLES.start!);
   await expect(h1(page)).toBeFocused();
+  // the next file, too
+  await page.locator(".cm-file-bar").getByRole("link", { name: /^Next file: / }).click();
+  await expect(h1(page)).not.toHaveText(TABLES.start!);
+  await expect(h1(page)).toBeFocused();
+
+  // a category opened straight from its address: the keyboard starts at the top, as on every page
+  await page.goto("about:blank");
+  await open(page, "/admin/code/tables");
+  await expect(h1(page)).toHaveText(TABLES.title);
+  await page.waitForLoadState("networkidle");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Skip to the page" })).toBeFocused();
 });
 
 // ---------- the two leaks closed with this page

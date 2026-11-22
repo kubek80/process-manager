@@ -159,11 +159,14 @@ test("the protections are said on the page, and the server keeps them too", asyn
   await expect(dialog).toContainText("Named in the settings where the portal is installed. It cannot be taken away here.");
   await dialog.getByRole("button", { name: "Cancel" }).click();
 
-  // the server: deleting yourself is refused; the admin from the settings stays admin whatever is sent
+  // the server: deleting yourself, or setting no roles at all for yourself, is refused with the
+  // same answer; the admin from the settings stays admin whatever is sent
   const del = await page.request.delete(`/api/admin/users/${DANA}`, { headers: CSRF });
   expect(del.status()).toBe(409);
   expect((await del.json()).error).toBe("You cannot remove all of your own roles. Ask another admin to do it.");
-  expect((await page.request.put(`/api/admin/users/${DANA}`, { data: { roles: [] }, headers: CSRF })).ok()).toBeTruthy();
+  const none = await page.request.put(`/api/admin/users/${DANA}`, { data: { roles: [] }, headers: CSRF });
+  expect(none.status()).toBe(409);
+  expect(await none.json()).toEqual(await del.json());
   expect((await (await page.request.get("/api/me")).json()).perms.admin).toBe(true);
   const { users } = await (await page.request.get("/api/admin/users")).json();
   expect(users.find((u: { email: string }) => u.email === DANA)).toMatchObject({ bootstrap: true });

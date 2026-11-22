@@ -112,6 +112,10 @@ export function CodeMapPage({ label, hint }: { label: string; hint: string }) {
   // a category or a file was opened: at the place the address names, else at the top with the
   // focus on its heading. A file's place is reached by the file itself, once its text is there.
   const where = view.category ? `${view.category}/${view.file ?? ""}` : "";
+  // on the page as it is first loaded the keyboard starts at the top ("Skip to the page" first),
+  // as on every page of the portal; the heading takes the focus once a place is opened from here
+  const loadedAt = useRef(where), moved = useRef(false);
+  if (where !== loadedAt.current) moved.current = true;
   useEffect(() => {
     if (!where) return;
     if (view.at && !view.file) {
@@ -120,7 +124,7 @@ export function CodeMapPage({ label, hint }: { label: string; hint: string }) {
     }
     if (view.at && file) return;
     window.scrollTo({ top: 0 });
-    heading.current?.focus({ preventScroll: true });
+    if (moved.current) heading.current?.focus({ preventScroll: true });
   }, [where, view.at]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!view.category) return <Overview label={label} hint={hint} q={view.q ?? ""} />;
