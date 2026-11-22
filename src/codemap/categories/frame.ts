@@ -174,7 +174,7 @@ export const frame: CodeCategory = {
       path: "src/types.ts",
       role: "The TypeScript types of the app: processes, standards, the lists, feedback, rights and what the server says about each document.",
       requirements: [
-        { text: "These types mirror `schema/*.schema.json`; a format changes in the schema first (`npm run validators`), and a value added only here is refused by the server's schema check." },
+        { text: "These types mirror `schema/*.schema.json`; a format changes in the schema first (`npm run validators`), and a value allowed only here is refused by the server's schema check when it is saved." },
         { text: "`DocMeta.draft` (unpublished changes) is filled by the server only for people with `CanDraft` on that document, in `listDocs` (`server/internal/httpapi/content.go`); here it is only typed, and pages only show it." },
       ],
     },
