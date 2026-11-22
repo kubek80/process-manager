@@ -290,10 +290,11 @@ export type AdminSection = "access" | "lists" | "skills" | "health" | "activity"
 /**
  * Where Admin › Code map is: `category` is the category open (`#/admin/code/tables`), `file` a
  * file of it (`#/admin/code/tables/file/server/internal/db/db.go`), `q` the search of the
- * overview (`#/admin/code?q=vector`). An unknown category or file is kept: the page says it is
- * not there.
+ * overview (`#/admin/code?q=vector`), `at` the place on a category's or a file's page it opens at
+ * (`#/admin/code/tables?at=table-documents`, `…/file/…/store.go?at=req-2`; see `anchorOf` in
+ * `src/lib/codemap.ts`). An unknown category or file is kept: the page says it is not there.
  */
-export interface CodeView { category?: string; file?: string; q?: string }
+export interface CodeView { category?: string; file?: string; q?: string; at?: string }
 /** `item` is the step or the requirement that is open, so that a link can point at one. */
 export type Route =
   | { page: "home" } | ({ page: "search" } & SearchState)
@@ -394,9 +395,8 @@ function parseCode(category: string | undefined, file: string | undefined, query
     if (f) v.file = f;
   }
   for (const part of (query ?? "").split("&")) {
-    if (!part.startsWith("q=")) continue;
-    const q = decode(part.slice(2));
-    if (q.trim() && !v.category) v.q = q;
+    if (part.startsWith("q=") && !v.category) { const q = decode(part.slice(2)); if (q.trim()) v.q = q; }
+    if (part.startsWith("at=") && v.category) { const at = decodePart(part.slice(3)).trim(); if (at) v.at = at; }
   }
   return v;
 }
@@ -404,7 +404,7 @@ function parseCode(category: string | undefined, file: string | undefined, query
 function codeHref(v: CodeView): string {
   if (!v.category) return `#/admin/code${v.q?.trim() ? `?q=${encodeURIComponent(v.q)}` : ""}`;
   const file = v.file ? `/file/${v.file.split("/").filter(Boolean).map(encodeURIComponent).join("/")}` : "";
-  return `#/admin/code/${encodeURIComponent(v.category)}${file}`;
+  return `#/admin/code/${encodeURIComponent(v.category)}${file}${v.at?.trim() ? `?at=${encodeURIComponent(v.at.trim())}` : ""}`;
 }
 
 const parse = (h: string = location.hash): Route => {

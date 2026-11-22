@@ -10,6 +10,9 @@ describe("addresses of the code map", () => {
       { page: "admin", section: "code", category: "tables" },
       { page: "admin", section: "code", category: "tables", file: "server/internal/db/migrations/0001_init.sql" },
       { page: "admin", section: "code", category: "look", file: "src/lib/théme (1).ts" },
+      { page: "admin", section: "code", category: "tables", at: "table-documents" },
+      { page: "admin", section: "code", category: "tables", at: "file-server/internal/db/db.go" },
+      { page: "admin", section: "code", category: "saving", file: "server/internal/docs/store.go", at: "req-2" },
     ];
     for (const r of routes) expect(parseRoute(href(r))).toEqual(r);
   });
@@ -18,6 +21,13 @@ describe("addresses of the code map", () => {
     expect(href({ page: "admin", section: "code", category: "x", file: "a b/c#d.ts" })).toBe("#/admin/code/x/file/a%20b/c%23d.ts");
     expect(href({ page: "admin", section: "code", q: "a&b" })).toBe("#/admin/code?q=a%26b");
     expect(href({ page: "admin", section: "code" })).toBe("#/admin/code");
+  });
+  it("carry the place a page opens at, only on a category or a file", () => {
+    expect(href({ page: "admin", section: "code", category: "saving", file: "server/internal/docs/store.go", at: "req-2" })).toBe("#/admin/code/saving/file/server/internal/docs/store.go?at=req-2");
+    expect(href({ page: "admin", section: "code", category: "tables", at: "file-src/a b.ts" })).toBe("#/admin/code/tables?at=file-src%2Fa%20b.ts");
+    expect(parseRoute("#/admin/code?at=must-1")).toEqual({ page: "admin", section: "code" });
+    expect(parseRoute("#/admin/code/tables?q=x&at=must-1")).toEqual({ page: "admin", section: "code", category: "tables", at: "must-1" });
+    expect(parseRoute("#/admin/code/tables?at=")).toEqual({ page: "admin", section: "code", category: "tables" });
   });
   it("keep an unknown category or file, so that the page can say it is not there", () => {
     expect(parseRoute("#/admin/code/nothing-here")).toEqual({ page: "admin", section: "code", category: "nothing-here" });

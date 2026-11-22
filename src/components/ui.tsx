@@ -151,8 +151,10 @@ export function useLayer(ref: RefObject<HTMLElement | null>, onClose: () => void
   }, [watch]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-export function Modal({ title, subtitle, onClose, children, wide, footer, closable = true }: {
+export function Modal({ title, subtitle, onClose, children, wide, footer, closable = true, className }: {
   title: ReactNode; subtitle?: ReactNode; onClose: () => void; children: ReactNode; wide?: boolean; footer?: ReactNode;
+  /** A class of its own for the dialog box, for a page that sizes it (Admin › Code map's enlarged chart). */
+  className?: string;
   /** false: a question that has to be answered with one of its buttons - no X to close it. */
   closable?: boolean;
 }) {
@@ -161,7 +163,7 @@ export function Modal({ title, subtitle, onClose, children, wide, footer, closab
   useLayer(ref, onClose, { modal: true });
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} className={`modal ${wide ? "wide" : ""}`} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
+      <div ref={ref} className={`modal ${wide ? "wide" : ""} ${className ?? ""}`} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
         <header className="modal-head">
           <div>
             <h2 id={titleId}>{title}</h2>

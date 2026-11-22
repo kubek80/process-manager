@@ -21,10 +21,16 @@ const NO_PAN = "button:not(.block-main), a, input, select, textarea, label, .qui
 /** How far the pointer moves before a press becomes a drag of the map (and no longer a click). */
 const PAN_START = 5;
 
-export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, onEnter, editable = true, bare, openMin, follow = !bare, legend = true }: {
+export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, onEnter, editable = true, bare, bareMin, openMin, follow = !bare, legend = true }: {
   /** Enter on a block: after selecting it (the editing screen moves the keyboard to its fields). */
   onEnter?: (id: string) => void;
   editable?: boolean; bare?: boolean;
+  /**
+   * Only with `bare`: the smallest zoom the picture opens at. Left out (the Guide), a picture gets
+   * as small as its column needs (down to 30%). Given (Admin › Code map), a wider flow keeps that
+   * size and scrolls sideways inside its box, its cut edges faded as on the reader's map.
+   */
+  bareMin?: number;
   /** The legend of the kinds of steps. The editing screen leaves it out: every block names its kind, and the map needs the room. */
   legend?: boolean;
   /** The smallest zoom the map opens at (60%): names stay readable, a wider flow scrolls sideways. "Fit" shows the whole flow, whatever zoom that takes. */
@@ -221,7 +227,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
     // the map uses its height: a long flow opens as large as fits it, and scrolls sideways
     const el = scroller.current;
     const room = el && !bare ? mapHeight(el) : 0;
-    const z = openingZoom(viewWidth(), drawW, bare ? 0.3 : opening, column, room ? { view: room - 14, content: layout.height } : undefined);
+    const z = openingZoom(viewWidth(), drawW, bare ? (bareMin ?? 0.3) : opening, column, room ? { view: room - 14, content: layout.height } : undefined);
     working.current = z;
     fitted.current = false;
     setZoom(z);
@@ -254,14 +260,14 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const [edges, setEdges] = useState({ left: false, right: false });
   useEffect(() => {
     const el = scroller.current;
-    if (!el || bare) return;
+    if (!el || (bare && bareMin === undefined)) return;
     const check = () => setEdges((e) => { const n = hiddenEdges(el.scrollLeft, el.scrollWidth, el.clientWidth); return n.left === e.left && n.right === e.right ? e : n; });
     check();
     el.addEventListener("scroll", check, { passive: true });
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(check) : null;
     ro?.observe(el);
     return () => { el.removeEventListener("scroll", check); ro?.disconnect(); };
-  }, [bare, zoom, layout.width]);
+  }, [bare, bareMin, zoom, layout.width]);
 
   const focus = hover ?? selectedId;
   const titleOf = (id: string) => { const i = process.steps.findIndex((s) => s.id === id); return i < 0 ? id : process.steps[i].title?.trim() || `step ${i + 1}`; };

@@ -340,3 +340,26 @@ func TestSourceGitRunsWithAnEnvironmentOfItsOwn(t *testing.T) {
 		t.Errorf("args: %v", gitArgs)
 	}
 }
+
+func TestSourceOfThisRepositoryCanBeRead(t *testing.T) {
+	needGit(t)
+	dir, err := filepath.Abs(repoRoot)
+	must(t, err)
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
+		t.Skip("not a git checkout")
+	}
+	v, problem := (&sourceTree{dir: dir}).current(bg)
+	if problem != "" {
+		t.Fatal(problem)
+	}
+	for _, p := range []string{"server/internal/httpapi/api.go", "package.json", "Dockerfile", "src/App.tsx", "demo/standards/secrets-management.json"} {
+		if data, ok := readSource(v, p); !ok || len(data) == 0 {
+			t.Errorf("%s: not read", p)
+		}
+	}
+	for _, p := range []string{".env.example", ".gitignore", "server/go.sum", "catalog/icons"} {
+		if _, ok := readSource(v, p); ok {
+			t.Errorf("%s: read", p)
+		}
+	}
+}
