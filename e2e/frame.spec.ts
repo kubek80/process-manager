@@ -255,7 +255,7 @@ test("“Skip to the page” is the first Tab stop on every signed-in page and m
   await open(page, "/");
   await expect(page.getByRole("searchbox").first()).toBeVisible();
   expect(await page.evaluate(() => document.querySelector("a[href], button, input, select, textarea, [tabindex]:not([tabindex='-1'])")?.textContent)).toBe("Skip to the page");
-  for (const path of ["/processes", "/p/request-gcp-project/flow", "/s/secure-logging/doc", "/requests", "/admin/access"]) {
+  for (const path of ["/processes", "/p/request-gcp-project/flow", "/s/secure-logging/doc", "/requests", "/admin/access", "/admin/code", "/admin/code/tables"]) {
     await page.goto("about:blank"); // a fresh load: the keyboard starts at the top of the page
     await open(page, path);
     await expect(page.locator("#main h1").first()).toBeVisible();

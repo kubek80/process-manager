@@ -243,6 +243,7 @@ export const tests: CodeCategory = {
     spec("browse.spec.ts", "Home, the two lists and the results: how processes and standards differ, the filters for an application, counts, order, page size and the pager."),
     spec("cards.spec.ts", "The shared list layout and its cards: filter dropdowns with the keyboard, the lines of a card, bookmark and upvote from a card, the phone layout."),
     spec("catalog.spec.ts", "Admin › Lists for a lists manager: adding a tool, an entry in use that cannot be removed, discard, adding a tool from a step."),
+    spec("codemap.spec.ts", "Admin › Code map: who gets it, the server's refusals for a source file, the overview and its search, a category, a file with its comments in place, what is said when a file cannot be shown."),
     spec("consumer.spec.ts", "A reader finds a process, reads the map with their lane first, follows the checklist, opens sub-processes and prerequisites."),
     spec("editing.spec.ts", "The editing screen and its drafts: unpublished changes only editors see, publishing, discarding, a new draft, retire, unpublish and delete."),
     spec("editor.spec.ts", "Changing a process on the editing screen: inserting and dragging steps on the map, moving them in the outline, the checker, About."),

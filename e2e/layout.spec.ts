@@ -5,7 +5,7 @@ import { ALEX, CASEY, CSRF, DANA, JORDAN, RILEY, SAM, fields, meaningReady, open
 // off screen, so no page may be wider than the screen.
 const PAGES = ["/", "/search?q=gcp", "/search?q=logging&type=standard&rigour=mandatory", "/processes", "/standards", "/p/request-gcp-project/flow", "/p/request-gcp-project/list", "/p/request-gcp-project/flow/raise-request",
   "/s/secure-logging/doc", "/s/secure-logging/doc/SEC-LOG-02", "/catalog", "/guide", "/mine", "/requests", "/requests?state=all"];
-const ADMIN = ["/p/request-gcp-project/edit", "/p/request-gcp-project/edit/raise-request", "/s/secure-logging/edit", "/s/secure-logging/edit/SEC-LOG-02", "/admin/access", "/admin/lists", "/admin/skills", "/admin/health", "/admin/activity", "/admin/statistics", "/admin/system"];
+const ADMIN = ["/p/request-gcp-project/edit", "/p/request-gcp-project/edit/raise-request", "/s/secure-logging/edit", "/s/secure-logging/edit/SEC-LOG-02", "/admin/access", "/admin/lists", "/admin/skills", "/admin/health", "/admin/activity", "/admin/statistics", "/admin/system", "/admin/code", "/admin/code/tables", "/admin/code/vectors/file/server/internal/retrieval/retrieval.go"];
 
 // the server listens before its index is complete: wait until search by meaning answers
 test.beforeAll(async ({ request }) => { await meaningReady(request); });
