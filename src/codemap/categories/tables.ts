@@ -19,9 +19,11 @@ export const tables: CodeCategory = {
     "Migrations only go forward: there are no down files and nothing in db.go undoes one. Undoing a migration is manual work from a backup.",
     "The body of documents, document_versions and working_drafts is json, not jsonb, so the order of the keys the author wrote is kept; it is stored re-indented by docs.Pretty.",
     "A deletion is a row of document_versions with a null body; the version numbers of a document continue after it (max(version) + 1), so a version number is never used twice.",
-    "Only working_drafts refers to documents with a foreign key (on delete cascade). feedback, bookmarks, upvotes, document_views, document_counts, skill_downloads, requests and search_chunks keep (kind, id) as plain text: the document's delete removes or marks their rows in the same transaction, or (the index) the next sync removes them.",
+    "Only working_drafts refers to documents with a foreign key (on delete cascade). feedback, bookmarks, upvotes, document_views, document_counts, skill_downloads, requests and search_chunks keep (kind, id) as plain text: the document's delete removes or marks their rows in the same transaction, or (the index) the next sync removes them; skills keeps (source_kind, source_id) and is set inactive by the regeneration that follows the commit.",
+    "A view, a counted download and a feedback item are written only while their document exists: the writing transaction reads its documents row for share (engagement held, feedback create), so a delete either comes first or waits and takes the new row along.",
+    "Concurrent writers are kept apart by advisory locks. Session locks through db.WithLock: 7461001 migrations, 7461002 filling an empty database, 7461003 regenerating skills, 7461010 the index's Ensure. Transaction locks on hashtextextended(text, space): space 7461 a document's save ('<kind>/<id>'), 7462 its skills, 7463 a view of one person, 7464 a person's requests, 7465 a person's feedback, 7466 the document's parts in the index.",
     "The migrations never mention pgvector: search_settings, search_chunks and search_pending are made by retrieval.Index.Ensure, only with PM_EMBEDDINGS on, and every use of the vector type there is qualified with the extension's schema.",
-    "A program that does not upgrade the database (the MCP server) checks with db.Current that schema_migrations has every migration of its version and refuses to start otherwise; it never migrates.",
+    "A program that does not upgrade the database (the MCP server) checks with db.Current that the newest number in schema_migrations is at least the newest migration file it was built with, and refuses to start otherwise; it never migrates.",
     "Content stored by an earlier version is converted after the migrations, under the same lock (upgrade.Convert), and a second run finds nothing to do.",
   ],
   charts: [
@@ -47,7 +49,7 @@ export const tables: CodeCategory = {
         ],
       ),
       caption:
-        "Everything up to the commit is one transaction of docs.SaveIn. The skills follow right after the commit (the answer waits for them a short while); the parts of the search index follow in the background and never hold up the answer.",
+        "Everything up to the commit is one transaction of docs.SaveIn. After the commit syncSkills starts the index's sync in the background, then regenerates the skills (the answer waits for them at most 20 seconds, syncWait); the parts of the search index never hold up the answer.",
     },
     {
       process: flow(
@@ -70,7 +72,7 @@ export const tables: CodeCategory = {
         ],
       ),
       caption:
-        "db.Upgrade runs the files and the conversion under one lock; prepareIndex (cmd/server/main.go) then sets up the index. A second server waits for the lock and finds the work done.",
+        "db.Upgrade runs the files and the conversion under one lock. Between it and the index, prepare runs under lock 7461002: an empty database is filled from the sample folder, unused icons are removed and the skills regenerated. prepareIndex (cmd/server/main.go) then sets up the index. A second server waits for each lock and finds the work done.",
     },
   ],
   tables: [
@@ -203,7 +205,7 @@ export const tables: CodeCategory = {
       createdIn: M + "002_content_roles_skills.sql",
       writtenBy: ["server/internal/audit/audit.go"],
       readBy: ["server/internal/httpapi/users.go"],
-      rules: ["A person's save writes its entry inside the save's transaction (docs.Change.After): the version and its entry are stored together or not at all. An import and the start-up conversion write one summary entry instead (content.import, content.convert)."],
+      rules: ["A person's save writes its entry inside the save's transaction (docs.Change.After): the version and its entry are stored together or not at all. An import and the start-up conversion write one summary entry instead (content.import, content.convert; the conversion also one access.grant or access.revoke per converted role). Saving a working draft writes no entry."],
     },
     // ---------- generated
     {
@@ -223,6 +225,10 @@ export const tables: CodeCategory = {
       keys: ["skills_source: index on (source_kind, source_id)"],
       createdIn: M + "002_content_roles_skills.sql",
       writtenBy: ["server/internal/skills/store.go"],
+      rules: [
+        "The skills of one document are regenerated in one transaction under lock 7462 of '<kind>/<id>', from the documents row as it is then (never from a working draft).",
+        "A new skill_versions row is written only when the hash of the generated text changed; what the document no longer produces (a draft, retired or deleted) is set active = false, never deleted.",
+      ],
     },
     {
       name: "skill_versions",
@@ -364,6 +370,7 @@ export const tables: CodeCategory = {
       keys: ["requests_removed_email: index on (email, created_at)"],
       createdIn: M + "006_counts_and_limits.sql",
       writtenBy: ["server/internal/requests/store.go"],
+      rules: ["Rows of requests made more than a day ago are deleted whenever another removal is written: the brake only looks at the last hour."],
     },
     {
       name: "feedback",
@@ -385,7 +392,10 @@ export const tables: CodeCategory = {
       keys: ["feedback_target: index on (target_kind, target_id)"],
       createdIn: M + "001_feedback.sql",
       writtenBy: ["server/internal/feedback/store.go"],
-      rules: ["Deleted with its document (feedback.DeleteByTargetIn in the delete's transaction)."],
+      rules: [
+        "Deleted with its document (feedback.DeleteByTargetIn in the delete's transaction).",
+        "Inserted only while the document exists (its documents row is read for share in the same transaction); at most 30 per person and hour (feedback.Report, under lock 7465 of the person), counted over the portal and the MCP server together.",
+      ],
     },
     {
       name: "feedback_also_hit",
@@ -414,6 +424,7 @@ export const tables: CodeCategory = {
       ],
       createdIn: M + "008_icons.sql",
       writtenBy: ["server/internal/icons/store.go"],
+      rules: ["Removed at start (icons.Clean) only when uploaded more than 24 hours ago and named by no version of the lists, not by the lists now and not by portal_settings (the logo)."],
     },
     {
       name: "portal_settings",
@@ -514,7 +525,7 @@ export const tables: CodeCategory = {
   "estimatedDuration": "3-5 working days",
   "status": "active",
   "review": { "intervalMonths": 6, "lastReviewedAt": "2026-11-03", … },
-  "prerequisites": [ … 4 ], "actors": [ … 4 ], "steps": [ … 11 ]
+  "prerequisites": [ … 4 ], "actors": [ … 4 ], "steps": [ … 10 ]
 }`,
         },
         {

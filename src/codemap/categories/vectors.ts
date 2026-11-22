@@ -35,9 +35,9 @@ export const vectors: CodeCategory = {
         [
           s("commit", "Commit the save, answer the person", "server", "automation", ["start"], "the save is done"),
           s("start", "Start the sync in the background", "server", "code", ["read"], "syncIndex, 10 min limit"),
-          s("read", "Read the document and its hashes", "pg", "automation", ["published"], "no transaction"),
+          s("read", "Read the document's version and body", "pg", "automation", ["published"], "no transaction"),
           s("published", "Is it published?", "server", "decision", [["cut", "Yes"], ["write", "No: no parts"]]),
-          s("cut", "Cut it into parts with their texts", "server", "code", ["anyNew"], "chunking.Chunks"),
+          s("cut", "Cut it into parts, read stored hashes", "server", "code", ["anyNew"], "chunking.Chunks"),
           s("anyNew", "Any part with a new hash?", "server", "decision", [["embed", "Yes"], ["write", "No"]]),
           s("embed", "Embed the new texts in one call", "provider", "automation", ["ok"], "no connection held"),
           s("ok", "Did the provider answer in 30 s?", "server", "decision", [["write", "Yes"], ["mark", "No"]]),
@@ -93,12 +93,12 @@ export const vectors: CodeCategory = {
   "prerequisites": [{"title": "Application registered in the CMDB", "description": "You need the application ID (APP-xxxxx)."}, … 3 more],
   "actors": [{"id": "me", "name": "You", …}, {"id": "budget-owner", "name": "Budget owner", "description": "Owner of the cost centre."}, …],
   "steps": [ …, {"id": "approve-budget", "title": "Approve the monthly budget", "actor": "budget-owner",
-                 "type": "approval", "duration": "up to 2 working days", …}, … 11 steps ]
+                 "type": "approval", "duration": "up to 2 working days", …}, … 10 steps ]
 }`,
           note: "syncDoc reads version and body with one select, outside any transaction, and the stored content_hash values of the document.",
         },
         {
-          label: "Cut into 16 parts (1 summary, 4 prerequisites, 11 steps)",
+          label: "Cut into 15 parts (1 summary, 4 prerequisites, 10 steps)",
           where: "server/internal/chunking/chunking.go",
           shape: `part=summary  item=""  label="Summary"  480 characters
 Process: Request a GCP project
@@ -205,6 +205,7 @@ order by n.distance, n.kind, n.doc_id, n.part, n.item
       requirements: [
         { text: "What the stored vectors depend on; a change of any of it rebuilds the index.", at: "func (ix *Index) settings() (provider string, dims int, chunks string) {" },
         { text: "Only quick database work: the extension, the tables, the vector index; nothing is dropped here when the settings differ.", at: "func (ix *Index) Ensure(ctx context.Context) error {" },
+        { text: "A missing pgvector is created in schema public when the database user may; a version below 0.5 (no HNSW) is refused with the statement an administrator has to run.", at: "create extension if not exists vector with schema public" },
         { text: "The vector index is HNSW for cosine distance, with the operator class of the extension's schema.", at: "create index search_chunks_embedding on search_chunks using hnsw" },
         { text: "A draft or a deleted document has no parts.", at: "func (ix *Index) partsOf(" },
         { text: "Read, embed holding no connection, then write; up to 3 rounds when the document changes meanwhile.", at: "// 2. embed what is new, holding no connection" },

@@ -77,6 +77,9 @@ type api struct {
 	Deps
 	searches *brake
 	uploads  *brake // icons
+	// Admin › Code map: the checkout named by PM_SOURCE_DIR, and a brake on reading it
+	sourceFiles *sourceTree
+	sourceReads *brake
 }
 
 type ctxKey struct{}
@@ -88,7 +91,8 @@ type session struct {
 
 // New builds the handler.
 func New(d Deps) http.Handler {
-	a := &api{Deps: d, searches: newBrake(searchesPerMinute, time.Minute), uploads: newBrake(iconUploadsPerHour, time.Hour)}
+	a := &api{Deps: d, searches: newBrake(searchesPerMinute, time.Minute), uploads: newBrake(iconUploadsPerHour, time.Hour),
+		sourceFiles: &sourceTree{dir: d.Cfg.SourceDir}, sourceReads: newBrake(sourceReadsPerMinute, time.Minute)}
 	mux := http.NewServeMux()
 
 	// healthz: the process is alive. readyz: it can also reach the database, so it may get traffic.

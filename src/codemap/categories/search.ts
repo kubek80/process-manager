@@ -73,13 +73,15 @@ request-gcp-project      0.523  Summary · Step 9: Create the project · Step 7:
 onboard-api-to-apigee    0.316  Before you start: GCP project for the backend
 infrastructure-as-code   0.291  Summary   (a standard)
 …`,
-          note: "Words are not required: \"project\" alone brings Apigee and the standard above the 0.20 floor.",
+          note: "Not every word is needed: Apigee's prerequisite shares only the word \"project\", the standard's summary \"google\" and \"cloud\"; both score above the 0.20 floor.",
         },
         {
           label: "What the page keeps (fromMeaning)",
           where: "src/lib/meaning.ts",
           shape: `{kind: "process", id: "request-gcp-project", score: 0.523, by: ["meaning"],
- hits: [{where: "summary", label: "Summary", snippet: …}, {where: "step", item: "create-project", label: "Create the project", …}, …]}`,
+ hits: [{where: "summary", label: "Summary"},
+        {where: "step", item: "create-project", label: "Create the project", snippet: "The pipeline runs on merge and creates the project, …"},
+        {where: "step", item: "add-project-config", label: "Add your project to the project factory", snippet: "Copy projects/_template.yaml to …"}]}`,
           note: "Labels come from the document the page has, not from the server; a step the page's copy no longer has is left out; the summary's snippet is dropped when it repeats the summary on the card.",
         },
         {
