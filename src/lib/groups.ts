@@ -76,6 +76,25 @@ export function tidyContacts(c: Contacts | undefined): Contacts | undefined {
 }
 
 /**
+ * One entry of the lists without empty optional fields: its id and name always, every other text
+ * only when it is not empty, and its contact details tidied (`tidyContacts`: an empty detail is
+ * left out, and `contacts` itself when nothing is left), because the format refuses an empty one.
+ */
+export function tidyListEntry<T extends { id: string; name: string; contacts?: Contacts }>(r: T): T {
+  const out = Object.fromEntries(Object.entries(r).filter(([k, v]) => k === "id" || k === "name" || (typeof v === "string" && v.trim() !== ""))) as T;
+  const contacts = tidyContacts(r.contacts);
+  return contacts ? { ...out, contacts } : out;
+}
+
+/** The lists without empty optional fields (`tidyListEntry`): what Admin › Lists compares with the saved lists, and saves. */
+export const tidyLists = (c: Catalog): Catalog => ({
+  ...c,
+  teams: c.teams.map(tidyListEntry), practices: (c.practices ?? []).map(tidyListEntry), platforms: (c.platforms ?? []).map(tidyListEntry),
+  categories: (c.categories ?? []).map(tidyListEntry), tools: c.tools.map(tidyListEntry), tiers: c.tiers.map(tidyListEntry),
+  environments: c.environments.map(tidyListEntry), languages: c.languages.map(tidyListEntry),
+});
+
+/**
  * What is wrong with the contact details, per field, as an instruction in plain words. Empty
  * fields are fine: every detail is optional.
  */

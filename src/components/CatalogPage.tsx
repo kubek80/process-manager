@@ -7,7 +7,7 @@ import { ContactList, RankMark } from "./GroupParts";
 import { EntryIcon } from "./EntryIcon";
 import { IconField } from "./IconField";
 import { hasMembers, membersOf, type GroupKind } from "../lib/members";
-import { summaryLine, tidyContacts } from "../lib/groups";
+import { summaryLine, tidyLists } from "../lib/groups";
 import { groupRank } from "../lib/rights";
 import { usePerms } from "../lib/session";
 import { slugify, uniqueId } from "../lib/edit";
@@ -113,17 +113,8 @@ function usesOf(key: Key, id: string, processes: (Process | Standard)[]): Use[] 
 /** What uses something, counted by kind: "2 processes and 1 standard". */
 const countOf = (uses: Use[]) => docCount(uses.filter((u) => !("requirements" in u.process)).length, uses.filter((u) => "requirements" in u.process).length);
 
-const strip = (r: Row): Row => {
-  const out = Object.fromEntries(Object.entries(r).filter(([k, v]) => k === "id" || k === "name" || (typeof v === "string" && v.trim() !== ""))) as Row;
-  const contacts = tidyContacts(r.contacts); // how to reach a team, platform or practice: the empty details left out
-  return contacts ? { ...out, contacts } : out;
-};
-/** The lists without empty optional fields: what is compared with the saved lists, and saved. */
-const tidyCatalog = (c: Catalog): Catalog =>
-  ({
-    ...c, teams: c.teams.map(strip), practices: (c.practices ?? []).map(strip), platforms: (c.platforms ?? []).map(strip), categories: (c.categories ?? []).map(strip),
-    tools: c.tools.map(strip), tiers: c.tiers.map(strip), environments: c.environments.map(strip), languages: c.languages.map(strip),
-  }) as Catalog;
+/** The lists without empty optional fields: what is compared with the saved lists, and saved (`tidyLists`). */
+const tidyCatalog = tidyLists;
 
 /** The lists. Read-only it is a directory for everyone; editable it is the Lists section of the Admin panel. */
 export function CatalogPage({ processes, standards, editable: editor }: { processes: Process[]; standards: Standard[]; editable: boolean }) {

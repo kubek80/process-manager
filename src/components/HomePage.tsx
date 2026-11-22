@@ -3,7 +3,7 @@ import { ArrowRight, Compass, Eye, History, ShieldCheck, Workflow } from "lucide
 import type { Catalog, FeedbackByTarget, Process, Standard } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { sortBookmarks, useEngagement } from "../lib/engagement";
-import { canEdit, useMe, usePerms } from "../lib/session";
+import { canDraft, useMe, usePerms } from "../lib/session";
 import { agoText, mostViewed, recentlyUpdated, type MetaByKind } from "../lib/sorting";
 import { rememberedMode } from "../lib/meaning";
 import { go, href } from "../lib/store";
@@ -114,7 +114,7 @@ export function HomePage({ processes, standards, feedback, meta }: {
                 {(allMarked ? marked : marked.slice(0, FEW)).map((r) => (
                   <DocCard key={`${r.kind}:${r.doc.id}`} kind={r.kind} doc={r.doc} rigour={r.rigour} rules={r.rules} level={3}
                     openFeedback={openCount(feedback?.[r.kind]?.[r.doc.id] ?? [])} mayEdit={false}
-                    meta={canEdit(perms, r.kind, r.doc) ? meta?.[r.kind]?.[r.doc.id] : undefined} />
+                    meta={canDraft(perms, r.kind, r.doc) ? meta?.[r.kind]?.[r.doc.id] : undefined} />
                 ))}
               </ol>
               {marked.length > FEW && (

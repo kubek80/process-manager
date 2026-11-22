@@ -55,6 +55,14 @@ export const canManage = (p: Perms, kind: TargetKind, doc?: Belongs) =>
 /** May see it while it is a draft, and its unpublished changes. */
 export const seesDrafts = (p: Perms, kind: TargetKind, doc?: Belongs) => canManage(p, kind, doc) || canDraft(p, kind, doc);
 
+/**
+ * Who sees a draft (`seesDrafts`), in words for a sentence such as "Until it is published, only
+ * {draftAudience} see it.": the editors of its kind, the owners and members of its platform or
+ * practice, and the Owners of its team. One wording for every place that says it.
+ */
+export const draftAudience = (kind: TargetKind) =>
+  `the ${kind === "process" ? "process" : "standards"} editors, the owners and members of its platform or practice, and the Owners of its team`;
+
 /** Whether somebody is a member (not an owner) of some platform or practice. */
 export const isMember = (p: Perms) => (p.memberPlatforms ?? []).length > 0 || (p.memberPractices ?? []).length > 0;
 

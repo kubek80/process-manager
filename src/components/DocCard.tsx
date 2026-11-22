@@ -70,11 +70,11 @@ export interface DocCardProps {
   hits?: Hit[];
   words?: string[];
   openFeedback: number;
-  /** The reader may change it: they see whether it needs fixing. */
+  /** The reader may change it, if only as a draft (`canDraft`): they see whether it needs fixing. */
   mayEdit: boolean;
-  /** The reader looks after it (edits it, or owns its team): they see where its review stands. */
+  /** The reader looks after it (`canManage`: publishes it, or owns its team): they see where its review stands. Left out: `mayEdit` decides. */
   manages?: boolean;
-  /** What the server says about it: whether it has unpublished changes (sent only to its editors). */
+  /** What the server says about it: whether it has unpublished changes (sent only to whoever may change it, members of its platform or practice included). */
   meta?: DocMeta;
   /** It has errors (shown only to those who may change it). */
   broken?: boolean;
@@ -113,7 +113,7 @@ export function DocCard(props: DocCardProps) {
   const known = engagementKnown(useEngagement());
   const status = statusOf(doc);
   const fix = !!broken && mayEdit;
-  const groups = cardGroups(cardLines({ kind, doc, catalog, rigour, rules, mayEdit: mayEdit || !!manages, usedBy, dates: meta }));
+  const groups = cardGroups(cardLines({ kind, doc, catalog, rigour, rules, mayEdit: manages ?? mayEdit, usedBy, dates: meta }));
   const changes = !!meta?.draft && status !== "draft";
   const title = typeof doc.title === "string" && doc.title ? doc.title : doc.id;
   const category = doc.category ? catalog.categories.find((c) => c.id === doc.category)?.name ?? doc.category : NO_CATEGORY_LABEL;

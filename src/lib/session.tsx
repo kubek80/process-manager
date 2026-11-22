@@ -9,7 +9,7 @@ export const useMe = () => useContext(MeContext);
 export const usePerms = (): Perms => useContext(MeContext).perms ?? NO_PERMS;
 
 // the rights themselves are worked out in ./rights; these are here for the pages that import them from the session
-export { canCreate, canEdit, canManage, canOpenAdmin, editsAll, roleLabel } from "./rights";
+export { canCreate, canDraft, canEdit, canManage, canOpenAdmin, editsAll, roleLabel } from "./rights";
 
 /** Everything that can be done to feedback. Each action is saved on the server straight away. */
 export interface FeedbackActions {

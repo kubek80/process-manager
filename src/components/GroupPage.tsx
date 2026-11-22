@@ -5,7 +5,7 @@ import { docCount, useCatalog } from "../lib/catalog";
 import { belongsHeading, contactsOk, groupEntry, groupFilter, KIND_WORD, tidyContacts } from "../lib/groups";
 import { GROUP, hasMembers, type GroupKind } from "../lib/members";
 import { canChangeDetails, canManageMembers, groupRank } from "../lib/rights";
-import { canEdit, canManage, useMe, usePerms } from "../lib/session";
+import { canDraft, canManage, useMe, usePerms } from "../lib/session";
 import { sortResults, type MetaByKind } from "../lib/sorting";
 import { useListView } from "../lib/paging";
 import { usePrinting } from "../lib/media";
@@ -116,7 +116,7 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta }: {
             <>
               <ol className={`cards ${view === "rows" ? "rows" : ""}`.trim()}>
                 {shown.map((r) => {
-                  const edits = canEdit(perms, r.kind, r.doc);
+                  const edits = canDraft(perms, r.kind, r.doc);
                   const broken = edits && hasErrors(r.kind === "process" ? validateProcess(r.doc, ids) : validateStandard(r.doc, ids));
                   return (
                     <DocCard key={`${r.kind}:${r.doc.id}`} kind={r.kind} doc={r.doc} rigour={r.rigour} rules={r.rules} view={view} level={3}

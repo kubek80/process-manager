@@ -5,7 +5,7 @@ import { useCatalog } from "../lib/catalog";
 import { useEngagement } from "../lib/engagement";
 import { pageOf, sizeOf, useListView, usePageSize } from "../lib/paging";
 import { useProfile, useRemembered } from "../lib/profile";
-import { canEdit, canManage, useMe, usePerms } from "../lib/session";
+import { canDraft, canManage, useMe, usePerms } from "../lib/session";
 import { sortOf, sortResults, type MetaByKind, type SortKey } from "../lib/sorting";
 import { closestWanted, emptyWithFilters, noWordsText, otherWay, type ClosestOutcome, contentStamp, fromMeaning, fuse, markedWords, meaningHelp, modeLine, modeOf, needsServer, planOf, providerOf, rememberMode, SEARCH_MODES, truncatedText, typingMovesAddress, useMeaningSearch, type Found, type Provider, type SearchMode } from "../lib/meaning";
 import { go, href, type SearchState } from "../lib/store";
@@ -105,7 +105,8 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
   const sort: SortKey = sortOf(route.sort);
   // what stays in the address when something else changes: the page size and the order
   const keep = { ...(route.size ? { size: route.size } : {}), ...(sort ? { sort } : {}) };
-  const mayEdit = (kind: "process" | "standard", d: Process | Standard) => canEdit(perms, kind, d);
+  // who may change it, if only as a draft (a member of its platform or practice), sees whether it needs fixing
+  const mayEdit = (kind: "process" | "standard", d: Process | Standard) => canDraft(perms, kind, d);
   const manages = (kind: "process" | "standard", d: Process | Standard) => canManage(perms, kind, d);
 
   // search by meaning: offered when the server has it switched on (and has not switched it off since)

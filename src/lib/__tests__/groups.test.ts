@@ -186,3 +186,33 @@ describe("the owner line of a page head", () => {
   });
 });
 
+
+import { tidyLists } from "../groups";
+import { hasErrors, validateCatalog } from "../validate";
+
+describe("Admin › Lists saves how to reach a group", () => {
+  const withContacts = (contacts: Catalog["platforms"][number]["contacts"]): Catalog => {
+    const c = structuredClone(catalog) as Catalog;
+    c.platforms = c.platforms.map((p, i) => (i === 0 ? { ...p, contacts } : i === 1 ? { ...p, contacts: { slack: "#other" } } : p));
+    return c;
+  };
+  it("keeps the filled details and leaves an emptied one out", () => {
+    const filled = withContacts({ email: "cloud@example.com", slack: "#cloud", slackUrl: "https://chat.example.com/c", chat: "Cloud", page: "https://cloud.example.com" });
+    const cleared = withContacts({ ...filled.platforms[0].contacts, slack: "", chat: "  ", slackUrl: "", page: "" });
+    const saved = tidyLists(cleared);
+    expect(saved.platforms[0].contacts).toEqual({ email: "cloud@example.com" });
+    expect(saved.platforms[1].contacts).toEqual({ slack: "#other" }); // the others are not dropped
+    expect(hasErrors(validateCatalog(saved))).toBe(false);
+    expect(tidyLists(filled).platforms[0].contacts).toEqual(filled.platforms[0].contacts);
+  });
+  it("leaves the contact details out entirely when every field is cleared, with nothing to refuse", () => {
+    const saved = tidyLists(withContacts({ email: "", slack: "", slackUrl: "", chat: "", chatUrl: "", confluence: "", page: "", form: "" }));
+    expect("contacts" in saved.platforms[0]).toBe(false);
+    expect(saved.platforms[0].id).toBe(catalog.platforms[0].id);
+    expect(saved.platforms[0].name).toBe(catalog.platforms[0].name);
+    expect(hasErrors(validateCatalog(saved))).toBe(false);
+  });
+  it("is what the format refuses without it: an empty Slack channel", () => {
+    expect(hasErrors(validateCatalog(withContacts({ slack: "" })))).toBe(true);
+  });
+});

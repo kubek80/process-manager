@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { belongsChoice, belongsRefused, canChangeDetails, canCreate, canDraft, canEdit, canManage, canManageMembers, canOpenAdmin, canPublish, completePerms, editsAll, groupRank, isMember, newDocPlaces, NO_PERMS, placesOf, roleLabel, seesDrafts, wouldLoseEdit, wouldLosePublish } from "../rights";
+import { belongsChoice, belongsRefused, canChangeDetails, canCreate, canDraft, canEdit, canManage, canManageMembers, canOpenAdmin, canPublish, completePerms, draftAudience, editsAll, groupRank, isMember, newDocPlaces, NO_PERMS, placesOf, roleLabel, seesDrafts, wouldLoseEdit, wouldLosePublish } from "../rights";
 import type { Perms } from "../../types";
 
 const perms = (p: Partial<Perms>): Perms => ({ ...NO_PERMS, ...p });
@@ -218,5 +218,20 @@ describe("who manages the people and details of a group", () => {
     expect(canChangeDetails(jordan, "platform", "azure")).toBe(false);
     expect(canChangeDetails(morgan, "platform", "google-cloud")).toBe(false);
     expect(canChangeDetails(NO_PERMS, "team", "")).toBe(false);
+  });
+});
+
+describe("what the lists show a member about drafts", () => {
+  const morgan = perms({ memberPlatforms: ["google-cloud"] });
+  it("the cards' “Needs fixing” and unpublished changes follow canDraft; the review stays with whoever manages it", () => {
+    // DocList, SearchPage, GroupPage and Home's bookmarks decide the card's marks with canDraft,
+    // the review line with canManage (DocCard: `manages ?? mayEdit`)
+    expect(canDraft(morgan, "process", gcp)).toBe(true);
+    expect(canEdit(morgan, "process", gcp)).toBe(false);
+    expect(canManage(morgan, "process", gcp)).toBe(false);
+  });
+  it("says who sees a draft in one wording", () => {
+    expect(draftAudience("process")).toBe("the process editors, the owners and members of its platform or practice, and the Owners of its team");
+    expect(draftAudience("standard")).toMatch(/^the standards editors, /);
   });
 });

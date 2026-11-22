@@ -10,7 +10,7 @@ import {
 import { CatalogContext, EMPTY_CATALOG, useCatalog } from "./lib/catalog";
 import { EngagementProvider } from "./lib/engagement";
 import { canOpenAdmin, FeedbackContext, MeContext, usePerms, type FeedbackActions } from "./lib/session";
-import { belongsRefused, canDraft, editsAll, newDocPlaces } from "./lib/rights";
+import { belongsRefused, canDraft, draftAudience, editsAll, newDocPlaces } from "./lib/rights";
 import { blankProcess, blankStandard, slugify, tidy, tidyStandard, today, uniqueId, type BelongsTo } from "./lib/edit";
 import { CatalogPage } from "./components/CatalogPage";
 import { Library } from "./components/Library";
@@ -268,7 +268,7 @@ function NameDialog({ noun, from, onCreate, onClose }: {
     try { await onCreate(title.trim(), choice); } catch { setBusy(false); }
   };
   return (
-    <Modal title={`New ${noun}`} subtitle={`It starts as a draft that only the people who may change it see. You can change everything later, except its link.`} onClose={onClose}
+    <Modal title={`New ${noun}`} subtitle={`It starts as a draft: until it is published, only ${draftAudience(noun)} see it. You can change everything later, except its link.`} onClose={onClose}
       footer={<><span className="spacer" /><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!ok || busy} onClick={create}>Create {noun}</button></>}>
       <form className="form" onSubmit={(e) => { e.preventDefault(); create(); }}>
         <Field label={`Name of the ${noun}`} hint={slugify(title).length >= 3 ? `Address: …/${from?.id ?? slugify(title)}` : noun === "process" ? "For example: Request a database" : "For example: Secure logging"}>

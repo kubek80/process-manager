@@ -68,5 +68,28 @@ export function membersOf<T extends { email: string; role: string; scope: string
   return [...out.values()].sort((a, b) => a.email.localeCompare(b.email));
 }
 
+/** A person as the portal knows them: the address, and the name where the portal knows it. */
+export interface PersonRef { email: string; name?: string }
+
+/**
+ * How a person is shown in the app: by name where it is known, else by address. The one place
+ * that decides it; where a person is drawn as an element, the address is its tooltip (and its
+ * mail link).
+ */
+export const personLabel = (p: PersonRef) => p.name?.trim() || p.email;
+
+/**
+ * The names the portal knows, by lower-case address, from lists of people such as
+ * `GET /api/members` or the admin's users. An earlier list wins; an entry without a name adds nothing.
+ */
+export function knownNames(...lists: (readonly PersonRef[] | null | undefined)[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const list of lists) for (const p of list ?? []) {
+    const key = p.email.toLowerCase(), name = p.name?.trim();
+    if (name && !out[key]) out[key] = name;
+  }
+  return out;
+}
+
 /** Whether a text looks like an email address; the server has the last word. */
 export const looksLikeEmail = (text: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text.trim());

@@ -9,6 +9,7 @@ import { author, deletedSentence, goneDraftSentence, newerChangesLine, savedByTe
 import { formatDateTime } from "../lib/dates";
 import { cap } from "../lib/diff";
 import { useMe } from "../lib/session";
+import { draftAudience } from "../lib/rights";
 import { LoadError, Modal, notify, type NoticeAction } from "./ui";
 
 /** Shared by the pages that edit something: processes, standards and the lists. */
@@ -45,7 +46,7 @@ export function DraftLine({ meta, status, editHref, noun }: { meta?: DocMeta; st
     return (
       <p className="draft-line never" role="note">
         <PencilLine size={16} aria-hidden="true" />
-        <span><b>Draft</b> · Readers do not see this {noun} yet. Only the people who may change or look after it can open it.
+        <span><b>Draft</b> · Readers do not see this {noun} yet. Only {draftAudience(noun === "standard" ? "standard" : "process")} can open it.
           {/* changes that still have something to fix are kept on the editing screen, not shown here */}
           {meta?.draft && editHref ? ` ${newerChangesLine(meta.draft, myEmail)}` : ""}</span>
         {editHref && <a href={editHref}>Continue editing</a>}
@@ -341,7 +342,7 @@ export function HistoryDialog<T>({ kind, id, title, onRestore, onClose, draftKep
       setChanges((all) => ({ ...all, [v.version]: compare(kind, a, b, catalog) }));
     } catch (e) {
       const why = e instanceof ApiError && e.status === 404
-        ? "One of the two versions was a draft that only its editors can open, so there is nothing to compare."
+        ? "One of the two versions was a draft you cannot open, so there is nothing to compare."
         : `The comparison could not be loaded: ${e instanceof Error ? e.message : String(e)} Press “What changed” again to retry.`;
       setChanges((all) => (e instanceof ApiError && e.status === 404 ? { ...all, [v.version]: why } : all));
       if (!(e instanceof ApiError && e.status === 404)) { setOpen(null); setError(why); }

@@ -1,6 +1,6 @@
 import type { Feedback, FeedbackByTarget, Perms, Process, Standard, TargetKind } from "../types";
 import { reviewOf, statusOf, type Dates, type ReviewInfo } from "./lifecycle";
-import type { GroupKind } from "./members";
+import { personLabel, type GroupKind } from "./members";
 import { roleLine, type Groups, type UserRole } from "./users";
 
 /** A team, platform or practice somebody belongs to; `member`: only as a member (of a platform or practice), not as an owner. */
@@ -128,7 +128,7 @@ export function changedBy(email: string | undefined, names: Record<string, strin
   if (!email) return "";
   if (email === "import") return "Imported";
   if (email === "system") return "Updated by the portal";
-  return names[email.toLowerCase()] || email;
+  return personLabel({ email, name: names[email.toLowerCase()] });
 }
 
 /**

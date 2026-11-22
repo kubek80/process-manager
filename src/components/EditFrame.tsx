@@ -6,6 +6,7 @@ import {
 import type { Feedback, Issue } from "../types";
 import { type PublishLine, checkerSummary, DELETE_PAUSE, deleteReady, dropBefore, issueField, isExampleIssue, issueText, outlineCollapsed, outlineKey, type EditState, type IssueCount, type OutlineEntry } from "../lib/editing";
 import { useMe } from "../lib/session";
+import { draftAudience } from "../lib/rights";
 import { useMedia } from "../lib/media";
 import { TOUCH } from "../lib/zoom";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
@@ -772,7 +773,7 @@ export function PublishDialog({ noun, first, changes, version, blocked, onPublis
   };
   return (
     <Modal title={first ? `Publish this ${noun}` : "Publish your changes"}
-      subtitle={first ? `Until now only the people who may change it could see it.` : `Until you publish, readers see version ${version}.`}
+      subtitle={first ? `Until now only ${draftAudience(noun === "standard" ? "standard" : "process")} could see it.` : `Until you publish, readers see version ${version}.`}
       onClose={onClose}
       footer={<><span className="spacer" /><button className="btn" onClick={onClose}>Not yet</button>
         <button className="btn primary" disabled={!!blocked || busy} onClick={go} title={blocked}><Send size={15} />{busy ? "Publishing…" : "Publish"}</button></>}>

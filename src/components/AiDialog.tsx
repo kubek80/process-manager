@@ -6,6 +6,7 @@ import { extractJson, hasErrors } from "../lib/validate";
 import { download } from "../lib/store";
 import { issuePlace, issueText, publishLines } from "../lib/editing";
 import { useCatalog } from "../lib/catalog";
+import { draftAudience } from "../lib/rights";
 import { CopyButton, Modal } from "./ui";
 
 /** What the dialog needs to know about the kind of document it creates or changes. */
@@ -49,8 +50,8 @@ export function AiDialog<T extends { id: string; title: string }>({ spec, onImpo
       subtitle="Use any chat assistant you are allowed to use - Gemini, Copilot, ChatGPT or Claude. Nothing is sent anywhere by this app."
       footer={<>
         <span className="muted small">{ok ? (current ? "The result replaces your draft (Undo brings it back). You still have to press Save draft."
-          : replaces ? `A ${noun} “${result!.id}” exists already: this one is created next to it, as a draft that only editors see.`
-            : `The ${noun} is created as a draft that only editors see.`) : ""}</span>
+          : replaces ? `A ${noun} “${result!.id}” exists already: this one is created next to it, as a draft. Until it is published, only ${draftAudience(noun)} see it.`
+            : `The ${noun} is created as a draft. Until it is published, only ${draftAudience(noun)} see it.`) : ""}</span>
         <span className="spacer" />
         <button className="btn" onClick={onClose}>Cancel</button>
         <button className="btn primary" disabled={!ok} onClick={() => onImport(current ? { ...result!, id: current.id } : result!)}>

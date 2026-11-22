@@ -2,9 +2,9 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { ArrowLeft, Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash2, TriangleAlert, Undo2, UserCheck } from "lucide-react";
 import type { DocMeta, Issue, Membership, Process, Standard, TargetKind } from "../types";
 import { conflictOf, useDraft, type Conflict, type Draft } from "../lib/draft";
-import { author, baseBehindSentence, clock, draftKindOf, draftMovedOn, draftRevisionToSend, draftSaveBase, saveCallOf, statusChangedSentence, editState, exampleIssues, isExampleIssue, issueText, statusChangeBlocked, steppedMessage, movedItem, movedMessage, moveOf, publishList, savedByText, whoPublishesSentence, type DraftKind } from "../lib/editing";
+import { author, baseBehindSentence, clock, draftKindOf, draftMovedOn, draftRevisionToSend, draftSaveBase, saveCallOf, statusChangedSentence, editState, exampleIssues, isExampleIssue, issueText, statusChangeBlocked, steppedMessage, movedItem, movedMessage, moveOf, publishList, savedByText, partsText, whoPublishesParts, type DraftKind } from "../lib/editing";
 import { compare, describeChange, type Change } from "../lib/diff";
-import { belongsRefused, canPublish } from "../lib/rights";
+import { belongsRefused, canPublish, draftAudience } from "../lib/rights";
 import { membersOf } from "../lib/members";
 import { platformName, practiceName } from "../lib/catalog";
 import { useMe, usePerms } from "../lib/session";
@@ -18,6 +18,7 @@ import { BehindBanner, ChangeList, ConflictDialog, editNotice, EditingBoundary, 
 import { type BarAction, type MenuItem, type Panel, PublishDialog } from "./EditFrame";
 import { useBelongsWarning } from "./Governance";
 import { confirmDialog, LoadError, Loading, Modal, notify } from "./ui";
+import { SentenceParts } from "./PersonLink";
 
 // the JSON editor and the AI dialog are loaded when they are first opened
 const JsonView = lazy(() => import("./JsonView").then((m) => ({ default: m.JsonView }))) as typeof import("./JsonView").JsonView;
@@ -409,10 +410,13 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
     loadMembers().then((m) => { if (live) setOwners(m); }, () => { /* said without their names */ });
     return () => { live = false; };
   }, [mayPublish, owners]);
-  const publishRight = mayPublish ? "" : whoPublishesSentence(kind, ([
-    d.draft.platform ? { kind: "platform" as const, name: platformName(catalog, d.draft.platform), owners: owners ? membersOf(owners, "platform", d.draft.platform).map((m) => m.email) : [] } : null,
-    d.draft.practice ? { kind: "practice" as const, name: practiceName(catalog, d.draft.practice), owners: owners ? membersOf(owners, "practice", d.draft.practice).map((m) => m.email) : [] } : null,
+  // the owners by name where the portal knows it (`GET /api/members` gives it), the address as tooltip
+  const ownersOf = (k: "platform" | "practice", id: string) => (owners ? membersOf(owners, k, id).map((m) => ({ email: m.email, name: m.name })) : []);
+  const publishRightParts = mayPublish ? [] : whoPublishesParts(kind, ([
+    d.draft.platform ? { kind: "platform" as const, name: platformName(catalog, d.draft.platform), owners: ownersOf("platform", d.draft.platform) } : null,
+    d.draft.practice ? { kind: "practice" as const, name: practiceName(catalog, d.draft.practice), owners: ownersOf("practice", d.draft.practice) } : null,
   ]).filter((g) => !!g), unsaved ? "unsaved" : working || unpublished ? "saved" : "none", !!owners);
+  const publishRight = partsText(publishRightParts);
   const rightsBlock = refused ? "Put the platform or practice back as it was (under About)." : losing ? "Keep it with a platform or practice of yours (under About)." : "";
   const jsonBlock = jsonPending ? "The JSON has changes with problems. Fix them there first." : "";
   const firstError = issues.find((i) => i.level === "error");
@@ -540,7 +544,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
   const unpublish = async () => {
     const yes = await confirmDialog({
       title: `Unpublish this ${noun}?`,
-      body: <>Readers no longer find or open “{stored.title}”; links to it stop working for them. {kind === "process" ? "Its skill is" : "Its skills are"} withdrawn and search and AI agents no longer find it. It becomes a draft that only the people who may change or look after it can open, and you can publish it again later.</>,
+      body: <>Readers no longer find or open “{stored.title}”; links to it stop working for them. {kind === "process" ? "Its skill is" : "Its skills are"} withdrawn and search and AI agents no longer find it. It becomes a draft again: only {draftAudience(kind)} can open it, and you can publish it again later.</>,
       confirmLabel: "Unpublish", danger: true,
     });
     if (yes) await setStatus({ ...stored, status: "draft" }, "Unpublished", `Unpublished. Readers no longer see this ${noun}.`);
@@ -598,7 +602,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
       )}
       {saidMeanwhile && <div className="check warn banner" role="status"><TriangleAlert size={16} /><span>{saidMeanwhile}</span></div>}
       {losing && <div className="check warn banner" role="alert"><TriangleAlert size={16} /><span>{losing}</span></div>}
-      {publishRight && !losing && !refused && <div className="check info banner publish-right"><UserCheck size={16} /><span>{publishRight}</span></div>}
+      {publishRight && !losing && !refused && <div className="check info banner publish-right"><UserCheck size={16} /><span><SentenceParts parts={publishRightParts} /></span></div>}
     </>
   );
   const hasBanners = !!saidMeanwhile || (unpublished && d.behind && d.dirty && !d.conflict) || (unpublished ? draftMoved : d.behind && d.dirty) && !!working || (!isGone && !!working && !rebaseTo.current && !!baseBehindSentence(working.base, version)) || !!losing || !!publishRight;

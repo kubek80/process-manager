@@ -357,16 +357,28 @@ describe("the delete button after the selection changed", () => {
   });
 });
 
-import { peopleList, whoPublishesSentence } from "../editing";
+import { listParts, partsText, peopleList, whoPublishesParts, whoPublishesSentence } from "../editing";
 
 describe("who can publish what a member drafted", () => {
-  it("names the platform and practice with their owners", () => {
-    expect(whoPublishesSentence("process", [{ kind: "platform", name: "Google Cloud", owners: ["jordan@example.com"] }], "saved"))
-      .toBe("Only an owner of the platform “Google Cloud” (jordan@example.com), or a process editor, can publish this process. Your draft is saved for them.");
+  const jordan = { email: "jordan@example.com", name: "Jordan Platform" };
+  const ann = { email: "ann@example.com" };
+  it("names the platform and its one owner by name", () => {
+    expect(whoPublishesSentence("process", [{ kind: "platform", name: "Google Cloud", owners: [jordan] }], "saved"))
+      .toBe("Only an owner of the platform “Google Cloud”, or a process editor, can publish this process. “Google Cloud” is owned by Jordan Platform. Your draft is saved for them.");
+  });
+  it("reads well with two and with many owners, by address where no name is known", () => {
     expect(whoPublishesSentence("standard", [
-      { kind: "platform", name: "Google Cloud", owners: ["jordan@example.com", "ann@example.com"] },
+      { kind: "platform", name: "Google Cloud", owners: [jordan, ann] },
       { kind: "practice", name: "Engineering", owners: [] },
-    ], "unsaved")).toBe("Only an owner of the platform “Google Cloud” (jordan@example.com and ann@example.com) or of the practice “Engineering” (it has no owner yet), or a standards editor, can publish this standard. Save draft keeps your changes for them.");
+    ], "unsaved")).toBe("Only an owner of the platform “Google Cloud” or of the practice “Engineering”, or a standards editor, can publish this standard. “Google Cloud” is owned by Jordan Platform and ann@example.com; “Engineering” has no owner yet. Save draft keeps your changes for them.");
+    const many = ["a", "b", "c", "d", "e"].map((x) => ({ email: `${x}@example.com`, name: x.toUpperCase() }));
+    expect(whoPublishesSentence("process", [{ kind: "practice", name: "Engineering", owners: many }], "none"))
+      .toBe("Only an owner of the practice “Engineering”, or a process editor, can publish this process. “Engineering” is owned by A, B, C and 2 more. What you change and save as a draft waits for them.");
+  });
+  it("gives the people as parts, so the page can show each with the address as tooltip", () => {
+    const parts = whoPublishesParts("process", [{ kind: "platform", name: "Google Cloud", owners: [jordan, ann] }], "saved");
+    expect(parts.filter((p) => typeof p !== "string")).toEqual([jordan, ann]);
+    expect(partsText(parts)).toBe(whoPublishesSentence("process", [{ kind: "platform", name: "Google Cloud", owners: [jordan, ann] }], "saved"));
   });
   it("leaves the owners out while they are not known, and still names who can", () => {
     expect(whoPublishesSentence("process", [{ kind: "practice", name: "Engineering", owners: [] }], "saved", false))
@@ -376,7 +388,9 @@ describe("who can publish what a member drafted", () => {
   it("lists people briefly", () => {
     expect(peopleList([])).toBe("");
     expect(peopleList(["a"])).toBe("a");
+    expect(peopleList(["a", "b"])).toBe("a and b");
     expect(peopleList(["a", "b", "c"])).toBe("a, b and c");
     expect(peopleList(["a", "b", "c", "d", "e"])).toBe("a, b, c and 2 more");
+    expect(listParts([1, 2])).toEqual([1, " and ", 2]);
   });
 });

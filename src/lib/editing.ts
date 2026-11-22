@@ -2,6 +2,7 @@ import type { Catalog, Issue, Level, Process, Standard, Status, StepType, Target
 import { cap, compare, describeChange, fieldName, itemWords, type Change, type FieldContext } from "./diff";
 import { EXAMPLE } from "./edit";
 import { formatDateTime } from "./dates";
+import { personLabel, type PersonRef } from "./members";
 
 /**
  * The editing screen, as plain functions: which kind of draft a document has, what its state is
@@ -778,31 +779,59 @@ const movedBy = new WeakMap<object, string>();
 export const noteMove = (doc: object, id: string) => { movedBy.set(doc, id); };
 export const moveOf = (doc: unknown): string | undefined => (doc && typeof doc === "object" ? movedBy.get(doc) : undefined);
 
-/** A platform or practice a document belongs to, with the addresses of its owners, for `whoPublishesSentence`. */
-export interface PublishingGroup { kind: "platform" | "practice"; name: string; owners: string[] }
+/** A platform or practice a document belongs to, with its owners, for `whoPublishesSentence`. */
+export interface PublishingGroup { kind: "platform" | "practice"; name: string; owners: PersonRef[] }
+
+/**
+ * A short list of things with "and": "a", "a and b", "a, b and c", "a, b, c and 2 more". The
+ * parts in order, so that a page can draw each item as an element (`peopleList` for plain text).
+ */
+export function listParts<T>(items: readonly T[], most = 3): (T | string)[] {
+  const shown = items.slice(0, most), rest = items.length - shown.length;
+  const parts: (T | string)[] = rest > 0 ? [...shown, `${rest} more`] : [...shown];
+  if (parts.length <= 1) return parts;
+  const out: (T | string)[] = [];
+  parts.forEach((p, i) => {
+    if (i > 0) out.push(i === parts.length - 1 ? " and " : ", ");
+    out.push(p);
+  });
+  return out;
+}
 
 /** "a", "a and b", "a, b and c", "a, b, c and 2 more". */
-export function peopleList(people: string[], most = 3): string {
-  const shown = people.slice(0, most), rest = people.length - shown.length;
-  const parts = rest > 0 ? [...shown, `${rest} more`] : shown;
-  return parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
-}
+export const peopleList = (people: string[], most = 3): string => listParts(people, most).join("");
+
+/** A sentence in parts: text, and people a page may draw as elements (by name, the address as tooltip). */
+export type SentencePart = string | PersonRef;
+/** The text of a sentence in parts, each person by `personLabel`. */
+export const partsText = (parts: readonly SentencePart[]) => parts.map((p) => (typeof p === "string" ? p : personLabel(p))).join("");
 
 /**
  * Who can publish a document the person may only save drafts of (a member of its platform or
- * practice), in plain words, naming its platform and practice and their owners as far as they
- * are known (`owners` false: not loaded yet). `draft`: "saved" when the person's draft is saved,
- * "unsaved" while changes on the screen are not, "none" when there is no draft yet.
- * E.g. "Only an owner of the platform “Google Cloud” (jordan@example.com), or a process editor,
- * can publish this process. Your draft is saved for them."
+ * practice), in plain words, naming its platform and practice and then their owners, by name
+ * where it is known (`owners` false: not loaded yet, so the owners are left out). `draft`:
+ * "saved" when the person's draft is saved, "unsaved" while changes on the screen are not,
+ * "none" when there is no draft yet. E.g. "Only an owner of the platform “Google Cloud”, or a
+ * process editor, can publish this process. “Google Cloud” is owned by Jordan Platform. Your
+ * draft is saved for them."
  */
-export function whoPublishesSentence(kind: TargetKind, groups: PublishingGroup[], draft: "saved" | "unsaved" | "none", owners = true): string {
+export function whoPublishesParts(kind: TargetKind, groups: PublishingGroup[], draft: "saved" | "unsaved" | "none", owners = true): SentencePart[] {
   const editor = kind === "process" ? "a process editor" : "a standards editor";
-  const of = groups.map((g, i) => {
-    const who = !owners ? "" : g.owners.length ? ` (${peopleList(g.owners)})` : " (it has no owner yet)";
-    return `${i === 0 ? "an owner of" : "of"} the ${g.kind} “${g.name}”${who}`;
-  });
+  const of = groups.map((g, i) => `${i === 0 ? "an owner of" : "of"} the ${g.kind} “${g.name}”`);
   const whom = of.length ? `${of.join(" or ")}, or ${editor},` : editor;
+  const parts: SentencePart[] = [`Only ${whom} can publish this ${kind}.`];
+  if (owners) {
+    groups.forEach((g, i) => {
+      const last = i === groups.length - 1;
+      if (!g.owners.length) { parts.push(` “${g.name}” has no owner yet${last ? "." : ";"}`); return; }
+      parts.push(` “${g.name}” is owned by `, ...listParts(g.owners), last ? "." : ";");
+    });
+  }
   const tail = draft === "saved" ? "Your draft is saved for them." : draft === "unsaved" ? "Save draft keeps your changes for them." : "What you change and save as a draft waits for them.";
-  return `Only ${whom} can publish this ${kind}. ${tail}`;
+  parts.push(` ${tail}`);
+  return parts;
 }
+
+/** `whoPublishesParts` as plain text, for the checker's list and messages. */
+export const whoPublishesSentence = (kind: TargetKind, groups: PublishingGroup[], draft: "saved" | "unsaved" | "none", owners = true): string =>
+  partsText(whoPublishesParts(kind, groups, draft, owners));

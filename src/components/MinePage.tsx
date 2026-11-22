@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, Boxes, CalendarCheck, Check, CircleCheck, Compass, Flag, PencilLine, Users } from "lucide-react";
 import type { DocMeta, FeedbackByTarget, Process, Standard, TargetKind } from "../types";
 import { groupName, useCatalog } from "../lib/catalog";
 import { STATUS_LABEL } from "../lib/lifecycle";
 import { changedBy, groupKey, myGroups, responsibilities, reviewsDue, type Group, type Owned, type Task } from "../lib/responsibilities";
 import { useFeedbackActions, useMe, usePerms } from "../lib/session";
-import { href, type MetaById } from "../lib/store";
+import { href, loadMembers, type MetaById } from "../lib/store";
+import { knownNames } from "../lib/members";
+import type { Membership } from "../types";
 import { FEEDBACK_KINDS } from "./Feedback";
 import { KindTag } from "./marks";
 import "../mine.css";
@@ -65,15 +67,21 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
     try { await onReviewed(o.kind, o.doc.id); } finally { setBusy(null); }
   };
   const Icon = ({ o }: { o: Owned }) => <KindTag kind={o.kind} />;
-  // names the page knows, by email: the signed-in person, whoever gave feedback, whoever saved unpublished changes
+  // names the page knows, by email: the signed-in person, whoever saved unpublished changes, whoever
+  // gave feedback, and the people of teams, platforms and practices (`GET /api/members`)
   const me = useMe();
-  const names = useMemo(() => {
-    const out: Record<string, string> = {};
-    for (const list of [...Object.values(feedback.process), ...Object.values(feedback.standard)]) for (const f of list) if (f.author.email && f.author.name) out[f.author.email.toLowerCase()] = f.author.name;
-    for (const k of ["process", "standard"] as const) for (const m of Object.values(meta[k])) if (m.draft?.updatedByName) out[m.draft.updatedBy.toLowerCase()] = m.draft.updatedByName;
-    if (me.user) out[me.user.email.toLowerCase()] = me.user.name;
-    return out;
-  }, [feedback, meta, me.user]);
+  const [people, setPeople] = useState<Membership[]>([]);
+  useEffect(() => {
+    let live = true;
+    loadMembers().then((m) => { if (live) setPeople(m); }, () => { /* the addresses are shown instead */ });
+    return () => { live = false; };
+  }, []);
+  const names = useMemo(() => knownNames(
+    me.user ? [{ email: me.user.email, name: me.user.name }] : [],
+    (["process", "standard"] as const).flatMap((k) => Object.values(meta[k]).flatMap((m) => (m.draft ? [{ email: m.draft.updatedBy, name: m.draft.updatedByName }] : []))),
+    [...Object.values(feedback.process), ...Object.values(feedback.standard)].flat().flatMap((f) => (f.author.email ? [{ email: f.author.email, name: f.author.name }] : [])),
+    people,
+  ), [feedback, meta, me.user, people]);
 
   if (groups.length === 0) {
     return (

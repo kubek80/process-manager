@@ -5,7 +5,7 @@ import { useEngagement } from "../lib/engagement";
 import { needsReview } from "../lib/lifecycle";
 import { pageOf, sizeOf, useListView, usePageSize } from "../lib/paging";
 import { useProfile, useRemembered } from "../lib/profile";
-import { canEdit, canManage, useMe, usePerms } from "../lib/session";
+import { canDraft, canManage, useMe, usePerms } from "../lib/session";
 import { sortOf, useRememberedSort, sortResults, type SortKey } from "../lib/sorting";
 import { FILTER_LABEL, filterCount, filtersOf, profileOptions, rigourFilterName, rigourOptionLabel, search, toggleFilter, wordsOf, type FilterKey, type Filters, type Flag } from "../lib/search";
 import { go, parseRoute, type ListState } from "../lib/store";
@@ -65,7 +65,8 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
   const [view, setView] = useListView(me.user?.email);
   const [open, setOpen] = useState(false);
   const results = useRef<HTMLElement>(null);
-  const mayEdit = (d: Process | Standard) => canEdit(perms, kind, d);
+  // who may change it, if only as a draft (a member of its platform or practice), sees whether it needs fixing
+  const mayEdit = (d: Process | Standard) => canDraft(perms, kind, d);
   // who looks after it (edits it, or owns the team that maintains it) sees where its review stands
   const manages = (d: Process | Standard) => canManage(perms, kind, d);
 

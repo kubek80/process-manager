@@ -5,7 +5,7 @@ import { diamondPoints, L as L_FULL, L_COMPACT, layoutProcess } from "../lib/lay
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import { toolName, useCatalog } from "../lib/catalog";
 import { afterFit, fitWhole, hiddenEdges, isZoomWheel, laneChars, laneColumn, laneLabel, openingZoom, panHint, scrollForZoom, TOUCH, scrollToCentre, stepZoom, wheelZoom, wrapWords, zoomKey } from "../lib/zoom";
-import { useMedia } from "../lib/media";
+import { pageFontFamily, useFontsLoaded, useMedia } from "../lib/media";
 import { openCount } from "./Feedback";
 import { EntryIcon } from "./EntryIcon";
 import { scrollBehavior, TypeIcon } from "./ui";
@@ -46,6 +46,8 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   // when the drawing is small. HEADW is that column, in pixels.
   const narrow = useNarrowScreen();
   const touch = useMedia(TOUCH);
+  // the lane names are measured in the page's font: once a font arrives (Roboto under Theming), they are measured again
+  useFontsLoaded();
   const column = (z: number) => (bare ? 136 : laneColumn(z, narrow));
   const [zoom, setZoomState] = useState(1);
   const HEADW = column(zoom);
@@ -507,7 +509,8 @@ function laneFits(column: number, small: boolean, avatar: boolean, narrow = fals
   }
   const ctx = measurer;
   if (!ctx || typeof getComputedStyle === "undefined") return undefined;
-  const family = getComputedStyle(document.body).fontFamily || "sans-serif";
+  // the font the page is set in (Theming may choose Roboto); measured again once fonts arrive (`useFontsLoaded`)
+  const family = pageFontFamily();
   // the padding and type of the lane names (smaller on a phone: see detail.css)
   const room = column - (narrow ? 18 : small ? 20 : 24) - (avatar && !narrow ? 40 : 0) - 2;
   const size = small ? 11.5 : narrow ? 12.5 : 13.5;

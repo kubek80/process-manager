@@ -277,7 +277,7 @@ export function BelongsEditor({ kind, doc, saved, onChange }: {
   const belongs = (field: BelongsField, label: string, list: Row[]) => {
     const choice = belongsChoice(perms, kind, field, saved[field]);
     return (
-      <Field label={label} hint={choice === "locked" ? LOCKED_HINT : choice === "own" ? "you can pick one of yours" : "its owners may change it"}>
+      <Field label={label} hint={choice === "locked" ? LOCKED_HINT : choice === "own" ? "you can pick one of yours" : "its owners may change it, its members as drafts"}>
         {select(field, list, choice)}
       </Field>
     );

@@ -81,3 +81,20 @@ describe("the members of a team, a platform and a practice", () => {
     for (const bad of ["kim", "kim@", "@example.com", "kim@example", "kim lee@example.com", ""]) expect(looksLikeEmail(bad)).toBe(false);
   });
 });
+
+import { knownNames, personLabel } from "../members";
+
+describe("how a person is shown", () => {
+  it("by name where it is known, else by address", () => {
+    expect(personLabel({ email: "jordan@example.com", name: "Jordan Platform" })).toBe("Jordan Platform");
+    expect(personLabel({ email: "jordan@example.com", name: "  " })).toBe("jordan@example.com");
+    expect(personLabel({ email: "jordan@example.com" })).toBe("jordan@example.com");
+  });
+  it("collects the known names by address, the first list winning", () => {
+    expect(knownNames(
+      [{ email: "Jordan@example.com", name: "Jordan Platform" }, { email: "pat@example.com" }],
+      null,
+      [{ email: "jordan@example.com", name: "Other" }, { email: "pat@example.com", name: "Pat" }],
+    )).toEqual({ "jordan@example.com": "Jordan Platform", "pat@example.com": "Pat" });
+  });
+});

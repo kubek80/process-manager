@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, UserPlus } from "lucide-react";
 import type { Membership } from "../types";
-import { GROUP, looksLikeEmail, membersOf, OWNER_ROLE, type GroupKind, type GroupRank } from "../lib/members";
+import { GROUP, knownNames, looksLikeEmail, membersOf, OWNER_ROLE, personLabel, type GroupKind, type GroupRank } from "../lib/members";
+import { PersonLink } from "./PersonLink";
 import { canManageMembers } from "../lib/rights";
 import { useMe, usePerms } from "../lib/session";
 import { addGroupMember, grantAccess, loadAccess, loadUsers, removeGroupMember, revokeAccess, type Access } from "../lib/store";
@@ -20,27 +21,29 @@ export const ownerText = (kind: GroupKind) => `${OWNERS_DO[kind]}. They find thi
 export const MEMBERS_TEXT = "Members can create and change drafts here. An owner publishes them.";
 
 /**
- * The names of people, by address, where they can be known: an admin reads everybody's; everyone
- * knows their own. Anybody else is shown by address.
+ * The names of people, by address, where the portal knows them: `GET /api/members` gives them
+ * to everyone signed in; an admin also reads every user's; everyone knows their own. Anybody
+ * else is shown by address (`personLabel`).
  */
-function useNames(admin: boolean): (email: string) => string | undefined {
+function useNames(admin: boolean, members: Membership[] | null): (email: string) => string | undefined {
   const me = useMe();
-  const [names, setNames] = useState<Record<string, string>>({});
+  const [users, setUsers] = useState<{ email: string; name?: string }[]>([]);
   useEffect(() => {
     if (!admin) return;
-    loadUsers().then((users) => setNames(Object.fromEntries(users.filter((u) => u.name).map((u) => [u.email.toLowerCase(), u.name!]))), () => { /* the addresses are shown instead */ });
+    loadUsers().then(setUsers, () => { /* the addresses are shown instead */ });
   }, [admin]);
-  const mine = me.user?.email?.toLowerCase();
-  return (email: string) => names[email.toLowerCase()] ?? (email.toLowerCase() === mine ? me.user?.name : undefined);
+  const names = useMemo(() => knownNames(me.user ? [{ email: me.user.email, name: me.user.name }] : [], members, users), [me.user, members, users]);
+  return (email: string) => names[email.toLowerCase()];
 }
 
-/** One person of a group: by name where it is known, the address as its tooltip; "you" for the person signed in. */
+/** One person of a group: by name where it is known (`personLabel`), the address as tooltip and mail link; "you" for the person signed in. */
 function Person({ email, name, you, sub, action }: { email: string; name?: string; you?: boolean; sub?: React.ReactNode; action?: React.ReactNode }) {
+  const label = personLabel({ email, name });
   return (
     <li>
-      <span className="avatar" aria-hidden="true">{(name || email).slice(0, 1).toUpperCase()}</span>
+      <span className="avatar" aria-hidden="true">{label.slice(0, 1).toUpperCase()}</span>
       <span className="person">
-        <a href={`mailto:${email}`} title={email}><strong>{name || email}</strong></a>
+        <PersonLink person={{ email, name }}><strong>{label}</strong></PersonLink>
         {(you || sub) && <em>{you && "You"}{you && sub && " · "}{sub}</em>}
       </span>
       {action}
@@ -77,7 +80,8 @@ export function GroupMembers({ kind, id, name, rank = "owner", saved, manage, me
   const H = heading;
   const ownersByAdmin = rank === "owner" && manage && perms.admin;
   const membersByManager = rank === "member" && manage && kind !== "team" && canManageMembers(perms, kind, id);
-  const nameOf = useNames(perms.admin);
+  const nameOf = useNames(perms.admin, members);
+  const shown = (email: string) => personLabel({ email, name: nameOf(email) });
   const you = (email: string) => email.toLowerCase() === me.user?.email?.toLowerCase();
   const noun = GROUP[kind].noun;
   const roleName = rank === "owner" ? GROUP[kind].owner : GROUP[kind].member ?? GROUP[kind].owner;
@@ -127,7 +131,7 @@ export function GroupMembers({ kind, id, name, rank = "owner", saved, manage, me
     const remove = async (who: string) => {
       const ok = await confirmDialog({
         title: "Remove this member?",
-        body: <>{nameOf(who) || who} is no longer a {roleName.toLowerCase()} of “{name}”. They can no longer create or change drafts of what belongs to this {noun}, unless another role lets them. Their drafts stay. This takes effect at once.</>,
+        body: <>{shown(who)} is no longer a {roleName.toLowerCase()} of “{name}”. They can no longer create or change drafts of what belongs to this {noun}, unless another role lets them. Their drafts stay. This takes effect at once.</>,
         confirmLabel: "Remove", danger: true,
       });
       if (!ok) return;
@@ -171,7 +175,7 @@ export function GroupMembers({ kind, id, name, rank = "owner", saved, manage, me
   const remove = async (who: string) => {
     const ok = await confirmDialog({
       title: "Remove this owner?",
-      body: <>{nameOf(who) || who} is no longer {kind === "team" ? "an Owner" : `a ${roleName.toLowerCase()}`} of “{name}”. {kind === "team"
+      body: <>{shown(who)} is no longer {kind === "team" ? "an Owner" : `a ${roleName.toLowerCase()}`} of “{name}”. {kind === "team"
         ? "What the team maintains disappears from their responsibilities."
         : `They can no longer change or publish what belongs to this ${noun}, unless another role lets them.`} This takes effect at once.</>,
       confirmLabel: "Remove", danger: true,
@@ -196,7 +200,7 @@ export function GroupMembers({ kind, id, name, rank = "owner", saved, manage, me
           <ul className="people">
             {list.map((m) => (
               <Person key={m.email} email={m.email} name={nameOf(m.email)} you={you(m.email)}
-                sub={<>since {formatDate(m.grantedAt)}, added by <span title={m.grantedBy.includes("@") ? m.grantedBy : undefined}>{nameOf(m.grantedBy) || m.grantedBy}</span></>}
+                sub={<>since {formatDate(m.grantedAt)}, added by <span title={m.grantedBy.includes("@") ? m.grantedBy : undefined}>{shown(m.grantedBy)}</span></>}
                 action={<button className="icon-btn member-remove" aria-label={`Remove ${m.email} as ${roleName}`} title={`Remove from this ${noun}`} onClick={() => remove(m.email)}><Trash2 size={15} aria-hidden="true" /></button>} />
             ))}
           </ul>
