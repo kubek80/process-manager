@@ -11,7 +11,7 @@ export const signin: CodeCategory = {
     "One guard wraps every request: the security headers, the content security policy, a time limit, the request log, the body limit and the `X-Requested-With` header on every change.",
   requirements: [
     "Every request that is not GET, HEAD or OPTIONS needs `X-Requested-With: process-manager`, or it is refused with 403 before any handler runs.",
-    "Every answer carries the content security policy (`script-src 'self'`, no `eval`, `frame-ancestors 'none'`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: same-origin`; `Strict-Transport-Security` when `PM_BASE_URL` is https.",
+    "Every answer carries the content security policy (`script-src 'self'`, no `eval`, `frame-ancestors 'none'`; an icon a stricter one of its own), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: same-origin`; `Strict-Transport-Security` when `PM_BASE_URL` is https.",
     "The session cookie is HMAC-SHA256 signed, HTTP-only, SameSite=Lax, Secure when the address is https, and expires after 12 hours; a changed, expired or foreign cookie is no session.",
     "Signing out ends every session of the person on every device (table `signed_out`); only a session that still counts can do it, and a sign-in right after a sign-out still works.",
     "When the database cannot say whether a session was ended, the answer is 503: neither signed in nor signed out.",

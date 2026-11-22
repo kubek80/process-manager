@@ -97,7 +97,7 @@ export const formats: CodeCategory = {
   examples: [
     {
       title: "A save that does not fit its format",
-      caption: "A process saved with a status that does not exist and a step that points nowhere: what each check says.",
+      caption: "The sample process saved with a status that does not exist and its first step pointing nowhere: what each check says.",
       stages: [
         {
           label: "The body (abridged)",
@@ -113,7 +113,7 @@ export const formats: CodeCategory = {
         {
           label: "With the status fixed: the checker",
           where: "server/internal/docs/check.go",
-          shape: `400 {"error": "…: steps[0].next[0].to: …"}`,
+          shape: `400 {"error": "steps[0].next[0].to: This way on leads to a step that does not exist (“no-such-step”): choose where it goes."}`,
           note: "What a schema cannot say: that the step it points to exists. The same rules are errors in the app's checker (src/lib/validate.ts).",
         },
       ],

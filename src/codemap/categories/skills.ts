@@ -122,28 +122,42 @@ path in a repository: .claude/skills/process-request-gcp-project/SKILL.md`,
           where: "server/internal/skills/generate.go",
           shape: `---
 name: process-request-gcp-project
-description: "Follow the company process “Request a GCP project” on behalf of a person: Get a new Google Cloud project created by the project factory, … Use when someone asks for this, or asks how to get it."
+description: "Follow the company process “Request a GCP project” on behalf of a person: Get a new Google Cloud project created by the project factory, attached to the right folder and billing account, with your team as owners. Use when someone asks for this, or asks how to get it."
 ---
 
 # Process: Request a GCP project
 
-Get a new Google Cloud project created by the project factory, …
+Get a new Google Cloud project created by the project factory, attached to the right folder and billing account, with your team as owners.
 
 - Owner: Cloud Platform team (Group email: cloud-platform@example.com; Slack: #cloud-platform (https://example.slack.com/archives/C0CLOUDPLAT))
 - Category: Cloud
-- Platform: Google Cloud (Group email: …; Slack: …; Confluence: …; Request form: …)
+- Platform: Google Cloud (Group email: cloud-platform@example.com; Slack: #cloud-platform (…); Confluence: …; Request form: …)
 - Rigour: Mandatory - this is the only allowed way to get this done.
 - Applies to: all tiers; any language; all environments
 - Typical lead time: 3-5 working days
 
 ## How to use this skill
+
+You act for the person who needs the result. In the steps below they are **You**.
+…
+## Before you start
+…
+- Access to the project-factory repository - … If missing: follow the process “Request a repository” (skill \`process-request-github-repository\`).
 …
 ## Steps
 
 1. **You** - Decide the project details (task, 15 min)
    - Choose the environment: dev, test or prod.
    …
-   - Result: Name, environment, folder, budget`,
+   - Result: Name, environment, folder, budget
+2. **You** - Raise the 'New GCP project' request (subprocess, in ServiceNow)
+   …
+   - This step is the process “Raise a ServiceNow request”: follow the skill \`process-raise-servicenow-request\`.
+3. **Budget owner** - Approve the monthly budget (approval, up to 2 working days)
+…
+5. **Cloud Platform team** - Details complete? (decision)
+   - If “Yes”: go to step 7.
+   - If “No”: go to step 6.`,
           note: "Names come from the lists with how to reach them; the person's own steps carry their instructions, other participants' steps do not.",
         },
         {

@@ -268,6 +268,7 @@ CanDraft("process", stored) = true   → notPublisher{first: false}`,
         { text: "The path after symbolic links are resolved must stay inside the folder and pass the same allow-list; at most 400 KB of valid UTF-8 without NUL bytes.", at: "func readSource(root, p string) ([]byte, bool) {" },
         { text: "Every refusal is the same 404 answer, so nothing about the folder can be probed.", at: "sourceRefusedMessage = \"That file cannot be shown.\"" },
       ],
+      tests: ["server/internal/httpapi/source_test.go"],
     },
     {
       path: "src/lib/rights.ts",
