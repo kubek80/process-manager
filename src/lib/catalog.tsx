@@ -66,8 +66,10 @@ export function docCount(processes: number, standards: number): string {
 export function removeHint(usedBy: string, members: number, noun: string): string {
   const why: string[] = [];
   if (usedBy) why.push(`still used by ${usedBy}`);
-  if (members) why.push(`${members} ${members === 1 ? "person is" : "people are"} still ${members === 1 ? "a member" : "members"} of this ${noun}`);
+  // a team has Owners only; a platform and a practice have owners and members
+  const roles = noun === "team" ? "its Owners" : "its owners or members";
+  if (members) why.push(`${members} ${members === 1 ? `person is still one of ${roles}` : `people are still ${roles}`}`);
   if (!why.length) return "Nothing uses it, so it is safe to remove.";
   const first = why.join(", and ");
-  return `${first[0].toUpperCase()}${first.slice(1)}. ${usedBy ? "Change those first" : "Remove them from the members first"}${usedBy && members ? " and remove the members" : ""}, then it can be removed.`;
+  return `${first[0].toUpperCase()}${first.slice(1)}. ${usedBy ? "Change those first" : "Take their roles first"}${usedBy && members ? " and take their roles" : ""}, then it can be removed.`;
 }

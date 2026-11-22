@@ -188,7 +188,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
                 <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a>
                   <em>{changes ? "Changes" : "Draft"} by <PersonLink person={{ email: by!.email, name: by!.name || names[by!.email.toLowerCase()] }} />{changes ? ", saved " : ", "}<span className="nowrap">{day(by!.at ?? "")}</span>.{changes ? ` Readers still see version ${meta[o.kind][o.doc.id]?.version}.` : " Readers do not see it until you publish it."}</em></span>
                 <span className={`tier-tag ${changes ? "unpublished" : "status-draft"}`}>{changes ? "Unpublished changes" : "Draft"}</span>
-                <a className="btn small primary" href={editPage(o)}>Review and publish<ArrowUpRight size={13} /></a>
+                <a className="btn small" href={editPage(o)}>Review and publish<ArrowUpRight size={13} /></a>
               </li>
             ))}
           </ul>

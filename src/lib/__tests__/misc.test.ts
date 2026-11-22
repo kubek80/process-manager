@@ -238,8 +238,9 @@ describe("what uses an entry of the lists", () => {
   it("and its members keep it from being removed", () => {
     expect(removeHint("", 0, "platform")).toBe("Nothing uses it, so it is safe to remove.");
     expect(removeHint("1 process", 0, "team")).toBe("Still used by 1 process. Change those first, then it can be removed.");
-    expect(removeHint("", 2, "platform")).toBe("2 people are still members of this platform. Remove them from the members first, then it can be removed.");
-    expect(removeHint("1 standard", 1, "practice")).toBe("Still used by 1 standard, and 1 person is still a member of this practice. Change those first and remove the members, then it can be removed.");
+    expect(removeHint("", 2, "platform")).toBe("2 people are still its owners or members. Take their roles first, then it can be removed.");
+    expect(removeHint("1 standard", 1, "practice")).toBe("Still used by 1 standard, and 1 person is still one of its owners or members. Change those first and take their roles, then it can be removed.");
+    expect(removeHint("", 1, "team")).toBe("1 person is still one of its Owners. Take their roles first, then it can be removed.");
   });
 });
 
