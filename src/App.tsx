@@ -328,7 +328,7 @@ function SignedOutDialog({ me, onBack, onOther }: { me: Me; onBack: () => void; 
   return (
     <Modal title="You are signed out" subtitle="Nothing on this page is lost. Sign in again, then carry on where you were." closable={false} onClose={() => { /* stays until signed in */ }}
       footer={<>
-        <a className="btn" href={me.provider === "dev" ? "/" : "/auth/login"} target="_blank" rel="noreferrer">Sign in again (opens a new tab)</a>
+        <a className="btn" href={me.provider === "dev" ? "/" : "/auth/login"} target="_blank" rel="noopener noreferrer">Sign in again (opens a new tab)</a>
         <span className="spacer" />
         <button className="btn primary" disabled={checking} onClick={check}>I have signed in</button>
       </>}>

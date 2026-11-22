@@ -472,10 +472,14 @@ func (s *Store) Revoke(ctx context.Context, email, role, scope string) error {
 	})
 }
 
+// lockRolesKey is the advisory lock of the changes that take roles away. Advisory lock numbers
+// are shared by the whole database: no other package may use this one (see the db package).
+const lockRolesKey = 7461011
+
 // lockRoles serialises the changes that take roles away, so that two admins removing each
 // other at the same moment cannot both succeed and leave nobody.
 func lockRoles(ctx context.Context, tx pgx.Tx) error {
-	_, err := tx.Exec(ctx, `select pg_advisory_xact_lock(7461010)`)
+	_, err := tx.Exec(ctx, `select pg_advisory_xact_lock($1)`, int64(lockRolesKey))
 	return err
 }
 

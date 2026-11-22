@@ -201,7 +201,7 @@ export function PrereqGrid({ process, all, hasPre, tickPre, compact }: {
             <div>
               <strong>{q.title || "(no name yet)"}</strong>
               {q.description && !(compact && q.processId) && <p>{q.description}</p>}
-              {q.url && <a href={q.url} target="_blank" rel="noreferrer">More information<ArrowUpRight size={13} /></a>}
+              {q.url && <a href={q.url} target="_blank" rel="noopener noreferrer">More information<ArrowUpRight size={13} /></a>}
               {q.processId && (
                 <button className="prereq-link" onClick={() => src && go({ page: "process", id: src.id, tab: "flow" })} disabled={!src || !tickPre}>
                   <Workflow size={13} />{src ? <>Don’t have it? {src.title}</> : <>Process “{q.processId}” not described yet</>}
@@ -249,7 +249,7 @@ export function BeforeYouStart({ process, all, standards, open, onToggle, hasPre
             const K = RESOURCE_KINDS[r.kind ?? "other"];
             return (
               <li key={i} className={r.kind === "skill" ? "skill" : ""}>
-                <a href={r.url} target="_blank" rel="noreferrer" title={r.description ? `${K.label}: ${r.description}` : K.label}>
+                <a href={r.url} target="_blank" rel="noopener noreferrer" title={r.description ? `${K.label}: ${r.description}` : K.label}>
                   <K.icon size={14} aria-hidden="true" /><span className="sr-only">{K.label}: </span>{r.title}<ArrowUpRight size={13} aria-hidden="true" />
                 </a>
               </li>

@@ -24,7 +24,7 @@ export function StepBody({ step, process, all, onSelect, compact }: {
         </ol>
       )}
       {step.url && (
-        <a className="btn link-btn" href={step.url} target="_blank" rel="noreferrer">
+        <a className="btn link-btn" href={step.url} target="_blank" rel="noopener noreferrer">
           <ExternalLink size={15} />{step.urlLabel ?? "Open link"}
         </a>
       )}

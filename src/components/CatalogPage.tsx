@@ -340,7 +340,7 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                     <div key={f.field}>
                       <dt>{f.label}</dt>
                       <dd>{f.field === "url"
-                        ? <a className="btn link-btn" href={current.url} target="_blank" rel="noreferrer"><ExternalLink size={15} />Open {current.name}</a>
+                        ? <a className="btn link-btn" href={current.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} />Open {current.name}</a>
                         : current[f.field]}</dd>
                     </div>
                   ))}

@@ -346,7 +346,7 @@ function AskDialog({ processes, standards, requests, onVote, onSent, onClose }: 
               {similarDocs.map((d) => (
                 <li key={`d-${d.kind}-${d.id}`}>
                   <KindIcon kind={d.kind} />
-                  <a href={docHref(d.kind, d.id)} target="_blank" rel="noreferrer">{d.title}</a>
+                  <a href={docHref(d.kind, d.id)} target="_blank" rel="noopener noreferrer">{d.title}</a>
                   <span className="muted">{d.kind === "process" ? "Process" : "Standard"} · exists</span>
                 </li>
               ))}

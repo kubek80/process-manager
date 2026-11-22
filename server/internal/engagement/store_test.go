@@ -256,3 +256,74 @@ func TestReset(t *testing.T) {
 		t.Fatalf("numbers left: %v", counts)
 	}
 }
+
+// A bookmark or upvote of a document that is deleted while it is being written is either
+// removed with the document or not stored at all: never left for a new document under the same id.
+func TestBookmarksAndUpvotesDoNotOutliveTheirDocument(t *testing.T) {
+	s := store(t)
+	if err := s.SetBookmark(ctx, "sam@example.com", Process, "nope", true); !errors.Is(err, ErrNoDocument) {
+		t.Fatalf("a bookmark of nothing: %v", err)
+	}
+	if _, err := s.SetUpvote(ctx, "sam@example.com", Process, "nope", true); !errors.Is(err, ErrNoDocument) {
+		t.Fatalf("an upvote of nothing: %v", err)
+	}
+	// dropping and taking back always work
+	if err := s.SetBookmark(ctx, "sam@example.com", Process, "nope", false); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.SetUpvote(ctx, "sam@example.com", Process, "nope", false); err != nil || n != 0 {
+		t.Fatalf("%d %v", n, err)
+	}
+
+	for _, write := range []struct {
+		name string
+		do   func() error
+	}{
+		{"bookmark", func() error { return s.SetBookmark(ctx, "sam@example.com", Process, "p", true) }},
+		{"upvote", func() error { _, err := s.SetUpvote(ctx, "sam@example.com", Process, "p", true); return err }},
+	} {
+		if _, err := s.Pool.Exec(ctx, `insert into documents (kind, id, version, body, updated_by) values ($1, 'p', 1, '{"id": "p"}', 'test')
+			on conflict do nothing`, Process); err != nil {
+			t.Fatal(err)
+		}
+		// the delete is under way (document and its bookmarks and upvotes gone, not yet committed)
+		tx, err := s.Pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec(ctx, `delete from documents where kind = $1 and id = 'p'`, Process); err != nil {
+			t.Fatal(err)
+		}
+		if err := DeleteByTargetIn(ctx, tx, Process, "p"); err != nil {
+			t.Fatal(err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- write.do() }()
+		// the write either waits for the delete or (without the check) is already stored
+		deadline := time.Now().Add(5 * time.Second)
+		for waiting := false; !waiting && time.Now().Before(deadline); {
+			select {
+			case err := <-done:
+				done <- err
+				waiting = true
+			default:
+				if err := s.Pool.QueryRow(ctx, `select exists (select 1 from pg_stat_activity where wait_event_type = 'Lock' and query like '%for share%')`).Scan(&waiting); err != nil {
+					t.Fatal(err)
+				}
+				if !waiting {
+					time.Sleep(10 * time.Millisecond)
+				}
+			}
+		}
+		if err := tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-done; !errors.Is(err, ErrNoDocument) {
+			t.Fatalf("%s of a document deleted meanwhile: %v", write.name, err)
+		}
+		var left int
+		if err := s.Pool.QueryRow(ctx, `select (select count(*) from bookmarks) + (select count(*) from upvotes)`).Scan(&left); err != nil || left != 0 {
+			t.Fatalf("%s left behind: %d %v", write.name, left, err)
+		}
+	}
+}

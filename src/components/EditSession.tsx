@@ -375,7 +375,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
       if (!live) return;
       const newer = list.filter((v) => v.version > draftBase && !v.deleted && v.savedBy !== me);
       const names = [...new Set(newer.map((v) => savedByText(v)))];
-      setSince({ base: b, who: names.length === 1 ? names[0] : names.length ? "somebody else" : "somebody else" });
+      setSince({ base: b, who: names.length === 1 ? names[0] : "somebody else" });
     }, () => { /* the list is shown without the marks */ });
     return () => { live = false; };
   }, [dialog, draftBase, version]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -736,7 +736,7 @@ function PublishConflict({ kind, id, c, base, onMine, onTheirs, onClose }: {
   useEffect(() => {
     if (!c.version || !base) return;
     Promise.all([loadVersion<unknown>(kind, id, base), loadVersion<unknown>(kind, id, c.version)])
-      .then(([a, b]) => setChanges(compare(kind, a, b, catalog)), (e) => setChanges(e instanceof ApiError ? "failed" : "failed"));
+      .then(([a, b]) => setChanges(compare(kind, a, b, catalog)), () => setChanges("failed"));
   }, [kind, id, base, c.version]); // eslint-disable-line react-hooks/exhaustive-deps
   const run = (fn: () => Promise<unknown>) => async () => { setBusy(true); try { await fn(); } finally { setBusy(false); } };
   const who = author(c, useMe().user?.email);

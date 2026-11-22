@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { ALEX, fields, open, openEditor, outline, publish, readCatalog, readProcess, readWorkingDraft, save, saveDraft, signIn, unfold } from "./helpers";
 
-// Alex manages the lists: for him the Admin panel has the Lists section only.
+// Alex manages the lists: for him the Admin panel has the Lists, Skills and Health sections only.
 
 test.beforeEach(async ({ page }) => { await signIn(page, ALEX); });
 

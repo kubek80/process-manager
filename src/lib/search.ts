@@ -61,8 +61,9 @@ export interface SearchInput {
   q?: string;
   filters?: Filters;
   /**
-   * Which drafts may be shown: none (false), all (true), or those this says yes to - in editor
-   * mode, the drafts the person may edit, as in the libraries.
+   * Which drafts may be shown: none (false), all (true), or those this says yes to. The pages
+   * pass true: the server sends a person only the drafts they may see (there is no editor mode;
+   * what is shown follows rights alone).
    */
   drafts: boolean | ((kind: "process" | "standard", doc: Process | Standard) => boolean);
   /** "My application": only what applies to it, and of a standard only the requirements that do. */

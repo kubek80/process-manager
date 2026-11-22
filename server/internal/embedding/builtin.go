@@ -60,8 +60,8 @@ func (b builtin) vector(text string) []float32 {
 			continue
 		}
 		grams := len(r) - 2
-		// The parts of a word together count a little less than the word itself, and each
-		// part counts less the more parts there are.
+		// Each part gets 2 * 0.8 * weight / parts, so the parts of a word together count 1.6
+		// times the word itself, and each part counts less the more parts there are.
 		each := 0.8 * weight / float64(grams)
 		for i := 0; i < grams; i++ {
 			b.add(v, "g:"+string(r[i:i+3]), each*2)

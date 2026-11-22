@@ -69,11 +69,15 @@ func (e providerError) Error() string {
 func (e providerError) Is(target error) bool { return target == ErrProvider }
 func (e providerError) Unwrap() error        { return e.err }
 
-// Locks that keep several servers from doing the same work at once (the numbers continue those
-// of the db package). Each is held only for quick database work, never while the provider is asked.
+// Locks that keep several servers from doing the same work at once. Advisory lock numbers are
+// shared by the whole database, so each must be used by one package only (checked by
+// TestAdvisoryLockNumbersAreNotShared in the db package). Each is held only for quick database
+// work, never while the provider is asked.
 const (
+	// a session lock through db.WithLock
 	lockEnsure = 7461010
-	// per document, inside the transaction that writes its parts
+	// per document, inside the transaction that writes its parts: the seed of
+	// hashtextextended, like 7461 to 7465 in the other packages
 	lockDocSpace = 7466
 )
 
@@ -109,8 +113,8 @@ type Result struct {
 	ID    string  `json:"id"`
 	Score float64 `json:"score"`
 	Hits  []Hit   `json:"hits"` // best first, at most MaxHits
-	// Status is the document's status as stored now: "active" (also for an empty status) or
-	// "retired". Drafts are never returned.
+	// Status is the document's status as stored now (the body's "status"): "active" (also for an
+	// empty status) or "deprecated" (a retired document). Drafts are never returned.
 	Status string `json:"-"`
 }
 

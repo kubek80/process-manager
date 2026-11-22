@@ -23,8 +23,7 @@ import { markBackPath, StepFields } from "./StepFields";
 const stamp = (p: Process): Process => ({ ...p, updatedAt: today() });
 const NONE = new Set<string>();
 
-/** Who may not change a process is told so, with the way back. */
-/** Who may change a process or standard, for somebody who may not. */
+/** What somebody who may not change a process or standard is told: who can, and that members can save drafts. */
 export const noRightText = (noun: string) =>
   `You may not change this ${noun}. ${noun === "standard" ? "A standards editor" : "A process editor"} and the owners of its platform or practice can; the members of its platform or practice can save drafts of it for an owner to publish.`;
 

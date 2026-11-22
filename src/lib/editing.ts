@@ -10,8 +10,9 @@ import { personLabel, type PersonRef } from "./members";
  * checker's problems belong. The screens in components/Edit*.tsx wire these to React.
  *
  * Two kinds of "not published":
- * - a document that was never published (`status: "draft"`): saving it is an ordinary save,
- *   publishing it is an ordinary save with `status: "active"`;
+ * - a document that was never published (`status: "draft"`): saving it stores it as itself while
+ *   nothing is to fix and keeps it in its working draft otherwise (`saveCallOf`); publishing it
+ *   is an ordinary save with `status: "active"`;
  * - unpublished changes to a published document: a working draft kept beside it, saved with
  *   `PUT …/draft` and published with `POST …/publish`. Readers keep the published version.
  */

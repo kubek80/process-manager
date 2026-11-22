@@ -60,7 +60,7 @@ export const codemap: CodeCategory = {
         ],
       ),
       caption:
-        "The test walks `server`, `src`, `scripts`, `schema`, `e2e`, `deploy` and `.github/workflows` for source files (not tests, not the generated validators, not the category files themselves) and names each one that is missing. It cannot tell whether a sentence is still true: a reviewer reads each requirement against the line it is shown above.",
+        "The test walks `server` (Go without `_test.go`, and SQL), `src` (without `__tests__`, the generated validators and the category files themselves), `scripts`, `schema`, `e2e` (its tests included), `deploy` and `.github/workflows`, plus a few files at the root (`Dockerfile`, `package.json`, …), and names each one that is missing. It cannot tell whether a sentence is still true: a reviewer reads each requirement against the line it is shown above.",
     },
   ],
   files: [

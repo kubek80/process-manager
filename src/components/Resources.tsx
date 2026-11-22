@@ -18,7 +18,7 @@ export function Resources({ list, compact }: { list: Resource[]; compact?: boole
         const K = RESOURCE_KINDS[r.kind ?? "other"];
         return (
           <li key={i} className={r.kind === "skill" ? "skill" : ""}>
-            <a href={r.url} target="_blank" rel="noreferrer">
+            <a href={r.url} target="_blank" rel="noopener noreferrer">
               <span className="res-icon"><K.icon size={16} /></span>
               <span className="res-text">
                 <em>{K.label}</em>

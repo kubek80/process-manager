@@ -120,6 +120,15 @@ func (a *api) recordView(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]int{"views": views, "people": people})
 }
 
+// goneAsNotFound answers a document deleted between the check of what the caller may see and
+// the write like one that never existed.
+func goneAsNotFound(err error) error {
+	if errors.Is(err, engagement.ErrNoDocument) {
+		return docs.ErrNotFound
+	}
+	return err
+}
+
 // bookmark keeps or drops a process or standard for the caller. Dropping always works, also
 // for something that is gone or that the caller can no longer see.
 func (a *api) bookmark(on bool) http.HandlerFunc {

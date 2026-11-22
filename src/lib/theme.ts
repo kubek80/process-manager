@@ -6,7 +6,7 @@
 // for dark: the readable variant of each colour on the surfaces of that theme (text at least
 // 4.5:1 per WCAG, which also covers large marks and borders at 3:1), the ink on top of it, its
 // soft tint and its line colour. They are set as CSS custom properties on the root element
-// (`--theme-light-…`, `--theme-dark-…`); the token blocks in styles.css and lists.css read them,
+// (`--theme-light-…`, `--theme-dark-…`); the token blocks in styles.css read them,
 // falling back to the hand-tuned default look, and pick the light or the dark set by `data-theme`.
 // Nothing here builds style text or code at run time.
 
@@ -178,7 +178,7 @@ export type Semantic = keyof typeof SEMANTIC;
 /** The token (styles.css) of each state: success is --good, warning --warn, problem --bad, information --info. */
 export const STATE_TOKEN: Record<StatePart, Semantic | "info"> = { success: "good", warning: "warn", info: "info", problem: "bad" };
 const SEMANTIC_PART: Record<Semantic, StatePart> = { good: "success", warn: "warning", bad: "problem" };
-/** The default colours of the kinds in each theme (lists.css): what an unchosen kind looks like. */
+/** The default colours of the kinds in each theme (styles.css): what an unchosen kind looks like. */
 const KIND_DEFAULT = { process: { light: "#0f766e", dark: "#5eead4" }, standard: { light: "#6d28d9", dark: "#c4b5fd" } } as const;
 
 // ---------- the derived tokens
@@ -328,7 +328,7 @@ export function derive(look: Look): Derived {
 /** A colour as it is used in each theme: as text and as a fill. */
 interface InUse { text: Record<Mode, string>; fill: Record<Mode, string> }
 const both = (light: string, dark: string): InUse => ({ text: { light, dark }, fill: { light, dark } });
-/** The defaults of the look (styles.css, lists.css) where nothing was chosen. */
+/** The defaults of the look (styles.css) where nothing was chosen. */
 const DEFAULT_USE: Record<"brand" | "process" | "standard" | Semantic, InUse> = {
   brand: both("#4f46e5", "#8b8cf8"), process: both(KIND_DEFAULT.process.light, KIND_DEFAULT.process.dark), standard: both(KIND_DEFAULT.standard.light, KIND_DEFAULT.standard.dark),
   good: both(SEMANTIC.good.light, SEMANTIC.good.dark), warn: both(SEMANTIC.warn.light, SEMANTIC.warn.dark), bad: both(SEMANTIC.bad.light, SEMANTIC.bad.dark),

@@ -10,7 +10,7 @@ export const records: CodeCategory = {
     "The activity log of every change is `audit`; views, bookmarks, upvotes and skill downloads are `engagement`; requests are `requests`; feedback on steps and requirements is `feedback`, announced to the owning team by `notify`. " +
     "Admins read the activity log and the statistics; everybody else only sees counts, their own bookmarks and votes, and feedback and requests, never who viewed or downloaded what, and never anything about a draft they may not see.",
   requirements: [
-    "Every stored version of a document, every discard of a working draft, and every change of the lists, roles, the look, icons, requests (not votes), other people's feedback and skill guidance writes one activity log entry (saving a working draft does not); where the change is in a transaction, the entry is written in the same transaction (`audit.AddIn`).",
+    "Every version saved in the portal, every discard of a working draft, and every change of the lists, roles, the look, icons, requests (not votes), other people's feedback and skill guidance writes one activity log entry (saving a working draft does not; an import writes one `content.import` entry for all it stored); where the change is in a transaction, the entry is written in the same transaction (`audit.AddIn`).",
     "Every action the server writes needs words in `ACTION` in `src/lib/activity.ts` and in the list of its unit test.",
     "The activity log is read by admins only, newest first, in pages of at most 499.",
     "A view counts once per person, document and day (UTC); `people` counts each person once ever; a download once per person, skill and day.",
@@ -79,7 +79,7 @@ export const records: CodeCategory = {
       ],
       keys: ["primary key (id)", "index audit_log_at (at desc)", "index audit_log_actor (actor_email, id desc): the newest name of a person (migration 008)"],
       createdIn: "server/internal/db/migrations/002_content_roles_skills.sql",
-      writtenBy: ["server/internal/audit/audit.go", "server/internal/httpapi/content.go", "server/internal/httpapi/drafts.go", "server/internal/httpapi/groups.go", "server/internal/upgrade/lists.go", "server/cmd/server/main.go"],
+      writtenBy: ["server/internal/audit/audit.go", "server/internal/httpapi/api.go", "server/internal/httpapi/content.go", "server/internal/httpapi/drafts.go", "server/internal/httpapi/groups.go", "server/internal/upgrade/lists.go", "server/cmd/server/main.go"],
       readBy: ["server/internal/httpapi/admin.go", "server/internal/httpapi/users.go"],
       rules: ["Rows are only added, never changed or removed by the portal.", "It is also where people's names come from (`names` in `users.go`)."],
     },
@@ -103,7 +103,7 @@ export const records: CodeCategory = {
       keys: ["primary key (id)", "check kind in ('broken', 'outdated', 'unclear', 'idea')", "index feedback_target (target_kind, target_id)"],
       createdIn: "server/internal/db/migrations/001_feedback.sql",
       writtenBy: ["server/internal/feedback/store.go"],
-      readBy: ["server/internal/engagement/store.go"],
+      readBy: ["server/internal/feedback/store.go", "server/internal/engagement/store.go", "server/internal/httpapi/users.go"],
       rules: ["Only written for a document that exists: its row is held while the item is stored.", "Deleted with its document, in the same transaction."],
     },
     {
@@ -214,6 +214,7 @@ export const records: CodeCategory = {
       keys: ["primary key (id)", "check state in ('open', 'planned', 'done', 'declined')", "index requests_requester (requested_by_email, created_at)"],
       createdIn: "server/internal/db/migrations/005_engagement_requests.sql",
       writtenBy: ["server/internal/requests/store.go"],
+      readBy: ["server/internal/requests/store.go", "server/internal/engagement/store.go", "server/internal/httpapi/users.go"],
     },
     {
       name: "request_votes",

@@ -15,7 +15,7 @@ type content struct {
 	summary, scope string
 	steps          map[string]string // step id -> description, else instructions, else outcome
 	requirements   map[string]string // requirement id -> statement
-	prerequisites  []string          // description, else title
+	prerequisites  []string          // description only (empty when it has none)
 }
 
 func readContent(kind string, body []byte) content {

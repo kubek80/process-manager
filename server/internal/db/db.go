@@ -19,6 +19,8 @@ import (
 var migrations embed.FS
 
 // Locks that make starting several instances at once safe. Each is held for the whole step.
+// Advisory lock numbers are shared by the whole database: a number is used by one package
+// only (TestAdvisoryLockNumbersAreNotShared).
 const (
 	lockMigrate = 7461001
 	LockPrepare = 7461002 // filling an empty database and regenerating the skills
@@ -143,9 +145,11 @@ func Latest() int {
 	return latest
 }
 
-// Current checks, without changing anything, that the database has every migration of this
-// version: for a program that reads the database but does not upgrade it (the MCP server).
-// ErrBehind (wrapped, with a plain explanation) when it does not.
+// Current checks, without changing anything, that the newest migration recorded in the database
+// (the highest number in schema_migrations) is at least the newest migration file of this
+// version; it does not check that every earlier one is recorded. For a program that reads the
+// database but does not upgrade it (the MCP server). ErrBehind (wrapped, with a plain
+// explanation) when it is older.
 func Current(ctx context.Context, pool *pgxpool.Pool) error {
 	var exists bool
 	if err := pool.QueryRow(ctx, `select to_regclass('schema_migrations') is not null`).Scan(&exists); err != nil {

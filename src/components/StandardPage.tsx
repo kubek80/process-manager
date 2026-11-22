@@ -239,7 +239,7 @@ export function StandardIntro({ standard, processes, helpers, background }: { st
               const K = RESOURCE_KINDS[r.kind ?? "other"];
               return (
                 <li key={i} className={r.kind === "skill" ? "skill" : ""}>
-                  <a href={r.url} target="_blank" rel="noreferrer" title={r.description ? `${K.label}: ${r.description}` : K.label}>
+                  <a href={r.url} target="_blank" rel="noopener noreferrer" title={r.description ? `${K.label}: ${r.description}` : K.label}>
                     <K.icon size={14} aria-hidden="true" /><span><span className="sr-only">{K.label}: </span>{r.title}</span><ArrowUpRight size={13} aria-hidden="true" />
                   </a>
                   {r.description && <p>{r.description}</p>}
