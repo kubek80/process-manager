@@ -29,7 +29,8 @@ const (
 	ViaExport   = "export"
 )
 
-// ErrNoDocument: what was to be counted is not (or no longer) a stored process or standard.
+// ErrNoDocument: what was to be counted, bookmarked or upvoted is not (or no longer) a stored
+// process or standard.
 var ErrNoDocument = errors.New("the document does not exist")
 
 // Key names one process or standard.
@@ -160,27 +161,40 @@ func (s *Store) CountDownload(ctx context.Context, skillID, kind, id, email, via
 	return counted, err
 }
 
-// SetBookmark keeps or drops a document for one person. Repeating it changes nothing.
+// SetBookmark keeps or drops a document for one person. Repeating it changes nothing. Keeping
+// one is stored only while the document exists (ErrNoDocument otherwise), like a view; dropping
+// always works.
 func (s *Store) SetBookmark(ctx context.Context, email, kind, id string, on bool) error {
-	q := `delete from bookmarks where email = $1 and kind = $2 and id = $3`
-	if on {
-		q = `insert into bookmarks (email, kind, id) values ($1, $2, $3) on conflict do nothing`
-	}
-	_, err := s.Pool.Exec(ctx, q, Norm(email), kind, id)
-	return err
+	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		q := `delete from bookmarks where email = $1 and kind = $2 and id = $3`
+		if on {
+			if err := held(ctx, tx, kind, id); err != nil {
+				return err
+			}
+			q = `insert into bookmarks (email, kind, id) values ($1, $2, $3) on conflict do nothing`
+		}
+		_, err := tx.Exec(ctx, q, Norm(email), kind, id)
+		return err
+	})
 }
 
 // SetUpvote gives or takes back the vote of one person and returns the votes of the document.
-func (s *Store) SetUpvote(ctx context.Context, email, kind, id string, on bool) (int, error) {
-	q := `delete from upvotes where email = $1 and kind = $2 and id = $3`
-	if on {
-		q = `insert into upvotes (email, kind, id) values ($1, $2, $3) on conflict do nothing`
-	}
-	if _, err := s.Pool.Exec(ctx, q, Norm(email), kind, id); err != nil {
-		return 0, err
-	}
-	var n int
-	err := s.Pool.QueryRow(ctx, `select count(*) from upvotes where kind = $1 and id = $2`, kind, id).Scan(&n)
+// A vote is given only while the document exists (ErrNoDocument otherwise), like a view; taking
+// it back always works.
+func (s *Store) SetUpvote(ctx context.Context, email, kind, id string, on bool) (n int, err error) {
+	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		q := `delete from upvotes where email = $1 and kind = $2 and id = $3`
+		if on {
+			if err := held(ctx, tx, kind, id); err != nil {
+				return err
+			}
+			q = `insert into upvotes (email, kind, id) values ($1, $2, $3) on conflict do nothing`
+		}
+		if _, err := tx.Exec(ctx, q, Norm(email), kind, id); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, `select count(*) from upvotes where kind = $1 and id = $2`, kind, id).Scan(&n)
+	})
 	return n, err
 }
 

@@ -135,7 +135,7 @@ func (a *api) bookmark(on bool) http.HandlerFunc {
 			return
 		}
 		if err := a.Engagement.SetBookmark(r.Context(), who(r).Email, kind, id, on); err != nil {
-			a.fail(w, r, err)
+			a.fail(w, r, goneAsNotFound(err))
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -163,7 +163,7 @@ func (a *api) upvote(on bool) http.HandlerFunc {
 		}
 		n, err := a.Engagement.SetUpvote(r.Context(), who(r).Email, kind, id, on)
 		if err != nil {
-			a.fail(w, r, err)
+			a.fail(w, r, goneAsNotFound(err))
 			return
 		}
 		if !visible {
