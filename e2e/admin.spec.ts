@@ -90,7 +90,7 @@ test("an admin gives someone a role and it takes effect at once", async ({ page,
   await expect(log.nth(2)).toContainText("Dana Admin changed the roles of Sam Consumer");
   // people by name, the address as tooltip
   await expect(log.nth(2).locator("b", { hasText: "Dana Admin" })).toHaveAttribute("title", "dana@example.com");
-  await expect(log.nth(2)).toContainText("added Practice owner for the practice Engineering");
+  await expect(log.nth(2)).toContainText("· added Practice owner for Engineering");
 });
 
 test("mistakes when giving a role are explained", async ({ page }) => {

@@ -122,11 +122,11 @@ export const versionFlow = flow("guide-versions", "Two people edit the same draf
     s("stored", "Keep it as the draft", "app", "automation", [], "readers see nothing yet"),
   ]);
 
-export const changeFlow = flow("guide-change", "The life of a change", "From pressing Edit to readers seeing the new version.",
+export const changeFlow = flow("guide-change", "The life of a change", "From pressing Edit to readers seeing the new version, for whoever may publish it.",
   [["app", "Process Manager"], ["readers", "Readers"]],
   [
     s("edit", "Press Edit and change it", "me", "task", ["save"], "on the editing screen"),
-    s("save", "Save draft", "me", "task", ["ready"], "only editors see it"),
+    s("save", "Save draft", "me", "task", ["ready"], "readers do not see it"),
     s("ready", "Ready for readers?", "me", "decision", [["publish", "Yes"], ["edit", "Not yet"], ["discard", "Drop it"]]),
     s("discard", "Discard draft", "me", "task", [], "readers keep theirs"),
     s("publish", "Publish, with a note", "me", "form", ["newer"], "once nothing is left to fix"),
@@ -135,10 +135,10 @@ export const changeFlow = flow("guide-change", "The life of a change", "From pre
     s("live", "See the new version", "readers", "task", [], "skills and search follow"),
   ], "Editor");
 
-export const themeFlow = flow("guide-theme", "Change the look of the portal", "How an admin gives the portal its name, logo and colours.",
+export const themeFlow = flow("guide-theme", "Change the look of the portal", "How an admin gives the portal its name, logo, colours and font.",
   [["app", "Process Manager"], ["everyone", "Everyone"]],
   [
-    s("choose", "Choose name, logo and colours", "me", "form", ["adjust"], "Admin › Theming"),
+    s("choose", "Choose name, logo, colours, font", "me", "form", ["adjust"], "Admin › Theming"),
     s("adjust", "Keep the colours readable", "app", "automation", ["look"], "and warn in plain words"),
     s("look", "Look at the preview", "me", "review", ["save"], "light and dark side by side"),
     s("save", "Save for everyone", "me", "task", ["store"]),
@@ -151,12 +151,27 @@ export const rightsFlow = flow("guide-rights", "Who may change a process or stan
   [
     s("open", "Open a process or standard", "me", "task", ["editor"]),
     s("editor", "Admin, process or standards editor?", "app", "decision", [["change", "Yes"], ["owns", "No"]]),
-    s("owns", "Owner of its platform or practice?", "app", "decision", [["change", "Yes"], ["team", "No"]]),
-    s("team", "Member of its owning team?", "app", "decision", [["manage", "Yes"], ["read", "No"]]),
+    s("owns", "Owner of its platform or practice?", "app", "decision", [["change", "Yes"], ["member", "No"]]),
+    s("member", "Member of its platform or practice?", "app", "decision", [["draft", "Yes"], ["team", "No"]]),
+    s("team", "Owner of its owning team?", "app", "decision", [["manage", "Yes"], ["read", "No"]]),
     s("change", "Edit, publish or delete it", "me", "document", [], "also create, review, feedback"),
+    s("draft", "Write drafts for an owner", "me", "document", [], "also create new ones there"),
     s("manage", "Confirm reviews, answer feedback", "me", "review", [], "and open its drafts"),
     s("read", "Read it and give feedback", "me", "task", []),
   ]);
+
+/** A member of a platform or practice writes, an owner publishes. */
+export const memberFlow = flow("guide-member", "A member writes, an owner publishes", "How a draft by a member of a platform or practice reaches readers.",
+  [["app", "Process Manager"], ["owner", "Owner of the platform"], ["readers", "Readers"]],
+  [
+    s("write", "Write it and press Save draft", "me", "document", ["wait"], "Publish… is not for you"),
+    s("wait", "List it for the owners", "app", "automation", ["read"], "Waiting for you to publish"),
+    s("read", "Review and publish", "owner", "review", ["ready"], "on the editing screen"),
+    s("ready", "Ready for readers?", "owner", "decision", [["publish", "Yes"], ["change", "Not yet"]]),
+    s("change", "Change what is needed", "owner", "document", ["publish"], "or ask the member"),
+    s("publish", "Publish, with a note", "owner", "form", ["live"], "names whose changes"),
+    s("live", "See the new version", "readers", "task", []),
+  ], "Member");
 
 export const requestFlow = flow("guide-request", "Ask for a missing process or standard", "How a request for something missing becomes a process or standard, or is declined with a reason.",
   [["others", "Colleagues"], ["maker", "Whoever could create it"]],

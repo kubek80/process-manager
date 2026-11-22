@@ -50,7 +50,7 @@ test("a platform owner cannot change what belongs to neither of his groups; the 
   await expect(page.getByRole("tab", { name: "JSON" })).toHaveCount(0);
   // the editing screen, opened by its address, tells him so
   await open(page, `/p/${AZURE}/edit`);
-  await expect(page.getByText("You may not change this process. Its editors, and the owners of its platform or practice, can.")).toBeVisible();
+  await expect(page.getByText("You may not change this process. A process editor and the owners of its platform or practice can; the members of its platform or practice can save drafts of it for an owner to publish.")).toBeVisible();
   await expect(page.locator(".edit-bar")).toHaveCount(0);
   await open(page, `/s/${LOGGING}/doc`);
   await expect(page.locator(".req").first()).toBeVisible();
@@ -128,7 +128,7 @@ test("a platform that is not his stays as it is on a document of his practice", 
   const platform = modal.getByLabel(/^Platform/);
   await expect(platform).toBeDisabled();
   await expect(platform).toHaveValue("github");
-  await expect(modal.locator("label.field", { has: page.locator("select:disabled") })).toContainText("PlatformOnly its owners or an editor can change this");
+  await expect(modal.locator("label.field", { has: page.locator("select:disabled") })).toContainText("PlatformOnly its owners and members, or an editor, can change this");
   // the practice is his: he may keep or clear it, but only pick his own
   await expect(modal.getByLabel(/^Practice/)).toBeEnabled();
   await expect(modal.getByLabel(/^Practice/).locator("option")).toHaveText(["None", "Engineering"]);

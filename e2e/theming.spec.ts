@@ -346,3 +346,165 @@ test("“Dark” for new visitors: a fresh browser gets it, a person's own choic
   await section(page).getByRole("button", { name: "Show me what new visitors see" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
+
+// ---------- the colours of buttons and states, and the font
+
+/** What a CSS value of a token comes to in the page right now (as a colour), read with a probe inside `within`. */
+async function tokenColour(page: Page, prop: "color" | "background-color", token: string, within = "body") {
+  return page.evaluate(({ prop, token, within }) => {
+    const probe = document.createElement("span");
+    probe.style.setProperty(prop, `var(${token})`);
+    document.querySelector(within)!.appendChild(probe);
+    const c = getComputedStyle(probe).getPropertyValue(prop);
+    probe.remove();
+    return c;
+  }, { prop, token, within });
+}
+/** A box drawn with the app's own classes, for the states that only appear in particular moments. */
+async function stateBoxes(page: Page) {
+  await page.evaluate(() => {
+    const box = document.createElement("div");
+    box.id = "probe-states";
+    box.innerHTML = '<div class="check good">Saved</div><div class="check warn">Review due</div><div class="check bad">1 to fix</div><div class="check info">Readers still see version 1</div>';
+    document.querySelector(".page")!.appendChild(box);
+  });
+}
+const CHOSEN = { mainButton: "#5b21b6", otherButtons: "#0f766e", success: "#0b6e2e", warning: "#8a4b00", info: "#1d4ed8", problem: "#9b1c1c" };
+
+test("the colours of buttons and states reach the app, in light and dark; “Back to the default” restores", async ({ page, browser }) => {
+  test.setTimeout(90_000);
+  /** The colours of real buttons and of the state boxes, each with the token it must follow. */
+  const measure = async (p: Page) => {
+    await p.goto("/#/processes");
+    const main = p.getByRole("button", { name: "New process", exact: true });
+    const other = p.getByRole("button", { name: "Create from text with AI" });
+    await expect(main).toBeVisible();
+    await stateBoxes(p);
+    const style = (l: ReturnType<Page["locator"]>, prop: string) => l.evaluate((e, prop) => getComputedStyle(e).getPropertyValue(prop), prop);
+    return {
+      main: [await style(main, "background-color"), await tokenColour(p, "background-color", "--action-fill")],
+      otherText: [await style(other, "color"), await tokenColour(p, "color", "--action-other")],
+      otherLine: [await style(other, "border-top-color"), await tokenColour(p, "color", "--action-other-line")],
+      success: [await style(p.locator("#probe-states .check.good"), "color"), await tokenColour(p, "color", "--good")],
+      warning: [await style(p.locator("#probe-states .check.warn"), "color"), await tokenColour(p, "color", "--warn")],
+      problem: [await style(p.locator("#probe-states .check.bad"), "color"), await tokenColour(p, "color", "--bad")],
+      info: [await style(p.locator("#probe-states .check.info"), "color"), await tokenColour(p, "color", "--info")],
+    };
+  };
+  const looks: Record<string, Record<string, string[]>> = {};
+  for (const mode of ["light", "dark"] as const) {
+    const v = await visitor(browser, ALEX, { own: mode });
+    looks[`default-${mode}`] = await measure(v.page);
+    await v.close();
+  }
+  await putLook(page.request, CHOSEN);
+  for (const mode of ["light", "dark"] as const) {
+    const v = await visitor(browser, ALEX, { own: mode });
+    await v.page.goto("/#/processes");
+    await expect(v.page.locator("html")).toHaveAttribute("data-theme", mode);
+    const now = await measure(v.page);
+    for (const [part, [element, token]] of Object.entries(now)) {
+      expect(element, `${part} follows its token (${mode})`).toBe(token);
+      expect(element, `${part} changed from the default (${mode})`).not.toBe(looks[`default-${mode}`][part][0]);
+    }
+    // in the light look the chosen colours are used as they are where they are readable
+    if (mode === "light") {
+      expect(rgbOf(now.main[0])).toEqual(hexToRgb(CHOSEN.mainButton));
+      expect(rgbOf(now.otherText[0])).toEqual(hexToRgb(CHOSEN.otherButtons));
+    }
+    await v.close();
+  }
+
+  // Back to the default, colour by colour, on the Theming page
+  await openTheming(page);
+  for (const label of ["Main buttons", "Other buttons", "Success", "Warning", "Information", "Problem"]) {
+    await section(page).getByRole("button", { name: `${label}: back to the default` }).click();
+    await expect(section(page).getByRole("button", { name: `${label}: back to the default` })).toHaveCount(0);
+  }
+  await expect(section(page).locator(".color-field", { hasText: "Main buttons" })).toContainText("Follows the brand");
+  await expect(section(page).locator(".color-field", { hasText: "Other buttons" })).toContainText("Neutral");
+  await saveForEveryone(page);
+  expect((await stored(page.request)).look).toEqual({});
+  const v = await visitor(browser, ALEX, { own: "light" });
+  const back: Record<string, string[]> = await measure(v.page);
+  for (const part of Object.keys(back)) expect(back[part][0], part).toBe(looks["default-light"][part][0]);
+  await v.close();
+});
+
+test("warnings: main buttons like success; a careless look counts its warnings and asks once on Save", async ({ page }) => {
+  await openTheming(page);
+  const field = (label: string) => section(page).locator(".color-field", { has: page.getByText(label, { exact: true }) });
+  const code = (label: string) => field(label).getByRole("textbox", { name: /as a code/ });
+  await code("Success").fill("#15803d");
+  await code("Main buttons").fill("#15803d");
+  await expect(field("Main buttons").locator(".color-note.warn", { hasText: "Main buttons will look like good news: “Publish…” and “Nothing to fix” will have nearly the same colour." })).toBeVisible();
+  // the preview's editing bar follows the unsaved colour of main buttons
+  const publish = page.getByRole("group", { name: "Preview, light" }).locator(".pv-edit-bar .eb-publish");
+  await expect.poll(async () => publish.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(await tokenColour(page, "background-color", "--action-fill-on-dark", ".theme-preview .pv-edit-bar"));
+  const fillNow = await publish.evaluate((e) => getComputedStyle(e).backgroundColor);
+  await code("Main buttons").fill("#b45309");
+  await expect.poll(async () => publish.evaluate((e) => getComputedStyle(e).backgroundColor)).not.toBe(fillNow);
+
+  // a careless look: warnings counted in the save bar, the link goes to the first
+  await code("Warning").fill("#b45309");
+  await code("Problem").fill("#b91c1c");
+  const count = saveBar(page).locator(".theme-warnings");
+  await expect(count).toHaveText(/^\d+ warnings?$/);
+  const n = Number((await count.innerText()).match(/\d+/)![0]);
+  expect(n).toBe(await section(page).locator(".color-note.warn").count());
+  await count.click();
+  await expect(section(page).locator(".color-note.warn").first()).toBeFocused();
+  // Save asks once: "Look at them first" stores nothing
+  await saveBar(page).getByRole("button", { name: "Save for everyone" }).click();
+  const ask = page.getByRole("dialog", { name: `Save with ${n} ${n === 1 ? "warning" : "warnings"}?` });
+  await expect(ask).toContainText("Some colours of this look will be mistaken for others");
+  await ask.getByRole("button", { name: "Look at them first" }).click();
+  await expect(ask).toHaveCount(0);
+  expect((await stored(page.request)).look).toEqual({});
+  await saveBar(page).getByRole("button", { name: "Save for everyone" }).click();
+  await ask.getByRole("button", { name: "Save anyway" }).click();
+  await expect(saveBar(page)).toHaveCount(0);
+  expect((await stored(page.request)).look).toMatchObject({ success: "#15803d", mainButton: "#b45309", warning: "#b45309", problem: "#b91c1c" });
+
+  // a look without warnings saves in one click
+  for (const label of ["Main buttons", "Warning", "Problem", "Success"]) await section(page).getByRole("button", { name: `${label}: back to the default` }).click();
+  await saveForEveryone(page);
+  await expect(page.getByRole("dialog", { name: /^Save with/ })).toHaveCount(0);
+  expect((await stored(page.request)).look).toEqual({});
+});
+
+test("the font: Roboto is fetched only once chosen, and the whole app follows", async ({ page, browser }) => {
+  // the default look fetches no Roboto
+  const plain = await visitor(browser, SAM);
+  const fetched: string[] = [];
+  plain.page.on("request", (r) => { if (/roboto/i.test(r.url())) fetched.push(r.url()); });
+  await plain.page.goto("/#/processes");
+  await expect(plain.page.locator(".card").first()).toBeVisible();
+  await plain.page.evaluate(() => document.fonts.ready);
+  expect(await plain.page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(/Inter/);
+  expect(fetched).toEqual([]);
+  await plain.close();
+
+  await openTheming(page);
+  const font = section(page).getByRole("radiogroup", { name: "Font" });
+  await expect(font.getByRole("radio")).toHaveText(["Default (Inter)", "Roboto"]);
+  await expect(font.getByRole("radio", { name: "Default (Inter)" })).toHaveAttribute("aria-checked", "true");
+  await font.getByRole("radio", { name: "Roboto" }).click();
+  await saveForEveryone(page);
+  expect((await stored(page.request)).look.font).toBe("roboto");
+
+  const sam = await visitor(browser, SAM);
+  const got: string[] = [];
+  sam.page.on("request", (r) => { if (/roboto/i.test(r.url())) got.push(r.url()); });
+  await sam.page.goto("/#/processes");
+  await expect(sam.page.locator(".card").first()).toBeVisible();
+  await expect.poll(() => sam.page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(/^"?Roboto/);
+  await expect.poll(() => got.length).toBeGreaterThan(0);
+  expect(got.every((u) => u.startsWith(BASE))).toBe(true); // shipped with the portal
+  await sam.close();
+
+  await section(page).locator(".theme-font-default").click();
+  await expect(font.getByRole("radio", { name: "Default (Inter)" })).toHaveAttribute("aria-checked", "true");
+  await saveForEveryone(page);
+  expect((await stored(page.request)).look).toEqual({});
+});

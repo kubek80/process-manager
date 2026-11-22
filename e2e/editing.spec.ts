@@ -59,7 +59,7 @@ test("a reader has no Edit, and the editing screen tells them they may not chang
   await expect(page.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
   await expect(page.locator(".draft-line")).toHaveCount(0);
   await open(page, "/p/request-gcp-project/edit");
-  await expect(page.getByText("You may not change this process. Its editors, and the owners of its platform or practice, can.")).toBeVisible();
+  await expect(page.getByText("You may not change this process. A process editor and the owners of its platform or practice can; the members of its platform or practice can save drafts of it for an owner to publish.")).toBeVisible();
   await expect(page.locator(".edit-bar")).toHaveCount(0);
   await page.getByRole("link", { name: "Back to reading" }).click();
   await expect(page).toHaveURL(/#\/p\/request-gcp-project\/flow/);
@@ -289,7 +289,7 @@ test("a new process is a draft nobody else sees until it is published", async ({
   await page.locator(".draft-line").getByRole("link", { name: "Continue editing" }).click();
   await bar(page).getByRole("button", { name: "Publish…" }).click();
   const dialog = page.getByRole("dialog", { name: "Publish this process" });
-  await expect(dialog).toContainText("Until now only the people who may change it could see it.");
+  await expect(dialog).toContainText("Until now only the process editors, the owners and members of its platform or practice, and the Owners of its team could see it.");
   await expect(dialog).toContainText("Everybody who signs in to the portal will be able to find and read it.");
   await dialog.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(editState(page)).toHaveAttribute("aria-label", /^Published\./);

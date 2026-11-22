@@ -6,8 +6,9 @@ test("the app is closed until you sign in", async ({ page, request }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Process Manager" })).toBeVisible();
   await expect(page.getByText("Local development.")).toBeVisible();
-  await expect(page.locator(".login-users button")).toHaveCount(6);
+  await expect(page.locator(".login-users button")).toHaveCount(7);
   await expect(page.locator(".login-users")).toContainText("Jordan Platform");
+  await expect(page.locator(".login-users")).toContainText("Morgan Member");
   await expect(page.locator(".topbar")).toHaveCount(0);
 });
 

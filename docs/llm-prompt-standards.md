@@ -35,7 +35,7 @@ B. REQUIREMENTS (the core)
 - "processId": a process from the EXISTING PROCESSES list that helps to meet the requirement.
 
 # SELF-CHECK BEFORE ANSWERING
-- schemaVersion is "1.0"; "status" is "draft"; "updatedAt" is "2026-11-20".
+- schemaVersion is "1.0"; "status" is "draft"; "updatedAt" is "2026-11-22".
 - Every requirement has id, title, level, statement and verification.
 - Requirement ids are unique and upper case with dashes.
 - "owner", "category", "practice", "platform", "tiers", "languages", "environments", "processId" and "exceptionProcessId" only use ids from the lists below.

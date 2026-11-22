@@ -7,6 +7,7 @@ export const CASEY = "casey@example.com"; // Owner of the team Cloud Platform te
 export const RILEY = "riley@example.com"; // Practice owner of Cyber security (edits what belongs to it) and Owner of the team Cyber Security
 export const JORDAN = "jordan@example.com"; // a reader who is Platform owner of Google Cloud, Practice owner of Engineering and Owner of the Cloud Platform team
 export const DANA = "dana@example.com"; // admin
+export const MORGAN = "morgan@example.com"; // Platform member of Google Cloud and Practice member of Engineering: saves drafts there, an owner publishes them
 
 export const CSRF = { "X-Requested-With": "process-manager" };
 
@@ -129,7 +130,7 @@ export async function saveDraft(page: Page) {
 /** "Publish…" -> (an optional note) -> "Publish", and wait until the editing bar says it is published. */
 export async function publish(page: Page, note = "") {
   await page.locator(".edit-bar").getByRole("button", { name: "Publish…" }).click();
-  const dialog = page.getByRole("dialog", { name: /^Publish (your changes|this (process|standard))$/ });
+  const dialog = page.getByRole("dialog", { name: /^Publish (your changes|this (process|standard)|.+’s changes)$/ });
   if (note) await dialog.getByLabel(/^Note for the list of versions/).fill(note);
   await dialog.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(dialog).toHaveCount(0);
