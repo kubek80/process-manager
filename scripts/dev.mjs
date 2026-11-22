@@ -19,6 +19,7 @@ const env = {
   PM_AUTH: process.env.PM_AUTH ?? "dev",
   DATABASE_URL: process.env.DATABASE_URL ?? db("pm_dev"),
   PM_SEED_DIR: root, // processes/, standards/, catalog/ fill an empty database; schema/ is read from here too
+  PM_SOURCE_DIR: root, // Admin › Code map shows the source files of this checkout
   PM_ADDR: "127.0.0.1:8080",
   PM_BASE_URL: "http://localhost:5173",
   // search by meaning with the built-in embedder: nothing leaves this machine

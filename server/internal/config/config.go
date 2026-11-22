@@ -29,6 +29,9 @@ type Config struct {
 	SchemaDir   string   // folder with the JSON schemas
 	Admins      []string // emails that are always admin, so there is always a way in
 	StaticDir   string   // built frontend; empty when the frontend is served separately
+	// SourceDir is the folder of the repository checkout (PM_SOURCE_DIR), from which admins may
+	// read source files in Admin › Code map. Empty (the default): the portal shows no source.
+	SourceDir string
 
 	Auth          string
 	SessionSecret []byte
@@ -162,6 +165,7 @@ func Load(getenv func(string) string) (Config, error) {
 		DatabaseURL:  get("DATABASE_URL", ""),
 		SeedDir:      get("PM_SEED_DIR", "."),
 		StaticDir:    get("PM_STATIC_DIR", ""),
+		SourceDir:    get("PM_SOURCE_DIR", ""),
 		Auth:         get("PM_AUTH", ""),
 		ClientID:     get("PM_OIDC_CLIENT_ID", ""),
 		ClientSecret: get("PM_OIDC_CLIENT_SECRET", ""),
@@ -199,6 +203,14 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	if c.DatabaseURL == "" {
 		problems = append(problems, "DATABASE_URL is required")
+	}
+	if c.SourceDir != "" {
+		// an absolute path only: a relative one would depend on where the server was started
+		if !filepath.IsAbs(c.SourceDir) {
+			problems = append(problems, fmt.Sprintf("PM_SOURCE_DIR=%q must be an absolute path: the folder of the repository checkout, e.g. /home/me/process-manager. Leave it empty to show no source code", c.SourceDir))
+		} else {
+			c.SourceDir = filepath.Clean(c.SourceDir)
+		}
 	}
 	if c.LogFormat != "text" && c.LogFormat != "json" {
 		problems = append(problems, fmt.Sprintf("PM_LOG_FORMAT=%q is not supported: use text or json", c.LogFormat))

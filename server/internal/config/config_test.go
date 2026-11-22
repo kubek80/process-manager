@@ -210,3 +210,20 @@ func TestEmbeddingSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestSourceDir(t *testing.T) {
+	base := map[string]string{"PM_AUTH": "dev", "DATABASE_URL": "postgres://x"}
+	c, err := Load(env(base))
+	if err != nil || c.SourceDir != "" {
+		t.Fatalf("off by default: %v %q", err, c.SourceDir)
+	}
+	base["PM_SOURCE_DIR"] = " /home/me/process-manager/ "
+	c, err = Load(env(base))
+	if err != nil || c.SourceDir != "/home/me/process-manager" {
+		t.Fatalf("absolute: %v %q", err, c.SourceDir)
+	}
+	base["PM_SOURCE_DIR"] = "process-manager"
+	if _, err = Load(env(base)); err == nil || !strings.Contains(err.Error(), "PM_SOURCE_DIR=\"process-manager\" must be an absolute path") {
+		t.Fatalf("relative: %v", err)
+	}
+}

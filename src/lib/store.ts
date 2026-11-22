@@ -221,8 +221,12 @@ export const saveUserRoles = (email: string, roles: UserRole[]) => call<AdminUse
 export const deleteUser = (email: string) => call<void>("DELETE", `/api/admin/users/${encodeURIComponent(email)}`);
 /** A page of the activity log, newest first. `before` is the id of the last entry already shown. */
 export const loadAudit = (limit = 100, before = 0) => call<{ entries: AuditEntry[]; more: boolean }>("GET", `/api/admin/audit?limit=${limit}${before ? `&before=${before}` : ""}`);
-export interface SystemInfo { provider: string; baseUrl: string; notify: string; processes: number; standards: number; skills: number; assignments: number; openFeedback: number }
+/** `source`: whether this installation can show its own source files (Admin › Code map); it runs beside its source code (`PM_SOURCE_DIR`). */
+export interface SystemInfo { provider: string; baseUrl: string; notify: string; processes: number; standards: number; skills: number; assignments: number; openFeedback: number; source?: boolean }
 export const loadSystem = () => call<SystemInfo>("GET", "/api/admin/system");
+/** One source file of the portal, for Admin › Code map; admins only, and only where the portal runs beside its source (else 404). */
+export interface SourceFile { path: string; text: string; bytes: number }
+export const loadSource = (path: string) => call<SourceFile>("GET", `/api/admin/source?path=${encodeURIComponent(path)}`);
 
 // The look of the portal (Admin › Theming). Everyone reads it through lib/theme.ts; admins read who
 // changed it last and save it on top of the revision their changes were made from.
@@ -282,13 +286,20 @@ export function useProgress(processId: string) {
 /** "json": an older address of the text of a document; it now opens the editing screen. */
 export type Tab = "flow" | "list" | "feedback" | "skills" | "json";
 export type StandardTab = "doc" | "feedback" | "skills" | "json";
-export type AdminSection = "access" | "lists" | "skills" | "health" | "activity" | "statistics" | "theming" | "system";
+export type AdminSection = "access" | "lists" | "skills" | "health" | "activity" | "statistics" | "theming" | "system" | "code";
+/**
+ * Where Admin › Code map is: `category` is the category open (`#/admin/code/tables`), `file` a
+ * file of it (`#/admin/code/tables/file/server/internal/db/db.go`), `q` the search of the
+ * overview (`#/admin/code?q=vector`). An unknown category or file is kept: the page says it is
+ * not there.
+ */
+export interface CodeView { category?: string; file?: string; q?: string }
 /** `item` is the step or the requirement that is open, so that a link can point at one. */
 export type Route =
   | { page: "home" } | ({ page: "search" } & SearchState)
   | ({ page: "library" } & ListState) | ({ page: "standards" } & ListState) | ({ page: "catalog" } & CatalogView) | { page: "guide" } | { page: "mine" }
   | ({ page: "requests" } & RequestsView)
-  | { page: "admin"; section: AdminSection }
+  | ({ page: "admin"; section: AdminSection } & CodeView)
   | { page: "process"; id: string; tab: Tab; item?: string }
   | { page: "standard"; id: string; tab: StandardTab; item?: string }
   /** The editing screen; `item` is the step or requirement that is selected. */
@@ -372,6 +383,30 @@ function searchHref(r: SearchState, path = "#/search"): string {
   return `${path}${parts.length ? `?${parts.join("&")}` : ""}`;
 }
 
+/** A part of a path in the address, decoded; a broken escape is kept as it was written. */
+const decodePart = (s: string) => { try { return decodeURIComponent(s); } catch { return s; } };
+function parseCode(category: string | undefined, file: string | undefined, query: string | undefined): CodeView {
+  const v: CodeView = {};
+  const c = category ? decodePart(category).trim() : "";
+  if (c) {
+    v.category = c;
+    const f = (file ?? "").split("/").filter(Boolean).map(decodePart).join("/");
+    if (f) v.file = f;
+  }
+  for (const part of (query ?? "").split("&")) {
+    if (!part.startsWith("q=")) continue;
+    const q = decode(part.slice(2));
+    if (q.trim() && !v.category) v.q = q;
+  }
+  return v;
+}
+/** The address of a place in Admin › Code map: each part of a file's path is encoded on its own, the slashes stay. */
+function codeHref(v: CodeView): string {
+  if (!v.category) return `#/admin/code${v.q?.trim() ? `?q=${encodeURIComponent(v.q)}` : ""}`;
+  const file = v.file ? `/file/${v.file.split("/").filter(Boolean).map(encodeURIComponent).join("/")}` : "";
+  return `#/admin/code/${encodeURIComponent(v.category)}${file}`;
+}
+
 const parse = (h: string = location.hash): Route => {
   const search = h.match(/^#\/search(?:\?(.*))?$/);
   if (search) return parseSearch(search[1] ?? "");
@@ -392,7 +427,9 @@ const parse = (h: string = location.hash): Route => {
   if (group) return { page: "group", kind: group[1] as GroupKind, id: group[2] };
   const requests = h.match(/^#\/requests(?:\?(.*))?$/);
   if (requests) return { page: "requests", ...parseRequestsQuery(requests[1] ?? "") };
-  const admin = h.match(/^#\/admin(?:\/(access|lists|skills|health|activity|statistics|theming|system))?/);
+  const code = h.match(/^#\/admin\/code(?:\/([^/?#]+)(?:\/file(?:\/([^?#]*))?)?)?\/?(?:\?(.*))?$/);
+  if (code) return { page: "admin", section: "code", ...parseCode(code[1], code[2], code[3]) };
+  const admin = h.match(/^#\/admin(?:\/(access|lists|skills|health|activity|statistics|theming|system|code))?/);
   if (admin) return { page: "admin", section: (admin[1] as AdminSection) ?? "access" };
   const es = h.match(/^#\/s\/([a-z0-9-]+)\/(?:edit(?:\/([A-Z][A-Z0-9-]*))?|json)/);
   if (es) return { page: "edit-standard", id: es[1], ...(es[2] ? { item: es[2] } : {}) };
@@ -564,7 +601,7 @@ export const href = (r: Route): string => {
     case "guide": return "#/guide";
     case "mine": return "#/mine";
     case "requests": return `#/requests${requestsQuery(r)}`;
-    case "admin": return `#/admin/${r.section}`;
+    case "admin": return r.section === "code" ? codeHref(r) : `#/admin/${r.section}`;
     case "standard": return r.tab === "json" ? `#/s/${r.id}/edit` : `#/s/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
     case "process": return r.tab === "json" ? `#/p/${r.id}/edit` : `#/p/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
     case "edit-process": return `#/p/${r.id}/edit${r.item ? `/${r.item}` : ""}`;
@@ -593,7 +630,8 @@ export function pageTitle(r: Route, names: { process?: string; standard?: string
     case "guide": here = "Guide"; break;
     case "mine": here = "My responsibilities"; break;
     case "requests": here = "Requests"; break;
-    case "admin": here = `${r.section.slice(0, 1).toUpperCase()}${r.section.slice(1)} · Admin`; break;
+    case "admin": here = r.section !== "code" ? `${r.section.slice(0, 1).toUpperCase()}${r.section.slice(1)} · Admin`
+      : `${r.file ? `${r.file.split("/").pop()} · ` : ""}Code map · Admin`; break;
     case "process": here = of(names.process, "Process not found"); break;
     case "standard": here = of(names.standard, "Standard not found"); break;
     case "edit-process": here = names.process ? `Editing ${names.process}` : of(undefined, "Process not found"); break;

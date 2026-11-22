@@ -209,6 +209,8 @@ func New(d Deps) http.Handler {
 	mux.Handle("GET /api/admin/system", admin(a.system))
 	mux.Handle("GET /api/admin/statistics", admin(a.statistics))
 	mux.Handle("GET /api/admin/statistics.csv", admin(a.statisticsCSV))
+	// one source file of the portal for Admin › Code map, where PM_SOURCE_DIR is set (source.go)
+	mux.Handle("GET /api/admin/source", admin(a.source))
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) { writeError(w, 404, "no such API endpoint") })
 	if d.Cfg.StaticDir != "" {

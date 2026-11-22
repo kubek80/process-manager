@@ -32,6 +32,7 @@ const env = {
   DATABASE_URL: db(database),
   PM_SEED_DIR: root,
   PM_STATIC_DIR: path.join(root, "dist"),
+  PM_SOURCE_DIR: root, // Admin › Code map shows the source files of this checkout
   PM_ADDR: `127.0.0.1:${port}`,
   PM_BASE_URL: `http://127.0.0.1:${port}`,
   // search by meaning with the built-in embedder: the browser tests never call an outside service

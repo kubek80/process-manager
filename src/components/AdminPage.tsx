@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, CalendarCheck, ChartColumn, Flag, KeyRound, List, Palette, Search, Server, ShieldCheck, Sparkles, Workflow } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Activity, CalendarCheck, ChartColumn, CodeXml, Flag, KeyRound, List, Palette, Search, Server, ShieldCheck, Sparkles, Workflow } from "lucide-react";
 import type { AuditEntry, FeedbackByTarget, Process, Skill, Standard, TargetKind } from "../types";
 import { teamName, useCatalog } from "../lib/catalog";
 import { reviewOf, statusOf } from "../lib/lifecycle";
@@ -19,6 +19,9 @@ import { formatDate, formatDateTime } from "../lib/dates";
 
 export { ROLES } from "../lib/users";
 
+// the code map and its categories are loaded only when the section is opened
+const CodeMapPage = lazy(() => import("./CodeMapPage").then((m) => ({ default: m.CodeMapPage })));
+
 const SECTIONS: { id: AdminSection; label: string; icon: typeof List; admin?: boolean; hint: string }[] = [
   { id: "access", label: "Access", icon: KeyRound, admin: true, hint: "Who may do what" },
   { id: "lists", label: "Lists", icon: List, hint: "Teams, practices, platforms, categories, tools and more" },
@@ -28,6 +31,7 @@ const SECTIONS: { id: AdminSection; label: string; icon: typeof List; admin?: bo
   { id: "statistics", label: "Statistics", icon: ChartColumn, admin: true, hint: "How much each process and standard is used" },
   { id: "theming", label: "Theming", icon: Palette, admin: true, hint: "The name, logo and colours everyone sees" },
   { id: "system", label: "System", icon: Server, admin: true, hint: "How this installation is set up" },
+  { id: "code", label: "Code map", icon: CodeXml, admin: true, hint: "How the portal is built, for whoever reviews its code" },
 ];
 
 function SkillsSection() {
@@ -259,7 +263,8 @@ export function AdminPage({ section, processes, standards, feedback, meta }: {
         ))}
       </aside>
       <div className="admin-main">
-        <header className="admin-head"><h1>{current.label}</h1><p className="lead">{current.hint}</p></header>
+        {/* the code map has a heading of its own: the category or the file that is open */}
+        {current.id !== "code" && <header className="admin-head"><h1>{current.label}</h1><p className="lead">{current.hint}</p></header>}
         {current.id === "access" && <UsersSection />}
         {current.id === "lists" && <CatalogPage processes={processes} standards={standards} editable />}
         {current.id === "skills" && <SkillsSection />}
@@ -268,6 +273,7 @@ export function AdminPage({ section, processes, standards, feedback, meta }: {
         {current.id === "statistics" && <StatisticsSection />}
         {current.id === "theming" && <ThemeSection processes={processes} standards={standards} />}
         {current.id === "system" && <SystemSection />}
+        {current.id === "code" && <Suspense fallback={<Loading />}><CodeMapPage label={current.label} hint={current.hint} /></Suspense>}
       </div>
     </div>
   );

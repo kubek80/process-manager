@@ -1,6 +1,41 @@
 import { describe, expect, it } from "vitest";
-import { forgetUnsaved, guardLeaving, hasUnsaved, href, isLoadFailure, offerSaving, parseRoute, unreachableMessage, unsavedSaver, unsavedWork, type Route } from "../store";
+import { forgetUnsaved, guardLeaving, hasUnsaved, href, isLoadFailure, offerSaving, pageTitle, parseRoute, unreachableMessage, unsavedSaver, unsavedWork, type Route } from "../store";
 import { blankProcess, blankStandard } from "../edit";
+
+describe("addresses of the code map", () => {
+  it("lead back to the overview, a category, a file of it and a search", () => {
+    const routes: Route[] = [
+      { page: "admin", section: "code" },
+      { page: "admin", section: "code", q: "vector index" },
+      { page: "admin", section: "code", category: "tables" },
+      { page: "admin", section: "code", category: "tables", file: "server/internal/db/migrations/0001_init.sql" },
+      { page: "admin", section: "code", category: "look", file: "src/lib/théme (1).ts" },
+    ];
+    for (const r of routes) expect(parseRoute(href(r))).toEqual(r);
+  });
+  it("keep the slashes of a path and encode each part on its own", () => {
+    expect(href({ page: "admin", section: "code", category: "saving", file: "server/internal/docs/store.go" })).toBe("#/admin/code/saving/file/server/internal/docs/store.go");
+    expect(href({ page: "admin", section: "code", category: "x", file: "a b/c#d.ts" })).toBe("#/admin/code/x/file/a%20b/c%23d.ts");
+    expect(href({ page: "admin", section: "code", q: "a&b" })).toBe("#/admin/code?q=a%26b");
+    expect(href({ page: "admin", section: "code" })).toBe("#/admin/code");
+  });
+  it("keep an unknown category or file, so that the page can say it is not there", () => {
+    expect(parseRoute("#/admin/code/nothing-here")).toEqual({ page: "admin", section: "code", category: "nothing-here" });
+    expect(parseRoute("#/admin/code/tables/file/no/such.go")).toEqual({ page: "admin", section: "code", category: "tables", file: "no/such.go" });
+  });
+  it("ignore empty parts, a search on a category and a broken escape", () => {
+    expect(parseRoute("#/admin/code/")).toEqual({ page: "admin", section: "code" });
+    expect(parseRoute("#/admin/code/tables/file//a//b.go")).toEqual({ page: "admin", section: "code", category: "tables", file: "a/b.go" });
+    expect(parseRoute("#/admin/code/tables/file/")).toEqual({ page: "admin", section: "code", category: "tables" });
+    expect(parseRoute("#/admin/code?q=%20")).toEqual({ page: "admin", section: "code" });
+    expect(parseRoute("#/admin/code/tables/file/100%.go")).toEqual({ page: "admin", section: "code", category: "tables", file: "100%.go" });
+  });
+  it("name the file in the browser tab", () => {
+    expect(pageTitle({ page: "admin", section: "code" }, {}, "Portal")).toBe("Code map · Admin · Portal");
+    expect(pageTitle({ page: "admin", section: "code", category: "saving", file: "server/internal/docs/store.go" }, {}, "Portal")).toBe("store.go · Code map · Admin · Portal");
+    expect(pageTitle({ page: "admin", section: "system" }, {}, "Portal")).toBe("System · Admin · Portal");
+  });
+});
 
 describe("addresses", () => {
   const routes: Route[] = [

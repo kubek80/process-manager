@@ -182,6 +182,7 @@ func (a *api) system(w http.ResponseWriter, r *http.Request) {
 		"provider": a.Cfg.Auth, "baseUrl": a.Cfg.BaseURL, "notify": a.Cfg.Notify,
 		"processes": count(a.Docs.CountKind(ctx, docs.Process)), "standards": count(a.Docs.CountKind(ctx, docs.Standard)),
 		"skills": count(a.Skills.ActiveCount(ctx)), "assignments": count(a.Roles.Count(ctx)), "openFeedback": count(a.Feedback.OpenCount(ctx)),
+		"source": a.sourceRoot() != "", // whether Admin › Code map can show the files themselves
 	}
 	if failed != nil {
 		a.fail(w, r, failed)
