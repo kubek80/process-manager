@@ -31,7 +31,6 @@ code.cm-path { background: none; border: 0; padding: 0; color: var(--text-2); }
 /* a page of the map: one column of parts */
 .cm-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-content: start; min-width: 0; }
 .cm-page h1:focus { outline: none; }
-.cm-page h1:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
 .cm-crumbs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--text-3); padding-top: 8px; margin-bottom: -14px; }
 .cm-crumbs a { color: var(--text-2); }
 .cm-crumbs a:hover { color: var(--accent); }
