@@ -15,6 +15,8 @@ git status --short && git diff --stat
 
 For each change ask: would someone who uses, edits, runs or deploys the app now be told something wrong, or not be told something they need?
 
+Then check the code map (Admin › Code map, `src/codemap/categories/*.ts`): for every file you touched, read what the categories that list it say about it (`grep -rn "path/of/the/file" src/codemap/categories`): its role, its requirements and their anchors (`at`), the tables, charts and examples that name it. Change every sentence that is no longer true, keep each anchor on the line that enforces the rule, and place every new source file in the category (or categories) it belongs to, with a role and what it must do. `npx vitest run src/codemap` fails on a missing path, an anchor that is no longer in its file, or a source file in no category; a wrong sentence it cannot catch.
+
 ## 2. Find the documents it touches
 
 | If you changed… | Update |
@@ -40,6 +42,7 @@ For each change ask: would someone who uses, edits, runs or deploys the app now 
 | The look of the portal: Admin › Theming, the tokens, the name or logo in the top bar (`src/lib/theme.ts`, `ThemeSection`, `Brand.tsx`, `src/theme.css`, `server/internal/theme`, `/api/theme`) | The Guide section “The look of the portal” and its chart (`themeFlow`), “The Admin panel”; “Look of the portal” and the API in `docs/backend.md`; the theming convention in `CLAUDE.md` |
 | The shared parts (`src/components/marks.tsx`, `src/controls.css`) or the words for levels, kinds and review marks | The Guide sections “Finding a process or standard” (Levels in words, the card), “Reading a process” and “Reading a standard”; the vocabulary in `CLAUDE.md` |
 | When a review is due, the first review (`reviewInfo`, `reviewOf`, `needsReview` in `src/lib/lifecycle.ts`, `meta[id].publishedAt`, the MCP server's `reviewOf`) | The Guide sections “Life-cycle and reviews” and “Your responsibilities”; “Reviews” and the API in `docs/backend.md`; the review state in `docs/mcp.md`; `CLAUDE.md` |
+| Any source file: added, moved, removed, or a rule it enforces | The code map, `src/codemap/categories/*.ts` (see step 1); a change to how the code map works, or to `GET /api/admin/source` / `PM_SOURCE_DIR`: the Guide section “The code map”, “Source files for the code map” and Settings in `docs/backend.md`, the code map convention in `CLAUDE.md` |
 | A screen shown in a screenshot (`docs/*.png`) so that the picture is now misleading | Retake it, or say in your summary that it is out of date |
 
 Search for the old name or behaviour before you finish, so no second copy is left behind:

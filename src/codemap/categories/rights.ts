@@ -230,7 +230,7 @@ CanDraft("process", stored) = true   → notPublisher{first: false}`,
       role: "Admin › Access by person: a person's complete set of roles in one go, and taking all of them away.",
       requirements: [
         { text: "Every role of the set is checked as when given alone, before anything is changed: one bad role refuses the whole set, so a person is never left with half of what was meant.", at: "for _, role := range roles {" },
-        { text: "`DELETE` of one's own address is refused (409), so an admin cannot lock themselves out by mistake. `PUT` is not refused the same way: an admin can send their own address an empty set and lose every role, as long as another admin (or `PM_ADMINS`) is left.", at: "if email == strings.ToLower(strings.TrimSpace(who(r).Email)) {" },
+        { text: "Removing all of one's own roles is refused (409) by one check, `refuseOwnLastRoles`, for `DELETE` of one's own address and for `PUT` of an empty set alike, so an admin cannot lock themselves out by mistake. Taking away only some of one's own roles, the admin role included, works while another admin (or `PM_ADMINS`) is left. Test: `TestNobodyRemovesAllOfTheirOwnRoles`.", at: "if len(roles) > 0 || email != strings.ToLower(strings.TrimSpace(who(r).Email)) {" },
       ],
       tests: ["server/internal/httpapi/users_test.go", "server/internal/rbac/users_test.go"],
     },

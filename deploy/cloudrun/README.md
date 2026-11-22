@@ -408,6 +408,9 @@ taken before the release. Before the next release, send all traffic to the lates
 - **The MCP server for agents**: not part of this deployment.
 - **Search by meaning**: `PM_EMBEDDINGS` is not set, so it is off, nothing is sent to Vertex AI
   and the database does not need pgvector.
+- **The files of Admin › Code map**: `PM_SOURCE_DIR` is not set, because the image holds no
+  source code and no git; the code map shows its paths, requirements, charts and tables, without
+  the files themselves.
 - **Terraform**: the team keeps that in its own repository; these steps say what it must create.
 - **A load balancer and your own domain**: see below.
 

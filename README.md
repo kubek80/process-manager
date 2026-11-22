@@ -88,7 +88,7 @@ React + Vite frontend; Go server; Postgres. Everything people change lives in th
 | **Requests** | `#/requests`: ask for a missing process or standard, vote; open, planned, done (linked to the published process or standard that answers it) or declined with a reason; withdrawn by the requester while open, removed by an admin |
 | **My responsibilities** | For owners: reviews to do, feedback waiting, what others saved that waits for them to publish (“Review and publish”), their own unfinished work, and everything of their teams, platforms and practices, on one page with a count in the top bar; for members: their drafts and what waits for an owner |
 | **Skills** | Generated per process and per standard, versioned automatically, with optional hand-written guidance |
-| **Admin panel** | People and their roles (all of a person's roles in one dialog), the lists (teams, practices and platforms with how to reach them, their owners and members, categories, tools and languages with icons, tiers, environments), the skills registry, health, activity, statistics (`#/admin/statistics`: use per process and standard and per platform, practice and team, per period, as CSV), theming (`#/admin/theming`) |
+| **Admin panel** | People and their roles (all of a person's roles in one dialog), the lists (teams, practices and platforms with how to reach them, their owners and members, categories, tools and languages with icons, tiers, environments), the skills registry, health, activity, statistics (`#/admin/statistics`: use per process and standard and per platform, practice and team, per period, as CSV), theming (`#/admin/theming`), and the code map (`#/admin/code`, for developers who review or maintain the portal: its code in categories with what each part and file must do, flow charts, the tables, and the files themselves with those requirements as comments where the portal runs beside its source) |
 | **Look of the portal** | Admins set the name, logo, brand colour, the colours of processes and standards, of main and other buttons and of the four states, the font (Inter or Roboto, both shipped with the portal), and light or dark for new visitors; readable variants and plain warnings are worked out by the app, and saving with warnings asks once; everyone sees the new look on their next page; not part of export and import |
 | **MCP server** | AI agents search and read the published processes and standards, the steps of one participant, the skills and the lists, and report problems for a person; a separate program on the same database, reachable from its own machine or with a shared secret. [`docs/mcp.md`](docs/mcp.md) |
 | **AI authoring** | A self-contained prompt for any chat assistant turns text into a process or a standard; the checker validates what comes back |
@@ -145,6 +145,10 @@ The first admins are named in the server setting `PM_ADMINS`.
 
 ![Statistics](docs/statistics.png)
 
+![Admin › Code map](docs/code-map.png)
+
+![A file in the code map, with its requirements as comments](docs/code-map-file.png)
+
 ## Tests
 
 ```bash
@@ -153,8 +157,8 @@ npm run test:all
 
 | Command | What it covers |
 | --- | --- |
-| `npm test` | Frontend logic (Vitest): both checkers, editing helpers, undo and the rules for saving, the editing screen's states and calls, comparing versions, sorting, zoom, icons, the roles dialog, layout, life-cycle, search (by words, by meaning, both), pages and cards, sharing, requests, statistics, the look of the portal, prompts, rights (who drafts, who publishes), owners and members, the pages of teams, platforms and practices, and that every sample file and the demo set are valid |
-| `npm run test:server` | Go server against a real Postgres: sign-in incl. a fake OpenID Connect provider, roles and people, the members and details of teams, platforms and practices, content with versions and concurrent saves, working drafts and publishing, icons, skill generators, feedback, views, bookmarks, upvotes, requests, statistics, the look of the portal, admin, start-up and shutdown, chunking, embeddings (Vertex AI only against a local stand-in), the search index, the MCP server |
+| `npm test` | Frontend logic (Vitest): both checkers, editing helpers, undo and the rules for saving, the editing screen's states and calls, comparing versions, sorting, zoom, icons, the roles dialog, layout, life-cycle, search (by words, by meaning, both), pages and cards, sharing, requests, statistics, the look of the portal, prompts, rights (who drafts, who publishes), owners and members, the pages of teams, platforms and practices, that every sample file and the demo set are valid, and that the code map matches the code (every path exists, every comment's line is there, every source file is in a category) |
+| `npm run test:server` | Go server against a real Postgres: sign-in incl. a fake OpenID Connect provider, roles and people, the members and details of teams, platforms and practices, content with versions and concurrent saves, working drafts and publishing, icons, skill generators, feedback, views, bookmarks, upvotes, requests, statistics, the look of the portal, admin, the source files of the code map and what it refuses, start-up and shutdown, chunking, embeddings (Vertex AI only against a local stand-in), the search index, the MCP server |
 | `npm run test:e2e` | Playwright against the real server and database: reader and editor journeys for processes and standards, the editing screen, drafts and publishing, versions and two people editing at once, feedback, the Admin panel, skills, AI import, the list filters, cards and pages, the map, views, upvotes, bookmarks and sharing, requests, statistics, theming, the search switch (Words, Meaning, Both) |
 | `npm run typecheck`, `npm run validate` | Types; the sample files (or an exported folder) against the schemas and rules |
 
@@ -179,7 +183,7 @@ Working on this repository with an AI coding assistant: `CLAUDE.md` and the skil
 ## Layout
 
 ```
-src/                  frontend (components, lib with checker / layout / prompts, guide)
+src/                  frontend (components, lib with checker / layout / prompts, guide, codemap: the code map of Admin › Code map)
 server/               Go backend
 schema/               formats + the examples used in the prompts
 processes/ standards/ catalog/   sample content that fills an empty database (icons in catalog/icons/)

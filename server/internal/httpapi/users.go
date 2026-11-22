@@ -125,6 +125,9 @@ func (a *api) putUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	roles := *in.Roles
+	if refuseOwnLastRoles(w, r, email, roles) {
+		return
+	}
 	if len(roles) > maxRoles {
 		writeError(w, 400, "That is more roles than one person can be given.")
 		return
@@ -151,6 +154,18 @@ func (a *api) putUser(w http.ResponseWriter, r *http.Request) {
 	a.replaceRoles(w, r, email, roles, lists, "access.change")
 }
 
+// refuseOwnLastRoles answers 409 when roles (the complete new set) would leave the caller with
+// none of their own: like the app, which offers it for everybody else, nobody removes all of
+// their own roles, by DELETE or by an empty set in PUT. Taking away some of them is left to the
+// other checks (the last admin is kept by the rbac store).
+func refuseOwnLastRoles(w http.ResponseWriter, r *http.Request, email string, roles []rbac.Role) bool {
+	if len(roles) > 0 || email != strings.ToLower(strings.TrimSpace(who(r).Email)) {
+		return false
+	}
+	writeError(w, 409, "You cannot remove all of your own roles. Ask another admin to do it.")
+	return true
+}
+
 // deleteUser takes every role from a person. They can still sign in and read like everyone.
 func (a *api) deleteUser(w http.ResponseWriter, r *http.Request) {
 	email, ok := storedEmail(r.PathValue("email"))
@@ -158,9 +173,7 @@ func (a *api) deleteUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "That is not an email address.")
 		return
 	}
-	// like the app, which offers it for everybody else: nobody removes all of their own roles
-	if email == strings.ToLower(strings.TrimSpace(who(r).Email)) {
-		writeError(w, 409, "You cannot remove all of your own roles. Ask another admin to do it.")
+	if refuseOwnLastRoles(w, r, email, nil) {
 		return
 	}
 	lists, err := a.Docs.Lists(r.Context())

@@ -270,3 +270,31 @@ func TestNamesComeFromWhatPeopleDid(t *testing.T) {
 		}
 	}
 }
+
+// Nobody removes all of their own roles, whether by DELETE or by an empty set in PUT: both answer
+// the same, and nothing changes. Taking some of them away still works.
+func TestNobodyRemovesAllOfTheirOwnRoles(t *testing.T) {
+	e := setup(t, func(d *Deps) { d.Roles.Bootstrap = nil })
+	// another admin, so that the last-admin rule is not what refuses
+	for _, a := range []rbac.Assignment{{Email: dana, Role: rbac.Admin}, {Email: dana, Role: "process-editor"}, {Email: riley, Role: rbac.Admin}} {
+		a.GrantedBy = "setup"
+		must(t, e.deps.Roles.Grant(bg, a))
+	}
+	d := e.as(dana)
+	before := rolesOf(usersOf(t, d)[dana])
+	delStatus, delBody, _ := d.raw("DELETE", "/api/admin/users/"+dana, nil, true)
+	putStatus, putBody, _ := d.raw("PUT", "/api/admin/users/"+dana, map[string]any{"roles": []any{}}, true)
+	if delStatus != 409 || putStatus != delStatus || string(putBody) != string(delBody) {
+		t.Fatalf("DELETE %d %s, PUT %d %s", delStatus, delBody, putStatus, putBody)
+	}
+	status, out := d.do("PUT", "/api/admin/users/"+strings.ToUpper(dana), map[string]any{"roles": []any{}})
+	wantError(t, status, out, 409, "You cannot remove all of your own roles. Ask another admin to do it.")
+	if after := rolesOf(usersOf(t, d)[dana]); after != before {
+		t.Fatalf("roles changed: %s -> %s", before, after)
+	}
+	status, out = d.do("PUT", "/api/admin/users/"+dana, roles("admin"))
+	wantStatus(t, status, 200, out)
+	if after := rolesOf(usersOf(t, d)[dana]); after != "admin" {
+		t.Fatalf("some roles taken: %s", after)
+	}
+}
