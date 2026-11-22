@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ALL_PROPERTIES, ALIKE, cleanLook, confusion, contrast, DEFAULT_NAME, derive, distance, FILL_MIN, inkOn, isDark, kindsAlikeText, lookProblems, lookProperties, luminance, mix, nameOf, SEMANTIC, underlineLinks,
+  ALL_PROPERTIES, ALIKE, BAR, cleanLook, COLOR_PARTS, FONT_FAMILY, FONT_PROPERTY, seenWithout, STATE_PARTS, TOKENS, confusion, contrast, DEFAULT_NAME, derive, distance, FILL_MIN, inkOn, isDark, kindsAlikeText, lookProblems, lookProperties, luminance, mix, nameOf, SEMANTIC, underlineLinks,
   PALETTES, readable, SURFACES, tidyLook,
 } from "../theme";
 
@@ -99,7 +99,9 @@ describe("the derived tokens", () => {
     expect(p["--theme-light-accent"]).toBe("#0369a1");
     expect(p["--theme-dark-accent"]).toMatch(/^#[0-9a-f]{6}$/);
     expect(p["--theme-light-kind-process"]).toBe("initial");
-    expect(ALL_PROPERTIES).toHaveLength(28);
+    expect(ALL_PROPERTIES).toHaveLength(71);
+    expect(p[FONT_PROPERTY]).toBe("initial");
+    expect(lookProperties({ font: "roboto" })[FONT_PROPERTY]).toBe(FONT_FAMILY.roboto);
   });
   it("the ready-made palettes start with the default look, and none of them looks like the red of problems", () => {
     expect(PALETTES[0].colors).toEqual({});
@@ -201,5 +203,85 @@ describe("the Theming section in the app", () => {
     expect(normalizeHex(" #05a ")).toBe("#0055aa");
     expect(normalizeHex("#0055a")).toBeNull();
     expect(normalizeHex("blue")).toBeNull();
+  });
+});
+
+describe("buttons and states", () => {
+  const words = (look: Parameters<typeof derive>[0], part: string) => derive(look).colors.find((c) => c.part === part)?.warnings ?? [];
+  it("leave the buttons and the states to the default look when nothing is chosen", () => {
+    const d = derive({ brand: "#0369a1" });
+    for (const mode of ["light", "dark"] as const) expect(Object.keys(d.tokens[mode]).some((k) => /^(action|good|warn|bad|info)/.test(k))).toBe(false);
+  });
+  it("work out every token of a button or a state, readable in both themes and on the dark editing bar", () => {
+    for (const c of ["#facc15", "#0b1f3a", "#808080", "#ffffff", "#000000", "#0369a1", "#dc2626", "#16a34a"]) {
+      const look = Object.fromEntries(COLOR_PARTS.filter((p) => p !== "brand" && p !== "process" && p !== "standard").map((p) => [p, c]));
+      const d = derive(look);
+      for (const mode of ["light", "dark"] as const) {
+        const t = d.tokens[mode], s = SURFACES[mode];
+        const bgs = mode === "dark" ? [s.bg, s.surface, s.surface2, ...BAR] : [s.bg, s.surface, s.surface2];
+        expect(Object.keys(t).sort()).toEqual([...TOKENS.mainButton, ...TOKENS.otherButtons, ...STATE_PARTS.flatMap((p) => TOKENS[p])].sort());
+        expect(contrast(t["action-ink"], t["action-fill"]), `${c} ${mode}`).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(t["action-fill"], s.surface), `${c} ${mode}`).toBeGreaterThanOrEqual(FILL_MIN);
+        expect(min(t["action-other"], [...bgs, t["action-other-soft"]]), `${c} ${mode}`).toBeGreaterThanOrEqual(4.5);
+        for (const k of ["good", "warn", "bad", "info"]) {
+          expect(min(t[k], [...bgs, t[`${k}-bg`]]), `${k} ${c} ${mode}`).toBeGreaterThanOrEqual(4.5);
+          expect(contrast(t[`${k}-ink`], t[`${k}-fill`]), `${k} ${c} ${mode}`).toBeGreaterThanOrEqual(4.5);
+        }
+        if (mode === "dark") for (const b of BAR) expect(contrast(t["action-fill"], b), `${c} on the bar`).toBeGreaterThanOrEqual(FILL_MIN);
+      }
+    }
+  });
+  it("keep a chosen fill as it is: an orange warning badge stays orange, with the ink that reads on it", () => {
+    const d = derive({ warning: "#ea580c", info: "#2563eb", mainButton: "#15803d" });
+    expect(d.tokens.light["warn-fill"]).toBe("#ea580c");
+    expect(d.tokens.light["action-fill"]).toBe("#15803d");
+    expect(d.tokens.light["action-ink"]).toBe("#ffffff");
+    expect(d.tokens.light.warn).not.toBe("#ea580c"); // orange text on white would be too light
+    expect(d.colors.flatMap((c) => c.warnings)).toEqual([]);
+  });
+  it("say when main buttons look like buttons that delete", () => {
+    expect(words({ mainButton: "#dc2626" }, "mainButton")).toContain("Main buttons will look like buttons that delete: “Publish” and “Delete” will have nearly the same colour.");
+    // said once, with the later of the two parts
+    expect(words({ mainButton: "#dc2626", problem: "#e11d48" }, "mainButton")).toEqual([]);
+    expect(words({ mainButton: "#dc2626", problem: "#e11d48" }, "problem")).toContain("Main buttons will look like buttons that delete: “Publish” and “Delete” will have nearly the same colour.");
+    expect(words({ mainButton: "#15803d" }, "mainButton")).toEqual([]);
+    expect(words({ otherButtons: "#e11d48" }, "otherButtons")).toContain("Other buttons will look like buttons that delete, which are drawn in the colour of problems.");
+    expect(words({ otherButtons: "#334155" }, "otherButtons")).toEqual([]); // a grey for the other buttons is the neutral look, not a problem
+  });
+  it("say when two states are hard to tell apart", () => {
+    expect(words({ success: "#ca8a04", warning: "#d97706" }, "warning")).toContain("Success and warnings will be hard to tell apart: “Published” and “Review due” will have nearly the same colour.");
+    expect(words({ warning: "#dc2626" }, "warning")).toContain("Warnings and problems will be hard to tell apart: “Review due” and “Review overdue” will have nearly the same colour.");
+    expect(words({ success: "#be123c" }, "success")).toContain("Success and problems will be hard to tell apart: “Nothing to fix” and “1 to fix” will have nearly the same colour.");
+    expect(words({ info: "#b45309" }, "info")).toContain("Notices that only inform will look like warnings.");
+    expect(words({ info: "#0369a1" }, "info")).toEqual([]);
+  });
+  it("say when success and problems differ only in hue, which people who cannot tell red from green do not see", () => {
+    // to them, the default green and red are nearly the same colour
+    expect(distance(seenWithout("#15803d", "deuteranopia"), seenWithout("#be123c", "deuteranopia"))).toBeLessThan(ALIKE);
+    expect(words({ success: "#16a34a" }, "success").join(" ")).toContain("People who cannot tell red from green");
+    // a clearly lighter or bluer success colour is seen as different
+    expect(words({ success: "#0369a1" }, "success")).toEqual([]);
+  });
+  it("say when a state looks like the brand or a kind left at its default, and when it is grey", () => {
+    expect(words({ success: "#4f46e5" }, "success")).toContain("This looks like the brand colour: confirmations will look like buttons and links, and will no longer stand out.");
+    expect(words({ warning: "#0f766e" }, "warning")).toContain("This looks like the colour of processes: every process will look as if its review were due.");
+    expect(words({ problem: "#6b6b70" }, "problem")).toContain("This colour is nearly grey: problems hardly stand out from ordinary text.");
+    // a brand colour is compared with the states as chosen: a blue brand next to a blue warning is said with the brand
+    expect(derive({ brand: "#2563eb", warning: "#1d4ed8" }).colors[0].like).toEqual(["warn"]);
+    expect(derive({ brand: "#dc2626", problem: "#7c3aed" }).colors[0].like).toEqual([]);
+  });
+});
+
+describe("reading and checking buttons, states and the font", () => {
+  it("keeps the valid parts and says what is wrong", () => {
+    expect(cleanLook({ mainButton: "#15803D", otherButtons: "x", success: "#166534", warning: "#ea580c", info: 3, problem: "#b91c1c", font: "roboto" }))
+      .toEqual({ mainButton: "#15803d", success: "#166534", warning: "#ea580c", problem: "#b91c1c", font: "roboto" });
+    expect(cleanLook({ font: "Comic Sans" })).toEqual({});
+    expect(tidyLook({ info: "#2563EB", font: "roboto" })).toEqual({ info: "#2563eb", font: "roboto" });
+    expect(lookProblems({ mainButton: "green", problem: "#12" })).toEqual([
+      "The colour of main buttons must be written as # and six digits or letters a-f, e.g. #4f46e5.",
+      "The colour of problems must be written as # and six digits or letters a-f, e.g. #4f46e5.",
+    ]);
+    expect(lookProblems({ font: "comic" as never })).toEqual(["The font must be Roboto, or the default font."]);
   });
 });

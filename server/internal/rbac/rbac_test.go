@@ -301,12 +301,15 @@ func TestMemberRolesAreCheckedLikeOwnerRoles(t *testing.T) {
 		rbac.ScopeList(rbac.PlatformMember) != "platforms" || rbac.ScopeNoun(rbac.PracticeMember) != "practice" {
 		t.Fatal("words")
 	}
+	// a freshly migrated database takes both roles (its own check on the role names included)
 	s := &rbac.Store{Pool: dbtest.NewPool(t)}
-	if err := s.Grant(ctx, rbac.Assignment{Email: "m@x.io", Role: rbac.PlatformMember, Scope: "google-cloud", GrantedBy: "t"}); err != nil {
-		t.Fatal(err)
+	for _, a := range []rbac.Assignment{{Email: "m@x.io", Role: rbac.PlatformMember, Scope: "google-cloud", GrantedBy: "t"}, {Email: "m@x.io", Role: rbac.PracticeMember, Scope: "engineering", GrantedBy: "t"}} {
+		if err := s.Grant(ctx, a); err != nil {
+			t.Fatal(err)
+		}
 	}
 	list, err := s.Members(ctx)
-	if err != nil || len(list) != 1 || list[0].Role != rbac.PlatformMember {
+	if err != nil || len(list) != 2 || list[0].Role != rbac.PlatformMember || list[1].Role != rbac.PracticeMember {
 		t.Fatalf("%v %v", list, err)
 	}
 }

@@ -237,14 +237,14 @@ func TestEveryoneCanSeeWhoBelongsToWhat(t *testing.T) {
 	}
 	status, raw, _ := e.as(sam).raw("GET", "/api/members", nil, false)
 	want := `{"members":[` +
-		`{"email":"casey@example.com","role":"owner","scope":"cloud-platform-team"},` +
-		`{"email":"jordan@example.com","role":"owner","scope":"cloud-platform-team"},` +
-		`{"email":"riley@example.com","role":"owner","scope":"security"},` +
-		`{"email":"morgan@example.com","role":"platform-member","scope":"google-cloud"},` +
-		`{"email":"jordan@example.com","role":"platform-owner","scope":"google-cloud"},` +
-		`{"email":"morgan@example.com","role":"practice-member","scope":"engineering"},` +
-		`{"email":"jordan@example.com","role":"practice-owner","scope":"engineering"},` +
-		`{"email":"riley@example.com","role":"practice-owner","scope":"security"}]}`
+		`{"email":"casey@example.com","role":"owner","scope":"cloud-platform-team","name":"Casey Owner"},` +
+		`{"email":"jordan@example.com","role":"owner","scope":"cloud-platform-team","name":"Jordan Platform"},` +
+		`{"email":"riley@example.com","role":"owner","scope":"security","name":"Riley Security"},` +
+		`{"email":"morgan@example.com","role":"platform-member","scope":"google-cloud","name":"Morgan Member"},` +
+		`{"email":"jordan@example.com","role":"platform-owner","scope":"google-cloud","name":"Jordan Platform"},` +
+		`{"email":"morgan@example.com","role":"practice-member","scope":"engineering","name":"Morgan Member"},` +
+		`{"email":"jordan@example.com","role":"practice-owner","scope":"engineering","name":"Jordan Platform"},` +
+		`{"email":"riley@example.com","role":"practice-owner","scope":"security","name":"Riley Security"}]}`
 	if status != 200 || strings.TrimSpace(string(raw)) != want {
 		t.Fatalf("%d %s", status, raw)
 	}
