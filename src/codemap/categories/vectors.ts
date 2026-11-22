@@ -34,10 +34,10 @@ export const vectors: CodeCategory = {
         [["server", "Server"], ["pg", "Postgres"], ["provider", "Embedding provider"]],
         [
           s("start", "Start the sync in the background", "server", "automation", ["read"], "syncIndex, 10 min limit"),
-          s("read", "Read the document and its hashes", "pg", "automation", ["published"], "no transaction"),
+          s("read", "Read the document's version and body", "pg", "automation", ["published"], "no transaction"),
           s("published", "Is it published?", "server", "decision", [["cut", "Yes"], ["write", "No: no parts"]]),
-          s("cut", "Cut it into parts, find new texts", "server", "automation", ["embed"], "chunking.Chunks, content_hash"),
-          s("embed", "Embed the new texts in one call", "provider", "communication", ["ok"], "no connection held"),
+          s("cut", "Cut it into parts, compare stored hashes", "server", "automation", ["embed"], "chunking.Chunks, content_hash"),
+          s("embed", "Embed the new texts in one call", "provider", "communication", ["ok"], "none new: no call; no connection held"),
           s("ok", "Did the provider answer in 30 s?", "server", "decision", [["write", "Yes"], ["mark", "No"]]),
           s("write", "Write all parts if still unchanged", "pg", "document", [], "search_chunks, one transaction"),
           s("mark", "Keep old parts, mark the document", "pg", "document", [], "search_pending"),
@@ -70,10 +70,10 @@ export const vectors: CodeCategory = {
   examples: [
     {
       title: "request-gcp-project, from its row to a search result",
-      caption: "The sample process at every stage, with the builtin provider at 768 dimensions (real output; long values shortened with …).",
+      caption: "The sample process at every stage, with the `builtin` provider at 768 dimensions (real output; long values shortened with …).",
       stages: [
         {
-          label: "Stored in documents (version 1)",
+          label: "Stored in `documents` (version 1)",
           where: "server/internal/docs/docs.go",
           shape: `{
   "id": "request-gcp-project",
@@ -87,7 +87,7 @@ export const vectors: CodeCategory = {
   "steps": [ …, {"id": "approve-budget", "title": "Approve the monthly budget", "actor": "budget-owner",
                  "type": "approval", "duration": "up to 2 working days", …}, … 10 steps ]
 }`,
-          note: "syncDoc reads version and body with one select, outside any transaction, and the stored content_hash values of the document.",
+          note: "`syncDoc` reads `version` and `body` with one select, outside any transaction, and the stored `content_hash` values of the document.",
         },
         {
           label: "Cut into 15 parts (1 summary, 4 prerequisites, 10 steps)",
@@ -116,10 +116,10 @@ Step 3: Approve the monthly budget
 Done by: Budget owner
 About Budget owner: Owner of the cost centre.
 Takes: up to 2 working days`,
-          note: "Every text starts with the parent (Process: <title>) and names list entries by name (Cloud, Google Cloud, Cloud Platform team). Other documents are named by id. Each text is far below PM_CHUNK_MAX_CHARS (2000), so nothing is dropped or cut.",
+          note: "Every text starts with the parent (`Process: <title>`) and names list entries by name (Cloud, Google Cloud, Cloud Platform team). Other documents are named by id. Each text is far below `PM_CHUNK_MAX_CHARS` (2000), so nothing is dropped or cut.",
         },
         {
-          label: "Turned into vectors (builtin)",
+          label: "Turned into vectors (`builtin`)",
           where: "server/internal/embedding/builtin.go",
           shape: `Tokens("Process: Request a GCP project") = [process request a gcp project]
 each word → FNV-64a("w:"+word) mod 768 (sign from the top bit), weight 0.6 … 2.0 by length
@@ -131,10 +131,10 @@ summary part:  256 of 768 positions non-zero
 question "new google cloud project": 24 of 768 positions non-zero
   [23]=-0.11715833 [60]=0.23599035 [87]=0.1129741 [105]=0.49426168 …
 dot product of the two = cosine similarity = 0.5233`,
-          note: "builtin matches words and parts of words, not meaning; Vertex AI (gemini-embedding-001) would return a dense vector of the same size.",
+          note: "`builtin` matches words and parts of words, not meaning; Vertex AI (`gemini-embedding-001`) would return a dense vector of the same size.",
         },
         {
-          label: "A row of search_chunks",
+          label: "A row of `search_chunks`",
           where: "server/internal/retrieval/retrieval.go",
           shape: `kind         | process
 doc_id       | request-gcp-project
@@ -150,10 +150,10 @@ updated_at   | 2026-11-22 14:04:20
 
 search_settings: {"provider":"builtin","dimensions":768,
   "chunks":"parts=prerequisite,requirement,scope,step,summary;max=2000;layout=3;text=2","complete":true}`,
-          note: "snippet is the readable text only (readContent), not the embedded text. The sample content gives 110 rows for 10 documents.",
+          note: "`snippet` is the readable text only (`readContent`), not the embedded text. The sample content gives 110 rows for 10 documents.",
         },
         {
-          label: "The SQL of a search (pgvector in schema extensions)",
+          label: "The SQL of a search (pgvector in schema `extensions`)",
           where: "server/internal/retrieval/retrieval.go",
           shape: `select set_config('enable_indexscan', 'off', true);   -- 110 parts ≤ 50,000: compare every part, exactly
 with near as (
@@ -166,10 +166,10 @@ from near n join documents d on d.kind = n.kind and d.id = n.doc_id
 where coalesce(d.body->>'status', '') <> 'draft' and n.distance <= $2
 order by n.distance, n.kind, n.doc_id, n.part, n.item
 -- $1 = '[0,…,-0.11715833,…]' (the question's vector), $2 = 1 - 0.20 (the builtin floor)`,
-          note: "Above 50,000 parts it sets hnsw.ef_search = 1000 and adds limit 1000 (approximate). The join drops a document that became a draft or was deleted before its parts were removed.",
+          note: "Above 50,000 parts it sets `hnsw.ef_search = 1000` and adds `limit 1000` (approximate). The join drops a document that became a draft or was deleted before its parts were removed.",
         },
         {
-          label: "The scored result, as GET /api/search?q=new+google+cloud+project&limit=3 answers",
+          label: "The scored result, as `GET /api/search?q=new+google+cloud+project&limit=3` answers",
           where: "server/internal/httpapi/search.go",
           shape: `{"results": [
   {"kind": "process", "id": "request-gcp-project", "score": 0.523, "hits": [
@@ -185,7 +185,7 @@ order by n.distance, n.kind, n.doc_id, n.part, n.item
     {"part": "summary", "item": "", "label": "Summary", "snippet": "How cloud resources are created and changed, …", "score": 0.291}]}
  ],
  "truncated": true}`,
-          note: "score = 1 - cosine distance, rounded to 3 places; a document's score is its best part's, with up to 3 parts; the snippet is the sentence that shares most words with the question. truncated: more documents matched than the limit of 3.",
+          note: "`score` = 1 - cosine distance, rounded to 3 places; a document's score is its best part's, with up to 3 parts; the snippet is the sentence that shares most words with the question. `truncated`: more documents matched than the limit of 3.",
         },
       ],
     },

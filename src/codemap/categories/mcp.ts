@@ -97,7 +97,7 @@ export const mcp: CodeCategory = {
                {"part": "step", "item": "create-project", "label": "Step 9: Create the project", "snippet": "The pipeline runs on merge …"}, …]},
   {"kind": "process", "id": "onboard-api-to-apigee", …, "score": 0.316}],
  "rankedBy": "meaning", "filters": {}}`,
-          note: "With search by meaning off rankedBy is \"words\"; when it does not answer in 5 seconds, \"words-fallback\" with a note.",
+          note: "With search by meaning off `rankedBy` is `words`; when it does not answer in 5 seconds, `words-fallback` with a `note`.",
         },
       ],
     },

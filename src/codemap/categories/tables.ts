@@ -500,7 +500,7 @@ export const tables: CodeCategory = {
   examples: [
     {
       title: "One process through its tables",
-      caption: "The sample request-gcp-project imported, a member saving unpublished changes, and an owner publishing them: the real rows (dates shortened).",
+      caption: "The sample `request-gcp-project` imported, a member saving unpublished changes, and an owner publishing them: the real rows (dates shortened).",
       stages: [
         {
           label: "The file in the sample content",
@@ -522,7 +522,7 @@ export const tables: CodeCategory = {
 }`,
         },
         {
-          label: "Stored in documents",
+          label: "Stored in `documents`",
           where: "server/internal/docs/docs.go",
           shape: `kind       | process
 id         | request-gcp-project
@@ -535,26 +535,26 @@ status     | active                 ← generated from body->>'status'
 owner      | cloud-platform-team    ← generated
 platform   | google-cloud           ← generated
 practice   |                        ← generated ('' when absent)`,
-          note: "docs.Store.ImportDir → Put → SaveIn: no base (imports are not checked), re-indented, version 1.",
+          note: "`docs.Store.ImportDir` → `Put` → `SaveIn`: no `base` (imports are not checked), re-indented, version 1.",
         },
         {
-          label: "Its first row of document_versions",
+          label: "Its first row of `document_versions`",
           shape: `{"kind":"process","id":"request-gcp-project","version":1,
  "saved_at":"2026-11-22T14:04:20","saved_by":"import","note":"",
  "changes_by":"","changes_by_name":"","deleted":false}`,
-          note: "Same transaction as the documents row. deleted is body is null.",
+          note: "Same transaction as the `documents` row. `deleted` is `body is null`.",
         },
         {
-          label: "A member saves unpublished changes: working_drafts",
+          label: "A member saves unpublished changes: `working_drafts`",
           where: "server/internal/docs/drafts.go",
           shape: `PUT /api/processes/request-gcp-project/draft?rev=0
 {"kind":"process","id":"request-gcp-project","base":1,"revision":1,
  "updated_by":"morgan@example.com","updated_by_name":"Morgan Member",
  "body":"{\\n  \\"$schema\\": …  \\"estimatedDuration\\": \\"2-4 working days\\" …"}`,
-          note: "documents and document_versions are untouched; readers, skills and the index still see version 1.",
+          note: "`documents` and `document_versions` are untouched; readers, skills and the index still see version 1.",
         },
         {
-          label: "An owner publishes it: document_versions gets version 2",
+          label: "An owner publishes it: `document_versions` gets version 2",
           where: "server/internal/httpapi/drafts.go",
           shape: `POST /api/processes/request-gcp-project/publish?rev=1&note=Shorter+lead+time
 {"kind":"process","id":"request-gcp-project","version":2,
@@ -562,7 +562,7 @@ practice   |                        ← generated ('' when absent)`,
  "changes_by":"morgan@example.com","changes_by_name":"Morgan Member","deleted":false}
 
 select count(*) from working_drafts;   → 0`,
-          note: "One transaction: documents updated to version 2, the version row with changes_by, the audit_log entry process.publish, the working draft deleted.",
+          note: "One transaction: `documents` updated to version 2, the version row with `changes_by`, the `audit_log` entry `process.publish`, the working draft deleted.",
         },
         {
           label: "A save still made from version 1 is refused",

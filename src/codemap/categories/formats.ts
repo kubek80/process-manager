@@ -6,9 +6,9 @@ export const formats: CodeCategory = {
   area: "server",
   title: "Formats and sample content",
   summary:
-    "Defines what a valid process, standard and set of lists is, checks every save and import against it, and keeps the sample content, the icons and the portal's look. " +
+    "Defines what a valid process, standard and set of lists is, and checks every save and import against it. " +
     "Each format is a JSON schema in `schema/`. The same files are read by the server (`server/internal/schema`) and, compiled ahead of time into `src/lib/validators.generated.js`, by the app, so both agree on what a valid document is; `docs.Check` adds what a schema cannot say. " +
-    "The sample content in `processes/`, `standards/` and `catalog/` fills an empty database; `demo/` is a larger set loaded on request.",
+    "The sample content in `processes/`, `standards/` and `catalog/` fills an empty database; `demo/` is a larger set loaded on request. Icons (with an allow-list for SVG) and the portal's look are checked and stored here too.",
   requirements: [
     "`schema/*.schema.json` is the one definition of the formats: the server compiles the same files at start, the app uses checks generated from them (`npm run validators`); a test fails when the generated file is out of date.",
     "The generated checks run under the content security policy: no `eval`, `new Function` or `require` (the generator refuses to write them).",

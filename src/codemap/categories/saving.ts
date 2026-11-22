@@ -71,13 +71,13 @@ export const saving: CodeCategory = {
       caption: "`docs.ForPublishing` on the sample process: the draft's status is ignored, the review rhythm comes from the draft, the review record from the published version.",
       stages: [
         {
-          label: "Published version 1 (documents.body)",
+          label: "Published version 1 (`documents.body`)",
           where: "processes/request-gcp-project.json",
           shape: `"status": "active",
 "review": { "intervalMonths": 6, "lastReviewedAt": "2026-11-03", "reviewedBy": "Process owner" }`,
         },
         {
-          label: "The working draft (working_drafts.body)",
+          label: "The working draft (`working_drafts.body`)",
           where: "server/internal/docs/drafts.go",
           shape: `"status": "draft",
 "review": { "intervalMonths": 12 },

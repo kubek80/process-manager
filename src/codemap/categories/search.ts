@@ -47,7 +47,7 @@ export const search: CodeCategory = {
   examples: [
     {
       title: "\"new google cloud project\" through both searches",
-      caption: "Real results on the sample content (builtin provider). The word search and the search by meaning find different things; Both puts them together.",
+      caption: "Real results on the sample content (`builtin` provider). The word search and the search by meaning find different things; Both puts them together.",
       stages: [
         {
           label: "By words, in the browser",
@@ -72,7 +72,7 @@ infrastructure-as-code   0.291  Summary   (a standard)
           note: "Not every word is needed: Apigee's prerequisite shares only the word \"project\", the standard's summary \"google\" and \"cloud\"; both score above the 0.20 floor.",
         },
         {
-          label: "What the page keeps (fromMeaning)",
+          label: "What the page keeps (`fromMeaning`)",
           where: "src/lib/meaning.ts",
           shape: `{kind: "process", id: "request-gcp-project", score: 0.523, by: ["meaning"],
  hits: [{where: "summary", label: "Summary"},
@@ -86,7 +86,7 @@ infrastructure-as-code   0.291  Summary   (a standard)
           shape: `request-gcp-project     1/61 (words) + 1/61 (meaning) = 0.0328   by: words, meaning
 onboard-api-to-apigee   1/62 (meaning)                  = 0.0161   by: meaning
 infrastructure-as-code  1/63 (meaning)                  = 0.0159   by: meaning`,
-          note: "Then search() runs with found = this list: the filters, counts, \"My application\" and paging work on it exactly as on a word search.",
+          note: "Then `search()` runs with `found` = this list: the filters, counts, \"My application\" and paging work on it exactly as on a word search.",
         },
       ],
     },
