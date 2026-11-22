@@ -205,9 +205,20 @@ type notPublisher struct {
 	lists docs.Lists
 	does  string // "publish this process", "retire this standard", ...
 	after string // a sentence after it, or ""
+	// first: readers would see it for the first time, so whoever publishes must own its whole
+	// placement - both its platform and its practice when it has both
+	first bool
 }
 
 func (e *notPublisher) Error() string {
+	if e.first && e.b.Platform != "" && e.b.Practice != "" {
+		msg := fmt.Sprintf("Only somebody who owns both the platform “%s” and the practice “%s”, or %s, can %s.",
+			docs.Name(e.lists.Platforms, e.b.Platform), docs.Name(e.lists.Practices, e.b.Practice), editorOf(e.kind), e.does)
+		if e.after != "" {
+			msg += " " + e.after
+		}
+		return msg
+	}
 	var who []string
 	if e.b.Platform != "" {
 		who = append(who, "an owner of the platform “"+docs.Name(e.lists.Platforms, e.b.Platform)+"”")
@@ -227,11 +238,14 @@ func (e *notPublisher) Error() string {
 }
 
 // publishWords says what a save does to readers that a member may not do: from the stored
-// status (storedDraft: never published, or new) to the new one.
-func publishWords(kind string, storedDraft bool, stored, next string, fromDraft bool) (does, after string) {
+// status (storedDraft: never published, or new) to the new one. kept: the person's draft stays
+// stored (publishing a working draft, or storing a never-published document from it).
+func publishWords(kind string, storedDraft bool, stored, next string, kept bool) (does, after string) {
 	n := noun[kind]
 	switch {
-	case fromDraft:
+	case storedDraft && next == "deprecated":
+		return "retire this " + n, ""
+	case kept:
 		return "publish this " + n, "Your draft is saved for them."
 	case storedDraft:
 		return "publish this " + n, "Save it as a draft for them."
@@ -598,11 +612,15 @@ func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 	s := who(r)
 	next, newStatus := headOf(body)
 	fromDraft := sv.drafts == docs.PublishDraft
+	// kept is true when the person's draft stays stored whatever is refused: publishing a working
+	// draft, or storing a never-published document from it
+	kept := fromDraft || sv.drafts == docs.ReplaceDraft
 	// A save that stays a draft needs the right to work on drafts (members of its platform or
-	// practice have it); anything readers would see needs the right to edit. The right is needed
-	// for what it belongs to now and for what it is moved to: an owner of one platform can
-	// neither take over a document of another nor hand theirs away. What is refused here is
-	// decided by the body alone, so it is the same whether the id exists or not.
+	// practice have it); anything readers would see needs the right to edit (checked with the
+	// stored document, below). The right is needed for what it belongs to now and for what it
+	// is moved to: an owner of one platform can neither take over a document of another nor
+	// hand theirs away. What is refused here is decided by the body alone, so it is the same
+	// whether the id exists or not.
 	staysDraft := kind != docs.Catalog && !fromDraft && newStatus == "draft"
 	if !s.CanDraft(kind, next) {
 		deniedFor(w, kind, s)
@@ -611,15 +629,6 @@ func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 	lists, err := a.Docs.Lists(r.Context())
 	if err != nil {
 		a.fail(w, r, err)
-		return
-	}
-	if !staysDraft && !s.CanEdit(kind, next) {
-		// only a member of where it would be: who can publish it is said
-		does, after := publishWords(kind, true, "", newStatus, fromDraft)
-		if newStatus == "deprecated" {
-			does, after = "retire this "+noun[kind], ""
-		}
-		writeError(w, 403, (&notPublisher{kind: kind, b: next, lists: lists, does: does, after: after}).Error())
 		return
 	}
 	if err := a.validateFormat(kind, body); err != nil {
@@ -659,6 +668,13 @@ func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 			storedDraft := current == nil || hidden || storedStatus == "draft"
 			// a never-published document saved as a draft: the right to work on drafts is enough
 			draftOnly := staysDraft && storedDraft
+			// readers see it for the first time: its whole placement is checked as for a new
+			// document, since a draft may have been placed where somebody is only a member
+			first := kind != docs.Catalog && storedDraft && !staysDraft
+			refuse := func(b rbac.Belongs) error {
+				does, after := publishWords(kind, storedDraft, storedStatus, newStatus, kept)
+				return &notPublisher{kind: kind, b: b, lists: lists, does: does, after: after, first: first}
+			}
 			if current != nil && !hidden {
 				b := belongsOf(current.Body)
 				switch {
@@ -666,24 +682,36 @@ func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 					return errDenied
 				case !draftOnly && !s.CanEdit(kind, b):
 					if kind != docs.Catalog && s.CanDraft(kind, b) {
-						does, after := publishWords(kind, storedDraft, storedStatus, newStatus, fromDraft)
-						return &notPublisher{kind: kind, b: b, lists: lists, does: does, after: after}
+						if first {
+							return refuse(next)
+						}
+						return refuse(b)
 					}
 					return errDenied
-				case !draftOnly && kind != docs.Catalog && !s.CanEdit(kind, next):
-					// taken back from readers onto a platform or practice the person is only a member of
-					does, after := publishWords(kind, storedDraft, storedStatus, newStatus, fromDraft)
-					return &notPublisher{kind: kind, b: next, lists: lists, does: does, after: after}
 				}
 				stored = &b
 			}
-			// a document shared with another platform or practice stays with it
-			misplacedBy := s.Misplaced
-			if draftOnly {
-				misplacedBy = s.MisplacedDraft
+			// only a member of where it would be: who can do it is said (also for a draft
+			// somebody may not see, which answers as for an id that does not exist)
+			if !draftOnly && kind != docs.Catalog && !s.CanEdit(kind, next) {
+				return refuse(next)
 			}
-			if field, id := misplacedBy(kind, stored, next); field != "" {
-				return &misplaced{kind: kind, field: field, name: placeName(lists, field, id), draft: draftOnly, member: s.MemberOfSome()}
+			// a document shared with another platform or practice stays with it
+			switch {
+			case draftOnly:
+				if field, id := s.MisplacedDraft(kind, stored, next); field != "" {
+					return &misplaced{kind: kind, field: field, name: placeName(lists, field, id), draft: true, member: s.MemberOfSome()}
+				}
+			case first:
+				// the first publication (of a stored draft, or of something new): the publisher must
+				// own its whole placement
+				if field, _ := s.Misplaced(kind, nil, next); field != "" {
+					return refuse(next)
+				}
+			default:
+				if field, id := s.Misplaced(kind, stored, next); field != "" {
+					return &misplaced{kind: kind, field: field, name: placeName(lists, field, id)}
+				}
 			}
 			if kind != docs.Catalog {
 				// a document readers do not see becomes published (active), never retired directly

@@ -296,7 +296,8 @@
     "contacts": {
       "type": "object",
       "additionalProperties": false,
-      "description": "How to reach them, each way on its own. Every link starts with http:// or https://.",
+      "minProperties": 1,
+      "description": "How to reach them, each way on its own. Every link starts with http:// or https://. Leave the object out when nothing is given.",
       "properties": {
         "email": {
           "type": "string",

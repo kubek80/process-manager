@@ -113,7 +113,7 @@ func (a *api) answerPeople(w http.ResponseWriter, r *http.Request, g group, note
 
 // memberCall reads what every change of the members starts with: the group, the right to
 // change its members (an admin, or an owner of that same group), and the person's address.
-func (a *api) memberCall(w http.ResponseWriter, r *http.Request, email string) (group, string, bool) {
+func (a *api) memberCall(w http.ResponseWriter, r *http.Request, email string, removing bool) (group, string, bool) {
 	lists, err := a.Docs.Lists(r.Context())
 	if err != nil {
 		a.fail(w, r, err)
@@ -128,7 +128,15 @@ func (a *api) memberCall(w http.ResponseWriter, r *http.Request, email string) (
 		return g, "", false
 	}
 	email = strings.ToLower(strings.TrimSpace(email))
-	if !docs.Storable(email) || rbac.Check(rbac.Assignment{Email: email, Role: rbac.Admin}) != nil {
+	if removing {
+		// an address stored by an earlier version can always be taken out again
+		if stored, ok := storedEmail(email); ok {
+			return g, stored, true
+		}
+		writeError(w, 400, "That is not an email address.")
+		return g, "", false
+	}
+	if !docs.Storable(email) || !rbac.ValidEmail(email) {
 		writeError(w, 400, "That is not an email address.")
 		return g, "", false
 	}
@@ -166,7 +174,7 @@ func (a *api) addMember(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	g, email, ok := a.memberCall(w, r, in.Email)
+	g, email, ok := a.memberCall(w, r, in.Email, false)
 	if !ok {
 		return
 	}
@@ -190,7 +198,7 @@ func (a *api) addMember(w http.ResponseWriter, r *http.Request) {
 
 // removeMember: DELETE /api/groups/{platforms|practices}/{id}/members?email=…
 func (a *api) removeMember(w http.ResponseWriter, r *http.Request) {
-	g, email, ok := a.memberCall(w, r, r.URL.Query().Get("email"))
+	g, email, ok := a.memberCall(w, r, r.URL.Query().Get("email"), true)
 	if !ok {
 		return
 	}

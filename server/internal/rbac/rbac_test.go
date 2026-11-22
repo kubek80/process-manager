@@ -313,3 +313,14 @@ func TestMemberRolesAreCheckedLikeOwnerRoles(t *testing.T) {
 		t.Fatalf("%v %v", list, err)
 	}
 }
+
+func TestAnAddressHoldsNoInvisibleCharacters(t *testing.T) {
+	for _, bad := range []string{"a​@x.io", "a@x‮.io", "a\u007f@x.io", "a\u0000@x.io", "⁦a@x.io"} {
+		if rbac.ValidEmail(bad) || rbac.Check(rbac.Assignment{Email: bad, Role: rbac.Admin}) == nil {
+			t.Errorf("%q", bad)
+		}
+	}
+	if !rbac.ValidEmail("anne.o'neil@example.co.uk") || !rbac.ValidEmail("zoë@example.com") {
+		t.Fatal("ordinary addresses")
+	}
+}

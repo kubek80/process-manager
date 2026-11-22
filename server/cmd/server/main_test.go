@@ -304,3 +304,36 @@ func TestStoppingWaitsForRequestsInProgress(t *testing.T) {
 		t.Fatalf("the request in progress got %q", got)
 	}
 }
+
+// Lists whose contact details hold a link that is not http:// or https:// are not imported: the
+// format says so, and so does the server's own check of the lists, each on its own.
+func TestImportRefusesListsWithABadContactLink(t *testing.T) {
+	good, err := os.ReadFile(filepath.Join(repo, "..", "catalog", "catalog.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad := strings.Replace(string(good), `"form": "https://forms.example.com/cloud-platform/request"`, `"form": "javascript:alert(1)"`, 1)
+	if bad == string(good) {
+		t.Fatal("the sample lists changed: adjust the test")
+	}
+	schemas, err := schema.Load(filepath.Join(repo, "..", "schema"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, validate := range map[string]func(string, []byte) error{
+		"format": schemas.Validate,
+		"check":  func(kind string, body []byte) error { return docs.Check(kind, body, docs.Lists{}) },
+	} {
+		st := newStores(t)
+		st.validate = validate
+		dir := t.TempDir()
+		os.MkdirAll(filepath.Join(dir, "catalog"), 0o755)
+		os.WriteFile(filepath.Join(dir, "catalog", "catalog.json"), []byte(bad), 0o644)
+		if err := importFiles(ctx, st, dir, quiet); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.docs.Get(ctx, docs.Catalog, docs.CatalogID); err == nil {
+			t.Errorf("%s: the lists were imported with a javascript: link", name)
+		}
+	}
+}

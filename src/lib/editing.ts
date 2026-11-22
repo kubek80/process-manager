@@ -807,25 +807,40 @@ export type SentencePart = string | PersonRef;
 export const partsText = (parts: readonly SentencePart[]) => parts.map((p) => (typeof p === "string" ? p : personLabel(p))).join("");
 
 /**
- * Who can publish a document the person may only save drafts of (a member of its platform or
- * practice), in plain words, naming its platform and practice and then their owners, by name
- * where it is known (`owners` false: not loaded yet, so the owners are left out). `draft`:
- * "saved" when the person's draft is saved, "unsaved" while changes on the screen are not,
- * "none" when there is no draft yet. E.g. "Only an owner of the platform “Google Cloud”, or a
- * process editor, can publish this process. “Google Cloud” is owned by Jordan Platform. Your
+ * Who can publish a document the person may not publish (`publishPlaces` says whose ownership it
+ * depends on), in plain words, naming the platforms and practices and then their owners, by name
+ * where it is known (`owners` false: not loaded yet, so the owners are left out). `all` false: an
+ * owner of any one of `groups`; true: somebody who owns every one of them (with one group the
+ * same). `draft`: "saved" when the person's draft is saved, "unsaved" while changes on the screen
+ * are not, "none" when there is no draft yet. E.g. "Only an owner of the platform “Google Cloud”,
+ * or a process editor, can publish this process. “Google Cloud” is owned by Jordan Platform. Your
  * draft is saved for them."
  */
-export function whoPublishesParts(kind: TargetKind, groups: PublishingGroup[], draft: "saved" | "unsaved" | "none", owners = true): SentencePart[] {
+export function whoPublishesParts(kind: TargetKind, need: { all: boolean; groups: PublishingGroup[] }, draft: "saved" | "unsaved" | "none", owners = true): SentencePart[] {
   const editor = kind === "process" ? "a process editor" : "a standards editor";
-  const of = groups.map((g, i) => `${i === 0 ? "an owner of" : "of"} the ${g.kind} “${g.name}”`);
-  const whom = of.length ? `${of.join(" or ")}, or ${editor},` : editor;
-  const parts: SentencePart[] = [`Only ${whom} can publish this ${kind}.`];
-  if (owners) {
-    groups.forEach((g, i) => {
+  const groups = need.groups;
+  const named = (g: PublishingGroup) => `the ${g.kind} “${g.name}”`;
+  const every = need.all && groups.length > 1;
+  const parts: SentencePart[] = [];
+  if (!groups.length) parts.push(`Only ${editor} can publish this ${kind}.`);
+  else if (!every) {
+    const of = groups.map((g, i) => `${i === 0 ? "an owner of" : "of"} ${named(g)}`);
+    parts.push(`Only ${of.join(" or ")}, or ${editor}, can publish this ${kind}.`);
+    if (owners) groups.forEach((g, i) => {
       const last = i === groups.length - 1;
       if (!g.owners.length) { parts.push(` “${g.name}” has no owner yet${last ? "." : ";"}`); return; }
       parts.push(` “${g.name}” is owned by `, ...listParts(g.owners), last ? "." : ";");
     });
+  } else {
+    const both = groups.length === 2;
+    const list = listParts(groups.map(named), groups.length).join("");
+    parts.push(`Only somebody who owns ${both ? "both " : ""}${list}, or ${editor}, can publish this ${kind}.`);
+    if (owners) {
+      const key = (x: PersonRef) => x.email.toLowerCase();
+      const common = groups[0].owners.filter((o) => groups.every((g) => g.owners.some((x) => key(x) === key(o))));
+      if (!common.length) parts.push(` Nobody owns ${both ? "both" : "all of them"} yet: ${editor} can publish it.`);
+      else parts.push(` ${common.length === 1 ? "Owner" : "Owners"} of ${both ? "both" : "all of them"}: `, ...listParts(common), ".");
+    }
   }
   const tail = draft === "saved" ? "Your draft is saved for them." : draft === "unsaved" ? "Save draft keeps your changes for them." : "What you change and save as a draft waits for them.";
   parts.push(` ${tail}`);
@@ -833,5 +848,5 @@ export function whoPublishesParts(kind: TargetKind, groups: PublishingGroup[], d
 }
 
 /** `whoPublishesParts` as plain text, for the checker's list and messages. */
-export const whoPublishesSentence = (kind: TargetKind, groups: PublishingGroup[], draft: "saved" | "unsaved" | "none", owners = true): string =>
-  partsText(whoPublishesParts(kind, groups, draft, owners));
+export const whoPublishesSentence = (kind: TargetKind, need: { all: boolean; groups: PublishingGroup[] }, draft: "saved" | "unsaved" | "none", owners = true): string =>
+  partsText(whoPublishesParts(kind, need, draft, owners));

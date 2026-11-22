@@ -4,7 +4,7 @@ import type { DocMeta, Issue, Membership, Process, Standard, TargetKind } from "
 import { conflictOf, useDraft, type Conflict, type Draft } from "../lib/draft";
 import { author, baseBehindSentence, clock, draftKindOf, draftMovedOn, draftRevisionToSend, draftSaveBase, saveCallOf, statusChangedSentence, editState, exampleIssues, isExampleIssue, issueText, statusChangeBlocked, steppedMessage, movedItem, movedMessage, moveOf, publishList, savedByText, partsText, whoPublishesParts, type DraftKind } from "../lib/editing";
 import { compare, describeChange, type Change } from "../lib/diff";
-import { belongsRefused, canPublish, draftAudience } from "../lib/rights";
+import { belongsRefused, canPublish, draftAudience, publishPlaces } from "../lib/rights";
 import { membersOf } from "../lib/members";
 import { platformName, practiceName } from "../lib/catalog";
 import { useMe, usePerms } from "../lib/session";
@@ -402,7 +402,12 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
   const keepStatus = (doc: T): T => ({ ...doc, status: unpublished ? "draft" : stored.status });
   // A member of its platform or practice saves drafts like an owner, but cannot publish (nor
   // retire, unpublish, bring back or delete): who can is said on the screen, by name
-  const mayPublish = canPublish(perms, kind, d.saved) && canPublish(perms, kind, d.draft);
+  // publishing depends on where it is stored and where the changes put it (`publishPlaces`): a
+  // never-published document needs an owner of its whole placement, a move an owner of both ends
+  const placement = publishPlaces(d.saved, d.draft, !unpublished);
+  const mayPublish = canPublish(perms, kind, d.saved, d.draft, !unpublished);
+  // retire, bring back, unpublish and delete act on what is stored: the right for where it is stored
+  const mayChangeStored = canPublish(perms, kind, d.saved);
   const [owners, setOwners] = useState<Membership[] | null>(null);
   useEffect(() => {
     if (mayPublish || owners) return;
@@ -412,10 +417,10 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
   }, [mayPublish, owners]);
   // the owners by name where the portal knows it (`GET /api/members` gives it), the address as tooltip
   const ownersOf = (k: "platform" | "practice", id: string) => (owners ? membersOf(owners, k, id).map((m) => ({ email: m.email, name: m.name })) : []);
-  const publishRightParts = mayPublish ? [] : whoPublishesParts(kind, ([
-    d.draft.platform ? { kind: "platform" as const, name: platformName(catalog, d.draft.platform), owners: ownersOf("platform", d.draft.platform) } : null,
-    d.draft.practice ? { kind: "practice" as const, name: practiceName(catalog, d.draft.practice), owners: ownersOf("practice", d.draft.practice) } : null,
-  ]).filter((g) => !!g), unsaved ? "unsaved" : working || unpublished ? "saved" : "none", !!owners);
+  const publishRightParts = mayPublish ? [] : whoPublishesParts(kind, {
+    all: placement.all,
+    groups: placement.places.map((x) => ({ kind: x.kind, name: x.kind === "platform" ? platformName(catalog, x.id) : practiceName(catalog, x.id), owners: ownersOf(x.kind, x.id) })),
+  }, unsaved ? "unsaved" : working || unpublished ? "saved" : "none", !!owners);
   const publishRight = partsText(publishRightParts);
   const rightsBlock = refused ? "Put the platform or practice back as it was (under About)." : losing ? "Keep it with a platform or practice of yours (under About)." : "";
   const jsonBlock = jsonPending ? "The JSON has changes with problems. Fix them there first." : "";
@@ -571,10 +576,10 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
     { label: "Change with AI", icon: <Sparkles size={16} />, hint: "Describe a change in plain words", run: () => setDialog("ai"), blocked: drawable ? undefined : "Repair the JSON first." },
     { label: json ? "Back to the editor" : "JSON", icon: <Braces size={16} />, hint: json ? undefined : "The text of the whole document", run: () => (jsonWanted ? void leaveJson() : setJsonWanted(true)), blocked: !drawable ? "It cannot be shown otherwise until the JSON is repaired." : undefined },
     ...(working ? [{ label: "Discard draft…", icon: <Undo2 size={16} />, hint: unpublished ? `Back to how it was last stored as the ${noun} itself` : `Readers keep version ${version}`, run: discardDraft, divider: true, danger: true }] : []),
-    ...(mayPublish && !unpublished && status === "active" ? [{ label: "Retire…", icon: <Archive size={16} />, hint: "Keep it for reference, marked as retired", run: () => setDialog("retire"), blocked: statusBlock, divider: !working }] : []),
-    ...(mayPublish && !unpublished && status === "deprecated" ? [{ label: "Bring back into use…", icon: <RotateCcw size={16} />, run: bringBack, blocked: statusBlock, divider: !working }] : []),
-    ...(mayPublish && !unpublished ? [{ label: "Unpublish…", icon: <EyeOff size={16} />, hint: "Hide it from readers again", run: unpublish, blocked: statusBlock }] : []),
-    ...(mayPublish ? [{ label: "Delete…", icon: <Trash2 size={16} />, run: remove, danger: true, divider: unpublished }] : []),
+    ...(mayChangeStored && !unpublished && status === "active" ? [{ label: "Retire…", icon: <Archive size={16} />, hint: "Keep it for reference, marked as retired", run: () => setDialog("retire"), blocked: statusBlock, divider: !working }] : []),
+    ...(mayChangeStored && !unpublished && status === "deprecated" ? [{ label: "Bring back into use…", icon: <RotateCcw size={16} />, run: bringBack, blocked: statusBlock, divider: !working }] : []),
+    ...(mayChangeStored && !unpublished ? [{ label: "Unpublish…", icon: <EyeOff size={16} />, hint: "Hide it from readers again", run: unpublish, blocked: statusBlock }] : []),
+    ...(mayChangeStored ? [{ label: "Delete…", icon: <Trash2 size={16} />, run: remove, danger: true, divider: unpublished }] : []),
   ];
 
   const discard: BarAction | undefined = d.dirty

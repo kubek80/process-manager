@@ -13,7 +13,11 @@ import type { GroupKind, GroupRank } from "./members";
  *   may publish, and a member of the platform or of the practice it belongs to (`canDraft`).
  * - May manage (confirm reviews, answer feedback): whoever may publish, and an Owner of the team
  *   that maintains it. A member of a platform or practice does not.
- * - May see its drafts: whoever may manage or draft it (`seesDrafts`).
+ * - May publish it as it is now (`canPublish` with its placement): who may publish what is
+ *   stored, owning every platform and practice the publication depends on (`publishPlaces`).
+ * - Sees a never-published document: whoever may manage or draft it (`seesDrafts`). Sees the
+ *   unpublished changes of a published one (`meta[id].draft`, the working draft): whoever may
+ *   draft it (`canDraft`); a team's Owner does not.
  */
 
 /** What a process or standard belongs to, as far as rights go. */
@@ -40,10 +44,55 @@ export const ownsPlatformOrPractice = (p: Perms, doc?: Belongs) =>
 export const memberOfPlatformOrPractice = (p: Perms, doc?: Belongs) =>
   (!!doc?.platform && (p.memberPlatforms ?? []).includes(doc.platform)) || (!!doc?.practice && (p.memberPractices ?? []).includes(doc.practice));
 
-/** May publish this process or standard: save what readers see, retire, unpublish, bring back, delete. */
+/** May publish this process or standard as stored: save what readers see, retire, unpublish, bring back, delete. */
 export const canEdit = (p: Perms, kind: TargetKind, doc?: Belongs) => editsAll(p, kind) || ownsPlatformOrPractice(p, doc);
-/** The same as `canEdit`, by the name the editing screen uses for it. */
-export const canPublish = canEdit;
+
+/** A platform or practice, by its id. */
+export interface Place { kind: BelongsField; id: string }
+const placesIn = (b: Belongs | undefined): Place[] =>
+  (["platform", "practice"] as const).filter((k) => !!b?.[k]).map((k) => ({ kind: k, id: b![k]! }));
+
+/**
+ * Whose ownership publishing depends on, besides an editor of the kind (who may always), as the
+ * server decides it. `saved`: where the document is stored; `now`: where the changes put it;
+ * `published`: readers see a version of it already.
+ * - `all` false: an owner of any one of `places` (a published document whose platform and
+ *   practice stay as they are: its stored places).
+ * - `all` true: somebody who owns every one of `places`: a never-published document needs its
+ *   whole placement, as a new one; a platform or practice changed needs an owner of where it
+ *   was and of where it goes (and of what it is stored on, and what it will be on).
+ * Empty `places`: only an editor.
+ */
+export function publishPlaces(saved: Belongs | undefined, now: Belongs, published: boolean): { all: boolean; places: Place[] } {
+  const was = saved ?? now;
+  const moved = (["platform", "practice"] as const).filter((k) => (was[k] || undefined) !== (now[k] || undefined));
+  if (published && !moved.length) return { all: false, places: placesIn(was) };
+  const out: Place[] = [];
+  const add = (x: Place[]) => { for (const pl of x) if (!out.some((o) => o.kind === pl.kind && o.id === pl.id)) out.push(pl); };
+  if (!published) add(placesIn(now));
+  for (const k of moved) add(placesIn({ [k]: was[k] }));
+  for (const k of moved) add(placesIn({ [k]: now[k] }));
+  // what it is stored on, and what it will be on, must be somebody's at all
+  if (moved.length && !moved.some((k) => was[k])) add(placesIn(was));
+  if (moved.length && !moved.some((k) => now[k])) add(placesIn(now));
+  const order = (x: Place) => (x.kind === "platform" ? 0 : 1);
+  return { all: true, places: out.sort((a, b) => order(a) - order(b)) };
+}
+
+const ownsPlace = (p: Perms, x: Place) => ((x.kind === "platform" ? p.platforms : p.practices) ?? []).includes(x.id);
+
+/**
+ * May publish this document. Without a new placement (`now`): as it is stored (`canEdit`). With
+ * one: also the platform and practice the changes give it, by `publishPlaces` - Publish… is
+ * offered exactly when the server accepts it.
+ */
+export function canPublish(p: Perms, kind: TargetKind, saved?: Belongs, now?: Belongs, published = true): boolean {
+  if (editsAll(p, kind)) return true;
+  if (!now) return canEdit(p, kind, saved);
+  const need = publishPlaces(saved, now, published);
+  if (!need.places.length) return false;
+  return need.all ? need.places.every((x) => ownsPlace(p, x)) : need.places.some((x) => ownsPlace(p, x));
+}
 
 /** May open the editing screen and save a draft of it (both kinds of draft), not necessarily publish. */
 export const canDraft = (p: Perms, kind: TargetKind, doc?: Belongs) => canEdit(p, kind, doc) || memberOfPlatformOrPractice(p, doc);
@@ -52,7 +101,11 @@ export const canDraft = (p: Perms, kind: TargetKind, doc?: Belongs) => canEdit(p
 export const canManage = (p: Perms, kind: TargetKind, doc?: Belongs) =>
   canEdit(p, kind, doc) || (!!doc?.owner && (p.owns ?? []).includes(doc.owner));
 
-/** May see it while it is a draft, and its unpublished changes. */
+/**
+ * May see it while it was never published (a draft the server sends them): whoever may manage
+ * it (a team's Owner too) or draft it. Its unpublished changes (`meta[id].draft`, the working
+ * draft) are only for whoever may draft it: `canDraft`.
+ */
 export const seesDrafts = (p: Perms, kind: TargetKind, doc?: Belongs) => canManage(p, kind, doc) || canDraft(p, kind, doc);
 
 /**
@@ -85,8 +138,8 @@ export const wouldLoseEdit = (p: Perms, kind: TargetKind, saved?: Belongs, now?:
  * owner who moves it to a platform or practice where they are only a member. Allowed, but they
  * should know.
  */
-export const wouldLosePublish = (p: Perms, kind: TargetKind, saved?: Belongs, now?: Belongs) =>
-  canPublish(p, kind, saved) && !canPublish(p, kind, now) && canDraft(p, kind, now);
+export const wouldLosePublish = (p: Perms, kind: TargetKind, saved?: Belongs, now?: Belongs, published = true) =>
+  canPublish(p, kind, saved) && !canPublish(p, kind, saved, now ?? {}, published) && canDraft(p, kind, now);
 
 export type BelongsField = "platform" | "practice";
 

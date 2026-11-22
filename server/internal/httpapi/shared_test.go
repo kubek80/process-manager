@@ -73,17 +73,18 @@ func TestASharedDocumentStaysWithItsOtherPlatformOrPractice(t *testing.T) {
 		t.Fatal("the platform was not removed")
 	}
 
-	// creating: every platform and practice set must be one's own
+	// creating (a first publication): every platform and practice set must be one's own
+	const both = "Only somebody who owns both the platform “%s” and the practice “%s”, or a process editor, can publish this process. Save it as a draft for them."
 	fresh := strings.NewReplacer(`"id": "request-gcp-project"`, `"id": "request-gcp-folder"`, `"practice": "engineering"`, `"practice": "security", "platform": "google-cloud"`).Replace(e.body(docs.Process, gcp, "", ""))
 	status, body = j.do("PUT", "/api/processes/request-gcp-folder?base=0", fresh)
-	wantError(t, status, body, 403, fmt.Sprintf(practiceMsg, "Cyber security", "process", "process"))
+	wantError(t, status, body, 403, fmt.Sprintf(both, "Google Cloud", "Cyber security"))
 	// also under the id of something deleted: it starts from nothing
 	status, body = e.as(alex).do("DELETE", "/api/processes/"+library, nil)
 	wantStatus(t, status, 200, body)
 	again := e.body(docs.Process, repoP, "", "")
 	again = strings.NewReplacer(`"id": "request-github-repository"`, `"id": "`+library+`"`, `"owner": "developer-experience-team",`, `"owner": "developer-experience-team", "practice": "engineering",`).Replace(again)
 	status, body = j.do("PUT", "/api/processes/"+library+"?base=0", again)
-	wantError(t, status, body, 403, fmt.Sprintf(platformMsg, "GitHub", "process", "process"))
+	wantError(t, status, body, 403, fmt.Sprintf(both, "GitHub", "Engineering"))
 
 	// general editors are not limited
 	status, body = e.as(alex).do("PUT", "/api/processes/"+repoP, e.body(docs.Process, repoP, `"platform": "github"`, `"platform": "azure"`))

@@ -120,10 +120,10 @@ func draftPending(w http.ResponseWriter, kind string, p *docs.DraftPending) {
 	})
 }
 
-// editable reads the published document and checks that the caller may work on its drafts
-// (publish: may edit it). It answers the request when not: "does not exist" for whoever may not
-// work on its drafts; to a member of its platform or practice who asks to publish, who can.
-func (a *api) editable(w http.ResponseWriter, r *http.Request, kind string, publish bool) (docs.Doc, bool) {
+// editable reads the published document and checks that the caller may work on its drafts. It
+// answers "does not exist" when not. Whether they may publish is decided by the save, which
+// knows what the draft makes of the document (a member is told who can).
+func (a *api) editable(w http.ResponseWriter, r *http.Request, kind string) (docs.Doc, bool) {
 	id := r.PathValue("id")
 	if !docs.ValidID(id) {
 		notThere(w)
@@ -140,22 +140,13 @@ func (a *api) editable(w http.ResponseWriter, r *http.Request, kind string, publ
 	case !who(r).CanDraft(kind, belongsOf(cur.Body)):
 		notThere(w)
 		return cur, false
-	case publish && !who(r).CanEdit(kind, belongsOf(cur.Body)):
-		lists, err := a.Docs.Lists(r.Context())
-		if err != nil {
-			a.fail(w, r, err)
-			return cur, false
-		}
-		e := notPublisher{kind: kind, b: belongsOf(cur.Body), lists: lists, does: "publish this " + noun[kind], after: "Your draft is saved for them."}
-		writeError(w, 403, e.Error())
-		return cur, false
 	}
 	return cur, true
 }
 
 func (a *api) getDraft(kind string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cur, ok := a.editable(w, r, kind, false)
+		cur, ok := a.editable(w, r, kind)
 		if !ok {
 			return
 		}
@@ -310,7 +301,7 @@ func (a *api) publishDraft(kind string) http.HandlerFunc {
 			}
 			over = &n
 		}
-		cur, ok := a.editable(w, r, kind, true)
+		cur, ok := a.editable(w, r, kind)
 		if !ok {
 			return
 		}

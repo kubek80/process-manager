@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { belongsChoice, belongsRefused, canChangeDetails, canCreate, canDraft, canEdit, canManage, canManageMembers, canOpenAdmin, canPublish, completePerms, draftAudience, editsAll, groupRank, isMember, newDocPlaces, NO_PERMS, placesOf, roleLabel, seesDrafts, wouldLoseEdit, wouldLosePublish } from "../rights";
+import { belongsChoice, belongsRefused, canChangeDetails, canCreate, canDraft, canEdit, canManage, canManageMembers, canOpenAdmin, canPublish, completePerms, draftAudience, publishPlaces, editsAll, groupRank, isMember, newDocPlaces, NO_PERMS, placesOf, roleLabel, seesDrafts, wouldLoseEdit, wouldLosePublish } from "../rights";
 import type { Perms } from "../../types";
 
 const perms = (p: Partial<Perms>): Perms => ({ ...NO_PERMS, ...p });
@@ -126,7 +126,7 @@ describe("who may change a process or standard", () => {
     expect(seesDrafts(casey, "process", gcp)).toBe(true);
     expect(seesDrafts(casey, "process", azure)).toBe(false);
     expect(seesDrafts(NO_PERMS, "process", gcp)).toBe(false);
-    expect(canPublish).toBe(canEdit);
+    expect(canPublish(jordan, "process", gcp)).toBe(canEdit(jordan, "process", gcp));
     expect(isMember(jordan)).toBe(false);
   });
 });
@@ -170,6 +170,8 @@ describe("a member of a platform or a practice", () => {
     expect(wouldLosePublish(both, "process", gcp, { platform: undefined, practice: "engineering" })).toBe(true);
     expect(wouldLoseEdit(both, "process", gcp, { platform: undefined, practice: "engineering" })).toBe(false);
     expect(wouldLosePublish(both, "process", gcp, gcp)).toBe(false);
+    // kept on his platform but put in a practice where he is only a member: publishing that move needs an owner of it
+    expect(wouldLosePublish(both, "process", gcp, { ...gcp, practice: "engineering" })).toBe(true);
     expect(wouldLosePublish(both, "process", gcp, azure)).toBe(false); // that one is out of reach altogether
     expect(placesOf(perms({ platforms: ["b", "a"], memberPlatforms: ["a", "c"] }), "platform")).toEqual(["a", "b", "c"]);
   });
@@ -233,5 +235,46 @@ describe("what the lists show a member about drafts", () => {
   it("says who sees a draft in one wording", () => {
     expect(draftAudience("process")).toBe("the process editors, the owners and members of its platform or practice, and the Owners of its team");
     expect(draftAudience("standard")).toMatch(/^the standards editors, /);
+  });
+});
+
+describe("who may publish, with the placement", () => {
+  const two = { platform: "google-cloud", practice: "engineering" };
+  const member = perms({ memberPlatforms: ["google-cloud"], memberPractices: ["engineering"] });
+  const ownsBoth = perms({ platforms: ["google-cloud"], practices: ["engineering"] });
+  const ownerAndMember = perms({ platforms: ["google-cloud"], memberPractices: ["engineering"] });
+  const ownsOne = perms({ platforms: ["google-cloud"] });
+  const editor = perms({ processes: true });
+  it("a never-published document needs an owner of its whole placement", () => {
+    expect(publishPlaces(two, two, false)).toEqual({ all: true, places: [{ kind: "platform", id: "google-cloud" }, { kind: "practice", id: "engineering" }] });
+    expect(canPublish(member, "process", two, two, false)).toBe(false);
+    expect(canPublish(ownsBoth, "process", two, two, false)).toBe(true);
+    expect(canPublish(ownerAndMember, "process", two, two, false)).toBe(false);
+    expect(canPublish(ownsOne, "process", two, two, false)).toBe(false);
+    expect(canPublish(editor, "process", two, two, false)).toBe(true);
+    expect(canPublish(ownsOne, "process", gcp, gcp, false)).toBe(true); // one place: owning it is enough
+    expect(canPublish(ownsOne, "process", {}, {}, false)).toBe(false); // nowhere: only an editor
+  });
+  it("a published document that stays where it is needs an owner of either place", () => {
+    expect(publishPlaces(two, two, true)).toEqual({ all: false, places: [{ kind: "platform", id: "google-cloud" }, { kind: "practice", id: "engineering" }] });
+    expect(canPublish(member, "process", two, two, true)).toBe(false);
+    expect(canPublish(ownsBoth, "process", two, two, true)).toBe(true);
+    expect(canPublish(ownerAndMember, "process", two, two, true)).toBe(true);
+    expect(canPublish(ownsOne, "process", two, two, true)).toBe(true);
+    expect(canPublish(editor, "process", two, two, true)).toBe(true);
+  });
+  it("a published document moved needs an owner of where it was and where it goes, not a member", () => {
+    // moved onto a practice the person is only a member of
+    expect(publishPlaces(gcp, two, true)).toEqual({ all: true, places: [{ kind: "platform", id: "google-cloud" }, { kind: "practice", id: "engineering" }] });
+    expect(canPublish(ownerAndMember, "process", gcp, two, true)).toBe(false);
+    expect(canPublish(ownsOne, "process", gcp, two, true)).toBe(false);
+    expect(canPublish(ownsBoth, "process", gcp, two, true)).toBe(true);
+    expect(canPublish(member, "process", gcp, two, true)).toBe(false);
+    expect(canPublish(editor, "process", gcp, two, true)).toBe(true);
+    // taken off its practice: an owner of the practice it leaves, and of what it stays on
+    expect(publishPlaces(two, gcp, true).places).toEqual([{ kind: "platform", id: "google-cloud" }, { kind: "practice", id: "engineering" }]);
+    // moved from one platform to another
+    expect(publishPlaces(gcp, azure, true).places).toEqual([{ kind: "platform", id: "google-cloud" }, { kind: "platform", id: "azure" }]);
+    expect(canPublish(ownsOne, "process", gcp, azure, true)).toBe(false);
   });
 });

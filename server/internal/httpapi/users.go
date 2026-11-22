@@ -90,6 +90,13 @@ func (a *api) listUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"users": users})
 }
 
+// storedEmail reads an address to take roles from: as it is stored, also one an earlier version
+// let in that would not be accepted today, so that it can always be removed.
+func storedEmail(raw string) (string, bool) {
+	email := strings.ToLower(strings.TrimSpace(raw))
+	return email, email != "" && docs.Storable(email)
+}
+
 // userEmail reads the email in the address, as it is stored.
 func userEmail(w http.ResponseWriter, r *http.Request) (string, bool) {
 	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
@@ -146,8 +153,9 @@ func (a *api) putUser(w http.ResponseWriter, r *http.Request) {
 
 // deleteUser takes every role from a person. They can still sign in and read like everyone.
 func (a *api) deleteUser(w http.ResponseWriter, r *http.Request) {
-	email, ok := userEmail(w, r)
+	email, ok := storedEmail(r.PathValue("email"))
 	if !ok {
+		writeError(w, 400, "That is not an email address.")
 		return
 	}
 	// like the app, which offers it for everybody else: nobody removes all of their own roles

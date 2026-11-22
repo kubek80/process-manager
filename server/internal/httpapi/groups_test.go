@@ -134,7 +134,15 @@ func TestAMemberIsToldWhoCanPublish(t *testing.T) {
 		{"PUT", "/api/processes/np1?base=1", e.variant("np1", "active", "Xxx"), "Only an owner of the platform “Google Cloud”, or a process editor, can publish this process. Save it as a draft for them."},
 		{"PUT", "/api/processes/np1?base=1", e.variant("np1", "deprecated", "Xxx"), "Only an owner of the platform “Google Cloud”, or a process editor, can retire this process."},
 		{"PUT", "/api/processes/pub1?base=1", e.variant("pub1", "draft", "Xxx"), "Only an owner of the platform “Google Cloud”, or a process editor, can hide this process from readers."},
-		{"PUT", "/api/processes/old?base=1", e.variant("old", "active", "Xxx"), "Only an owner of the platform “Google Cloud”, or a process editor, can publish this process. Save it as a draft for them."},
+		{"PUT", "/api/processes/old?base=1", e.variant("old", "active", "Xxx"), "Only an owner of the platform “Google Cloud”, or a process editor, can bring back this process."},
+		{"PUT", "/api/processes/old?base=1", e.variant("old", "deprecated", "Xxx"), "Only an owner of the platform “Google Cloud”, or a process editor, can change this process as readers see it. Save your changes as a draft for them."},
+		{"PUT", "/api/processes/pub1?base=1", e.variant("pub1", "active", "Xxx"), "Only an owner of the platform “Google Cloud”, or a process editor, can change this process as readers see it. Save your changes as a draft for them."},
+		{"PUT", "/api/processes/pub1?base=1", e.variant("pub1", "deprecated", "Xxx"), "Only an owner of the platform “Google Cloud”, or a process editor, can retire this process."},
+		{"PUT", "/api/processes/brand-new?base=0", e.variant("brand-new", "active", "Xxx"), "Only an owner of the platform “Google Cloud”, or a process editor, can publish this process. Save it as a draft for them."},
+		{"PUT", "/api/processes/np1?base=1&draft=1", e.variant("np1", "active", "Xxx"), "Only an owner of the platform “Google Cloud”, or a process editor, can publish this process. Your draft is saved for them."},
+		// a standard of the platform and the practice: published, either owner can; first published, an owner of both
+		{"PUT", "/api/standards/" + iac + "?base=1", e.body(docs.Standard, iac, `"summary": "`, `"summary": "Changed. `), "Only an owner of the platform “Google Cloud”, an owner of the practice “Engineering”, or a standards editor, can change this standard as readers see it. Save your changes as a draft for them."},
+		{"PUT", "/api/standards/sx1?base=0", strings.Replace(e.body(docs.Standard, iac, `"id": "`+iac+`"`, `"id": "sx1"`), `"status": "active"`, `"status": "active"`, 1), "Only somebody who owns both the platform “Google Cloud” and the practice “Engineering”, or a standards editor, can publish this standard. Save it as a draft for them."},
 		{"DELETE", "/api/processes/np1?base=1", "", "Only an owner of the platform “Google Cloud”, or a process editor, can delete this process."},
 		// a standard of the platform and the practice: either owner can
 		{"POST", "/api/standards/" + iac + "/review?base=1", "", "Only the team that owns this, and the people who can edit it, can confirm its review."},
@@ -496,5 +504,174 @@ func TestDetailsSurviveSavesOfTheListsAtTheSameTime(t *testing.T) {
 	}
 	if v := e.version(docs.Catalog, docs.CatalogID).Version; v != 6 {
 		t.Errorf("version %d", v)
+	}
+}
+
+// A draft may be placed where somebody is only a member; whoever makes it visible to readers for
+// the first time must own its whole placement, as when creating a published document directly.
+func TestTheFirstPublicationNeedsTheWholePlacement(t *testing.T) {
+	e := setup(t, nil)
+	// riley owns the practice Cyber security and is only a member of Google Cloud
+	must(t, e.deps.Roles.Grant(bg, rbac.Assignment{Email: riley, Role: rbac.PlatformMember, Scope: "google-cloud", GrantedBy: "test"}))
+	shared := func(id, status, practice string) string {
+		return strings.Replace(e.variant(id, status, "Shared "+id), `"platform": "google-cloud",`, `"platform": "google-cloud", "practice": "`+practice+`",`, 1)
+	}
+	const both = "Only somebody who owns both the platform “Google Cloud” and the practice “Cyber security”, or a process editor, can publish this process."
+	r := e.as(riley)
+	status, out := r.do("PUT", "/api/processes/rx1?base=0", shared("rx1", "active", "security"))
+	if status != 403 || out["error"] != both+" Save it as a draft for them." {
+		t.Fatalf("directly: %d %v", status, out)
+	}
+	status, out = r.do("PUT", "/api/processes/rx1?base=0", shared("rx1", "draft", "security"))
+	wantStatus(t, status, 200, out)
+	// 1. a plain save
+	status, out = r.do("PUT", "/api/processes/rx1?base=1", shared("rx1", "active", "security"))
+	if status != 403 || out["error"] != both+" Save it as a draft for them." {
+		t.Fatalf("plain save: %d %v", status, out)
+	}
+	// 2. its working draft, then Publish
+	status, out = r.do("PUT", "/api/processes/rx1/draft?rev=0&base=1", shared("rx1", "active", "security"))
+	wantStatus(t, status, 200, out)
+	status, out = r.do("POST", "/api/processes/rx1/publish?rev=1", nil)
+	if status != 403 || out["error"] != both+" Your draft is saved for them." {
+		t.Fatalf("publish: %d %v", status, out)
+	}
+	// 3. stored from its working draft
+	status, out = r.do("PUT", "/api/processes/rx1?base=1&draft=1", shared("rx1", "active", "security"))
+	if status != 403 || out["error"] != both+" Your draft is saved for them." {
+		t.Fatalf("draft=R: %d %v", status, out)
+	}
+	if _, raw, _ := e.as(sam).raw("GET", "/api/processes", nil, false); strings.Contains(string(raw), "rx1") {
+		t.Fatal("readers see it")
+	}
+
+	// the cooperative case: a member places a draft on a platform and a practice; an owner of one
+	// of the two cannot publish it, an owner of both and a process editor can
+	must(t, e.deps.Roles.Grant(bg, rbac.Assignment{Email: casey, Role: rbac.PlatformOwner, Scope: "google-cloud", GrantedBy: "test"}))
+	m := e.as(morgan)
+	for _, id := range []string{"co1", "co2", "co3"} {
+		status, out = m.do("PUT", "/api/processes/"+id+"?base=0", shared(id, "draft", "engineering"))
+		wantStatus(t, status, 200, out)
+		status, out = m.do("PUT", draftPath(docs.Process, id, "draft", 0), shared(id, "draft", "engineering"))
+		wantStatus(t, status, 200, out)
+	}
+	status, out = e.as(casey).do("POST", draftPath(docs.Process, "co1", "publish", 1), nil)
+	if status != 403 || out["error"] != "Only somebody who owns both the platform “Google Cloud” and the practice “Engineering”, or a process editor, can publish this process. Your draft is saved for them." {
+		t.Fatalf("an owner of one: %d %v", status, out)
+	}
+	status, out = e.as(casey).do("PUT", "/api/processes/co1?base=1", shared("co1", "active", "engineering"))
+	if status != 403 || out["error"] != "Only somebody who owns both the platform “Google Cloud” and the practice “Engineering”, or a process editor, can publish this process. Save it as a draft for them." {
+		t.Fatalf("%d %v", status, out)
+	}
+	status, out = e.as(morgan).do("POST", draftPath(docs.Process, "co1", "publish", 1), nil)
+	if status != 403 || !strings.HasPrefix(out["error"].(string), "Only somebody who owns both") {
+		t.Fatalf("the member: %d %v", status, out)
+	}
+	status, out = e.as(jordan).do("POST", draftPath(docs.Process, "co2", "publish", 1), nil)
+	wantStatus(t, status, 200, out)
+	status, out = e.as(alex).do("POST", draftPath(docs.Process, "co3", "publish", 1), nil)
+	wantStatus(t, status, 200, out)
+
+	// standards too: the code-review standard is in the practice Engineering; a draft of it on Google Cloud
+	std := strings.Replace(strings.Replace(e.body(docs.Standard, iac, `"id": "`+iac+`"`, `"id": "sx1"`), `"status": "active"`, `"status": "draft"`, 1), `"title": "`, `"title": "Draft `, 1)
+	status, out = m.do("PUT", "/api/standards/sx1?base=0", std)
+	wantStatus(t, status, 200, out)
+	status, out = e.as(casey).do("PUT", "/api/standards/sx1?base=1", strings.Replace(std, `"status": "draft"`, `"status": "active"`, 1))
+	if status != 403 || out["error"] != "Only somebody who owns both the platform “Google Cloud” and the practice “Engineering”, or a standards editor, can publish this standard. Save it as a draft for them." {
+		t.Fatalf("standard: %d %v", status, out)
+	}
+	status, out = e.as(jordan).do("PUT", "/api/standards/sx1?base=1", strings.Replace(std, `"status": "draft"`, `"status": "active"`, 1))
+	wantStatus(t, status, 200, out)
+}
+
+// A member's working draft may move a published document into their practice; whoever publishes
+// it needs the right to that move.
+func TestPublishingAMovedWorkingDraftChecksTheMove(t *testing.T) {
+	e := setup(t, nil)
+	must(t, e.deps.Roles.Grant(bg, rbac.Assignment{Email: riley, Role: rbac.PlatformOwner, Scope: "google-cloud", GrantedBy: "test"}))
+	moved := e.body(docs.Process, gcp, `"platform": "google-cloud",`, `"platform": "google-cloud", "practice": "engineering",`)
+	status, out := e.as(morgan).do("PUT", drafts+"?rev=0", moved)
+	wantStatus(t, status, 200, out)
+	status, out = e.as(riley).do("POST", "/api/processes/"+gcp+"/publish?rev=1", nil)
+	if status != 403 || out["error"] != "Only an owner of the practice “Engineering”, or a process editor, can put this process in that practice or take it out of it." {
+		t.Fatalf("%d %v", status, out)
+	}
+	status, out = e.as(jordan).do("POST", "/api/processes/"+gcp+"/publish?rev=1", nil)
+	wantStatus(t, status, 200, out)
+}
+
+func TestMembersWorkOnStandardsToo(t *testing.T) {
+	e := setup(t, nil)
+	m := e.as(morgan)
+	std := strings.Replace(e.body(docs.Standard, iac, `"id": "`+iac+`"`, `"id": "sx2"`), `"status": "active"`, `"status": "draft"`, 1)
+	status, out := m.do("PUT", "/api/standards/sx2?base=0", std)
+	wantStatus(t, status, 200, out)
+	status, out = m.do("PUT", draftPath(docs.Standard, iac, "draft", 0), e.body(docs.Standard, iac, `"summary": "`, `"summary": "Changed. `))
+	wantStatus(t, status, 200, out)
+	status, out = m.do("GET", "/api/standards/"+iac+"/draft", nil)
+	wantStatus(t, status, 200, out)
+	status, out = m.do("POST", draftPath(docs.Standard, iac, "publish", 1), nil)
+	if status != 403 || out["error"] != "Only an owner of the platform “Google Cloud”, an owner of the practice “Engineering”, or a standards editor, can publish this standard. Your draft is saved for them." {
+		t.Fatalf("%d %v", status, out)
+	}
+	status, _ = m.do("DELETE", draftPath(docs.Standard, iac, "draft", 1), nil)
+	wantStatus(t, status, 204, nil)
+	// logging is in the practice Cyber security only: not theirs
+	status, out = m.do("PUT", draftPath(docs.Standard, logging, "draft", 0), e.body(docs.Standard, logging, "", ""))
+	wantStatus(t, status, 404, out)
+	status, out = e.as(sam).do("GET", "/api/standards/sx2/draft", nil)
+	wantStatus(t, status, 404, out)
+}
+
+func TestAddressesWithInvisibleCharactersAreRefused(t *testing.T) {
+	e := setup(t, nil)
+	for _, bad := range []string{"pat​@example.com", "pat@exa‮mple.com", "pat\u007f@example.com", "pat\u0007@example.com", "\ufeffpat@example.com"} {
+		status, out := e.as(jordan).do("POST", "/api/groups/platforms/google-cloud/members", map[string]string{"email": bad})
+		if status != 400 || out["error"] != "That is not an email address." {
+			t.Errorf("member %q: %d %v", bad, status, out)
+		}
+		status, out = e.as(dana).do("POST", "/api/admin/access", map[string]string{"email": bad, "role": "platform-member", "scope": "google-cloud"})
+		if status != 400 {
+			t.Errorf("access %q: %d %v", bad, status, out)
+		}
+		status, out = e.as(dana).do("PUT", "/api/admin/users/"+url.PathEscape(bad), map[string]any{"roles": []map[string]string{{"role": "process-editor", "scope": ""}}})
+		if status != 400 || out["error"] != "That is not an email address." {
+			t.Errorf("users %q: %d %v", bad, status, out)
+		}
+	}
+	// an address an earlier version stored can still be taken out
+	for _, role := range []string{rbac.PlatformMember, rbac.ProcessEditor} {
+		scope := ""
+		if role == rbac.PlatformMember {
+			scope = "google-cloud"
+		}
+		_, err := e.deps.Roles.Pool.Exec(bg, `insert into role_assignments (email, role, scope, granted_by) values ($1, $2, $3, 'old')`, "old​@example.com", role, scope)
+		must(t, err)
+	}
+	status, out := e.as(jordan).do("DELETE", "/api/groups/platforms/google-cloud/members?email="+url.QueryEscape("old​@example.com"), nil)
+	if status != 200 || out["note"] != nil {
+		t.Fatalf("%d %v", status, out)
+	}
+	status, raw, _ := e.as(dana).raw("DELETE", "/api/admin/users/"+url.PathEscape("old​@example.com"), nil, true)
+	if status != 204 {
+		t.Fatalf("%d %s", status, raw)
+	}
+	if u, _ := e.deps.Roles.UserOf(bg, "old​@example.com"); len(u.Roles) != 0 {
+		t.Fatalf("%+v", u)
+	}
+}
+
+func TestAnEmptySetOfContactsIsLeftOut(t *testing.T) {
+	e := setup(t, nil)
+	body := e.body(docs.Catalog, docs.CatalogID, `"name": "Azure",`, `"name": "Azure", "contacts": {},`)
+	status, out := e.as(alex).do("PUT", "/api/catalog", body)
+	if status != 400 || !strings.Contains(fmt.Sprint(out["error"]), "contacts") {
+		t.Fatalf("%d %v", status, out)
+	}
+	// the details call leaves an empty one out by itself
+	status, out = e.as(alex).do("PUT", "/api/groups/platforms/azure/details", `{"contacts": {"slack": ""}}`)
+	wantStatus(t, status, 200, out)
+	if strings.Contains(string(e.version(docs.Catalog, docs.CatalogID).Body), `"contacts": {}`) {
+		t.Fatal("an empty object was stored")
 	}
 }

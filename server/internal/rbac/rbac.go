@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -393,11 +394,27 @@ var covers = map[string]string{
 	StandardsEditor: "A standards editor always covers all standards",
 }
 
+// ValidEmail reports whether an address may be given a role: it looks like an email address
+// and holds no control or invisible formatting characters (a zero-width space, a change of
+// reading direction), which could make one address look like another. Every way of giving a
+// role goes through it (Check).
+func ValidEmail(email string) bool {
+	if !emailPattern.MatchString(email) {
+		return false
+	}
+	for _, r := range email {
+		if unicode.Is(unicode.Cc, r) || unicode.Is(unicode.Cf, r) {
+			return false
+		}
+	}
+	return true
+}
+
 // Check validates an assignment before it is stored. Whether the team, platform or practice
 // of a scope exists is for the caller to check against the lists. The messages are for the
 // people who manage access.
 func Check(a Assignment) error {
-	if !emailPattern.MatchString(a.Email) {
+	if !ValidEmail(a.Email) {
 		return fmt.Errorf("%w: %q is not an email address.", ErrInvalid, a.Email)
 	}
 	switch a.Role {
@@ -505,10 +522,10 @@ func (s *Store) Replace(ctx context.Context, email string, roles []Role, by stri
 		}
 		want[r] = true
 	}
-	if len(roles) == 0 {
-		if err := Check(Assignment{Email: email, Role: Admin}); err != nil {
-			return Change{}, err // the email itself
-		}
+	if len(roles) == 0 && !emailPattern.MatchString(email) {
+		// taking every role away also works for an address an earlier version let in (one with
+		// an invisible character), so only its shape is checked
+		return Change{}, fmt.Errorf("%w: That is not an email address.", ErrInvalid)
 	}
 	var ch Change
 	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
