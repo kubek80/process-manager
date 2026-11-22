@@ -326,7 +326,7 @@ func TestSearchProcessesByWords(t *testing.T) {
 		t.Fatalf("%s %+v", text, out)
 	}
 	r := out.Results[0]
-	if r.Version < 1 || r.Owner.Name != "Cloud Platform team" || r.Owner.Contact == "" || r.Platform.Name != "Google Cloud" || r.Rigour != "mandatory" ||
+	if r.Version < 1 || r.Owner.Name != "Cloud Platform team" || r.Owner.Contacts == nil || r.Owner.Contacts.Email == "" || r.Platform.Name != "Google Cloud" || r.Rigour != "mandatory" ||
 		r.Link != "https://processes.example.com/#/p/request-gcp-project" || r.Status != "active" || r.Retired {
 		t.Fatalf("%+v", r)
 	}
@@ -489,7 +489,7 @@ func TestGetProcess(t *testing.T) {
 	if len(p.Skills) != 1 || p.Skills[0].ID != "process-request-gcp-project" {
 		t.Fatalf("%+v", p.Skills)
 	}
-	if p.Actors[2].Team == nil || p.Actors[2].Team.Contact == "" {
+	if p.Actors[2].Team == nil || p.Actors[2].Team.Contacts == nil {
 		t.Fatalf("%+v", p.Actors)
 	}
 
@@ -623,7 +623,7 @@ func TestGetCatalog(t *testing.T) {
 	}
 	// how to reach a group, each way on its own, beside the free line
 	for _, g := range c.Platforms {
-		if g.ID == "google-cloud" && (g.Drafters != nil || g.Contacts == nil || g.Contacts.Email != "cloud-platform@example.com" || g.Contacts.Form == "" || g.Contact == "") {
+		if g.ID == "google-cloud" && (g.Drafters != nil || g.Contacts == nil || g.Contacts.Email != "cloud-platform@example.com" || g.Contacts.Form == "") {
 			t.Fatalf("%+v", g)
 		}
 	}

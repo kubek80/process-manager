@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Boxes, Compass, PencilLine, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Boxes, Compass, PencilLine, Plus, Users } from "lucide-react";
 import type { DocMeta, FeedbackByTarget, Membership, Process, Standard, TargetKind } from "../types";
 import { docCount, useCatalog } from "../lib/catalog";
-import { belongsHeading, contactsOk, groupEntry, groupFilter, KIND_WORD, tidyContacts } from "../lib/groups";
+import { belongsHeading, contactsOk, groupEntry, groupFilter, KIND_WORD, LIST_OF, tidyContacts } from "../lib/groups";
 import { GROUP, hasMembers, type GroupKind } from "../lib/members";
-import { canChangeDetails, canManageMembers, groupRank } from "../lib/rights";
+import { canChangeDetails, canCreate, canManageMembers, editsAll, groupRank, newDocPlaces } from "../lib/rights";
 import { canDraft, canManage, useMe, usePerms } from "../lib/session";
 import { sortResults, type MetaByKind } from "../lib/sorting";
 import { useListView } from "../lib/paging";
@@ -30,10 +30,12 @@ const FIRST = 12;
  * the processes and standards that belong to it (for a team: what it owns), as the lists draw them.
  * Whoever may changes its details here, and an owner of a platform or practice its members.
  */
-export function GroupPage({ kind, id, processes, standards, feedback, meta }: {
+export function GroupPage({ kind, id, processes, standards, feedback, meta, onNew }: {
   kind: GroupKind; id: string; processes: Process[]; standards: Standard[];
   feedback?: FeedbackByTarget;
   meta?: MetaByKind;
+  /** Opens the dialog for a new process or standard, placed on this platform or practice (or with this owning team). */
+  onNew?: (noun: TargetKind, place: { platform?: string; practice?: string; owner?: string }) => void;
 }) {
   const { catalog, reload } = useCatalog();
   const perms = usePerms();
@@ -63,10 +65,16 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta }: {
   const ids = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds: standards.map((s) => s.id), catalog }), [processes, standards, catalog]);
   const usedBy = (pid: string) => processes.filter((p) => Array.isArray(p.steps) && p.steps.some((s) => s && s.subProcessId === pid)).length;
   const searchLink = href({ page: "search", ...filters });
+  // a new process or standard starts here for whoever may draft here (a team: whoever may create at all)
+  const mayNew = (noun: TargetKind) => kind === "team"
+    ? canCreate(perms, noun)
+    : editsAll(perms, noun) || newDocPlaces(perms, noun).some((x) => x.kind === kind && x.id === id);
+  const place = kind === "team" ? { owner: id } : kind === "platform" ? { platform: id } : { practice: id };
+  const news = onNew ? (["process", "standard"] as TargetKind[]).filter(mayNew) : [];
 
   return (
     <div className="page group-page" data-group={kind}>
-      <a className="back" href={href({ page: "catalog" })}><ArrowLeft size={16} aria-hidden="true" />Teams &amp; tools</a>
+      <a className="back" href={href({ page: "catalog", list: LIST_OF[kind], id })}><ArrowLeft size={16} aria-hidden="true" />Teams &amp; tools</a>
       <header className="group-head">
         <div className="group-kicker">
           <span className="group-kind"><Icon size={14} aria-hidden="true" />{KIND_WORD[kind]}</span>
@@ -88,7 +96,7 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta }: {
         </section>
 
         <section className="group-people" aria-label="People">
-          <GroupMembers kind={kind} id={id} name={entry.name} saved manage heading="h2" members={members} membersError={membersError} onChanged={reloadMembers} />
+          <GroupMembers kind={kind} id={id} name={entry.name} saved manage heading="h2" members={members} membersError={membersError} onChanged={reloadMembers} reachAbove />
           {hasMembers(kind) && (
             <GroupMembers kind={kind} id={id} name={entry.name} rank="member" saved manage={canManageMembers(perms, kind, id)} heading="h2"
               members={members} membersError={membersError} onChanged={reloadMembers} />
@@ -101,10 +109,13 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta }: {
               <h2 id="group-docs" className="group-h">{belongsHeading(kind)}</h2>
               <p className="group-count" aria-live="polite">{sorted.length ? docCount(nP, nS) : "Nothing yet"}</p>
             </div>
-            {sorted.length > 0 && (
+            {(sorted.length > 0 || news.length > 0) && (
               <div className="group-docs-tools">
-                <ViewSwitch view={view} onView={setView} />
-                <a className="btn small" href={searchLink}>Open in the search<ArrowRight size={14} aria-hidden="true" /></a>
+                {sorted.length > 0 && <ViewSwitch view={view} onView={setView} />}
+                {sorted.length > 0 && <a className="btn small" href={searchLink}>Open in the search<ArrowRight size={14} aria-hidden="true" /></a>}
+                {news.map((noun) => (
+                  <button key={noun} type="button" className="btn small" onClick={() => onNew!(noun, place)}><Plus size={14} aria-hidden="true" />New {noun}</button>
+                ))}
               </div>
             )}
           </div>
@@ -170,7 +181,12 @@ function DetailsDialog({ kind, id, name, saved, onClose, onSaved }: {
   };
   const save = async () => {
     setTried(true);
-    if (!ok || busy) return;
+    if (!ok) {
+      // the first field to fix is brought into view and focused (the message at the top may be scrolled away)
+      setTimeout(() => document.querySelector<HTMLElement>(".contact-fields [aria-invalid='true']")?.focus(), 0);
+      return;
+    }
+    if (busy) return;
     if (!dirty) { onClose(); return; }
     setBusy(true); setRefused("");
     const t = tidyDetails(value);

@@ -91,7 +91,7 @@ func TestStillInUseSaysOnlyWhatTheCallerMayKnow(t *testing.T) {
 	status, body = e.as(alex).do("PUT", "/api/catalog", without)
 	msg, _ := body["error"].(string)
 	if status != 400 || !strings.Contains(msg, "still used by") || strings.Contains(msg, secret) || strings.Contains(msg, riley) ||
-		!strings.Contains(msg, "a draft you cannot see") || !strings.Contains(msg, "roles that are limited to it") {
+		!strings.Contains(msg, "a draft you cannot see") || !strings.Contains(msg, "1 person is still one of its Owners. Change those first and take their roles, then it can be removed.") {
 		t.Fatalf("as a lists manager: %d %q", status, msg)
 	}
 	// an admin may see both, and each person once

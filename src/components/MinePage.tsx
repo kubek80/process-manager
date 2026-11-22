@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, Boxes, CalendarCheck, Check, CircleCheck, Compass, Flag, PencilLine, Users } from "lucide-react";
+import { ArrowUpRight, Boxes, CalendarCheck, Check, CircleCheck, Compass, Flag, PencilLine, Send, Users } from "lucide-react";
 import type { DocMeta, FeedbackByTarget, Process, Standard, TargetKind } from "../types";
 import { groupName, useCatalog } from "../lib/catalog";
 import { STATUS_LABEL } from "../lib/lifecycle";
@@ -10,6 +10,7 @@ import { knownNames } from "../lib/members";
 import type { Membership } from "../types";
 import { FEEDBACK_KINDS } from "./Feedback";
 import { KindTag } from "./marks";
+import { PersonLink } from "./PersonLink";
 import "../mine.css";
 import { formatDate } from "../lib/dates";
 
@@ -55,13 +56,16 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
   const via = (o: Owned) => o.groups.map((g) => (g.member ? `${nameOf(g)} (member)` : nameOf(g))).join(", ");
   // somebody who is only a member of platforms and practices: they draft, the owners publish, review and answer feedback
   const onlyMember = groups.length > 0 && groups.every((g) => g.member);
-  const { owned, tasks } = useMemo(() => responsibilities(perms, only, processes, standards, feedback, undefined, meta), [perms, only, processes, standards, feedback, meta]);
+  const myEmail = useMe().user?.email;
+  const { owned, tasks } = useMemo(() => responsibilities(perms, only, processes, standards, feedback, undefined, meta, myEmail), [perms, only, processes, standards, feedback, meta, myEmail]);
 
   const of = (...kinds: Task["kind"][]) => tasks.filter((t) => kinds.includes(t.kind));
-  const overdue = of("review-overdue"), soon = of("review-soon"), open = of("feedback"), other = of("draft", "no-rhythm");
+  const overdue = of("review-overdue"), soon = of("review-soon"), open = of("feedback"), toPublish = of("publish"), other = of("draft", "no-rhythm");
   // published, with changes saved beside it that readers do not see yet (only sent to whoever may edit it)
   const workingDraft = (o: Owned) => (o.status === "draft" ? undefined : meta[o.kind][o.doc.id]?.draft);
-  const changed = owned.filter((o) => workingDraft(o));
+  const mine = (email?: string) => !!email && !!myEmail && email.toLowerCase() === myEmail.toLowerCase();
+  // your unfinished work: unpublished changes you saved last yourself (somebody else's wait for you under "Waiting for you to publish")
+  const changed = owned.filter((o) => mine(workingDraft(o)?.updatedBy));
   const review = async (o: Owned) => {
     setBusy(o.kind + o.doc.id);
     try { await onReviewed(o.kind, o.doc.id); } finally { setBusy(null); }
@@ -79,6 +83,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
   const names = useMemo(() => knownNames(
     me.user ? [{ email: me.user.email, name: me.user.name }] : [],
     (["process", "standard"] as const).flatMap((k) => Object.values(meta[k]).flatMap((m) => (m.draft ? [{ email: m.draft.updatedBy, name: m.draft.updatedByName }] : []))),
+    (["process", "standard"] as const).flatMap((k) => Object.values(meta[k]).map((m) => ({ email: m.updatedBy, name: m.updatedByName }))),
     [...Object.values(feedback.process), ...Object.values(feedback.standard)].flat().flatMap((f) => (f.author.email ? [{ email: f.author.email, name: f.author.name }] : [])),
     people,
   ), [feedback, meta, me.user, people]);
@@ -119,6 +124,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
       <div className="stat-row">
         {!onlyMember && (() => { const t = reviewsDue(overdue.length, soon.length); return <div className={`stat ${t.tone}`}><strong>{t.count}</strong><span>{t.label}</span>{t.split && <span className="stat-split">{t.split}</span>}</div>; })()}
         {!onlyMember && <div className={`stat ${open.length ? "warn" : "good"}`}><strong>{open.length}</strong><span>open feedback</span></div>}
+        {!onlyMember && <div className={`stat ${toPublish.length ? "warn" : "good"}`} title="Drafts and changes other people saved, which you can publish"><strong>{toPublish.length}</strong><span>waiting for you to publish</span></div>}
         <div className="stat"><strong>{owned.filter((o) => o.status === "draft").length}</strong><span>drafts not yet published</span></div>
         {onlyMember && <div className="stat"><strong>{changed.length}</strong><span>with unpublished changes</span></div>}
         <div className="stat"><strong>{owned.length}</strong><span>{owned.length === 1 ? "process or standard is yours" : "processes and standards are yours"}</span></div>
@@ -127,7 +133,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
       {tasks.length === 0 && owned.length > 0 && (
         <div className="check good banner"><CircleCheck size={16} /><span>{onlyMember
           ? <><b>No draft is waiting for an owner.</b> Create one with “New process” or “New standard”, or suggest a change with “Edit” on what belongs to your platforms and practices.</>
-          : <><b>Nothing needs you right now.</b> Every review is up to date and no feedback is waiting.</>}</span></div>
+          : <><b>Nothing needs you right now.</b> Every review is up to date, no feedback is waiting and nothing waits for you to publish.</>}</span></div>
       )}
 
       {(overdue.length > 0 || soon.length > 0) && (
@@ -171,9 +177,27 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
         </section>
       )}
 
+      {toPublish.length > 0 && (
+        <section className="admin-card" aria-labelledby="mine-publish">
+          <h2 id="mine-publish"><Send size={16} />Waiting for you to publish <span>{toPublish.length}</span></h2>
+          <p className="muted small">What other people saved, the oldest first. Read it through on the editing screen, change what is needed, then publish it.</p>
+          <ul className="mine-list">
+            {toPublish.map(({ item: o, by, changes }) => (
+              <li key={"publish" + o.kind + o.doc.id}>
+                <Icon o={o} />
+                <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a>
+                  <em>{changes ? "Changes" : "Draft"} by <PersonLink person={{ email: by!.email, name: by!.name || names[by!.email.toLowerCase()] }} />{changes ? ", saved " : ", "}<span className="nowrap">{day(by!.at ?? "")}</span>.{changes ? ` Readers still see version ${meta[o.kind][o.doc.id]?.version}.` : " Readers do not see it until you publish it."}</em></span>
+                <span className={`tier-tag ${changes ? "unpublished" : "status-draft"}`}>{changes ? "Unpublished changes" : "Draft"}</span>
+                <a className="btn small primary" href={editPage(o)}>Review and publish<ArrowUpRight size={13} /></a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {other.length + changed.length > 0 && (
         <section className="admin-card" aria-labelledby="mine-other">
-          <h2 id="mine-other"><PencilLine size={16} />Unfinished <span>{other.length + changed.length}</span></h2>
+          <h2 id="mine-other"><PencilLine size={16} />Your unfinished work <span>{other.length + changed.length}</span></h2>
           <ul className="mine-list">
             {changed.map((o) => {
               const d = workingDraft(o)!;
@@ -193,7 +217,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
                 <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a>
                   <em>{kind === "draft" ? (o.member ? "A draft waiting for an owner to publish it. Readers do not see it yet." : "A draft: readers do not see it until it is published.") : "In use, but nobody is asked to review it: no review rhythm is set under About when editing it."}</em></span>
                 <span className={`tier-tag ${kind === "draft" ? "status-draft" : "review-soon"}`}>{kind === "draft" ? "Draft" : "No review rhythm"}</span>
-                {o.member ? <a className="btn small" href={editPage(o)}>Continue editing<ArrowUpRight size={13} /></a> : <a className="btn small" href={pageOf(o)}>Open<ArrowUpRight size={13} /></a>}
+                {kind === "draft" ? <a className="btn small" href={editPage(o)}>Continue editing<ArrowUpRight size={13} /></a> : <a className="btn small" href={pageOf(o)}>Open<ArrowUpRight size={13} /></a>}
               </li>
             ))}
           </ul>

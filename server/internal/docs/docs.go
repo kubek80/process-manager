@@ -57,6 +57,11 @@ type Doc struct {
 	// CreatedAt is when the document was added: when its first version was saved (since it was
 	// last deleted, if it ever was).
 	CreatedAt time.Time
+	// ChangesBy, on a version a save just stored: whoever saved the changes it published last,
+	// when that is not who saved the version (see Version.ChangesBy); "" otherwise.
+	ChangesBy string
+	// ChangesByName: their name, where the working draft kept it ("" otherwise).
+	ChangesByName string
 }
 
 // Version describes one saved version.
@@ -69,6 +74,12 @@ type Version struct {
 	SavedByName string `json:"savedByName,omitempty"`
 	Note        string `json:"note"` // what changed, in the words of whoever saved it
 	Deleted     bool   `json:"deleted"`
+	// ChangesBy: a version that published changes somebody else saved last names that person
+	// (whoever saved the working draft last, or the never-published version it made visible);
+	// SavedBy is the publisher. ChangesByName: the name the working draft kept, else filled in
+	// by the API where the portal knows it.
+	ChangesBy     string `json:"changesBy,omitempty"`
+	ChangesByName string `json:"changesByName,omitempty"`
 	// What the document belonged to and its status in this version: who may see it follows
 	// from them (a version that was a draft stays with the people who work on the document).
 	Owner    string `json:"-"`
@@ -321,6 +332,20 @@ func SaveIn(ctx context.Context, tx pgx.Tx, c Change) (doc Doc, changed bool, er
 		}
 		return *cur, false, nil
 	}
+	// whose changes a person's save makes visible to readers, when somebody else saved them last:
+	// a working draft it publishes or stores, or the never-published version it publishes
+	changesBy, changesByName := "", ""
+	if c.Drafts != KeepDraft {
+		switch {
+		case fromDraft && draft != nil:
+			changesBy, changesByName = draft.UpdatedBy, draft.UpdatedByName
+		case cur != nil && StatusOf(cur.Body) == "draft" && StatusOf(pretty) != "draft":
+			changesBy = cur.UpdatedBy
+		}
+		if !strings.Contains(changesBy, "@") || strings.EqualFold(strings.TrimSpace(changesBy), strings.TrimSpace(c.By)) {
+			changesBy, changesByName = "", ""
+		}
+	}
 	// continue the numbering even if the document was deleted in between
 	var next int
 	if err := tx.QueryRow(ctx, `select coalesce(max(version), 0) + 1 from document_versions where kind = $1 and id = $2`, kind, id).Scan(&next); err != nil {
@@ -333,9 +358,11 @@ func SaveIn(ctx context.Context, tx pgx.Tx, c Change) (doc Doc, changed bool, er
 	if err != nil {
 		return doc, false, err
 	}
-	if _, err := tx.Exec(ctx, `insert into document_versions (kind, id, version, body, saved_by, note) values ($1, $2, $3, $4, $5, $6)`, kind, id, next, pretty, c.By, note); err != nil {
+	if _, err := tx.Exec(ctx, `insert into document_versions (kind, id, version, body, saved_by, note, changes_by, changes_by_name) values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		kind, id, next, pretty, c.By, note, changesBy, changesByName); err != nil {
 		return doc, false, err
 	}
+	doc.ChangesBy, doc.ChangesByName = changesBy, changesByName
 	if c.After != nil {
 		if err := c.After(ctx, tx, doc); err != nil {
 			return doc, false, err
@@ -386,7 +413,7 @@ func (s *Store) Remove(ctx context.Context, r Removal) error {
 
 // History lists the versions of a document, newest first.
 func (s *Store) History(ctx context.Context, kind, id string) ([]Version, error) {
-	rows, err := s.Pool.Query(ctx, `select version, saved_at, saved_by, note, body is null, coalesce(body->>'owner', ''),
+	rows, err := s.Pool.Query(ctx, `select version, saved_at, saved_by, note, changes_by, changes_by_name, body is null, coalesce(body->>'owner', ''),
 		coalesce(body->>'platform', ''), coalesce(body->>'practice', ''), coalesce(body->>'status', '')
 		from document_versions where kind = $1 and id = $2 order by version desc`, kind, id)
 	if err != nil {
@@ -396,7 +423,7 @@ func (s *Store) History(ctx context.Context, kind, id string) ([]Version, error)
 	out := []Version{}
 	for rows.Next() {
 		var v Version
-		if err := rows.Scan(&v.Version, &v.SavedAt, &v.SavedBy, &v.Note, &v.Deleted, &v.Owner, &v.Platform, &v.Practice, &v.Status); err != nil {
+		if err := rows.Scan(&v.Version, &v.SavedAt, &v.SavedBy, &v.Note, &v.ChangesBy, &v.ChangesByName, &v.Deleted, &v.Owner, &v.Platform, &v.Practice, &v.Status); err != nil {
 			return nil, err
 		}
 		out = append(out, v)

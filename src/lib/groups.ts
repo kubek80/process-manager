@@ -206,7 +206,8 @@ export function repeatsDetail(contact: string | undefined, c: Contacts | undefin
  */
 export function withScheme(v: string): string {
   const t = v.trim();
-  if (!t || /^[a-z][a-z0-9+.-]*:/i.test(t) || /\s/.test(t)) return v;
+  // "host:8443/…" is a port, not a scheme
+  if (!t || /^[a-z][a-z0-9+.-]*:(?!\d+([/?#]|$))/i.test(t) || /\s/.test(t)) return v;
   return /^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?([/?#].*)?$/i.test(t) ? `https://${t}` : v;
 }
 

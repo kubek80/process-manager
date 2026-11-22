@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { ArrowLeft, Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash2, TriangleAlert, Undo2, UserCheck } from "lucide-react";
 import type { DocMeta, Issue, Membership, Process, Standard, TargetKind } from "../types";
 import { conflictOf, useDraft, type Conflict, type Draft } from "../lib/draft";
-import { author, baseBehindSentence, clock, draftKindOf, draftMovedOn, draftRevisionToSend, draftSaveBase, saveCallOf, statusChangedSentence, editState, exampleIssues, isExampleIssue, issueText, statusChangeBlocked, steppedMessage, movedItem, movedMessage, moveOf, publishList, savedByText, partsText, whoPublishesParts, whoPublishesShort, type DraftKind } from "../lib/editing";
+import { author, baseBehindSentence, clock, draftKindOf, draftMovedOn, draftRevisionToSend, draftSaveBase, saveCallOf, statusChangedSentence, editState, exampleIssues, isExampleIssue, issueText, statusChangeBlocked, steppedMessage, movedItem, movedMessage, moveOf, publishList, savedByText, partsText, whoPublishesParts, whoPublishesShort, lastSavedByOther, type DraftKind } from "../lib/editing";
 import { compare, describeChange, type Change } from "../lib/diff";
 import { belongsRefused, canPublish, draftAudience, publishPlaces } from "../lib/rights";
 import { membersOf } from "../lib/members";
@@ -399,6 +399,8 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
     setJsonWanted(false);
   };
 
+  // who saved last what a publication puts out: the working draft, else the stored never-published document
+  const lastSaver = working ?? (unpublished ? o.meta : undefined);
   const keepStatus = (doc: T): T => ({ ...doc, status: unpublished ? "draft" : stored.status });
   // A member of its platform or practice saves drafts like an owner, but cannot publish (nor
   // retire, unpublish, bring back or delete): who can is said on the screen, by name
@@ -617,6 +619,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
     <>
       {dialog === "publish" && (
         <PublishDialog noun={noun} first={unpublished} version={version} blocked={publishBlocked}
+          lastSavedBy={lastSavedByOther(lastSaver, me, d.dirty)} lastSavedAt={lastSaver?.updatedAt}
           changes={unpublished ? [] : publishList(kind, stored, d.clean, catalog, since?.base)} since={since?.who}
           onPublish={(note) => publish(note)} onClose={() => setDialog(null)} />
       )}

@@ -4,7 +4,7 @@ import type { AuditEntry, FeedbackByTarget, Process, Skill, Standard, TargetKind
 import { teamName, useCatalog } from "../lib/catalog";
 import { reviewOf, statusOf } from "../lib/lifecycle";
 import { usePerms } from "../lib/session";
-import { go, href, loadAudit, loadSkills, loadSystem, type AdminSection, type MetaById, type SystemInfo } from "../lib/store";
+import { go, href, loadAudit, loadMembers, loadSkills, loadUsers, loadSystem, type AdminSection, type MetaById, type SystemInfo } from "../lib/store";
 import { KindTag } from "./marks";
 import { describeEntry, detailParts, type Names } from "../lib/activity";
 import { reviewsDue } from "../lib/responsibilities";
@@ -152,16 +152,23 @@ function ActivitySection({ processes, standards, feedback }: { processes: Proces
   const titles = useMemo(() => ({
     process: Object.fromEntries(processes.map((p) => [p.id, p.title])), standard: Object.fromEntries(standards.map((x) => [x.id, x.title])),
   }), [processes, standards]);
-  // the names the page knows, by address: whoever appears in the log, whoever gave feedback
+  // the names the page knows, by address: the people with roles, whoever appears in the log, whoever gave feedback
+  const [people, setPeople] = useState<{ email: string; name?: string }[]>([]);
+  useEffect(() => {
+    let live = true;
+    Promise.all([loadUsers().catch(() => []), loadMembers().catch(() => [])]).then(([u, m]) => { if (live) setPeople([...u, ...m]); });
+    return () => { live = false; };
+  }, []);
   const names = useMemo<Names>(() => {
     const out: Names = {};
+    for (const p of people) if (p.name) out[p.email.toLowerCase()] = p.name;
     for (const list of [...Object.values(feedback.process), ...Object.values(feedback.standard)]) for (const f of list) if (f.author.email && f.author.name) out[f.author.email.toLowerCase()] = f.author.name;
     for (const e of entries ?? []) if (e.email && e.name && e.email.includes("@")) out[e.email.toLowerCase()] = e.name;
     return out;
-  }, [feedback, entries]);
+  }, [feedback, entries, people]);
   return (
     <div className="admin-section">
-      <p className="lead small">Every change to content, lists, roles and skills, newest first.</p>
+      <p className="lead small">Every change to content, lists, roles, members, skills and the look, newest first.</p>
       {error && <LoadError what="The activity could not be loaded." error={error} onRetry={() => load(entries?.length ? entries[entries.length - 1].id : 0)} />}
       {!entries && !error && <Loading />}
       {entries && <section className="admin-card">

@@ -513,6 +513,7 @@ func (a *api) stillUsed(ctx context.Context, s session, body []byte) error {
 		}
 	}
 	var problems []string
+	anyUse, anyPeople := false, false
 	for _, entry := range removed {
 		users := usedBy[entry]
 		sort.Strings(users)
@@ -524,28 +525,54 @@ func (a *api) stillUsed(ctx context.Context, s session, body []byte) error {
 		} else if n > 1 {
 			users = append(users, fmt.Sprintf("%d drafts you cannot see", n))
 		}
+		// the people tied to it: its owners (a team's Owners) and members, counted; by address for admins
+		key, id, _ := strings.Cut(entry, "/")
+		var tied, alone string // "2 people are still its owners or members", "2 people are still owners or members of “x”"
 		if people := roles[entry]; len(people) > 0 {
+			who := "owners or members"
+			if key == "teams" {
+				who = "Owners"
+			}
+			names := ""
 			if s.Admin {
-				names := make([]string, 0, len(people))
+				list := make([]string, 0, len(people))
 				for email := range people {
-					names = append(names, email)
+					list = append(list, email)
 				}
-				sort.Strings(names)
-				users = append(users, "the roles of "+strings.Join(names, ", "))
-			} else {
-				users = append(users, "roles that are limited to it (an admin can see whose)")
+				sort.Strings(list)
+				names = " (" + strings.Join(list, ", ") + ")"
+			}
+			tied = fmt.Sprintf("%d people are still its %s%s", len(people), who, names)
+			alone = fmt.Sprintf("%d people are still %s of “%s”%s", len(people), who, id, names)
+			if len(people) == 1 {
+				tied = fmt.Sprintf("1 person is still one of its %s%s", who, names)
+				alone = fmt.Sprintf("1 person is still one of the %s of “%s”%s", who, id, names)
 			}
 		}
-		if len(users) == 0 {
+		switch {
+		case len(users) > 0 && tied != "":
+			problems = append(problems, fmt.Sprintf("“%s” is still used by %s, and %s", id, strings.Join(users, ", "), tied))
+		case len(users) > 0:
+			problems = append(problems, fmt.Sprintf("“%s” is still used by %s", id, strings.Join(users, ", ")))
+		case tied != "":
+			problems = append(problems, alone)
+		default:
 			continue
 		}
-		_, id, _ := strings.Cut(entry, "/")
-		problems = append(problems, fmt.Sprintf("“%s” is still used by %s", id, strings.Join(users, ", ")))
+		anyUse = anyUse || len(users) > 0
+		anyPeople = anyPeople || tied != ""
 	}
 	if len(problems) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%w: cannot remove what is still in use: %s. Change those first.", docs.ErrInvalid, strings.Join(problems, "; "))
+	end := "Change those first."
+	switch {
+	case anyUse && anyPeople:
+		end = "Change those first and take their roles, then it can be removed."
+	case anyPeople:
+		end = "Take their roles first, then it can be removed."
+	}
+	return fmt.Errorf("%w: cannot remove what is still in use: %s. %s", docs.ErrInvalid, strings.Join(problems, "; "), end)
 }
 
 func contains(list []string, v string) bool {
@@ -734,6 +761,16 @@ func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 			detail := fmt.Sprintf("version %d", saved.Version)
 			if n := strings.TrimSpace(note); n != "" {
 				detail += ": " + n
+			}
+			if saved.ChangesBy != "" {
+				by := saved.ChangesByName
+				if by == "" {
+					by = a.personName(ctx, saved.ChangesBy)
+				}
+				if by == "" {
+					by = saved.ChangesBy
+				}
+				detail += "; the changes were last saved by " + by
 			}
 			return audit.AddIn(ctx, tx, s.Email, s.Name, noun[kind]+"."+action, id, detail)
 		},
@@ -1004,8 +1041,10 @@ func (a *api) history(w http.ResponseWriter, r *http.Request) {
 	// who saved each, by name where it is known (an import or the portal itself has none)
 	var emails []string
 	for _, v := range shown {
-		if strings.Contains(v.SavedBy, "@") && !slices.Contains(emails, v.SavedBy) {
-			emails = append(emails, v.SavedBy)
+		for _, e := range []string{v.SavedBy, v.ChangesBy} {
+			if strings.Contains(e, "@") && !slices.Contains(emails, e) {
+				emails = append(emails, e)
+			}
 		}
 	}
 	names, err := a.names(r.Context(), emails)
@@ -1015,6 +1054,9 @@ func (a *api) history(w http.ResponseWriter, r *http.Request) {
 	}
 	for i := range shown {
 		shown[i].SavedByName = names[shown[i].SavedBy]
+		if shown[i].ChangesBy != "" && shown[i].ChangesByName == "" {
+			shown[i].ChangesByName = names[shown[i].ChangesBy]
+		}
 	}
 	writeJSON(w, 200, map[string]any{"versions": shown})
 }

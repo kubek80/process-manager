@@ -134,9 +134,14 @@ export function rigourParts(rigour: Partial<Record<Rigour, number>>): RigourPart
   return (["mandatory", "recommended", "optional"] as Rigour[]).filter((r) => (rigour[r] ?? 0) > 0).map((r) => ({ rigour: r, n: rigour[r]! }));
 }
 
+/** "5 of 10 steps are yours"; with one step: "The only step is yours" (or "is somebody else's"). */
+export const stepsYoursText = (mine: number, total: number) =>
+  total === 1 ? (mine ? "The only step is yours" : "The only step is somebody else’s") : `${mine} of ${total} steps are yours`;
+
 /** The short text of a key fact on the card: "5 of 10 steps are yours", "3 of 5 requirements apply". */
 export function shortFact(l: CardLine, kind: TargetKind): string {
-  if (l.key === "steps") return l.value.replace(/ are yours$/, " steps are yours");
+  const steps = l.key === "steps" ? /^(\d+) of (\d+) are yours$/.exec(l.value) : null;
+  if (steps) return stepsYoursText(Number(steps[1]), Number(steps[2]));
   if (l.key === "rules" && kind === "standard") {
     const m = /^(\d+) of (\d+) apply/.exec(l.value);
     if (m) return `${m[1]} of ${m[2]} requirements apply`;

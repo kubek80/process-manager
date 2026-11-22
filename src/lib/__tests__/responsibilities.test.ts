@@ -176,3 +176,50 @@ describe("what a member of a platform or practice answers for", () => {
     expect(accountRoles(morgan, groups)).toEqual(["Platform member for Google Cloud", "Practice member for Engineering"]);
   });
 });
+
+import { mineTitle, urgentWords, waiting } from "../responsibilities";
+
+describe("what waits for an owner to publish", () => {
+  const jordan = perms({ platforms: ["google-cloud"], owns: ["cloud-platform-team"] });
+  const ME = "jordan@example.com";
+  const newDraft = { ...base(), id: "new", title: "New", platform: "google-cloud", status: "draft" as const };
+  const mineDraft = { ...base(), id: "mine-draft", title: "Mine draft", platform: "google-cloud", status: "draft" as const };
+  const changed = { ...base(), id: "changed", title: "Changed", platform: "google-cloud", review: { intervalMonths: 12, lastReviewedAt: "2026-10-01" } };
+  const both = { ...base(), id: "both", title: "Both", platform: "google-cloud", practice: "security", status: "draft" as const };
+  const meta = {
+    process: {
+      new: { updatedAt: "2026-11-22T09:00:00Z", updatedBy: "morgan@example.com", updatedByName: "Morgan Member" },
+      "mine-draft": { updatedAt: "2026-11-21T09:00:00Z", updatedBy: "jordan@example.com" },
+      changed: { createdAt: "2025-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", updatedBy: "import", draft: { updatedAt: "2026-11-22T10:00:00Z", updatedBy: "MORGAN@example.com", updatedByName: "Morgan Member" } },
+      both: { updatedAt: "2026-11-22T09:00:00Z", updatedBy: "morgan@example.com" },
+    },
+  };
+  const r = responsibilities(jordan, null, [newDraft, mineDraft, changed, both], [], { process: {}, standard: {} }, TODAY, meta, ME);
+
+  it("hands over what somebody else saved, with who and when, oldest first; one's own drafts stay one's unfinished work", () => {
+    expect(r.tasks.map((t) => `${t.kind}:${t.item.doc.id}`)).toEqual(["publish:new", "publish:changed", "draft:mine-draft"]);
+    expect(r.tasks[0].by).toEqual({ email: "morgan@example.com", name: "Morgan Member", at: "2026-11-22T09:00:00Z" });
+    expect(r.tasks[0].changes).toBe(false);
+    expect(r.tasks[1].changes).toBe(true);
+    expect(urgent(r.tasks)).toBe(2);
+    expect(urgentWords(r.tasks)).toBe("2 to publish");
+  });
+  it("does not hand over what the person could not publish (a draft on a practice they do not own), nor make it theirs", () => {
+    expect(r.tasks.some((t) => t.item.doc.id === "both")).toBe(false);
+    // a team's Owner reviews, does not publish
+    const casey = responsibilities(perms({ owns: ["cloud-platform-team"] }), null, [newDraft], [], { process: {}, standard: {} }, TODAY, meta, "casey@example.com");
+    expect(casey.tasks).toEqual([]);
+  });
+  it("reads who saved last from the unpublished changes first, and ignores the portal's own saves", () => {
+    expect(waiting("active", { updatedBy: "import" })).toBeUndefined();
+    expect(waiting("draft", { updatedBy: "import" })).toBeUndefined();
+    expect(waiting("active", { updatedBy: "x@example.com", draft: { updatedAt: "t", updatedBy: "y@example.com" } })).toEqual({ email: "y@example.com", name: undefined, at: "t", changes: true });
+    expect(waiting("draft", { updatedBy: "x@example.com", updatedAt: "t" })).toEqual({ email: "x@example.com", name: undefined, at: "t", changes: false });
+  });
+  it("says in the top bar what its number counts, and what the place is for a member", () => {
+    expect(mineTitle([{ kind: "platform", id: "google-cloud" }], r.tasks)).toBe("What you answer for: drafts to publish, reviews to do, feedback to handle. Waiting now: 2 to publish");
+    expect(mineTitle([{ kind: "platform", id: "google-cloud", member: true }], [])).toBe("Your drafts, and what waits for an owner to publish it");
+    expect(mineTitle([{ kind: "team", id: "t" }], [])).toBe("What you answer for: drafts to publish, reviews to do, feedback to handle");
+    expect(urgentWords([])).toBe("");
+  });
+});

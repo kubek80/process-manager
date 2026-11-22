@@ -4,7 +4,7 @@ import {
   PanelLeftClose, PanelLeftOpen, PanelRight, Plus, Redo2, Send, ShieldCheck, Trash2, TriangleAlert, Undo2, Users, Workflow, X, type LucideIcon,
 } from "lucide-react";
 import type { Feedback, Issue } from "../types";
-import { type PublishLine, checkerSummary, DELETE_PAUSE, deleteReady, dropBefore, issueField, isExampleIssue, issueText, outlineCollapsed, outlineKey, type EditState, type IssueCount, type OutlineEntry } from "../lib/editing";
+import { type PublishLine, checkerSummary, DELETE_PAUSE, deleteReady, dropBefore, issueField, isExampleIssue, issueText, outlineCollapsed, publishDialogWords, outlineKey, type EditState, type IssueCount, type OutlineEntry } from "../lib/editing";
 import { useMe } from "../lib/session";
 import { draftAudience } from "../lib/rights";
 import { useMedia } from "../lib/media";
@@ -754,8 +754,10 @@ function useNarrow() {
  * "Publish…": what changed since the published version, a note for the list of versions, and
  * what publishing means for readers. Blocked, with the reason, while the checker has errors.
  */
-export function PublishDialog({ noun, first, changes, version, blocked, onPublish, onClose, since }: {
+export function PublishDialog({ noun, first, changes, version, blocked, onPublish, onClose, since, lastSavedBy, lastSavedAt }: {
   noun: string;
+  /** Somebody else saved what is published last: their name (and when). */
+  lastSavedBy?: string; lastSavedAt?: string;
   /** Never published before: says who will be able to see it. */
   first: boolean;
   /** What readers will see differently, a line each (see publishList); some marked as undoing a newer change. */
@@ -766,14 +768,15 @@ export function PublishDialog({ noun, first, changes, version, blocked, onPublis
 }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const words = publishDialogWords(noun, first, version, lastSavedBy, lastSavedAt);
   const go = async () => {
     if (blocked || busy) return;
     setBusy(true);
     try { if (await onPublish(note)) onClose(); } finally { setBusy(false); }
   };
   return (
-    <Modal title={first ? `Publish this ${noun}` : "Publish your changes"}
-      subtitle={first ? `Until now only ${draftAudience(noun === "standard" ? "standard" : "process")} could see it.` : `Until you publish, readers see version ${version}.`}
+    <Modal title={words.title}
+      subtitle={words.audience ? `${words.subtitle}Until now only ${draftAudience(noun === "standard" ? "standard" : "process")} could see it.` : words.subtitle}
       onClose={onClose}
       footer={<><span className="spacer" /><button className="btn" onClick={onClose}>Not yet</button>
         <button className="btn primary" disabled={!!blocked || busy} onClick={go} title={blocked}><Send size={15} />{busy ? "Publishing…" : "Publish"}</button></>}>

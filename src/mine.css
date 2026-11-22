@@ -1,5 +1,6 @@
 /* My responsibilities: published, with changes readers do not see yet */
-.tier-tag.unpublished { background: var(--warn-bg); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+/* the same state mark as on the cards (`.card-mark.changes`): a state, not a warning */
+.tier-tag.unpublished { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 
 /* the kind of each item: the tag of the cards (KindTag), first on the line */
 .mine-list li > .kind-tag { align-self: flex-start; margin-top: 1px; min-width: 96px; justify-content: center; }

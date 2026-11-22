@@ -39,6 +39,19 @@ export function RankMark({ rank, className = "" }: { rank: GroupRank | undefined
   return <span className={`rank-mark ${rank} ${className}`.trim()}><Icon size={13} aria-hidden="true" />{words}</span>;
 }
 
+/** Pages are links whose text is only their address: cut with "…" (the whole link is the tooltip). Emails and names wrap. */
+const CUT: ContactItem["key"][] = ["confluence", "page"];
+
+/**
+ * The words of a contact link, and its "opens in a new tab" mark kept on the line of the last
+ * character, whether the words are cut or wrap.
+ */
+function LinkText({ item: i }: { item: ContactItem }) {
+  if (!i.external) return <span className="contact-text">{i.text}</span>;
+  if (CUT.includes(i.key)) return <><span className="contact-text">{i.text}</span><ExternalLink size={12} aria-hidden="true" className="contact-out" /></>;
+  return <span className="contact-text">{i.text.slice(0, -1)}<span className="contact-tail">{i.text.slice(-1)}<ExternalLink size={12} aria-hidden="true" className="contact-out" /></span></span>;
+}
+
 const ICON: Record<ContactItem["key"], typeof Mail> = { email: Mail, slack: Hash, chat: MessageSquare, confluence: BookOpen, page: Globe };
 
 /**
@@ -52,9 +65,12 @@ export function ContactList({ entry, name, empty }: { entry: { contact?: string;
   return (
     <div className="contact-view">
       {v.form && (
-        <a className="btn primary contact-form" href={v.form} target="_blank" rel="noopener noreferrer" title={v.form}>
-          Ask {name} for something<ExternalLink size={14} aria-hidden="true" />
-        </a>
+        <div className="contact-form-box">
+          <a className="btn primary contact-form" href={v.form} target="_blank" rel="noopener noreferrer" title={v.form} aria-describedby="contact-form-hint">
+            Open the request form<ExternalLink size={14} aria-hidden="true" />
+          </a>
+          <span className="contact-form-hint" id="contact-form-hint">Where people ask them for something</span>
+        </div>
       )}
       {v.form && <p className="contact-form-print">Request form: {v.form}</p>}
       {(v.items.length > 0 || v.other) && (
@@ -62,10 +78,10 @@ export function ContactList({ entry, name, empty }: { entry: { contact?: string;
           {v.items.map((i) => {
             const Icon = ICON[i.key];
             return (
-              <div key={i.key} className="contact-row" data-contact={i.key}>
+              <div key={i.key} className={`contact-row ${CUT.includes(i.key) ? "cut" : "wraps"}`} data-contact={i.key}>
                 <dt><Icon size={14} aria-hidden="true" />{i.label}</dt>
                 <dd>{i.href
-                  ? <a href={i.href} title={i.href.replace(/^mailto:/, "")} className="contact-link" {...(i.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}><span className="contact-text">{i.text}</span>{i.external && <ExternalLink size={12} aria-hidden="true" className="contact-out" />}</a>
+                  ? <a href={i.href} title={i.href.replace(/^mailto:/, "")} className="contact-link" {...(i.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}><LinkText item={i} /></a>
                   : i.text}</dd>
               </div>
             );

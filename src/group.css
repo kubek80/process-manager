@@ -57,6 +57,14 @@ p.muted.group-lead { font-size: 15px; }
 .contact-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .contact-out { flex: none; color: var(--text-3); }
 .contact-none { margin: 0; font-size: 14px; }
+/* an email or a name wraps (break anywhere): it is the information; the mark stays with its last letter */
+.contact-row.wraps .contact-link { display: inline; }
+.contact-row.wraps .contact-text { white-space: normal; overflow: visible; }
+.contact-row.wraps .contact-out { margin-left: 4px; vertical-align: -1px; }
+.contact-tail { white-space: nowrap; }
+/* the request form: the one main button, and what it is for under it */
+.contact-form-box { display: grid; gap: 4px; justify-items: start; }
+.contact-form-hint { font-size: 12.5px; color: var(--text-3); }
 .contact-form-print { display: none; margin: 0; overflow-wrap: anywhere; }
 
 /* ---------- what belongs to it ---------- */
@@ -72,6 +80,26 @@ p.muted.group-lead { font-size: 15px; }
 .contact-fields { display: grid; gap: 12px; }
 .contact-fields .field-label em { margin-left: 8px; }
 .contact-fields textarea { resize: vertical; }
+/* a field with a problem: outlined in the problem colour, as on the editing screen, with what to do under it */
+.contact-fields [aria-invalid="true"], .member-add input[aria-invalid="true"] { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad); }
+/* the details dialog: its fields scroll, Save and Cancel stay in view (also on a phone) */
+.modal:has(.contact-fields) { display: flex; flex-direction: column; max-height: calc(100dvh - 10vh); }
+.modal:has(.contact-fields) > .modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+@media (max-width: 520px) { .modal:has(.contact-fields) { max-height: calc(100dvh - 24px); } }
+
+/* ---------- adding somebody ---------- */
+.member-add .member-problem, .member-add .member-note { flex-basis: 100%; margin: 0; }
+.member-note { display: flex; align-items: flex-start; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+.member-note svg { flex: none; margin-top: 2px; color: var(--text-3); }
+
+/* ---------- a person's name is a mail link, drawn as the other links of the page ---------- */
+.cat-members .person a.person-link { color: var(--accent); font-weight: 600; overflow-wrap: anywhere; }
+.cat-members .person a.person-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.cat-members.none { gap: 0; }
+
+/* ---------- Teams & tools: how many entries of a list are yours, beside its count ---------- */
+.tab .tab-yours { font-size: 12px; font-weight: 550; color: var(--text-3); white-space: nowrap; }
+.tab.on .tab-yours { color: var(--accent); }
 
 /* ---------- a phone ---------- */
 @media (max-width: 599px) {
@@ -91,7 +119,10 @@ p.muted.group-lead { font-size: 15px; }
 }
 
 /* ---------- Teams & tools and Admin › Lists: a team, platform or practice ---------- */
-.cat-item-text .rank-mark { align-self: flex-start; height: 19px; margin-top: 4px; padding: 0 7px 0 5px; font-size: 11px; }
+/* a row: the name and, at the right of the same line, the mark (rows keep one height) */
+.cat-item-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cat-item-line strong { flex: 0 1 auto; min-width: 0; }
+.cat-item-text .rank-mark { flex: none; margin-left: auto; height: 18px; padding: 0 6px 0 5px; font-size: 11px; gap: 4px; }
 .cat-item-text .rank-mark svg { width: 12px; height: 12px; }
 .cat-detail-head .cat-rank { margin-top: 6px; }
 .cat-detail-head h2 a.group-link { text-decoration-color: color-mix(in srgb, currentColor 25%, transparent); }

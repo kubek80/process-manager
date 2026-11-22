@@ -25,6 +25,8 @@ describe("the card: groups of facts", () => {
   });
   it("short facts say what the number is of", () => {
     expect(shortFact(line("steps", "5 of 10 are yours"), "process")).toBe("5 of 10 steps are yours");
+    expect(shortFact(line("steps", "1 of 1 are yours"), "process")).toBe("The only step is yours");
+    expect(shortFact(line("steps", "0 of 1 are yours"), "process")).toBe("The only step is somebody else’s");
     expect(shortFact(line("rules", "5"), "standard")).toBe("5 requirements");
     expect(shortFact(line("rules", "1"), "standard")).toBe("1 requirement");
     expect(shortFact(line("rules", "2 of 5 apply to your application"), "standard")).toBe("2 of 5 requirements apply");

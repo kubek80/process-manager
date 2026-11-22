@@ -519,6 +519,26 @@ export function author(by: { updatedBy?: string; updatedByName?: string } | unde
 }
 
 /**
+ * Whose work a publication puts out, for the Publish dialog: somebody else when they saved what
+ * is published last (the person's own unsaved changes make it theirs). Undefined: the person's.
+ */
+export function lastSavedByOther(by: { updatedBy?: string; updatedByName?: string } | undefined, myEmail: string | undefined, dirty: boolean): string | undefined {
+  if (dirty || !by?.updatedBy || ["import", "system"].includes(by.updatedBy)) return undefined;
+  const who = author(by, myEmail);
+  return who.you ? undefined : who.name;
+}
+
+/** "Morgan Member’s", "James’". */
+export const possessive = (name: string) => (/s$/i.test(name) ? `${name}’` : `${name}’s`);
+
+/** The Publish dialog's title and first line: whose changes, never claiming more than who saved them last. */
+export function publishDialogWords(noun: string, first: boolean, version: number | undefined, other?: string, otherAt?: string): { title: string; subtitle: string; audience?: boolean } {
+  const saved = other ? `Last saved by ${other}${otherAt ? ` ${savedWhen(otherAt)}` : ""}. ` : "";
+  if (first) return { title: `Publish this ${noun}`, subtitle: saved, audience: true };
+  return { title: other ? `Publish ${possessive(other)} changes` : "Publish your changes", subtitle: `${saved}Until you publish, readers see version ${version}.` };
+}
+
+/**
  * Who saved a version, for the versions list: the person's name where the portal knows it (else
  * their email), and a plain word for a version that no person saved.
  */
@@ -526,6 +546,15 @@ export function savedByText(v: { savedBy: string; savedByName?: string }): strin
   if (v.savedBy === "import") return "Imported";
   if (v.savedBy === "system") return "Updated by the portal";
   return v.savedByName || v.savedBy || "Somebody";
+}
+
+/**
+ * Who a version is by, for the versions list: "Jordan Platform", or, for a version that published
+ * changes somebody else saved last, "published by Jordan Platform · changes last saved by Morgan Member".
+ */
+export function versionByText(v: { savedBy: string; savedByName?: string; changesBy?: string; changesByName?: string }): string {
+  if (!v.changesBy) return savedByText(v);
+  return `published by ${savedByText(v)} · changes last saved by ${v.changesByName || v.changesBy}`;
 }
 
 /**

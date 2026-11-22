@@ -9,6 +9,7 @@ import {
   BOOTSTRAP_PLACE, BOOTSTRAP_SETTING, choicesOf, deleteBlocked, normalRoles, ROLE_ORDER, ROLES, roleLine, roleProblems, rolesDiff, rolesOf, shownRoles, userMatches,
   type AdminUser, type Groups, type RoleChoices,
 } from "../lib/users";
+import { possessive } from "../lib/editing";
 import { confirmDialog, Field, LoadError, Loading, Modal, notify } from "./ui";
 import "../users.css";
 
@@ -46,7 +47,7 @@ export function UsersSection() {
       confirmLabel: "Delete", danger: true,
     });
     if (!yes) return;
-    deleteUser(u.email).then(() => { notify.info(`${u.email} no longer has any role.`); load(); }, (e) => notify.error(`The roles of ${u.email} could not be removed.`, e));
+    deleteUser(u.email).then(() => { notify.info(`${u.name || u.email} no longer has any role.`); load(); }, (e) => notify.error(`${possessive(u.name || u.email)} roles could not be removed.`, e));
   };
 
   return (
@@ -100,7 +101,12 @@ export function UsersSection() {
 
       {editing && users && (
         <RolesDialog user={editing.user} users={users} groups={groups} me={me} onClose={() => setEditing(null)}
-          onSaved={(email) => { setEditing(null); notify.info(`The roles of ${email} were saved.`); load(); }} />
+          onSaved={(email) => {
+            setEditing(null);
+            const name = users.find((u) => u.email.toLowerCase() === email.toLowerCase())?.name;
+            notify.info(`${possessive(name || email)} roles are saved.`);
+            load();
+          }} />
       )}
     </div>
   );

@@ -433,3 +433,27 @@ describe("the reader's line about one's own unpublished changes", () => {
     expect(ownerOfWords([])).toBe("An editor");
   });
 });
+
+import { lastSavedByOther, possessive, publishDialogWords, versionByText } from "../editing";
+
+describe("whose work is published", () => {
+  it("names the person who saved the changes last, never claiming more", () => {
+    const morgan = { updatedBy: "morgan@example.com", updatedByName: "Morgan Member" };
+    expect(lastSavedByOther(morgan, "jordan@example.com", false)).toBe("Morgan Member");
+    expect(lastSavedByOther(morgan, "MORGAN@example.com", false)).toBeUndefined();
+    expect(lastSavedByOther(morgan, "jordan@example.com", true)).toBeUndefined(); // the publisher's unsaved changes make them theirs
+    expect(lastSavedByOther({ updatedBy: "import" }, "jordan@example.com", false)).toBeUndefined();
+    expect(possessive("Morgan Member")).toBe("Morgan Member’s");
+    expect(possessive("James")).toBe("James’");
+    expect(publishDialogWords("process", false, 3, "Morgan Member")).toEqual({ title: "Publish Morgan Member’s changes", subtitle: "Last saved by Morgan Member. Until you publish, readers see version 3." });
+    expect(publishDialogWords("process", false, 3)).toEqual({ title: "Publish your changes", subtitle: "Until you publish, readers see version 3." });
+    expect(publishDialogWords("standard", true, 1, "Morgan Member")).toEqual({ title: "Publish this standard", subtitle: "Last saved by Morgan Member. ", audience: true });
+    expect(publishDialogWords("process", false, 2, "Morgan Member", "2026-11-22T10:00:00Z").subtitle).toMatch(/^Last saved by Morgan Member at .+\. Until you publish, readers see version 2\.$/);
+  });
+  it("says in the list of versions who published and who saved the changes", () => {
+    expect(versionByText({ savedBy: "jordan@example.com", savedByName: "Jordan Platform", changesBy: "morgan@example.com", changesByName: "Morgan Member" }))
+      .toBe("published by Jordan Platform · changes last saved by Morgan Member");
+    expect(versionByText({ savedBy: "jordan@example.com", changesBy: "morgan@example.com" })).toBe("published by jordan@example.com · changes last saved by morgan@example.com");
+    expect(versionByText({ savedBy: "jordan@example.com", savedByName: "Jordan Platform" })).toBe("Jordan Platform");
+  });
+});

@@ -23,6 +23,7 @@ import { Fact, LevelMark } from "./marks";
 import { DraftLine, HistoryDialog, NotShown } from "./Editing";
 import { platformName, practiceName, useCatalog } from "../lib/catalog";
 import { ownerOfWords } from "../lib/editing";
+import { stepsYoursText } from "../lib/cardLines";
 import { SourceSkills } from "./SkillPanel";
 import { createPrompt, modifyPrompt } from "../lib/prompt";
 import type { Catalog, Standard } from "../types";
@@ -112,7 +113,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
         facts={<>
           {doc.rigour && <span title={RIGOUR[doc.rigour]?.hint}><LevelMark level={doc.rigour} /></span>}
           {doc.estimatedDuration && <Fact icon={Clock3} label="Typical time" strong>{doc.estimatedDuration}</Fact>}
-          <Fact icon={UserCheck} label="Steps" strong>{`${mine} of ${doc.steps.length} steps are yours`}</Fact>
+          <Fact icon={UserCheck} label="Steps" strong>{stepsYoursText(mine, doc.steps.length)}</Fact>
           {doc.actors.length > 1 && <Fact icon={Users} label="Who else takes part">{`${doc.actors.length - 1} other ${doc.actors.length === 2 ? "party" : "parties"}`}</Fact>}
         </>}
         notice={(status === "deprecated" || ((editor || manages) && review.state === "overdue")) && <>

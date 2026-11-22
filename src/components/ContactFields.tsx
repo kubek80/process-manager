@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Contacts } from "../types";
-import { CONTACT_LABEL, CONTACT_MAX, contactProblems, DESCRIPTION_MAX, OTHER_LABEL, OTHER_MAX } from "../lib/groups";
+import { CONTACT_LABEL, CONTACT_MAX, contactProblems, DESCRIPTION_MAX, LINK_KEYS, OTHER_LABEL, OTHER_MAX, withScheme } from "../lib/groups";
 import type { GroupKind } from "../lib/members";
 
 /** What the fields change: the description, the free line and the contact details of one group. */
@@ -58,7 +58,11 @@ export function ContactFields({ kind, value, onChange, showAll = false, idPrefix
             <input id={id(r.key)} type={r.type === "email" ? "email" : "text"} inputMode={r.type === "url" ? "url" : undefined} autoComplete="off" spellCheck={false}
               value={c[r.key] ?? ""} maxLength={CONTACT_MAX[r.key] + 20} placeholder={r.placeholder}
               aria-invalid={problem ? true : undefined} aria-describedby={problem ? id(`${r.key}-problem`) : undefined}
-              onChange={(e) => set(r.key, e.target.value)} onBlur={() => setLeft((l) => ({ ...l, [r.key]: true }))} />
+              onChange={(e) => set(r.key, e.target.value)} onBlur={(e) => {
+                // a link typed without its beginning ("example.atlassian.net/wiki/x") gets https:// added
+                if (LINK_KEYS.includes(r.key)) { const v = withScheme(e.target.value); if (v !== e.target.value) set(r.key, v); }
+                setLeft((l) => ({ ...l, [r.key]: true }));
+              }} />
             {problem && <p className="field-error" id={id(`${r.key}-problem`)}>{problem}</p>}
           </div>
         );

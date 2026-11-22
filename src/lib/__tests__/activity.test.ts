@@ -76,13 +76,29 @@ describe("the activity list in words a reader knows", () => {
     expect(out).toMatchObject({ words: "removed", target: { text: "kim@example.com" }, after: "from the members of the practice Engineering" });
     expect(out.detail).toBeUndefined();
     // an owner role is still a role given
-    expect(describeEntry(entry("access.grant", "jo@example.com", { detail: "Platform owner for the platform Google Cloud" }), titles)).toMatchObject({ words: "gave a role to", detail: "Platform owner for the platform Google Cloud" });
+    expect(describeEntry(entry("access.grant", "jo@example.com", { detail: "Platform owner for the platform Google Cloud" }), titles)).toMatchObject({ words: "gave a role to", detail: "Platform owner for Google Cloud" });
   });
   it("says whose details were changed, not only that the lists were", () => {
     const e = entry("lists.save", "catalog", { detail: "version 2: Details of the platform “Google Cloud” changed by Jordan Platform: description, Slack channel" });
     expect(describeEntry(e, titles)).toEqual({ who: "Jordan Platform", person: true, words: "changed the details of the platform", target: { text: "“Google Cloud”", quoted: true }, detail: "description, Slack channel; version 2" });
     expect(describeEntry(entry("lists.save", "catalog", { detail: "Details of the team “Network team” changed" }), titles)).toMatchObject({ words: "changed the details of the team", target: { text: "“Network team”" } });
     expect(describeEntry(entry("lists.save", "catalog", { detail: "version 3" }), titles)).toMatchObject({ words: "changed the lists", detail: "version 3" });
+  });
+  it("does not name the person twice when their roles change, and names a role by its group", () => {
+    const names = { "sam@example.com": "Sam Consumer" };
+    expect(describeEntry(entry("access.change", "sam@example.com", { detail: "Sam Consumer: removed Practice member for the practice Engineering" }), titles, names))
+      .toMatchObject({ words: "changed the roles of", target: { text: "Sam Consumer", hint: "sam@example.com" }, detail: "removed Practice member for Engineering" });
+    expect(describeEntry(entry("access.change", "kim@example.com", { detail: "kim@example.com: added Owner for the team Network team; removed Process editor" }), titles).detail)
+      .toBe("added Owner for Network team; removed Process editor");
+    expect(describeEntry(entry("access.grant", "alex@example.com", { detail: "Platform member for the platform Google Cloud" }), titles, { "alex@example.com": "Alex Editor" }))
+      .toMatchObject({ words: "added", target: { text: "Alex Editor" }, after: "to the members of the platform Google Cloud" });
+  });
+  it("says whose changes a publication put out", () => {
+    expect(describeEntry(entry("process.publish", "request-gcp-project", { detail: "version 4: Budget step; the changes were last saved by Morgan Member" }), titles).detail)
+      .toBe("version 4: Budget step · changes last saved by Morgan Member");
+    expect(describeEntry(entry("standard.publish", "secure-logging", { detail: "version 2; the changes were last saved by morgan@example.com" }), titles).detail)
+      .toBe("version 2 · changes last saved by morgan@example.com");
+    expect(describeEntry(entry("process.publish", "request-gcp-project", { detail: "version 3" }), titles).detail).toBe("version 3");
   });
   it("cuts the detail into words, people and colours", () => {
     expect(detailParts("reported by sam@example.com", { "sam@example.com": "Sam Consumer" })).toEqual([

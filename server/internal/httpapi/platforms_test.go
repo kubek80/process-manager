@@ -343,11 +343,11 @@ func TestUsedCategoriesPracticesAndPlatformsCannotBeRemoved(t *testing.T) {
 	status, out = e.as(dana).do("POST", "/api/admin/access", map[string]string{"email": sam, "role": "platform-owner", "scope": "aws"})
 	wantStatus(t, status, 200, out)
 	status, out = e.as(alex).do("PUT", "/api/catalog", e.catalogWith(dropEntry("platforms", "aws")))
-	if status != 400 || !strings.Contains(out["error"].(string), "roles that are limited to it") {
+	if status != 400 || !strings.Contains(out["error"].(string), "1 person is still one of the owners or members of “aws”. Take their roles first, then it can be removed.") {
 		t.Fatalf("a platform with an owner: %d %v", status, out)
 	}
 	status, out = e.as(dana).do("PUT", "/api/catalog", e.catalogWith(dropEntry("platforms", "aws")))
-	if status != 400 || !strings.Contains(out["error"].(string), "the roles of sam@example.com") {
+	if status != 400 || !strings.Contains(out["error"].(string), "1 person is still one of the owners or members of “aws” (sam@example.com)") {
 		t.Fatalf("admins see whose: %d %v", status, out)
 	}
 	// a team with the same id is a different entry: the platform owner does not keep the team

@@ -79,6 +79,16 @@ export function describeEntry(e: AuditEntry, titles: Titles, names: Names = {}):
     } else out.target = { text: shown };
     return out;
   }
+  // a publication of changes somebody else saved last: "version 4 · changes last saved by Morgan Member"
+  const by = /^(.*?);? the changes were last saved by (.+)$/s.exec(e.detail);
+  if (by && e.action.endsWith(".publish")) out.detail = [by[1].trim(), `changes last saved by ${by[2]}`].filter(Boolean).join(" · ");
+  // roles given or taken: the person is the target, so the detail does not name them again, and
+  // a role reads "Practice member for Engineering"
+  if (e.action.startsWith("access.") && out.detail) {
+    // the server starts "Sam Consumer: added …" for a change of all of a person's roles
+    const said = e.action === "access.change" || e.action === "access.remove" ? out.detail.replace(/^[^:;]+:\s+/, "") : out.detail;
+    out.detail = said.replace(/ for the (?:platform|practice|team) /g, " for ");
+  }
   // a person's address: their name where the page knows it, the address as the hint
   const name = names[shown.toLowerCase()];
   // a member added to or removed from a platform or practice: said as such, not as a role

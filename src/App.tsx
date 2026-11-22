@@ -19,7 +19,7 @@ import { ProcessPage, processAiSpec } from "./components/ProcessPage";
 import { StandardPage, standardAiSpec } from "./components/StandardPage";
 import { StandardsLibrary } from "./components/StandardsLibrary";
 import { MinePage } from "./components/MinePage";
-import { accountRoles, myGroups, responsibilities, urgent } from "./lib/responsibilities";
+import { accountRoles, minePlace } from "./lib/responsibilities";
 import { platformName, practiceName } from "./lib/catalog";
 import { groupEntry } from "./lib/groups";
 import type { GroupKind } from "./lib/members";
@@ -233,6 +233,8 @@ function whyNotCreated(e: unknown, noun: string): string {
 
 /** What the person chose when creating something: what it belongs to and, for a standard, the team that issues it. */
 interface NewChoice { belongs: BelongsTo; owner?: string }
+/** Where a new process or standard starts when it is made from the page of a platform, practice or team. */
+export interface NewPreset { platform?: string; practice?: string; owner?: string }
 
 /**
  * A new process or standard starts with its name: the name gives it its address, which never
@@ -240,8 +242,10 @@ interface NewChoice { belongs: BelongsTo; owner?: string }
  * which of these it belongs to - otherwise it would not be theirs to save. A standard also needs
  * the team that issues it. `from` is something made with AI: its name is suggested.
  */
-function NameDialog({ noun, from, onCreate, onClose }: {
+function NameDialog({ noun, from, preset, onCreate, onClose }: {
   noun: "process" | "standard"; from?: Process | Standard;
+  /** Made from the page of a platform, practice or team: placed there already. */
+  preset?: NewPreset;
   onCreate: (title: string, choice: NewChoice) => Promise<void>; onClose: () => void;
 }) {
   const perms = usePerms();
@@ -250,21 +254,28 @@ function NameDialog({ noun, from, onCreate, onClose }: {
   const [busy, setBusy] = useState(false);
   // the platforms and practices this person owns, for somebody who may not change everything
   const yours = newDocPlaces(perms, noun).map((x) => ({
-    value: `${x.kind}:${x.id}`,
-    label: `${x.kind === "platform" ? "Platform" : "Practice"}: ${x.kind === "platform" ? platformName(catalog, x.id) : practiceName(catalog, x.id)}${x.publishes ? "" : " (an owner publishes it)"}`,
+    value: `${x.kind}:${x.id}`, publishes: x.publishes,
+    label: `${x.kind === "platform" ? "Platform" : "Practice"}: ${x.kind === "platform" ? platformName(catalog, x.id) : practiceName(catalog, x.id)}`,
   }));
-  const [belongs, setBelongs] = useState(yours[0]?.value ?? "");
+  const presetPlace = preset?.platform ? `platform:${preset.platform}` : preset?.practice ? `practice:${preset.practice}` : "";
+  const [belongs, setBelongs] = useState(yours.find((o) => o.value === presetPlace)?.value ?? yours[0]?.value ?? "");
+  const chosen = yours.find((o) => o.value === belongs);
   const teams = catalog.teams;
   const [owner, setOwner] = useState(() => {
     const given = from && "requirements" in from ? from.owner : undefined;
-    return teams.find((t) => t.id === given)?.id ?? teams.find((t) => perms.owns.includes(t.id))?.id ?? teams[0]?.id ?? "";
+    return teams.find((t) => t.id === (preset?.owner ?? given))?.id ?? teams.find((t) => perms.owns.includes(t.id))?.id ?? teams[0]?.id ?? "";
   });
   const ok = slugify(title).length >= 3 && (!yours.length || !!belongs) && (noun === "process" || !!owner);
   const create = async () => {
     if (!ok || busy) return;
     setBusy(true);
     const [kind, id] = belongs.split(":");
-    const choice: NewChoice = { belongs: !yours.length ? {} : kind === "platform" ? { platform: id } : { practice: id }, ...(noun === "standard" ? { owner } : {}) };
+    // an editor of the kind picks nothing: what the page it was made from names, if anything
+    const placed: BelongsTo = preset?.platform ? { platform: preset.platform } : preset?.practice ? { practice: preset.practice } : {};
+    const choice: NewChoice = {
+      belongs: !yours.length ? placed : kind === "platform" ? { platform: id } : { practice: id },
+      ...(noun === "standard" ? { owner } : preset?.owner ? { owner: preset.owner } : {}),
+    };
     try { await onCreate(title.trim(), choice); } catch { setBusy(false); }
   };
   return (
@@ -275,12 +286,16 @@ function NameDialog({ noun, from, onCreate, onClose }: {
           <input autoFocus value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} />
         </Field>
         {yours.length > 0 && (
-          <Field label="It belongs to" hint="one of your platforms and practices">
+          <Field label="It belongs to" hint={chosen && !chosen.publishes ? "An owner of the platform or practice publishes it." : "one of your platforms and practices"}>
             <select value={belongs} onChange={(e) => setBelongs(e.target.value)}>
               {yours.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </Field>
         )}
+        {!yours.length && (preset?.platform || preset?.practice) && (
+          <p className="muted small">It belongs to the {preset.platform ? `platform “${platformName(catalog, preset.platform)}”` : `practice “${practiceName(catalog, preset.practice)}”`}. You can change that later.</p>
+        )}
+        {noun === "process" && preset?.owner && <p className="muted small">Owned by {catalog.teams.find((t) => t.id === preset.owner)?.name ?? preset.owner}. You can change that later.</p>}
         {noun === "standard" && (
           <Field label="Issued by" hint="the team that reviews it and answers feedback">
             <select value={owner} onChange={(e) => setOwner(e.target.value)}>
@@ -335,6 +350,8 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const [standardMeta, setStandardMeta] = useState<MetaById>({});
   const [catalogVersion, setCatalogVersion] = useState(0);
   const [naming, setNaming] = useState<null | "process" | "standard">(null);
+  // made from the page of a platform, practice or team: where it starts
+  const [preset, setPreset] = useState<NewPreset | undefined>(undefined);
   // something made with AI that is not yet the person's to save: they first say what it belongs to
   const [pending, setPending] = useState<Process | Standard | null>(null);
   const [signedOut, setSignedOut] = useState(false);
@@ -494,7 +511,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     const id = uniqueId(p.id, all.map((x) => x.id));
     const doc = tidy({ ...p, id, status: "draft", $schema: "../schema/process.schema.json", updatedAt: today() });
     try { await saveProcess(doc, 0, "Created"); } catch (e) { notify.error("The process could not be created.", whyNotCreated(e, "process")); if ((e as ApiError).conflict) load(); throw e; }
-    setAi(null); setNaming(null); setPending(null);
+    setAi(null); setNaming(null); setPending(null); setPreset(undefined);
     go({ page: "edit-process", id });
   };
   const createStandard = async (s: Standard) => {
@@ -502,7 +519,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     const id = uniqueId(s.id, standards.map((x) => x.id));
     const doc = tidyStandard({ ...s, id, status: "draft", $schema: "../schema/standard.schema.json", updatedAt: today() });
     try { await saveStandard(doc, 0, "Created"); } catch (e) { notify.error("The standard could not be created.", whyNotCreated(e, "standard")); if ((e as ApiError).conflict) load(); throw e; }
-    setAi(null); setNaming(null); setPending(null);
+    setAi(null); setNaming(null); setPending(null); setPreset(undefined);
     go({ page: "edit-standard", id });
   };
   // Deleting: the version the person is looking at. If somebody changed it since, it is not
@@ -539,7 +556,8 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     const own = editsAll(perms, noun) ? {} : { platform: undefined, practice: undefined };
     if (noun === "process") {
       const from = pending && !("requirements" in pending) ? pending : null;
-      return createProcess(from ? { ...from, title, ...own, ...choice.belongs } : blankProcess(all.map((p) => p.id), title, choice.belongs));
+      const owner = choice.owner ? { owner: choice.owner } : {};
+      return createProcess(from ? { ...from, title, ...own, ...choice.belongs, ...owner } : { ...blankProcess(all.map((p) => p.id), title, choice.belongs), ...owner });
     }
     const from = pending && "requirements" in pending ? pending : null;
     const owner = choice.owner ?? from?.owner ?? "";
@@ -550,11 +568,10 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   // after publishing: what readers now see, and the versions, come from the server
   const refreshAll = async () => { await fetchAll(); };
   // what needs the signed-in person as an owner: shown as a count next to "My responsibilities"
-  const mine = useMemo(() => myGroups(perms), [perms]);
-  const waiting = useMemo(() => {
-    // the top bar is on every page: whatever is wrong with one document, it must not take all of them down
-    try { return mine.length ? urgent(responsibilities(perms, null, all, standards, feedback, undefined, { process: processMeta, standard: standardMeta }).tasks) : 0; } catch { return 0; }
-  }, [mine, perms, all, standards, feedback, processMeta, standardMeta]);
+  // (reviews overdue, feedback, and what others saved that waits for the person to publish)
+  const minePl = useMemo(() => minePlace(perms, all, standards, feedback, { process: processMeta, standard: standardMeta }, me.user?.email),
+    [perms, all, standards, feedback, processMeta, standardMeta, me.user?.email]);
+  const mine = minePl.shown ? [true] : [], waiting = minePl.count;
   const process = route.page === "process" || route.page === "edit-process" ? all.find((p) => p.id === route.id) : undefined;
   const standard = route.page === "standard" || route.page === "edit-standard" ? standards.find((s) => s.id === route.id) : undefined;
   // the editing screen is a screen of its own: its editing bar takes the place of the top bar
@@ -570,7 +587,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     { key: "library", pages: ["library", "process"], href: href({ page: "library" }), label: "Processes", title: "Processes", icon: LayoutGrid },
     { key: "standards", pages: ["standards", "standard"], href: href({ page: "standards" }), label: "Standards", title: "Standards", icon: ShieldCheck },
     { key: "requests", pages: ["requests"], href: href({ page: "requests" }), label: "Requests", title: "Requests: ask for a process or standard that is missing, vote for what others asked for", icon: Lightbulb },
-    ...(mine.length > 0 ? [{ key: "mine", pages: ["mine"], href: href({ page: "mine" }), label: "My responsibilities", title: "What you answer for: reviews to do, feedback to handle", icon: ClipboardCheck, count: waiting,
+    ...(mine.length > 0 ? [{ key: "mine", pages: ["mine"], href: href({ page: "mine" }), label: "My responsibilities", title: minePl.title, icon: ClipboardCheck, count: waiting,
       name: waiting ? `My responsibilities, ${waiting} waiting` : "My responsibilities" }] : []),
     { key: "catalog", pages: ["catalog", "group"], href: href({ page: "catalog" }), label: "Teams & tools", title: "Teams & tools", icon: Users },
     { key: "guide", pages: ["guide"], href: href({ page: "guide" }), label: "Guide", title: "Guide", icon: BookOpen },
@@ -615,9 +632,10 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       {processes && route.page === "standards" && (
         <StandardsLibrary standards={standards} processes={all} feedback={feedback.standard} meta={standardMeta} onAi={() => setAi("standard")} onNew={newStandard} />
       )}
-      {processes && route.page === "catalog" && <CatalogPage processes={all} standards={standards} editable={false} />}
+      {processes && route.page === "catalog" && <CatalogPage processes={all} standards={standards} editable={false} list={route.list} id={route.id} />}
       {processes && route.page === "group" && (group
-        ? <GroupPage key={`${route.kind}/${route.id}`} kind={route.kind} id={route.id} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }} />
+        ? <GroupPage key={`${route.kind}/${route.id}`} kind={route.kind} id={route.id} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }}
+          onNew={(noun, place) => { setPending(null); setPreset(place); if (noun === "standard") newStandard(); else setNaming("process"); }} />
         : <NotFound key={`g/${route.kind}/${route.id}`} noun={route.kind} recheck={refreshAll} />)}
       {processes && route.page === "requests" && <RequestsPage state={route.state} kind={route.kind} processes={all} standards={standards} />}
       {processes && route.page === "mine" && (
@@ -653,7 +671,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         {ai === "process" && <AiDialog spec={processAiSpec(undefined, all, standards, catalog)} onClose={() => setAi(null)} onImport={(p) => { createProcess(p).catch(() => {}); }} />}
         {ai === "standard" && <AiDialog spec={standardAiSpec(undefined, standards, all, catalog)} onClose={() => setAi(null)} onImport={(s) => { createStandard(s).catch(() => {}); }} />}
       </Suspense>
-      {naming && <NameDialog noun={naming} from={pending ?? undefined} onClose={() => { setNaming(null); setPending(null); }}
+      {naming && <NameDialog noun={naming} from={pending ?? undefined} preset={preset} onClose={() => { setNaming(null); setPending(null); setPreset(undefined); }}
         onCreate={(title, choice) => createNamed(naming, title, choice)} />}
       {signedOut && <SignedOutDialog me={me} onBack={() => setSignedOut(false)} onOther={onSignedOut} />}
     </FeedbackContext.Provider>

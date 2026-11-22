@@ -26,10 +26,10 @@ const SHELF = 5;
 const BROWSE_FEW = 6;
 
 const WAYS: { key: Extract<FilterKey, "platform" | "practice" | "owner" | "category">; title: string; hint: string }[] = [
-  { key: "platform", title: "By platform", hint: "Everything about one platform" },
-  { key: "practice", title: "By practice", hint: "Everything a practice looks after" },
-  { key: "owner", title: "By team", hint: "Everything a team owns" },
-  { key: "category", title: "By category", hint: "Everything on one subject" },
+  { key: "platform", title: "By platform", hint: "Each opens the platform’s page" },
+  { key: "practice", title: "By practice", hint: "Each opens the practice’s page" },
+  { key: "owner", title: "By team", hint: "Each opens the team’s page" },
+  { key: "category", title: "By category", hint: "Each shows what is filed under it, in the search" },
 ];
 /** Where a way in leads: a platform, a practice or a team to its own page, a category to the search with its filter. */
 const GROUP_OF_WAY: Partial<Record<(typeof WAYS)[number]["key"], GroupKind>> = { platform: "platform", practice: "practice", owner: "team" };

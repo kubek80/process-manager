@@ -5,7 +5,7 @@ import type { Draft } from "../lib/draft";
 import { compare, describeChange, summarize, type Change } from "../lib/diff";
 import { ApiError, loadHistory, loadVersion } from "../lib/store";
 import { useCatalog } from "../lib/catalog";
-import { author, deletedSentence, goneDraftSentence, newerChangesLine, savedByText, savedWhen, unpublishedLine } from "../lib/editing";
+import { author, deletedSentence, goneDraftSentence, newerChangesLine, savedByText, savedWhen, unpublishedLine, versionByText } from "../lib/editing";
 import { formatDateTime } from "../lib/dates";
 import { cap } from "../lib/diff";
 import { useMe } from "../lib/session";
@@ -378,7 +378,7 @@ export function HistoryDialog<T>({ kind, id, title, onRestore, onClose, draftKep
               <span className="history-text">
                 <strong>{v.deleted ? "Deleted" : `Version ${v.version}`}{i === 0 && !v.deleted && <span className="history-current">current</span>}</strong>
                 {v.note && <span className="history-note">{v.note}</span>}
-                <em>{savedByText(v)} · stored {when(v.savedAt)}</em>
+                <em>{versionByText(v)} · stored {when(v.savedAt)}</em>
               </span>
               {/* the first version has nothing before it to compare with */}
               {!v.deleted && !!previousOf(v) && <button className="btn small ghost" aria-expanded={open === v.version} onClick={() => show(v)}><GitCompare size={14} />What changed</button>}

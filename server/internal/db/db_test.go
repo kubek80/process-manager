@@ -30,7 +30,7 @@ func TestMigrateIsRepeatableAndConcurrent(t *testing.T) {
 		}
 	}
 	var n int
-	if err := pool.QueryRow(ctx, `select count(*) from schema_migrations`).Scan(&n); err != nil || n != 11 {
+	if err := pool.QueryRow(ctx, `select count(*) from schema_migrations`).Scan(&n); err != nil || n != 12 {
 		t.Fatalf("migrations recorded: %d, %v", n, err)
 	}
 	for _, table := range []string{"feedback", "feedback_also_hit", "documents", "document_versions", "working_drafts", "role_assignments", "audit_log", "skills", "skill_versions", "signed_out"} {
@@ -60,7 +60,7 @@ func TestMigrateOnAnEmptyDatabaseFromSeveralInstances(t *testing.T) {
 			}
 		}
 		var n int
-		if err := pool.QueryRow(ctx, `select count(*) from schema_migrations`).Scan(&n); err != nil || n != 11 {
+		if err := pool.QueryRow(ctx, `select count(*) from schema_migrations`).Scan(&n); err != nil || n != 12 {
 			t.Fatalf("round %d: migrations recorded: %d, %v", round, n, err)
 		}
 	}
@@ -89,7 +89,7 @@ func TestUpgradeReportsWhatItApplied(t *testing.T) {
 	}
 	wg.Wait()
 	sort.Strings(all)
-	if got := strings.Join(all, ","); got != "001_feedback.sql,002_content_roles_skills.sql,003_version_notes_sessions.sql,004_platform_practice_owners.sql,005_engagement_requests.sql,006_counts_and_limits.sql,007_working_drafts.sql,008_icons.sql,009_draft_names.sql,010_portal_settings.sql,011_platform_practice_members.sql" {
+	if got := strings.Join(all, ","); got != "001_feedback.sql,002_content_roles_skills.sql,003_version_notes_sessions.sql,004_platform_practice_owners.sql,005_engagement_requests.sql,006_counts_and_limits.sql,007_working_drafts.sql,008_icons.sql,009_draft_names.sql,010_portal_settings.sql,011_platform_practice_members.sql,012_version_changes_by.sql" {
 		t.Fatalf("applied: %s", got)
 	}
 	if applied, err := db.Upgrade(ctx, pool); err != nil || len(applied) != 0 {

@@ -3,7 +3,7 @@ import type { Catalog, Process } from "../../types";
 import { ownedBy } from "../catalog";
 import {
   belongsHeading, belongsToGroup, contactProblems, contactsOk, contactView, countByKind, groupEntry, groupFilter, isWebLink, rankText,
-  shortLink, splitOwnerLine, summaryLine, tidyContacts,
+  addedNote, ownFirst, repeatsDetail, shortLink, splitOwnerLine, summaryLine, tidyContacts, withScheme,
 } from "../groups";
 import { search } from "../search";
 import { href, pageTitle, parseRoute, type Route } from "../store";
@@ -163,9 +163,9 @@ describe("how to reach a group", () => {
 
 describe("the one line of a row in Teams & tools", () => {
   it("says how to reach them first: the Slack channel, the group email, the Chat space, the free line", () => {
-    expect(summaryLine({ contacts: { email: "a@b.co", slack: "#cloud" }, contact: "x", description: "d" })).toBe("#cloud");
-    expect(summaryLine({ contacts: { email: "a@b.co", chat: "Space" }, description: "d" })).toBe("a@b.co");
-    expect(summaryLine({ contacts: { chat: "Space" }, contact: "x" })).toBe("Space");
+    expect(summaryLine({ contacts: { email: "a@b.co", slack: "#cloud" }, contact: "x", description: "d" })).toBe("Slack #cloud");
+    expect(summaryLine({ contacts: { email: "a@b.co", chat: "Space" }, description: "d" })).toBe("Email a@b.co");
+    expect(summaryLine({ contacts: { chat: "Space" }, contact: "x" })).toBe("Chat Space");
     expect(summaryLine({ contact: "Slack #old", description: "d" })).toBe("Slack #old");
   });
   it("else what it is, a tool's link, or that nothing is known", () => {
@@ -214,5 +214,54 @@ describe("Admin › Lists saves how to reach a group", () => {
   });
   it("is what the format refuses without it: an empty Slack channel", () => {
     expect(hasErrors(validateCatalog(withContacts({ slack: "" })))).toBe(true);
+  });
+});
+
+describe("the old free line beside the new details", () => {
+  it("is left out when it only repeats one of them (without case, spaces, # and the word Slack)", () => {
+    expect(repeatsDetail("Slack #cloud-platform", { slack: "#cloud-platform" })).toBe(true);
+    expect(repeatsDetail("slack: #Cloud-Platform", { slack: "#cloud-platform" })).toBe(true);
+    expect(repeatsDetail("cloud@example.com", { email: "Cloud@example.com" })).toBe(true);
+    expect(repeatsDetail("Slack #cloud-platform or the queue", { slack: "#cloud-platform" })).toBe(false);
+    expect(repeatsDetail("Slack #cloud-platform", undefined)).toBe(false);
+    expect(contactView({ contact: "Slack #cloud", contacts: { slack: "#cloud" } }).other).toBeUndefined();
+    expect(contactView({ contact: "Office hours", contacts: { slack: "#cloud" } }).other).toBe("Office hours");
+  });
+});
+
+describe("a link typed without its beginning", () => {
+  it("gets https:// when it looks like a host or a path", () => {
+    expect(withScheme("example.atlassian.net/wiki/x")).toBe("https://example.atlassian.net/wiki/x");
+    expect(withScheme("www.example.com")).toBe("https://www.example.com");
+    expect(withScheme(" intranet.example.com:8443/a?b=c ")).toBe("https://intranet.example.com:8443/a?b=c");
+  });
+  it("is left alone when it names a scheme, has spaces or is not a host", () => {
+    for (const v of ["https://example.com", "http://example.com", "ftp://example.com", "mailto:a@b.co", "javascript:alert(1)", "wiki page", "example", "", "a b.com"]) expect(withScheme(v)).toBe(v);
+  });
+});
+
+describe("the order of a list in Teams & tools", () => {
+  it("puts the person's own entries first, then by name", () => {
+    const rows = [{ id: "z", name: "Zeta" }, { id: "a", name: "alpha" }, { id: "m", name: "Mid" }, { id: "b", name: "Beta" }];
+    expect(ownFirst(rows, (id) => id === "m" || id === "z").map((r) => r.id)).toEqual(["m", "z", "a", "b"]);
+    expect(ownFirst(rows, () => false).map((r) => r.id)).toEqual(["a", "b", "m", "z"]);
+  });
+});
+
+describe("what adding somebody answered", () => {
+  it("speaks to the person about themselves, and passes the server's note on otherwise", () => {
+    expect(addedNote({ note: "jordan@example.com is already an owner …", self: true, selfRank: "owner", group: "Google Cloud" })).toBe("You are already an owner of Google Cloud.");
+    expect(addedNote({ note: "x", self: true, selfRank: "member", group: "Engineering" })).toBe("You are already a member of Engineering.");
+    expect(addedNote({ note: "ann@example.com is already a member of the platform “Google Cloud”: nothing changed.", self: false, group: "Google Cloud" })).toBe("ann@example.com is already a member of the platform “Google Cloud”: nothing changed.");
+  });
+});
+
+describe("the address of Teams & tools", () => {
+  it("carries the list and the entry, and the old address still works", () => {
+    const routes: Route[] = [{ page: "catalog" }, { page: "catalog", list: "platforms" }, { page: "catalog", list: "platforms", id: "google-cloud" }];
+    for (const r of routes) expect(parseRoute(href(r))).toEqual(r);
+    expect(href({ page: "catalog", list: "teams", id: "cloud-platform-team" })).toBe("#/catalog/teams/cloud-platform-team");
+    expect(parseRoute("#/catalog")).toEqual({ page: "catalog" });
+    expect(parseRoute("#/catalog/nonsense/x")).toEqual({ page: "catalog" });
   });
 });

@@ -331,7 +331,7 @@ func TestMembersAreAddedByTheOwnersOfTheirGroup(t *testing.T) {
 	status, out = e.as(alex).do("PUT", "/api/catalog", strings.Replace(e.body(docs.Catalog, docs.CatalogID, "", ""), `"id": "security",
       "name": "Cyber security",`, `"id": "security-2",
       "name": "Cyber security",`, 1))
-	if status != 400 || !strings.Contains(fmt.Sprint(out["error"]), "roles that are limited to it") {
+	if status != 400 || !strings.Contains(fmt.Sprint(out["error"]), "and 2 people are still its owners or members. Change those first and take their roles, then it can be removed.") {
 		t.Fatalf("%d %v", status, out)
 	}
 }
@@ -390,7 +390,6 @@ func TestTheDetailsOfAGroupAreChangedByItsOwners(t *testing.T) {
 	// only that entry changed, and only its three fields
 	gcpBefore := `      "id": "google-cloud",
       "name": "Google Cloud",
-      "contact": "Slack #cloud-platform",
       "contacts": {
         "email": "cloud-platform@example.com",
         "slack": "#cloud-platform",
@@ -401,7 +400,6 @@ func TestTheDetailsOfAGroupAreChangedByItsOwners(t *testing.T) {
       "description": "Google Cloud as the company runs it: projects, networks and the guard rails around them. Ask the Cloud Platform team for a project, quota or access."`
 	gcpAfter := `      "id": "google-cloud",
       "name": "Google Cloud",
-      "contact": "Slack #cloud-platform",
       "contacts": {
         "email": "gcp@example.com",
         "slack": "#gcp",
@@ -434,14 +432,14 @@ func TestTheDetailsOfAGroupAreChangedByItsOwners(t *testing.T) {
 	}
 	if !strings.HasPrefix(strings.Join(log, "\n"), "lists.save catalog: version 5: Details of the practice “Cyber security” changed by Dana Admin: other ways to reach them\n"+
 		"lists.save catalog: version 4: Details of the practice “Cyber security” changed by Alex Editor: other ways to reach them\n"+
-		"lists.save catalog: version 3: Details of the team “Cloud Platform team” changed by Casey Owner: description, how to reach them, other ways to reach them\n"+
-		"lists.save catalog: version 2: Details of the platform “Google Cloud” changed by Jordan Platform: description, how to reach them") {
+		"lists.save catalog: version 3: Details of the team “Cloud Platform team” changed by Casey Owner: description, Group email, Slack channel, Slack channel link\n"+
+		"lists.save catalog: version 2: Details of the platform “Google Cloud” changed by Jordan Platform: description, Group email, Slack channel, Slack channel link, Confluence page, Request form") {
 		t.Fatalf("%s", strings.Join(log, "\n"))
 	}
 	// skills follow: the platform is named with how to reach it
 	content, err := e.deps.Skills.Content(bg, "process-"+gcp, 0)
 	must(t, err)
-	if !strings.Contains(content, "- Platform: Google Cloud (Group email: gcp@example.com; Slack: #gcp; Request form: https://forms.example.com/gcp; Other: Slack #cloud-platform)") {
+	if !strings.Contains(content, "- Platform: Google Cloud (Group email: gcp@example.com; Slack: #gcp; Request form: https://forms.example.com/gcp)") {
 		t.Fatalf("%s", content)
 	}
 	// a save of the lists from before meets the details as somebody else's change
@@ -673,5 +671,94 @@ func TestAnEmptySetOfContactsIsLeftOut(t *testing.T) {
 	wantStatus(t, status, 200, out)
 	if strings.Contains(string(e.version(docs.Catalog, docs.CatalogID).Body), `"contacts": {}`) {
 		t.Fatal("an empty object was stored")
+	}
+}
+
+// The record of a details change names only what changed, each detail by its label; a change
+// that changes nothing stores nothing.
+func TestADetailsChangeNamesOnlyWhatChanged(t *testing.T) {
+	e := setup(t, nil)
+	before := e.version(docs.Catalog, docs.CatalogID)
+	j := e.as(jordan)
+	same := `{"description": "Google Cloud as the company runs it: projects, networks and the guard rails around them. Ask the Cloud Platform team for a project, quota or access.",
+		"contacts": {"form": "https://forms.example.com/cloud-platform/request", "email": "cloud-platform@example.com", "slack": "#cloud-platform",
+		"slackUrl": "https://example.slack.com/archives/C0CLOUDPLAT", "confluence": "https://example.atlassian.net/wiki/spaces/CLOUD"}}`
+	status, out := j.do("PUT", "/api/groups/platforms/google-cloud/details", same)
+	if status != 200 || num(out["version"]) != before.Version || e.version(docs.Catalog, docs.CatalogID).Version != before.Version {
+		t.Fatalf("nothing changed, yet: %d %v", status, out["version"])
+	}
+	status, out = j.do("PUT", "/api/groups/platforms/google-cloud/details", strings.Replace(same, `"form":`, `"page": "https://intranet.example.com/gcp", "chat": "Cloud", "form":`, 1))
+	wantStatus(t, status, 200, out)
+	entries, err := e.deps.Audit.Before(bg, 0, 10)
+	must(t, err)
+	var log []string
+	for _, en := range entries {
+		if en.Action == "lists.save" {
+			log = append(log, en.Detail)
+		}
+	}
+	if strings.Join(log, "\n") != "version 2: Details of the platform “Google Cloud” changed by Jordan Platform: Google Chat space, Their page" {
+		t.Fatalf("%v", log)
+	}
+}
+
+// Publishing changes somebody else saved last records them: in the version and the activity log.
+func TestAPublicationRecordsWhoSavedTheChanges(t *testing.T) {
+	e := setup(t, nil)
+	m, j := e.as(morgan), e.as(jordan)
+	// unpublished changes by morgan, published by jordan
+	status, out := m.do("PUT", drafts+"?rev=0", e.body(docs.Process, gcp, `"summary": "`, `"summary": "Morgan's words. `))
+	wantStatus(t, status, 200, out)
+	status, out = j.do("POST", "/api/processes/"+gcp+"/publish?rev=1&note=Looks+right", nil)
+	wantStatus(t, status, 200, out)
+	// a never-published draft by morgan, stored as the document, published by jordan with a plain save
+	status, out = m.do("PUT", "/api/processes/m1?base=0", e.variant("m1", "draft", "Morgan's process"))
+	wantStatus(t, status, 200, out)
+	status, out = j.do("PUT", "/api/processes/m1?base=1", e.variant("m1", "active", "Morgan's process"))
+	wantStatus(t, status, 200, out)
+	// one through its working draft (draft=R)
+	status, out = m.do("PUT", "/api/processes/m2?base=0", e.variant("m2", "draft", "Second"))
+	wantStatus(t, status, 200, out)
+	status, out = m.do("PUT", draftPath(docs.Process, "m2", "draft", 0), e.variant("m2", "draft", "Second, newer"))
+	wantStatus(t, status, 200, out)
+	status, out = j.do("PUT", "/api/processes/m2?base=1&draft=1", e.variant("m2", "active", "Second, newer"))
+	wantStatus(t, status, 200, out)
+	// jordan's own changes, published by jordan: nobody else to name
+	status, out = j.do("PUT", drafts+"?rev=0", e.body(docs.Process, gcp, `"summary": "`, `"summary": "Jordan's words. `))
+	wantStatus(t, status, 200, out)
+	status, out = j.do("POST", "/api/processes/"+gcp+"/publish?rev=1", nil)
+	wantStatus(t, status, 200, out)
+
+	for id, want := range map[string]string{gcp: "3: - | 2: morgan@example.com Morgan Member | 1: - ", "m1": "2: morgan@example.com Morgan Member ", "m2": "2: morgan@example.com Morgan Member "} { // a reader sees no draft versions
+		_, out := e.as(sam).do("GET", "/api/history/process/"+id, nil)
+		var got []string
+		for _, v := range out["versions"].([]any) {
+			v := v.(map[string]any)
+			who := "-"
+			if v["changesBy"] != nil {
+				who = fmt.Sprint(v["changesBy"], " ", v["changesByName"])
+			}
+			got = append(got, fmt.Sprint(num(v["version"]), ": ", who))
+			if v["savedBy"] != jordan && num(v["version"]) > 1 {
+				t.Errorf("%s: the publisher is the one who saved: %v", id, v)
+			}
+		}
+		if strings.Join(got, " | ")+" " != want {
+			t.Errorf("%s: %s", id, strings.Join(got, " | "))
+		}
+	}
+	entries, err := e.deps.Audit.Before(bg, 0, 20)
+	must(t, err)
+	var log []string
+	for _, en := range entries {
+		if en.Action == "process.publish" {
+			log = append(log, en.Target+" "+en.Detail)
+		}
+	}
+	if strings.Join(log, "\n") != gcp+" version 3\n"+
+		"m2 version 2; the changes were last saved by Morgan Member\n"+
+		"m1 version 2; the changes were last saved by Morgan Member\n"+
+		gcp+" version 2: Looks right; the changes were last saved by Morgan Member" {
+		t.Fatalf("%s", strings.Join(log, "\n"))
 	}
 }

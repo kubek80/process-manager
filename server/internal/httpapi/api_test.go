@@ -652,7 +652,7 @@ func TestReportFeedbackOnAStepAndOnARequirement(t *testing.T) {
 		t.Fatalf("notifications: %+v", e.notes.events)
 	}
 	n := e.notes.events[0]
-	if n.Type != "feedback.created" || n.To != "Cloud Platform team" || n.Contact != "Slack #cloud-platform" || n.ProcessTitle != "Request a GCP project" ||
+	if n.Type != "feedback.created" || n.To != "Cloud Platform team" || n.Contact != "Group email: cloud-platform@example.com; Slack: #cloud-platform (https://example.slack.com/archives/C0CLOUDPLAT)" || n.ProcessTitle != "Request a GCP project" ||
 		n.StepTitle != "Raise the 'New GCP project' request" || n.URL != "http://pm.test/#/p/"+gcp+"/feedback" {
 		t.Fatalf("notification: %+v", n)
 	}
