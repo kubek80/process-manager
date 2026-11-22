@@ -130,7 +130,7 @@ func (s *Server) report(ctx context.Context, who actor, in ReportInput) (Report,
 		Author: it.AuthorName, Actor: it.AuthorName, To: "the owner", URL: link}
 	if lists, err := s.o.Docs.Lists(ctx); err == nil {
 		if team, ok := lists.Team(t.Owner); ok {
-			e.To, e.Contact = team.Name, team.Contact
+			e.To, e.Contact = team.Name, team.Reach()
 		}
 	}
 	s.o.Notifier.Notify(ctx, e)

@@ -1,7 +1,8 @@
 /* ---------- the editing screen of a process or a standard ----------
    A screen of its own: a dark editing bar instead of the top bar, then outline | what readers
    will see | fields. Each column scrolls by itself. */
-:root {
+/* (also on .look-light / .look-dark: the preview in Admin > Theming draws a small editing bar in the look being edited) */
+:root, .look-light, .look-dark {
   /* the bar is a neutral dark in both themes; the brand colour of the look reaches it through
      the "on dark" accents of styles.css */
   --eb-bg: #1c1d22; --eb-line: #34363e; --eb-text: #f3f3f5; --eb-muted: #afb1ba; --eb-btn: rgba(255, 255, 255, .07); --eb-btn-hover: rgba(255, 255, 255, .14);

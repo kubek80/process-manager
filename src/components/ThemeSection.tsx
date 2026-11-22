@@ -8,7 +8,7 @@ import { ICON_TYPES, iconContentType, iconFileProblem } from "../lib/icons";
 import { iconUrl, loadAdminLook, saveLook, uploadIcon, type SavedLook } from "../lib/store";
 import {
   confusion, DEFAULT_APPEARANCE, DEFAULT_COLOR, DEFAULT_NAME, derive, forgetOwnChoice, isDark, kindsAlikeText, lookProblems, lookProperties, MAX_NAME, nameOf,
-  normalizeHex, PALETTES, STATE_PARTS, takeLook, tidyLook, underlineLinks, useLook, type Appearance, type ColorPart, type ColorUse, type Font, type Look,
+  normalizeHex, PALETTES, STATE_PARTS, warningCount, warningsText, takeLook, tidyLook, underlineLinks, useLook, type Appearance, type ColorPart, type ColorUse, type Font, type Look,
 } from "../lib/theme";
 import { BrandLogo } from "./Brand";
 import { DocCard } from "./DocCard";
@@ -77,6 +77,30 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
   const set = (patch: Partial<Look>) => d.change((l) => ({ ...l, ...patch }));
   const derived = useMemo(() => derive(look), [look]);
   const problems = lookProblems(look);
+  const warnings = warningCount(derived);
+  const settings = useRef<HTMLDivElement>(null);
+  /** Brings the first warning into view and puts the keyboard on it. */
+  const toFirstWarning = () => {
+    const first = settings.current?.querySelector<HTMLElement>(".color-note.warn");
+    if (!first) return;
+    first.scrollIntoView({ block: "center", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    first.focus({ preventScroll: true });
+  };
+  // Save asks once about the warnings; the same warnings are not asked about again
+  const accepted = useRef("");
+  const save = async () => {
+    const said = derived.colors.flatMap((c) => c.warnings).join("|") + warnings;
+    if (warnings > 0 && accepted.current !== said) {
+      const yes = await confirmDialog({
+        title: `Save with ${warningsText(warnings)}?`,
+        body: `Some colours of this look will be mistaken for others, as the ${warnings === 1 ? "warning beside the colour says" : "warnings beside the colours say"}. Everyone sees the look once you save.`,
+        confirmLabel: "Save anyway", cancelLabel: "Look at them first",
+      });
+      if (!yes) { toFirstWarning(); return; }
+      accepted.current = said;
+    }
+    await d.save();
+  };
   const bar = useRef<HTMLDivElement>(null);
   useBottomBar(bar, d.dirty);
   const isDefault = Object.keys(tidyLook(saved.look)).length === 0;
@@ -94,7 +118,7 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
   return (
     <div className="admin-section theme-section">
       <div className="theme-layout">
-        <div className="theme-settings">
+        <div className="theme-settings" ref={settings}>
           <div className="theme-status">
             <p className="small">
               {saved.revision > 0 && saved.updatedAt
@@ -145,7 +169,7 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
               <ColorField key={part} part={part} value={look[part]} use={derived.colors.find((c) => c.part === part)} onChange={(v) => set({ [part]: v })} />
             ))}
             {derived.kindsAlike.length > 0 && (
-              <p className="color-note warn" role="status"><TriangleAlert size={14} aria-hidden="true" /><span>{kindsAlikeText(derived.kindsAlike)}</span></p>
+              <p className="color-note warn" role="status" tabIndex={-1}><TriangleAlert size={14} aria-hidden="true" /><span>{kindsAlikeText(derived.kindsAlike)}</span></p>
             )}
           </section>
 
@@ -207,11 +231,12 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
             ? <span className="theme-save-text bad" role="alert"><TriangleAlert size={16} aria-hidden="true" /><span><b>Not saved.</b> {d.error}</span></span>
             : problems.length
               ? <span className="theme-save-text bad" role="status"><TriangleAlert size={16} aria-hidden="true" /><span>{problems.join(" ")}</span></span>
-              : <span className="theme-save-text" role="status"><b>Unsaved changes</b> to the look. Everyone sees them once you save.</span>}
+              : <span className="theme-save-text" role="status"><span><b>Unsaved changes</b> to the look. Everyone sees them once you save.
+                {warnings > 0 && <> <button type="button" className="link-btn theme-warnings" onClick={toFirstWarning}><TriangleAlert size={14} aria-hidden="true" />{warningsText(warnings)}</button></>}</span></span>}
           <span className="spacer" />
           {d.dirty && <button type="button" className="btn" onClick={() => { d.discard(); d.clearError(); }}>Discard</button>}
           {d.dirty && (
-            <button type="button" className="btn primary" disabled={d.saving || problems.length > 0} onClick={() => { void d.save(); }}>
+            <button type="button" className="btn primary" disabled={d.saving || problems.length > 0} onClick={() => { void save(); }}>
               <Save size={16} aria-hidden="true" />{d.saving ? "Saving…" : "Save for everyone"}
             </button>
           )}
@@ -340,10 +365,10 @@ function ColorField({ part, value, fallback, use, onChange }: { part: ColorPart;
       )}
       {adjusted && <p className="color-note"><Info size={14} aria-hidden="true" /><span>{adjustedText(use!)}</span></p>}
       {use && (part === "brand" || part === "process" || part === "standard") && use.like.map((k) => (
-        <p key={k} className="color-note warn"><TriangleAlert size={14} aria-hidden="true" /><span>{confusion(part, k)}</span></p>
+        <p key={k} className="color-note warn" tabIndex={-1}><TriangleAlert size={14} aria-hidden="true" /><span>{confusion(part, k)}</span></p>
       ))}
       {use?.warnings.map((w) => (
-        <p key={w} className="color-note warn"><TriangleAlert size={14} aria-hidden="true" /><span>{w}</span></p>
+        <p key={w} className="color-note warn" tabIndex={-1}><TriangleAlert size={14} aria-hidden="true" /><span>{w}</span></p>
       ))}
     </div>
   );

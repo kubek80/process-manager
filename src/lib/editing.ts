@@ -533,13 +533,17 @@ export function savedByText(v: { savedBy: string; savedByName?: string }): strin
  * made them reads "You have unpublished changes (saved 02:09)"; other editors are told whose
  * they are. `when` is the time in words for others ("today at 02:09"), `clock` the short one.
  */
-export function unpublishedLine(draft: { updatedAt: string; updatedBy: string; updatedByName?: string }, myEmail: string | undefined): string {
+export function unpublishedLine(draft: { updatedAt: string; updatedBy: string; updatedByName?: string }, myEmail: string | undefined, publisher?: string): string {
   const who = author(draft, myEmail);
   const at = formatDateTime(draft.updatedAt);
+  if (who.you && publisher) return `You have unpublished changes${at ? ` (saved ${at})` : ""}. ${publisher} publishes them; readers see the published version until then.`;
   if (who.you) return `You have unpublished changes${at ? ` (saved ${at})` : ""}. Readers see the published version.`;
   const name = draft.updatedByName || draft.updatedBy || "an editor";
   return `There are unpublished changes by ${name}${at ? `, saved ${at}` : ""}. Readers see the published version.`;
 }
+
+/** Who publishes, for somebody who may only draft: "An owner of Google Cloud", "An owner of Google Cloud or Engineering". */
+export const ownerOfWords = (places: string[]) => (places.length ? `An owner of ${listParts(places, places.length, "or").join("")}` : "An editor");
 
 /**
  * The reader's page line of a never-published document, for its editors, when it has newer
@@ -786,13 +790,13 @@ export interface PublishingGroup { kind: "platform" | "practice"; name: string; 
  * A short list of things with "and": "a", "a and b", "a, b and c", "a, b, c and 2 more". The
  * parts in order, so that a page can draw each item as an element (`peopleList` for plain text).
  */
-export function listParts<T>(items: readonly T[], most = 3): (T | string)[] {
+export function listParts<T>(items: readonly T[], most = 3, word = "and"): (T | string)[] {
   const shown = items.slice(0, most), rest = items.length - shown.length;
   const parts: (T | string)[] = rest > 0 ? [...shown, `${rest} more`] : [...shown];
   if (parts.length <= 1) return parts;
   const out: (T | string)[] = [];
   parts.forEach((p, i) => {
-    if (i > 0) out.push(i === parts.length - 1 ? " and " : ", ");
+    if (i > 0) out.push(i === parts.length - 1 ? ` ${word} ` : ", ");
     out.push(p);
   });
   return out;
@@ -807,45 +811,43 @@ export type SentencePart = string | PersonRef;
 export const partsText = (parts: readonly SentencePart[]) => parts.map((p) => (typeof p === "string" ? p : personLabel(p))).join("");
 
 /**
- * Who can publish a document the person may not publish (`publishPlaces` says whose ownership it
- * depends on), in plain words, naming the platforms and practices and then their owners, by name
- * where it is known (`owners` false: not loaded yet, so the owners are left out). `all` false: an
- * owner of any one of `groups`; true: somebody who owns every one of them (with one group the
- * same). `draft`: "saved" when the person's draft is saved, "unsaved" while changes on the screen
- * are not, "none" when there is no draft yet. E.g. "Only an owner of the platform “Google Cloud”,
- * or a process editor, can publish this process. “Google Cloud” is owned by Jordan Platform. Your
- * draft is saved for them."
+ * Who publishes a document the person may not publish (`publishPlaces` says whose ownership it
+ * depends on), led by the people, by name where it is known (`owners` false: not loaded yet, so
+ * they are left out). `all` false: an owner of any one of `groups`; true: somebody who owns every
+ * one of them (with one group the same). `draft`: "saved" when the person's draft is saved,
+ * otherwise Save draft is what keeps their work. E.g. "Jordan Platform, an owner of Google Cloud,
+ * publishes this. Your draft is saved for them."
  */
 export function whoPublishesParts(kind: TargetKind, need: { all: boolean; groups: PublishingGroup[] }, draft: "saved" | "unsaved" | "none", owners = true): SentencePart[] {
   const editor = kind === "process" ? "a process editor" : "a standards editor";
   const groups = need.groups;
-  const named = (g: PublishingGroup) => `the ${g.kind} “${g.name}”`;
+  const names = (gs: PublishingGroup[], word: string) => listParts(gs.map((g) => g.name), gs.length, word).join("");
   const every = need.all && groups.length > 1;
+  const key = (x: PersonRef) => x.email.toLowerCase();
   const parts: SentencePart[] = [];
-  if (!groups.length) parts.push(`Only ${editor} can publish this ${kind}.`);
-  else if (!every) {
-    const of = groups.map((g, i) => `${i === 0 ? "an owner of" : "of"} ${named(g)}`);
-    parts.push(`Only ${of.join(" or ")}, or ${editor}, can publish this ${kind}.`);
-    if (owners) groups.forEach((g, i) => {
-      const last = i === groups.length - 1;
-      if (!g.owners.length) { parts.push(` “${g.name}” has no owner yet${last ? "." : ";"}`); return; }
-      parts.push(` “${g.name}” is owned by `, ...listParts(g.owners), last ? "." : ";");
-    });
+  if (!groups.length) parts.push(`${cap(editor)} publishes this.`);
+  else if (every) {
+    const which = `${groups.length === 2 ? "both " : ""}${names(groups, "and")}`;
+    const common = groups[0].owners.filter((o) => groups.every((g) => g.owners.some((x) => key(x) === key(o))));
+    if (!owners) parts.push(`Somebody who owns ${which} publishes this.`);
+    else if (!common.length) parts.push(`Nobody owns ${which} yet: ${editor} publishes this.`);
+    else parts.push(`Somebody who owns ${which} publishes this: `, ...listParts(common, 3, "or"), ".");
   } else {
-    const both = groups.length === 2;
-    const list = listParts(groups.map(named), groups.length).join("");
-    parts.push(`Only somebody who owns ${both ? "both " : ""}${list}, or ${editor}, can publish this ${kind}.`);
-    if (owners) {
-      const key = (x: PersonRef) => x.email.toLowerCase();
-      const common = groups[0].owners.filter((o) => groups.every((g) => g.owners.some((x) => key(x) === key(o))));
-      if (!common.length) parts.push(` Nobody owns ${both ? "both" : "all of them"} yet: ${editor} can publish it.`);
-      else parts.push(` ${common.length === 1 ? "Owner" : "Owners"} of ${both ? "both" : "all of them"}: `, ...listParts(common), ".");
-    }
+    const people: PersonRef[] = [];
+    for (const g of groups) for (const o of g.owners) if (!people.some((x) => key(x) === key(o))) people.push(o);
+    const of = names(groups, "or");
+    if (!owners) parts.push(`An owner of ${of} publishes this.`);
+    else if (!people.length) parts.push(`${names(groups, "and")} ${groups.length === 1 ? "has" : "have"} no owner yet: ${editor} publishes this.`);
+    else if (people.length === 1) parts.push(people[0], `, an owner of ${of}, publishes this.`);
+    else parts.push(`An owner of ${of} publishes this: `, ...listParts(people, 3, "or"), ".");
   }
-  const tail = draft === "saved" ? "Your draft is saved for them." : draft === "unsaved" ? "Save draft keeps your changes for them." : "What you change and save as a draft waits for them.";
-  parts.push(` ${tail}`);
+  parts.push(draft === "saved" ? " Your draft is saved for them." : " Save draft keeps your work for them.");
   return parts;
 }
+
+/** What pressing Publish… says to somebody who may not publish: the banner above says who does. */
+export const whoPublishesShort = (kind: TargetKind, need: { groups: PublishingGroup[] }) =>
+  need.groups.length ? "An owner publishes this: see above." : `${kind === "process" ? "A process editor" : "A standards editor"} publishes this: see above.`;
 
 /** `whoPublishesParts` as plain text, for the checker's list and messages. */
 export const whoPublishesSentence = (kind: TargetKind, need: { all: boolean; groups: PublishingGroup[] }, draft: "saved" | "unsaved" | "none", owners = true): string =>

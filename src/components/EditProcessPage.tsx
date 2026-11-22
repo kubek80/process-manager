@@ -5,7 +5,7 @@ import { appendStep, deleteStep, EXAMPLE, flowMoveBlocked, insertStep, movedHead
 import { issueTarget, issuesByPlace, noteMove, issuesFor, PROCESS_SECTIONS, processOutline, selectionKey, withoutEarlySuggestions, type ProcessSection, type Selection } from "../lib/editing";
 import { isDrawableProcess, processSchema, validateProcess } from "../lib/validate";
 import { useSelectedItem } from "../lib/selection";
-import { canDraft } from "../lib/rights";
+import { canDraft, canPublish, type Belongs } from "../lib/rights";
 import { usePerms } from "../lib/session";
 import { useCatalog } from "../lib/catalog";
 import { href } from "../lib/store";
@@ -197,7 +197,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
       {fresh && <StartHere items={processStart(draft, () => {
         choose({ section: "about" });
         setTimeout(() => document.querySelector<HTMLTextAreaElement>(".edit-fields [data-field=summary]")?.focus(), 50);
-      }, openAddLine, () => draft.steps[0] && choose({ section: "steps", item: draft.steps[0].id }))} />}
+      }, openAddLine, () => draft.steps[0] && choose({ section: "steps", item: draft.steps[0].id }))} kind="process" belongs={draft} />}
       <PreviewBefore process={draft} all={all} standards={standards} on={["before", "links", "standards"].includes(sel.section)} open={beforeOpen}
         onToggle={() => setBeforeOpen(!beforeOpen)} onChoose={(section) => choose({ section })} />
       <FlowView editable legend={false} openMin={0.6} follow process={draft} selectedId={stepId} done={NONE} feedback={feedback}
@@ -278,7 +278,9 @@ export interface StartItem { done: boolean; icon: React.ReactNode; title: string
  * On a process or standard that is still blank: the order in which it is written, each a button to
  * the place where it is done, ticked off as it is done.
  */
-export function StartHere({ items }: { items: StartItem[] }) {
+export function StartHere({ items, kind, belongs }: { items: StartItem[]; kind: "process" | "standard"; belongs: Belongs }) {
+  // something never published: whoever may not publish its whole placement saves it for an owner
+  const publishes = canPublish(usePerms(), kind, belongs, belongs, false);
   return (
     <section className="start-here" aria-label="Start here">
       <h3>Start here</h3>
@@ -291,7 +293,9 @@ export function StartHere({ items }: { items: StartItem[] }) {
           </li>
         ))}
       </ol>
-      <p className="start-last"><Send size={13} aria-hidden="true" /><span>Then <b>Publish…</b>: the checker on the bar says what is still to do.</span></p>
+      <p className="start-last"><Send size={13} aria-hidden="true" />{publishes
+        ? <span>Then <b>Publish…</b>: the checker on the bar says what is still to do.</span>
+        : <span>Then <b>Save draft</b>: an owner publishes it.</span>}</p>
     </section>
   );
 }

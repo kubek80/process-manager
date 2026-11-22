@@ -77,7 +77,6 @@
     {
       "id": "cloud-platform-team",
       "name": "Cloud Platform team",
-      "contact": "Slack #cloud-platform",
       "contacts": {
         "email": "cloud-platform@example.com",
         "slack": "#cloud-platform",
@@ -122,7 +121,6 @@
     {
       "id": "security",
       "name": "Cyber security",
-      "contact": "Slack #security",
       "contacts": {
         "email": "security@example.com",
         "slack": "#security",
@@ -133,7 +131,6 @@
     {
       "id": "engineering",
       "name": "Engineering",
-      "contact": "Slack #engineering-practice",
       "contacts": {
         "email": "engineering-practice@example.com",
         "slack": "#engineering-practice",
@@ -153,7 +150,6 @@
     {
       "id": "google-cloud",
       "name": "Google Cloud",
-      "contact": "Slack #cloud-platform",
       "contacts": {
         "email": "cloud-platform@example.com",
         "slack": "#cloud-platform",
@@ -177,7 +173,6 @@
     {
       "id": "akamai",
       "name": "Akamai",
-      "contact": "Slack #edge-cdn",
       "contacts": {
         "email": "edge-cdn@example.com",
         "slack": "#edge-cdn",

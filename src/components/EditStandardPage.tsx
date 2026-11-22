@@ -195,7 +195,7 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
           document.querySelector<HTMLButtonElement>(".outline-add-line")?.click();
           document.querySelector<HTMLInputElement>(".outline-add-form input")?.focus();
         });
-      })} />}
+      })} kind="standard" belongs={draft} />}
       <PreviewIntro standard={draft} on={sel.section === "scope" || sel.section === "background"} open={introOpen} onToggle={() => setIntroOpen(!introOpen)}
         onChoose={(section) => choose({ section })} intro={<StandardIntro standard={draft} processes={processes} helpers={helpers} background />} />
       <ol className="reqs">

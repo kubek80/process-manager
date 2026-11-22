@@ -289,12 +289,19 @@ export function derive(look: Look): Derived {
       });
     }
   }
-  // pairs that will be confused: the warning stands with the later of the two chosen parts
+  // pairs that will be confused: the warning stands with the later of the two chosen parts. Main buttons
+  // without a colour of their own are the brand colour, which says itself what it looks like.
+  const needsOwn = new Set<ColorPart>();
   const pair = (a: ColorPart, b: ColorPart, text: string, test = alike) => {
+    if (needsOwn.has(a) && !byPart(a)) return;
     const at = [byPart(a), byPart(b)].filter((c) => !!c).sort((x, y) => COLOR_PARTS.indexOf(y!.part) - COLOR_PARTS.indexOf(x!.part))[0];
     if (at && test(eff[a], eff[b])) at.warnings.push(text);
   };
   pair("mainButton", "problem", "Main buttons will look like buttons that delete: “Publish” and “Delete” will have nearly the same colour.");
+  needsOwn.add("mainButton");
+  pair("mainButton", "success", "Main buttons will look like good news: “Publish…” and “Nothing to fix” will have nearly the same colour.");
+  pair("mainButton", "warning", "Main buttons will look like warnings: “Publish…” and “Review due” will have nearly the same colour.");
+  needsOwn.clear();
   pair("otherButtons", "problem", "Other buttons will look like buttons that delete, which are drawn in the colour of problems.");
   pair("success", "warning", "Success and warnings will be hard to tell apart: “Published” and “Review due” will have nearly the same colour.");
   pair("warning", "problem", "Warnings and problems will be hard to tell apart: “Review due” and “Review overdue” will have nearly the same colour.");
@@ -397,6 +404,13 @@ export function confusion(part: "brand" | "process" | "standard", like: Semantic
     : KIND_EFFECT[part][like].replace(/^./, (x) => x.toUpperCase());
   return `This looks like ${SEMANTIC_NAME[like]}: ${effect} You can still use ${what}.`;
 }
+/** How many warnings a look gets: what each colour will be mistaken for, and two kinds that look alike. */
+export function warningCount(d: Derived): number {
+  return d.colors.reduce((n, c) => n + c.warnings.length + (c.part === "brand" || c.part === "process" || c.part === "standard" ? c.like.length : 0), 0) + (d.kindsAlike.length ? 1 : 0);
+}
+/** "1 warning", "7 warnings". */
+export const warningsText = (n: number) => `${n} warning${n === 1 ? "" : "s"}`;
+
 /** The sentence for processes and standards that look alike. */
 export function kindsAlikeText(modes: Mode[]): string {
   const where = modes.length === 2 ? "" : modes[0] === "light" ? " in the light look" : " in the dark look";

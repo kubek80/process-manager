@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpRight, Boxes, Code2, Compass, Server, ExternalLink, Layers, Plus, Search, Tag, Trash2, Users, Wrench } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, ArrowUpRight, Boxes, Code2, Compass, Server, ExternalLink, Layers, Plus, Search, Tag, Trash2, Users, Wrench } from "lucide-react";
 import type { Catalog, Contacts, Membership, Process, Standard } from "../types";
 import { GroupMembers } from "./TeamMembers";
 import { ContactFields } from "./ContactFields";
@@ -7,14 +7,14 @@ import { ContactList, RankMark } from "./GroupParts";
 import { EntryIcon } from "./EntryIcon";
 import { IconField } from "./IconField";
 import { hasMembers, membersOf, type GroupKind } from "../lib/members";
-import { summaryLine, tidyLists } from "../lib/groups";
+import { ownFirst, summaryLine, tidyLists } from "../lib/groups";
 import { groupRank } from "../lib/rights";
 import { usePerms } from "../lib/session";
 import { slugify, uniqueId } from "../lib/edit";
 import { docCount, removeHint, useCatalog } from "../lib/catalog";
 import { useDraft } from "../lib/draft";
 import { BehindBanner, ConflictDialog, SaveBar } from "./Editing";
-import { go, href, loadMembers } from "../lib/store";
+import { go, href, loadMembers, type CatalogList } from "../lib/store";
 import { hasErrors, validateCatalog } from "../lib/validate";
 import { Field, IssueList, notify, useScrollFade } from "./ui";
 
@@ -28,26 +28,17 @@ const KINDS: Record<Key, {
   teams: {
     title: "Teams", noun: "team", icon: Users,
     blurb: "Maintain processes and standards, and take part in them.",
-    fields: [
-      { field: "contact", label: "How to reach them", placeholder: "e.g. Slack #cloud-platform, a mailbox or a queue" },
-      { field: "description", label: "What they do", placeholder: "One sentence on what this team is responsible for", long: true },
-    ],
+    fields: [], // the details of a team, practice or platform are ContactFields
   },
   practices: {
     title: "Practices", noun: "practice", icon: Compass,
     blurb: "Ways of working, such as cyber security or engineering.",
-    fields: [
-      { field: "contact", label: "How to reach them", placeholder: "e.g. Slack #engineering-practice or a mailbox" },
-      { field: "description", label: "What it covers", placeholder: "One sentence on what this practice agrees on", long: true },
-    ],
+    fields: [], // the details of a team, practice or platform are ContactFields
   },
   platforms: {
     title: "Platforms", noun: "platform", icon: Boxes,
     blurb: "Systems and services people get access to or build on.",
-    fields: [
-      { field: "contact", label: "How to reach its owners", placeholder: "e.g. Slack #cloud-platform or a mailbox" },
-      { field: "description", label: "What it is", placeholder: "One sentence on what this platform is for", long: true },
-    ],
+    fields: [], // the details of a team, practice or platform are ContactFields
   },
   categories: {
     title: "Categories", noun: "category", icon: Tag,
@@ -117,15 +108,29 @@ const countOf = (uses: Use[]) => docCount(uses.filter((u) => !("requirements" in
 const tidyCatalog = tidyLists;
 
 /** The lists. Read-only it is a directory for everyone; editable it is the Lists section of the Admin panel. */
-export function CatalogPage({ processes, standards, editable: editor }: { processes: Process[]; standards: Standard[]; editable: boolean }) {
+export function CatalogPage({ processes, standards, editable: editor, list: routeList, id: routeId }: {
+  processes: Process[]; standards: Standard[]; editable: boolean;
+  /** Teams & tools: the list and the entry the address names (`#/catalog/platforms/google-cloud`). */
+  list?: CatalogList; id?: string;
+}) {
   const { catalog, version, save, reload } = useCatalog();
   const docs = useMemo<(Process | Standard)[]>(() => [...processes, ...standards], [processes, standards]);
   const d = useDraft<Catalog>({ docKey: "catalog", saved: catalog, version, tidy: tidyCatalog, save, reload, what: "the lists", editable: editor });
   const { draft, clean, dirty } = d;
   const setDraft = d.change;
   useEffect(() => { if (d.error) { notify.error("The lists could not be saved.", d.error); d.clearError(); } }, [d.error]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [key, setKey] = useState<Key>("teams");
-  const [selected, setSelected] = useState<string | null>(null);
+  const [key, setKeyHere] = useState<Key>(routeList ?? "teams");
+  const [selected, setSelectedHere] = useState<string | null>(routeId ?? null);
+  // Teams & tools keeps the list and the entry in the address (a link, Back, the group page's back
+  // link lead to them); Admin › Lists keeps them on the page
+  useEffect(() => { if (!editor) { setKeyHere(routeList ?? "teams"); setSelectedHere(routeId ?? null); } }, [editor, routeList, routeId]);
+  const keyRef = useRef(key);
+  keyRef.current = key;
+  const setKey = (k: Key) => { setKeyHere(k); keyRef.current = k; if (!editor) go({ page: "catalog", list: k }, { replace: true }); };
+  const setSelected = (id: string | null) => {
+    setSelectedHere(id);
+    if (!editor) go({ page: "catalog", list: keyRef.current, ...(id ? { id } : {}) }, { replace: true });
+  };
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [q, setQ] = useState("");
@@ -139,15 +144,20 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
   useEffect(reloadMembers, [reloadMembers]);
 
   const kind = KINDS[key];
+  // how many entries of a list are the person's own (teams, platforms, practices)
+  const yoursIn = (k: Key) => (GROUP_OF[k] ? ((draft[k] ?? []) as Row[]).filter((r) => groupRank(perms, GROUP_OF[k]!, r.id)).length : 0);
   const rows = (draft[key] ?? []) as Row[];
-  const shown = rows.filter((r) => `${r.name} ${r.contact ?? ""} ${r.description ?? ""} ${r.url ?? ""}`.toLowerCase().includes(q.toLowerCase()));
+  const perms = usePerms();
+  const group = GROUP_OF[key];
+  const mine = (id: string) => !!group && !!groupRank(perms, group, id);
+  // the person's own groups first, then by name; tiers and environments keep their order
+  const found = rows.filter((r) => `${r.name} ${r.contact ?? ""} ${summaryLine(r)} ${r.description ?? ""} ${r.url ?? ""}`.toLowerCase().includes(q.toLowerCase()));
+  const shown = ORDERED.includes(key) ? found : ownFirst(found, mine);
   const current = adding ? undefined : rows.find((r) => r.id === selected) ?? shown[0];
   const uses = current ? usesOf(key, current.id, docs) : [];
   // people who are still members: the server refuses to remove an entry that roles point to
   const stillMembers = current && GROUP_OF[key] && members ? membersOf(members, GROUP_OF[key]!, current.id).length + membersOf(members, GROUP_OF[key]!, current.id, "member").length : 0;
   const isNew = (id: string) => !((catalog[key] ?? []) as Row[]).some((r) => r.id === id);
-  const group = GROUP_OF[key];
-  const perms = usePerms();
 
   const setRows = (next: Row[]) => setDraft({ ...draft, [key]: next });
   const upd = (patch: Partial<Row>) => current && setRows(rows.map((r) => (r.id === current.id ? { ...r, ...patch } : r)));
@@ -216,6 +226,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
           return (
             <button key={k} role="tab" aria-selected={key === k} className={`tab ${key === k ? "on" : ""}`} title={K.blurb} onClick={() => switchTo(k)}>
               {K.title}<span className="tab-count">{(draft[k] ?? []).length}</span>
+              {!editor && yoursIn(k) > 0 && <span className="tab-yours">{yoursIn(k)} yours</span>}
             </button>
           );
         })}
@@ -250,9 +261,11 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
                     <EntryIcon icon={WITH_ICON.includes(key) ? r.icon : undefined} size={32}
                       fallback={<span className="cat-avatar">{ORDERED.includes(key) ? rank + (key === "tiers" ? 0 : 1) : r.name.slice(0, 1).toUpperCase()}</span>} />
                     <span className="cat-item-text">
-                      <strong>{r.name || "Unnamed"}{isNew(r.id) && <i>new</i>}</strong>
+                      <span className="cat-item-line">
+                        <strong>{r.name || "Unnamed"}{isNew(r.id) && <i>new</i>}</strong>
+                        {group && !isNew(r.id) && <RankMark rank={groupRank(perms, group, r.id)} />}
+                      </span>
                       <em>{summaryLine(r)}</em>
-                      {group && !isNew(r.id) && <RankMark rank={groupRank(perms, group, r.id)} />}
                     </span>
                     <span className={`cat-uses ${n ? "" : "none"}`} title={n ? `Used by ${countOf(used)}` : "Not used by any process or standard"}>{n}</span>
                   </button>
@@ -319,7 +332,7 @@ export function CatalogPage({ processes, standards, editable: editor }: { proces
                 <div className="cat-group-facts">
                   {current.description?.trim() ? <p className="cat-group-description">{current.description}</p> : null}
                   <ContactList entry={current} name={current.name} empty="Nothing is known yet about how to reach them." />
-                  <a className="btn cat-open-page" href={href({ page: "group", kind: group, id: current.id })}>Open the page of {current.name}<ArrowUpRight size={15} aria-hidden="true" /></a>
+                  <a className="btn cat-open-page" href={href({ page: "group", kind: group, id: current.id })}>Open the page of {current.name}<ArrowRight size={15} aria-hidden="true" /></a>
                 </div>
               ) : (
                 <dl className="cat-facts">

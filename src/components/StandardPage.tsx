@@ -1,7 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Bot, CalendarCheck, Flag, ListChecks, Pencil, TriangleAlert, Workflow, X } from "lucide-react";
 import type { DocMeta, Feedback, Level, Process, Requirement, Standard } from "../types";
-import { teamName, useCatalog } from "../lib/catalog";
+import { platformName, practiceName, teamName, useCatalog } from "../lib/catalog";
+import { ownerOfWords } from "../lib/editing";
 import { appliesTo } from "../lib/edit";
 import { useSelectedItem } from "../lib/selection";
 import { useProfile } from "../lib/profile";
@@ -161,7 +162,8 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
           open={openCount(feedback)} resolvedHere={feedback.length - openCount(feedback)} onFeedback={giveFeedback} />}
       </DocHead>
 
-      <DraftLine meta={meta} status={status} editHref={drafts ? editHref : undefined} noun="standard" />
+      <DraftLine meta={meta} status={status} editHref={drafts ? editHref : undefined} noun="standard"
+        publisher={drafts && !editor ? ownerOfWords([standard.platform && platformName(catalog, standard.platform), standard.practice && practiceName(catalog, standard.practice)].filter((x): x is string => !!x)) : undefined} />
 
       <div className="tabs-row">
         <div className="tabs" role="tablist">

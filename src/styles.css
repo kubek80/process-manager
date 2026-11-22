@@ -58,8 +58,9 @@
   color-scheme: dark;
 }
 /* the brand colour on a surface that is dark in both themes (the editing bar): text, fill and the ink on the fill;
-   the buttons and the states there likewise (their dark variants also read on the bar: see BAR in theme.ts) */
-:root {
+   the buttons and the states there likewise (their dark variants also read on the bar: see BAR in theme.ts).
+   Also on .look-light / .look-dark, so that an element with a look of its own (the preview) resolves them from it. */
+:root, .look-light, .look-dark {
   --accent-on-dark: var(--theme-dark-accent, #8b8cf8); --accent-fill-on-dark: var(--theme-dark-accent-fill, #8b8cf8); --accent-ink-on-dark: var(--theme-dark-accent-ink, #11121c);
   --action-fill-on-dark: var(--theme-dark-action-fill, var(--accent-fill-on-dark)); --action-ink-on-dark: var(--theme-dark-action-ink, var(--accent-ink-on-dark));
   --action-other-on-dark: var(--theme-dark-action-other);

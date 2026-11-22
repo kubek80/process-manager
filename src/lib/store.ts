@@ -286,7 +286,7 @@ export type AdminSection = "access" | "lists" | "skills" | "health" | "activity"
 /** `item` is the step or the requirement that is open, so that a link can point at one. */
 export type Route =
   | { page: "home" } | ({ page: "search" } & SearchState)
-  | ({ page: "library" } & ListState) | ({ page: "standards" } & ListState) | { page: "catalog" } | { page: "guide" } | { page: "mine" }
+  | ({ page: "library" } & ListState) | ({ page: "standards" } & ListState) | ({ page: "catalog" } & CatalogView) | { page: "guide" } | { page: "mine" }
   | ({ page: "requests" } & RequestsView)
   | { page: "admin"; section: AdminSection }
   | { page: "process"; id: string; tab: Tab; item?: string }
@@ -296,6 +296,12 @@ export type Route =
   | { page: "edit-standard"; id: string; item?: string }
   /** The page of a team, a platform or a practice. */
   | { page: "group"; kind: GroupKind; id: string };
+
+/** The lists of Teams & tools, as the address names them. */
+export const CATALOG_LISTS = ["teams", "practices", "platforms", "categories", "tools", "tiers", "environments", "languages"] as const;
+export type CatalogList = (typeof CATALOG_LISTS)[number];
+/** Which list of Teams & tools is open and which entry is chosen: `#/catalog/platforms/google-cloud`. */
+export interface CatalogView { list?: CatalogList; id?: string }
 
 /**
  * What the results page shows: the words searched for and the filters. Several values of one
@@ -376,6 +382,8 @@ const parse = (h: string = location.hash): Route => {
     return { page: list[1] === "processes" ? "library" : "standards", ...listOf(state) };
   }
   if (h.startsWith("#/processes")) return { page: "library" };
+  const cat = h.match(/^#\/catalog(?:\/([a-z]+)(?:\/([a-z0-9-]+))?)?\/?$/);
+  if (cat) return { page: "catalog", ...((CATALOG_LISTS as readonly string[]).includes(cat[1] ?? "") ? { list: cat[1] as CatalogList, ...(cat[2] ? { id: cat[2] } : {}) } : {}) };
   if (h.startsWith("#/catalog")) return { page: "catalog" };
   if (h.startsWith("#/guide")) return { page: "guide" };
   if (h.startsWith("#/mine")) return { page: "mine" };
@@ -552,7 +560,7 @@ export const href = (r: Route): string => {
     case "search": return searchHref(r);
     case "library": return searchHref(listOf(r), "#/processes");
     case "standards": return searchHref(listOf(r), "#/standards");
-    case "catalog": return "#/catalog";
+    case "catalog": return `#/catalog${r.list ? `/${r.list}${r.id ? `/${r.id}` : ""}` : ""}`;
     case "guide": return "#/guide";
     case "mine": return "#/mine";
     case "requests": return `#/requests${requestsQuery(r)}`;

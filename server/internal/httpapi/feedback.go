@@ -190,7 +190,7 @@ func (a *api) createFeedback(w http.ResponseWriter, r *http.Request) {
 	e.To = "the owner"
 	if lists, err := a.Docs.Lists(r.Context()); err == nil {
 		if team, ok := lists.Team(t.Owner); ok {
-			e.To, e.Contact = team.Name, team.Contact
+			e.To, e.Contact = team.Name, team.Reach()
 		}
 	}
 	a.Notifier.Notify(r.Context(), e)

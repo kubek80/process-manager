@@ -195,6 +195,9 @@ export interface DocVersion {
   version: number; savedAt: string; savedBy: string; note: string; deleted: boolean;
   /** The name of whoever saved it, where the portal knows it. */
   savedByName?: string;
+  /** A version that published changes somebody else saved last: that person (address, and name where known). */
+  changesBy?: string;
+  changesByName?: string;
 }
 /** What the server knows about a document besides its content. */
 export interface DocMeta {

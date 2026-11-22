@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { ArrowLeft, Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash2, TriangleAlert, Undo2, UserCheck } from "lucide-react";
 import type { DocMeta, Issue, Membership, Process, Standard, TargetKind } from "../types";
 import { conflictOf, useDraft, type Conflict, type Draft } from "../lib/draft";
-import { author, baseBehindSentence, clock, draftKindOf, draftMovedOn, draftRevisionToSend, draftSaveBase, saveCallOf, statusChangedSentence, editState, exampleIssues, isExampleIssue, issueText, statusChangeBlocked, steppedMessage, movedItem, movedMessage, moveOf, publishList, savedByText, partsText, whoPublishesParts, type DraftKind } from "../lib/editing";
+import { author, baseBehindSentence, clock, draftKindOf, draftMovedOn, draftRevisionToSend, draftSaveBase, saveCallOf, statusChangedSentence, editState, exampleIssues, isExampleIssue, issueText, statusChangeBlocked, steppedMessage, movedItem, movedMessage, moveOf, publishList, savedByText, partsText, whoPublishesParts, whoPublishesShort, type DraftKind } from "../lib/editing";
 import { compare, describeChange, type Change } from "../lib/diff";
 import { belongsRefused, canPublish, draftAudience, publishPlaces } from "../lib/rights";
 import { membersOf } from "../lib/members";
@@ -455,7 +455,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
     if (busy || d.saving) return;
     const why = rightsBlock || jsonBlock;
     if (why) return setNotice({ text: `This cannot be published yet. ${why}`, tone: "bad" });
-    if (publishRight) return setNotice({ text: publishRight, tone: "warn" });
+    if (publishRight) return setNotice({ text: whoPublishesShort(kind, { groups: placement.places as never[] }), tone: "warn" });
     if (problemsBlock) { setNotice({ text: problemsBlock, tone: "bad", issue: firstError }); return goTo(firstError); }
     setDialog("publish");
   };

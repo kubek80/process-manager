@@ -94,6 +94,10 @@
 .theme-save-text.bad { color: var(--bad); }
 .theme-save-text.bad span { color: var(--text); }
 .theme-save-text svg { flex: none; margin-top: 2px; }
+/* how many warnings the look has: a link to the first */
+.theme-save-text .theme-warnings { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; font-weight: 650; color: var(--warn); text-decoration: underline; text-underline-offset: 2px; }
+.theme-save-text .theme-warnings svg { margin-top: 0; }
+.color-note.warn:focus { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
 /* ---------- the preview: the real parts, one pane per theme */
 .theme-preview { position: sticky; top: 76px; display: grid; gap: 10px; min-width: 0; }

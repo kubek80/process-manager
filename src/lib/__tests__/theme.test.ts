@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ALL_PROPERTIES, ALIKE, BAR, cleanLook, COLOR_PARTS, FONT_FAMILY, FONT_PROPERTY, seenWithout, STATE_PARTS, TOKENS, confusion, contrast, DEFAULT_NAME, derive, distance, FILL_MIN, inkOn, isDark, kindsAlikeText, lookProblems, lookProperties, luminance, mix, nameOf, SEMANTIC, underlineLinks,
+  ALL_PROPERTIES, ALIKE, BAR, warningCount, warningsText, cleanLook, COLOR_PARTS, FONT_FAMILY, FONT_PROPERTY, seenWithout, STATE_PARTS, TOKENS, confusion, contrast, DEFAULT_NAME, derive, distance, FILL_MIN, inkOn, isDark, kindsAlikeText, lookProblems, lookProperties, luminance, mix, nameOf, SEMANTIC, underlineLinks,
   PALETTES, readable, SURFACES, tidyLook,
 } from "../theme";
 
@@ -232,9 +232,9 @@ describe("buttons and states", () => {
     }
   });
   it("keep a chosen fill as it is: an orange warning badge stays orange, with the ink that reads on it", () => {
-    const d = derive({ warning: "#ea580c", info: "#2563eb", mainButton: "#15803d" });
+    const d = derive({ warning: "#ea580c", info: "#2563eb", mainButton: "#7c3aed" });
     expect(d.tokens.light["warn-fill"]).toBe("#ea580c");
-    expect(d.tokens.light["action-fill"]).toBe("#15803d");
+    expect(d.tokens.light["action-fill"]).toBe("#7c3aed");
     expect(d.tokens.light["action-ink"]).toBe("#ffffff");
     expect(d.tokens.light.warn).not.toBe("#ea580c"); // orange text on white would be too light
     expect(d.colors.flatMap((c) => c.warnings)).toEqual([]);
@@ -244,7 +244,12 @@ describe("buttons and states", () => {
     // said once, with the later of the two parts
     expect(words({ mainButton: "#dc2626", problem: "#e11d48" }, "mainButton")).toEqual([]);
     expect(words({ mainButton: "#dc2626", problem: "#e11d48" }, "problem")).toContain("Main buttons will look like buttons that delete: “Publish” and “Delete” will have nearly the same colour.");
-    expect(words({ mainButton: "#15803d" }, "mainButton")).toEqual([]);
+    expect(words({ mainButton: "#15803d" }, "mainButton")).toContain("Main buttons will look like good news: “Publish…” and “Nothing to fix” will have nearly the same colour.");
+    expect(words({ mainButton: "#0369a1" }, "mainButton")).toEqual([]);
+    expect(words({ mainButton: "#22c55e", success: "#22c55e" }, "success")).toContain("Main buttons will look like good news: “Publish…” and “Nothing to fix” will have nearly the same colour.");
+    expect(words({ mainButton: "#d97706" }, "mainButton")).toContain("Main buttons will look like warnings: “Publish…” and “Review due” will have nearly the same colour.");
+    // main buttons in the brand colour: the brand colour says it itself, once
+    expect(words({ brand: "#15803d", success: "#16a34a" }, "success").filter((w) => w.startsWith("Main buttons"))).toEqual([]);
     expect(words({ otherButtons: "#e11d48" }, "otherButtons")).toContain("Other buttons will look like buttons that delete, which are drawn in the colour of problems.");
     expect(words({ otherButtons: "#334155" }, "otherButtons")).toEqual([]); // a grey for the other buttons is the neutral look, not a problem
   });
@@ -283,5 +288,18 @@ describe("reading and checking buttons, states and the font", () => {
       "The colour of problems must be written as # and six digits or letters a-f, e.g. #4f46e5.",
     ]);
     expect(lookProblems({ font: "comic" as never })).toEqual(["The font must be Roboto, or the default font."]);
+  });
+});
+
+describe("how many warnings a look has", () => {
+  it("counts every warning once, the two kinds alike included", () => {
+    expect(warningCount(derive({}))).toBe(0);
+    expect(warningCount(derive({ brand: "#dc2626" }))).toBe(1);
+    expect(warningCount(derive({ process: "#0369a1", standard: "#0284c7" }))).toBe(1);
+    const careless = derive({ mainButton: "#be123c", otherButtons: "#e11d48", success: "#ca8a04", warning: "#d97706", problem: "#dc2626", info: "#b45309" });
+    expect(warningCount(careless)).toBe(careless.colors.reduce((n, c) => n + c.warnings.length, 0));
+    expect(warningCount(careless)).toBeGreaterThan(4);
+    expect(warningsText(1)).toBe("1 warning");
+    expect(warningsText(7)).toBe("7 warnings");
   });
 });

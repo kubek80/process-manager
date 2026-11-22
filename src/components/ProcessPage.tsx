@@ -21,6 +21,8 @@ import { DocHead, PrintFoot, RIGOUR } from "./Governance";
 import { ACTIONS_ON_TABS, PHONE, arrivalTab, useMedia, usePrinting } from "../lib/media";
 import { Fact, LevelMark } from "./marks";
 import { DraftLine, HistoryDialog, NotShown } from "./Editing";
+import { platformName, practiceName, useCatalog } from "../lib/catalog";
+import { ownerOfWords } from "../lib/editing";
 import { SourceSkills } from "./SkillPanel";
 import { createPrompt, modifyPrompt } from "../lib/prompt";
 import type { Catalog, Standard } from "../types";
@@ -51,6 +53,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
   // "Edit" also for a member of its platform or practice: they save drafts there, an owner publishes
   const drafts = canDraft(perms, "process", process);
   const manages = canManage(perms, "process", process);
+  const { catalog } = useCatalog();
   const me = useMe();
   const { done, toggle, reset } = useProgress(process.id);
   const doc = process;
@@ -131,7 +134,8 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
           open={openCount(feedback)} resolvedHere={feedback.length - openCount(feedback)} onFeedback={giveFeedback} />}
       </DocHead>
 
-      <DraftLine meta={meta} status={status} editHref={drafts ? editHref : undefined} noun="process" />
+      <DraftLine meta={meta} status={status} editHref={drafts ? editHref : undefined} noun="process"
+        publisher={drafts && !editor ? ownerOfWords([process.platform && platformName(catalog, process.platform), process.practice && practiceName(catalog, process.practice)].filter((x): x is string => !!x)) : undefined} />
 
       <div className="tabs-row">
         <div className="tabs" role="tablist">

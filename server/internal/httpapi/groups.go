@@ -272,13 +272,6 @@ func (a *api) putDetails(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "Say what to change: the description, the contact or how to reach them.")
 		return
 	}
-	var changed []string
-	for _, f := range []string{"description", "contacts", "contact"} {
-		if _, ok := set[f]; ok {
-			changed = append(changed, map[string]string{"description": "description", "contacts": "how to reach them", "contact": "other ways to reach them"}[f])
-		}
-	}
-	note := fmt.Sprintf("Details of %s changed by %s: %s", g.named(), nameOrEmail(s), strings.Join(changed, ", "))
 	for try := 1; ; try++ {
 		cur, err := a.Docs.Get(r.Context(), docs.Catalog, docs.CatalogID)
 		if err != nil {
@@ -294,11 +287,28 @@ func (a *api) putDetails(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 404, fmt.Sprintf("There is no %s “%s” in the lists.", g.noun, g.entry.ID))
 			return
 		}
-		var now docs.Lists
+		var now, was docs.Lists
 		err = a.validateFormat(docs.Catalog, body)
 		if err == nil {
 			err = json.Unmarshal(body, &now)
 		}
+		if err == nil {
+			err = json.Unmarshal(cur.Body, &was)
+		}
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		// only what really differs is named; a change that changes nothing stores nothing
+		before, _ := find(was.ByKey(g.key), g.entry.ID)
+		after, _ := find(now.ByKey(g.key), g.entry.ID)
+		changed := detailsChanged(before, after)
+		if len(changed) == 0 {
+			w.Header().Set(VersionHeader, fmt.Sprint(cur.Version))
+			writeJSON(w, 200, map[string]any{"catalog": json.RawMessage(cur.Body), "version": cur.Version})
+			return
+		}
+		note := fmt.Sprintf("Details of %s changed by %s: %s", g.named(), nameOrEmail(s), strings.Join(changed, ", "))
 		if err == nil {
 			err = docs.Check(docs.Catalog, body, now)
 		}
@@ -335,6 +345,35 @@ func (a *api) putDetails(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"catalog": json.RawMessage(doc.Body), "version": doc.Version})
 		return
 	}
+}
+
+// detailsChanged names, in the app's words, each detail of an entry that differs: the
+// description, every way to reach them by its label, and the free line.
+func detailsChanged(before, after docs.Named) []string {
+	var out []string
+	if before.Description != after.Description {
+		out = append(out, "description")
+	}
+	var b, a docs.Contacts
+	if before.Contacts != nil {
+		b = *before.Contacts
+	}
+	if after.Contacts != nil {
+		a = *after.Contacts
+	}
+	for _, f := range []struct{ label, was, now string }{
+		{"Group email", b.Email, a.Email}, {"Slack channel", b.Slack, a.Slack}, {"Slack channel link", b.SlackURL, a.SlackURL},
+		{"Google Chat space", b.Chat, a.Chat}, {"Google Chat space link", b.ChatURL, a.ChatURL},
+		{"Confluence page", b.Confluence, a.Confluence}, {"Their page", b.Page, a.Page}, {"Request form", b.Form, a.Form},
+	} {
+		if f.was != f.now {
+			out = append(out, f.label)
+		}
+	}
+	if before.Contact != after.Contact {
+		out = append(out, "other ways to reach them")
+	}
+	return out
 }
 
 func nameOrEmail(s session) string {

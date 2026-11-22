@@ -357,7 +357,7 @@ describe("the delete button after the selection changed", () => {
   });
 });
 
-import { listParts, partsText, peopleList, whoPublishesParts, whoPublishesSentence, type PublishingGroup } from "../editing";
+import { listParts, partsText, peopleList, whoPublishesParts, whoPublishesSentence, whoPublishesShort, type PublishingGroup } from "../editing";
 import type { PersonRef } from "../members";
 
 describe("who can publish what a member drafted", () => {
@@ -367,38 +367,48 @@ describe("who can publish what a member drafted", () => {
   const every = (groups: PublishingGroup[]) => ({ all: true, groups });
   const gcp = (owners: PersonRef[]): PublishingGroup => ({ kind: "platform", name: "Google Cloud", owners });
   const eng = (owners: PersonRef[]): PublishingGroup => ({ kind: "practice", name: "Engineering", owners });
-  it("names the platform and its one owner by name", () => {
+  it("leads with the one owner, by name", () => {
     expect(whoPublishesSentence("process", any([gcp([jordan])]), "saved"))
-      .toBe("Only an owner of the platform “Google Cloud”, or a process editor, can publish this process. “Google Cloud” is owned by Jordan Platform. Your draft is saved for them.");
+      .toBe("Jordan Platform, an owner of Google Cloud, publishes this. Your draft is saved for them.");
+    expect(whoPublishesSentence("process", any([gcp([jordan])]), "unsaved"))
+      .toBe("Jordan Platform, an owner of Google Cloud, publishes this. Save draft keeps your work for them.");
     // one place that has to be owned whole reads the same
     expect(whoPublishesSentence("process", every([gcp([jordan])]), "saved")).toBe(whoPublishesSentence("process", any([gcp([jordan])]), "saved"));
   });
-  it("reads well with two and with many owners, by address where no name is known", () => {
-    expect(whoPublishesSentence("standard", any([gcp([jordan, ann]), eng([])]), "unsaved"))
-      .toBe("Only an owner of the platform “Google Cloud” or of the practice “Engineering”, or a standards editor, can publish this standard. “Google Cloud” is owned by Jordan Platform and ann@example.com; “Engineering” has no owner yet. Save draft keeps your changes for them.");
+  it("names several owners as a choice, by address where no name is known", () => {
+    expect(whoPublishesSentence("standard", any([gcp([jordan, ann])]), "none"))
+      .toBe("An owner of Google Cloud publishes this: Jordan Platform or ann@example.com. Save draft keeps your work for them.");
+    expect(whoPublishesSentence("standard", any([gcp([jordan]), eng([ann, { email: "JORDAN@example.com" }])]), "saved"))
+      .toBe("An owner of Google Cloud or Engineering publishes this: Jordan Platform or ann@example.com. Your draft is saved for them.");
     const many = ["a", "b", "c", "d", "e"].map((x) => ({ email: `${x}@example.com`, name: x.toUpperCase() }));
-    expect(whoPublishesSentence("process", any([eng(many)]), "none"))
-      .toBe("Only an owner of the practice “Engineering”, or a process editor, can publish this process. “Engineering” is owned by A, B, C and 2 more. What you change and save as a draft waits for them.");
+    expect(whoPublishesSentence("process", any([eng(many)]), "saved"))
+      .toBe("An owner of Engineering publishes this: A, B, C or 2 more. Your draft is saved for them.");
+  });
+  it("says when nobody owns it yet, and that an editor publishes then", () => {
+    expect(whoPublishesSentence("process", any([gcp([])]), "saved")).toBe("Google Cloud has no owner yet: a process editor publishes this. Your draft is saved for them.");
+    expect(whoPublishesSentence("standard", any([gcp([]), eng([])]), "saved")).toBe("Google Cloud and Engineering have no owner yet: a standards editor publishes this. Your draft is saved for them.");
+    expect(whoPublishesSentence("process", any([]), "none")).toBe("A process editor publishes this. Save draft keeps your work for them.");
   });
   it("asks for somebody who owns both places where the whole placement counts", () => {
     expect(whoPublishesSentence("process", every([gcp([jordan, ann]), eng([{ email: "JORDAN@example.com" }])]), "saved"))
-      .toBe("Only somebody who owns both the platform “Google Cloud” and the practice “Engineering”, or a process editor, can publish this process. Owner of both: Jordan Platform. Your draft is saved for them.");
+      .toBe("Somebody who owns both Google Cloud and Engineering publishes this: Jordan Platform. Your draft is saved for them.");
     expect(whoPublishesSentence("process", every([gcp([jordan]), eng([ann])]), "saved"))
-      .toBe("Only somebody who owns both the platform “Google Cloud” and the practice “Engineering”, or a process editor, can publish this process. Nobody owns both yet: a process editor can publish it. Your draft is saved for them.");
+      .toBe("Nobody owns both Google Cloud and Engineering yet: a process editor publishes this. Your draft is saved for them.");
     expect(whoPublishesSentence("standard", every([gcp([]), { kind: "platform", name: "Azure", owners: [] }, eng([])]), "none"))
-      .toBe("Only somebody who owns the platform “Google Cloud”, the platform “Azure” and the practice “Engineering”, or a standards editor, can publish this standard. Nobody owns all of them yet: a standards editor can publish it. What you change and save as a draft waits for them.");
+      .toBe("Nobody owns Google Cloud, Azure and Engineering yet: a standards editor publishes this. Save draft keeps your work for them.");
   });
   it("gives the people as parts, so the page can show each with the address as tooltip", () => {
     const parts = whoPublishesParts("process", any([gcp([jordan, ann])]), "saved");
     expect(parts.filter((p) => typeof p !== "string")).toEqual([jordan, ann]);
     expect(partsText(parts)).toBe(whoPublishesSentence("process", any([gcp([jordan, ann])]), "saved"));
   });
-  it("leaves the owners out while they are not known, and still names who can", () => {
-    expect(whoPublishesSentence("process", any([eng([])]), "saved", false))
-      .toBe("Only an owner of the practice “Engineering”, or a process editor, can publish this process. Your draft is saved for them.");
-    expect(whoPublishesSentence("process", every([gcp([]), eng([])]), "saved", false))
-      .toBe("Only somebody who owns both the platform “Google Cloud” and the practice “Engineering”, or a process editor, can publish this process. Your draft is saved for them.");
-    expect(whoPublishesSentence("process", any([]), "none")).toBe("Only a process editor can publish this process. What you change and save as a draft waits for them.");
+  it("leaves the owners out while they are not known, and still names where", () => {
+    expect(whoPublishesSentence("process", any([eng([])]), "saved", false)).toBe("An owner of Engineering publishes this. Your draft is saved for them.");
+    expect(whoPublishesSentence("process", every([gcp([]), eng([])]), "saved", false)).toBe("Somebody who owns both Google Cloud and Engineering publishes this. Your draft is saved for them.");
+  });
+  it("points at the banner when Publish… is pressed", () => {
+    expect(whoPublishesShort("process", any([gcp([jordan])]))).toBe("An owner publishes this: see above.");
+    expect(whoPublishesShort("standard", any([]))).toBe("A standards editor publishes this: see above.");
   });
   it("lists people briefly", () => {
     expect(peopleList([])).toBe("");
@@ -407,5 +417,19 @@ describe("who can publish what a member drafted", () => {
     expect(peopleList(["a", "b", "c"])).toBe("a, b and c");
     expect(peopleList(["a", "b", "c", "d", "e"])).toBe("a, b, c and 2 more");
     expect(listParts([1, 2])).toEqual([1, " and ", 2]);
+    expect(listParts(["a", "b", "c"], 3, "or").join("")).toBe("a, b or c");
+  });
+});
+
+import { ownerOfWords } from "../editing";
+
+describe("the reader's line about one's own unpublished changes", () => {
+  const mine = { updatedAt: "2026-11-22T10:00:00Z", updatedBy: "morgan@example.com", updatedByName: "Morgan Member" };
+  it("tells a member who publishes them", () => {
+    expect(unpublishedLine(mine, "morgan@example.com", ownerOfWords(["Google Cloud"])))
+      .toMatch(/^You have unpublished changes \(saved .+\)\. An owner of Google Cloud publishes them; readers see the published version until then\.$/);
+    expect(unpublishedLine(mine, "morgan@example.com")).toMatch(/\. Readers see the published version\.$/);
+    expect(ownerOfWords(["Google Cloud", "Engineering"])).toBe("An owner of Google Cloud or Engineering");
+    expect(ownerOfWords([])).toBe("An editor");
   });
 });

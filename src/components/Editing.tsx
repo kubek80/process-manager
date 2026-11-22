@@ -40,7 +40,11 @@ export const editNotice = {
  * On the reader's page: a never-published draft is marked as one, and its editors are told,
  * calmly, when there are unpublished changes (`meta.draft` is only sent to them).
  */
-export function DraftLine({ meta, status, editHref, noun }: { meta?: DocMeta; status: Status; editHref?: string; noun: string }) {
+export function DraftLine({ meta, status, editHref, noun, publisher }: {
+  meta?: DocMeta; status: Status; editHref?: string; noun: string;
+  /** For somebody who may draft but not publish it: who does, e.g. "An owner of Google Cloud". */
+  publisher?: string;
+}) {
   const myEmail = useMe().user?.email;
   if (status === "draft") {
     return (
@@ -57,7 +61,7 @@ export function DraftLine({ meta, status, editHref, noun }: { meta?: DocMeta; st
   return (
     <p className="draft-line" role="note">
       <PencilLine size={16} aria-hidden="true" />
-      <span>{unpublishedLine(meta.draft, myEmail)}</span>
+      <span>{unpublishedLine(meta.draft, myEmail, publisher)}</span>
       <a href={editHref}>Continue editing</a>
     </p>
   );

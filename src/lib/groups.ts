@@ -150,7 +150,7 @@ export function contactView(e: { contact?: string; contacts?: Contacts } | undef
     if (isWebLink(c[key])) items.push({ key, label: CONTACT_LABEL[key], text: shortLink(c[key]!), href: c[key]!.trim(), external: true });
   }
   const form = isWebLink(c.form) ? c.form.trim() : undefined;
-  const other = e?.contact?.trim() || undefined;
+  const other = e?.contact?.trim() && !repeatsDetail(e.contact, c) ? e.contact.trim() : undefined;
   return { form, items, other, none: !form && !items.length && !other };
 }
 
@@ -160,8 +160,11 @@ export function contactView(e: { contact?: string; contacts?: Contacts } | undef
  */
 export function summaryLine(e: { contact?: string; contacts?: Contacts; description?: string; url?: string }): string {
   const c = e.contacts ?? {};
-  const first = [c.slack, c.email, c.chat, e.contact].map((v) => v?.trim()).find(Boolean);
-  if (first) return first;
+  // always what it is: "Slack #cloud-platform", "Email cloud@…", "Chat Cloud questions"
+  if (c.slack?.trim()) return `Slack ${c.slack.trim()}`;
+  if (c.email?.trim()) return `Email ${c.email.trim()}`;
+  if (c.chat?.trim()) return `Chat ${c.chat.trim()}`;
+  if (e.contact?.trim()) return e.contact.trim();
   if (e.url?.trim()) return shortLink(e.url);
   return e.description?.trim() || "No details yet";
 }
@@ -181,4 +184,42 @@ export function countByKind(docs: { kind: "process" | "standard" }[]): { process
 export function splitOwnerLine(said: string, team: string): { before: string; team: string } {
   if (!team || !said.endsWith(team)) return { before: said, team: "" };
   return { before: said.slice(0, said.length - team.length), team };
+}
+
+/** A text for comparing: without case, spaces, "#" and the word Slack. */
+const plain = (v: string) => v.toLowerCase().replace(/slack/g, "").replace(/[\s#:]/g, "");
+
+/**
+ * Whether the old free line only repeats a detail given above it ("Slack #cloud-platform" beside
+ * the Slack channel "#cloud-platform"): then the page leaves it out.
+ */
+export function repeatsDetail(contact: string | undefined, c: Contacts | undefined): boolean {
+  const line = plain(contact ?? "");
+  if (!line || !c) return false;
+  return [c.slack, c.email, c.chat].some((v) => !!v?.trim() && plain(v) === line);
+}
+
+/**
+ * A link typed without its beginning ("example.atlassian.net/wiki/x") gets "https://" when the
+ * field is left; anything that names a scheme of its own ("ftp:", "mailto:") or does not look like
+ * a host is left as it is, for the check to say what is wrong.
+ */
+export function withScheme(v: string): string {
+  const t = v.trim();
+  if (!t || /^[a-z][a-z0-9+.-]*:/i.test(t) || /\s/.test(t)) return v;
+  return /^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?([/?#].*)?$/i.test(t) ? `https://${t}` : v;
+}
+
+/**
+ * The order of a list in Teams & tools: the person's own groups first, then by name. `mine` says
+ * whether an entry is theirs.
+ */
+export function ownFirst<T extends { id: string; name: string }>(rows: T[], mine: (id: string) => boolean): T[] {
+  return [...rows].sort((a, b) => Number(mine(b.id)) - Number(mine(a.id)) || a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.id.localeCompare(b.id));
+}
+
+/** What adding somebody answered, in words: the server's note as information, about oneself in the second person. */
+export function addedNote(o: { note?: string; self: boolean; selfRank?: GroupRank; group: string }): string {
+  if (o.self && o.selfRank) return `You are already ${o.selfRank === "owner" ? "an owner" : "a member"} of ${o.group}.`;
+  return o.note ?? "";
 }
