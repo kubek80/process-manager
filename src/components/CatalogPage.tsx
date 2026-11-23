@@ -286,13 +286,14 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
             {editor && <button className="btn" onClick={() => { setAdding(true); setNewName(""); }}><Plus size={16} />New {kind.noun}</button>}
           </div>
           <ul ref={listBox}>
-            {shown.map((r) => {
+            {shown.map((r, at) => {
               const used = usesOf(key, r.id, docs);
               const n = used.length;
               const rank = rows.findIndex((x) => x.id === r.id);
               return (
-                <li key={`${r.id}/${rank}`}>
-                  <button className={`cat-item ${current?.id === r.id ? "on" : ""}`} onClick={() => { setSelected(r.id); setAdding(false); }}>
+                // a second entry with the same id (lists imported with a mistake) is still its own row
+                <li key={shown.findIndex((x) => x.id === r.id) === at ? r.id : `${r.id}/${at}`}>
+                  <button className={`cat-item ${current === r ? "on" : ""}`} onClick={() => { setSelected(r.id); setAdding(false); }}>
                     <EntryIcon icon={WITH_ICON.includes(key) ? r.icon : undefined} size={32}
                       fallback={<span className="cat-avatar">{ORDERED.includes(key) ? rank + (key === "tiers" ? 0 : 1) : r.name.slice(0, 1).toUpperCase()}</span>} />
                     <span className="cat-item-text">

@@ -73,7 +73,7 @@ export function JsonView<T extends { id: string }>({ doc, noun, validate, schema
         {parsed.error && <button className="btn small" onClick={() => editor.current?.nextProblem()}><CircleAlert size={14} />Go to the problem</button>}
         {issues.length > 0 && (
           <IssueList issues={issues} label="What the checker found" pickTitle="Show in the editor" onPick={(i) => editor.current?.reveal(i.path)}
-            place={(i) => issuePlace(kind, parsed.value, i.path)} text={(i) => issueText(i, kind)} detail={(i) => i.path || undefined} />
+            place={(i) => issuePlace(kind, parsed.value, i.path)} text={(i) => issueText(i, kind)} detail={(i) => (i.path && i.path !== "(root)" ? i.path : undefined)} />
         )}
         <div className="btn-col">
           <CopyButton label="Copy JSON" text={() => text} />
