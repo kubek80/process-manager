@@ -1,8 +1,9 @@
 import type { Catalog, Issue, Level, Process, Standard, Status, StepType, TargetKind } from "../types";
 import { cap, compare, describeChange, fieldName, itemWords, type Change, type FieldContext } from "./diff";
 import { EXAMPLE } from "./edit";
-import { formatDateTime } from "./dates";
+import { dayOf, formatDateTime, today } from "./dates";
 import { personLabel, type PersonRef } from "./members";
+import { LIST_WORDS, refusalIssues } from "./validate";
 
 /**
  * The editing screen, as plain functions: which kind of draft a document has, what its state is
@@ -280,12 +281,16 @@ export function pathContext(path: string, kind?: TargetKind): FieldContext | und
  * label ("Write what happens in this step.", "Link 1: start the address with https://"). Never a
  * path, a schema word or a number of characters. `kind`: a process or a standard (their fields are
  * not all called alike). The place (which step) is shown by where the problem is listed.
+ * For the lists (`kind` "lists", `doc` the lists checked) the sentence names the list and the
+ * entry itself, since a list of problems shows them all at once: "Give the team “Cloud Platform
+ * team” a name." (`listIssueText`).
  */
-export function issueText(issue: Issue, kind?: TargetKind): string {
+export function issueText(issue: Issue, kind?: TargetKind | "lists", doc?: unknown): string {
   const message = typeof issue.message === "string" ? issue.message : "";
   const path = typeof issue.path === "string" ? issue.path : "";
   // a whole sentence already ("Say exactly what the reader does in this step.")
   if (/^[A-Z“]/.test(message)) return message;
+  if (kind === "lists") return listIssueText(path, message, doc);
   const context = pathContext(path, kind);
   const missing = message.match(/^is missing the required field "(\w+)"$/);
   if (missing) return requiredText(missing[1], context);
@@ -334,6 +339,112 @@ export function issuePlace(kind: TargetKind, doc: unknown, path: string): string
   }
   const t = issueTarget(kind, (kind === "process" ? { steps: [] } : { requirements: [] }) as unknown as Process, path);
   return (kind === "process" ? PROCESS_SECTIONS : STANDARD_SECTIONS).find((x) => x.id === t.section)?.label ?? "About";
+}
+
+// ---------- the problems of the lists (Admin › Lists)
+
+/** What a list's entry and its fields are called in a sentence. */
+const LIST_NOUN: Record<string, { one: string; many: string }> = LIST_WORDS;
+/** The fields of an entry of the lists, as the page's labels call them. */
+const LIST_FIELD: Record<string, string> = {
+  name: "name", id: "id", description: "description", url: "link", icon: "icon", contact: "other ways to reach them", contacts: "contact details",
+  email: "group email", slack: "Slack channel", slackUrl: "link to the Slack channel", chat: "Google Chat space", chatUrl: "link to the Chat space",
+  confluence: "Confluence page", page: "page link", form: "request form",
+};
+
+/** Which list, entry and field a problem of the lists is about: "teams[3].contacts.slackUrl". */
+export function listIssuePlace(path: string): { list?: keyof typeof LIST_WORDS; index?: number; field?: string; contact?: boolean } {
+  const m = (typeof path === "string" ? path : "").match(/^([a-z]+)(?:\[(\d+)\])?(?:\.([A-Za-z]+))?(?:\.([A-Za-z]+))?/);
+  if (!m || !(m[1] in LIST_WORDS)) return {};
+  const list = m[1] as keyof typeof LIST_WORDS;
+  const index = m[2] === undefined ? undefined : Number(m[2]);
+  if (m[3] === "contacts") return { list, index, field: m[4] ?? "contacts", contact: !!m[4] };
+  return { list, index, field: m[3] };
+}
+
+/** An entry of the lists in a sentence: "the team “Cloud Platform team”", else by its id, never by its place. */
+export function listEntryWords(doc: unknown, list: string, index: number): string {
+  const noun = LIST_NOUN[list]?.one ?? "entry";
+  const entries = doc && typeof doc === "object" ? (doc as Record<string, unknown>)[list] : undefined;
+  const entry = Array.isArray(entries) && entries[index] && typeof entries[index] === "object" ? (entries[index] as Record<string, unknown>) : {};
+  const name = typeof entry.name === "string" ? entry.name.trim() : "";
+  // a name far too long is the problem itself: its beginning is enough to know it
+  if (name) return `the ${noun} “${name.length > 60 ? `${name.slice(0, 57).trimEnd()}…` : name}”`;
+  const id = typeof entry.id === "string" ? entry.id.trim() : "";
+  if (id) return `the ${noun} with the id “${id}”`;
+  return `${/^[aeiou]/.test(noun) ? "an" : "a"} ${noun} without a name`;
+}
+
+/**
+ * A problem of the lists as an instruction that names the list, the entry and the field by the
+ * words of the page, never by a path: "Give the team “Cloud Platform team” a name.", "The link to
+ * the Slack channel of the platform “Google Cloud” must start with https://.". One nobody foresaw
+ * is still a sentence about its entry.
+ */
+function listIssueText(path: string, message: string, doc: unknown): string {
+  const { list, index, field, contact } = listIssuePlace(path);
+  if (!list) {
+    const extra = message.match(/^has a field "([^"]+)"/);
+    if (extra) return `The lists hold “${extra[1]}”, which the portal does not know: ask whoever looks after the portal to remove it.`;
+    const missing = message.match(/^is missing the required field "(\w+)"$/);
+    if (missing) return `The list of ${LIST_NOUN[missing[1]]?.many ?? missing[1]} is missing: ask whoever looks after the portal to put it back.`;
+    return "The lists are not in a form the portal can use: ask whoever looks after the portal.";
+  }
+  if (index === undefined) return `The list of ${LIST_NOUN[list].many} is not in a form the portal can use: ask whoever looks after the portal.`;
+  const entry = listEntryWords(doc, list, index);
+  const Entry = cap(entry);
+  const missing = message.match(/^is missing the required field "(\w+)"$/);
+  const key = missing ? missing[1] : field ?? "";
+  const words = LIST_FIELD[key] ?? key;
+  const value = (() => {
+    const e = doc && typeof doc === "object" ? ((doc as Record<string, unknown>)[list] as unknown[] | undefined)?.[index] : undefined;
+    const holder = contact && e && typeof e === "object" ? (e as Record<string, unknown>).contacts : e;
+    const v = holder && typeof holder === "object" && key ? (holder as Record<string, unknown>)[key] : undefined;
+    return typeof v === "string" ? v : "";
+  })();
+  if (key === "name" && (missing || /^is empty$|^is too short/.test(message))) return `Give ${entry} a name.`;
+  if (key === "id" && (missing || /kebab-case|^is empty$|^is too long/.test(message)))
+    return `${Entry} has ${missing || !value.trim() ? "no id" : `an id the portal cannot use (“${value}”)`}: remove it and add it again under the same name.`;
+  if (key === "icon") return `The icon of ${entry} is not an image the portal knows: choose the image again, or remove the icon.`;
+  if (missing) return `Fill in the ${words} of ${entry}.`;
+  if (/^is empty$|^is too short/.test(message)) return `Fill in the ${words} of ${entry}, or leave it out.`;
+  const long = message.match(/^is too long \(maximum (\d+)/);
+  if (long) return `Shorten the ${words} of ${entry} to at most ${long[1]} characters.`;
+  if (/full link/.test(message)) return `The ${words} of ${entry} must start with https://${/\s/.test(value.trim()) ? " and have no spaces" : ""}.`;
+  if (/email address/.test(message)) return `The group email of ${entry} is not an email address: write one, like team@company.com.`;
+  const extra = message.match(/^has a field "([^"]+)"/);
+  if (extra) return `${Entry} has a detail the portal does not know (“${extra[1]}”): ask whoever looks after the portal to remove it.`;
+  return key ? `Check the ${words} of ${entry}: the portal cannot use what is there.` : `Check ${entry}: the portal cannot use what is there.`;
+}
+
+/**
+ * A save the server refused, in the words of the app's own checker (`refusalIssues`, `issueText`):
+ * the problems one after the other, then how many more there are. Anything else the server said
+ * (a sentence already, such as what is still in use) is shown as it is.
+ */
+export function refusalText(error: string, kind: TargetKind | "lists", doc: unknown): string {
+  const r = refusalIssues(error);
+  if (!r) return cap(typeof error === "string" ? error.trim() : "");
+  const lines = r.issues.map((i) => issueText(i, kind, doc)).map((t) => (/[.!?:/]$/.test(t) ? t : `${t}.`));
+  if (r.more) lines.push(`And ${r.more} more to fix.`);
+  return lines.join(" ");
+}
+
+/**
+ * Where the field a problem of the lists is about is in the details of its entry (Admin › Lists),
+ * to bring the keyboard to it and mark it: CSS selectors to try in order. An id cannot be changed,
+ * so its problems lead to the name; a problem of the whole entry too.
+ */
+export function listIssueField(path: string): string[] {
+  const { field, contact } = listIssuePlace(path);
+  if (contact) return [`[data-contact-field="${field}"] input`, ".contact-fields input"];
+  switch (field) {
+    case "description": return ['[data-field="description"]', '.contact-fields textarea[id$="-description"]'];
+    case "contact": return ['.contact-fields input[id$="-contact"]'];
+    case "url": return ['[data-field="url"]'];
+    case "icon": return [".icon-field button"];
+    default: return ['[data-field="name"]'];
+  }
 }
 
 /** "the name", "what happens": a field in a sentence. */
@@ -671,8 +782,7 @@ export function clock(iso?: string, now = new Date()): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
-  const day = (x: Date) => `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`;
-  return day(d) === day(now) ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : `on ${day(d)}`;
+  return dayOf(d) === today(now) ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : `on ${dayOf(d)}`;
 }
 
 /**

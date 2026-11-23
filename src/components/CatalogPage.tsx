@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, ArrowUpRight, Boxes, Code2, Compass, Server, ExternalLink, Layers, Plus, Search, Tag, Trash2, Users, Wrench } from "lucide-react";
-import type { Catalog, Contacts, Membership, Process, Standard } from "../types";
+import { ArrowDown, ArrowRight, ArrowUp, ArrowUpRight, Boxes, CircleAlert, Code2, Compass, Server, ExternalLink, Layers, Plus, Search, Tag, Trash2, Users, Wrench } from "lucide-react";
+import type { Catalog, Contacts, Issue, Membership, Process, Standard } from "../types";
 import { GroupMembers } from "./TeamMembers";
 import { ContactFields } from "./ContactFields";
 import { ContactList, RankMark } from "./GroupParts";
@@ -16,6 +16,8 @@ import { useDraft } from "../lib/draft";
 import { BehindBanner, ConflictDialog, SaveBar } from "./Editing";
 import { go, href, loadMembers, type CatalogList } from "../lib/store";
 import { hasErrors, validateCatalog } from "../lib/validate";
+import { checkerSummary, issueText, listIssueField, listIssuePlace, refusalText } from "../lib/editing";
+import { focusWhenShown, useFieldMarks } from "../lib/fieldMarks";
 import { Field, IssueList, notify, useScrollFade } from "./ui";
 
 type Key = "teams" | "practices" | "platforms" | "categories" | "tools" | "tiers" | "environments" | "languages";
@@ -118,7 +120,8 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
   const d = useDraft<Catalog>({ docKey: "catalog", saved: catalog, version, tidy: tidyCatalog, save, reload, what: "the lists", editable: editor });
   const { draft, clean, dirty } = d;
   const setDraft = d.change;
-  useEffect(() => { if (d.error) { notify.error("The lists could not be saved.", d.error); d.clearError(); } }, [d.error]); // eslint-disable-line react-hooks/exhaustive-deps
+  // a save the server refused reads like a problem the page found itself: by name, never by place
+  useEffect(() => { if (d.error) { notify.error("The lists could not be saved.", refusalText(d.error, "lists", clean)); d.clearError(); } }, [d.error]); // eslint-disable-line react-hooks/exhaustive-deps
   const [key, setKeyHere] = useState<Key>(routeList ?? "teams");
   const [selected, setSelectedHere] = useState<string | null>(routeId ?? null);
   // Teams & tools keeps the list and the entry in the address (a link, Back, the group page's back
@@ -135,6 +138,8 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
   const [newName, setNewName] = useState("");
   const [q, setQ] = useState("");
   const issues = validateCatalog(clean);
+  /** A problem of the lists in words, naming its list and entry (`issueText`). */
+  const issueWords = (i: Issue) => issueText(i, "lists", clean);
   // the bar with Save and Discard sticks to the bottom while there are changes: messages go above it
   const saveBar = useRef<HTMLDivElement>(null);
   // who belongs to which team, platform and practice: everyone may read it
@@ -195,6 +200,27 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
       },
     }, "It is gone for everyone once the lists are saved.");
   };
+  // Each problem leads to its place: that list's tab, that entry, the keyboard on the field. The
+  // fields of the entry shown are marked as on the editing screen (`useFieldMarks`).
+  const detailBox = useRef<HTMLElement>(null);
+  const fieldOf = (i: Issue, box: HTMLElement): HTMLElement | null => {
+    for (const sel of listIssueField(i.path)) { const el = box.querySelector<HTMLElement>(sel); if (el && el.getClientRects().length) return el; }
+    return null;
+  };
+  const issueEntry = (i: Issue) => {
+    const { list, index } = listIssuePlace(i.path);
+    const entry = list && index !== undefined ? ((clean[list] ?? []) as Row[])[index] : undefined;
+    return list && entry ? { list, entry } : undefined;
+  };
+  const shownIssues = adding || !current ? [] : issues.filter((i) => { const at = issueEntry(i); return at?.list === key && at.entry.id === current.id; });
+  useFieldMarks(shownIssues, { box: () => detailBox.current, find: fieldOf, text: issueWords });
+  const pickIssue = (i: Issue) => {
+    const at = issueEntry(i);
+    if (!at) return;
+    setKey(at.list); setSelected(at.entry.id); setAdding(false); setQ("");
+    focusWhenShown(() => (detailBox.current ? fieldOf(i, detailBox.current) : null));
+  };
+
   // the chosen entry is kept in view in the list (after adding, removing or Undo)
   const listBox = useRef<HTMLUListElement>(null);
   useEffect(() => {
@@ -242,7 +268,13 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
         )}
       </div>
 
-      {issues.length > 0 && <div className="issues-panel"><IssueList issues={issues} /></div>}
+      {/* what stops saving, each by the entry's name; readers of Teams & tools cannot change it, so it is not theirs to see */}
+      {editor && issues.length > 0 && (
+        <section className="issues-panel cat-issues" aria-labelledby="cat-issues-head">
+          <h2 id="cat-issues-head" className="cat-issues-head"><CircleAlert size={16} aria-hidden="true" />{checkerSummary(issues).text}<span>The lists can be saved once {issues.length === 1 ? "it is" : "these are"} fixed. Press one to go to it.</span></h2>
+          <IssueList issues={issues} text={issueWords} onPick={pickIssue} pickTitle="Go to it" label="What is to fix in the lists" />
+        </section>
+      )}
 
       <div className="cat-split">
         <section className="cat-list">
@@ -276,7 +308,7 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
           </ul>
         </section>
 
-        <section className="cat-detail">
+        <section className="cat-detail" ref={detailBox}>
           {adding && (
             <div className="cat-new">
               <span className="cat-avatar big"><Plus size={22} /></span>
@@ -316,15 +348,15 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
 
               {editor ? (
                 <div className="form">
-                  <Field label="Name"><input value={current.name} maxLength={40} onChange={(e) => upd({ name: e.target.value })} /></Field>
+                  <Field label="Name"><input data-field="name" value={current.name} maxLength={40} onChange={(e) => upd({ name: e.target.value })} /></Field>
                   {WITH_ICON.includes(key) && <IconField key={current.id} icon={current.icon} name={current.name} onChange={(icon) => upd({ icon })} />}
                   {group && <ContactFields key={`${key}/${current.id}`} kind={group} idPrefix={`lists-${group}`} value={{ description: current.description, contact: current.contact, contacts: current.contacts }}
                     onChange={(v) => upd({ description: v.description, contact: v.contact, contacts: v.contacts })} />}
                   {!group && kind.fields.map((f) => (
                     <Field key={f.field} label={f.label}>
                       {f.long
-                        ? <textarea rows={2} maxLength={200} value={current[f.field] ?? ""} placeholder={f.placeholder} onChange={(e) => upd({ [f.field]: e.target.value })} />
-                        : <input value={current[f.field] ?? ""} placeholder={f.placeholder} onChange={(e) => upd({ [f.field]: e.target.value })} />}
+                        ? <textarea data-field={f.field} rows={2} maxLength={200} value={current[f.field] ?? ""} placeholder={f.placeholder} onChange={(e) => upd({ [f.field]: e.target.value })} />
+                        : <input data-field={f.field} value={current[f.field] ?? ""} placeholder={f.placeholder} onChange={(e) => upd({ [f.field]: e.target.value })} />}
                     </Field>
                   ))}
                 </div>

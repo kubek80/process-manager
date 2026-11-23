@@ -1,17 +1,39 @@
 import { describe, expect, it } from "vitest";
 import { firstPublished, needsReview, quietReview, reviewInfo, reviewOf } from "../lifecycle";
 import { reviewLine } from "../cardLines";
+import { addMonths, dayOf, today } from "../dates";
 import { savedMeta } from "../store";
 import { responsibilities, urgent } from "../responsibilities";
 import type { Perms } from "../../types";
 import { base } from "./fixtures";
 
 const TODAY = "2026-11-20";
+// a moment at this time of the reader's own day (the tests run in any time zone: a first publication counts from the reader's day)
+const localAt = (day: string, hour: number) => { const [y, m, d] = day.split("-").map(Number); return new Date(y, m - 1, d, hour).toISOString(); };
 const never = (intervalMonths = 6) => ({ ...base(), review: { intervalMonths } });
+
+describe("the reader's day", () => {
+  it("counts the first review from the day the first publication fell on for the reader", () => {
+    const since = "2026-05-20T23:30:00Z"; // the 21st in Auckland, the 20th in Los Angeles
+    expect(reviewInfo(never(), TODAY, since).dueAt).toBe(addMonths(dayOf(since), 6));
+  });
+  it("uses a stored review date as written and today as the reader's day", () => {
+    const r = reviewInfo({ ...base(), review: { intervalMonths: 6, lastReviewedAt: "2026-06-01" } });
+    expect(r.dueAt).toBe("2026-12-01");
+    expect(r).toEqual(reviewInfo({ ...base(), review: { intervalMonths: 6, lastReviewedAt: "2026-06-01" } }, today()));
+  });
+  it("is due a day later for a reader whose day has not yet turned", () => {
+    const due = { ...base(), review: { intervalMonths: 6, lastReviewedAt: "2026-05-23" } }; // due 2026-11-23
+    const at = new Date("2026-11-24T07:50:00Z"); // 23:50 on the 23rd in Los Angeles, the 24th in UTC and Auckland
+    expect(reviewInfo(due, today(at, "America/Los_Angeles"))).toMatchObject({ state: "soon", days: 0 });
+    expect(reviewInfo(due, today(at, "UTC"))).toMatchObject({ state: "overdue", days: -1 });
+    expect(reviewInfo(due, today(at, "Pacific/Auckland"))).toMatchObject({ state: "overdue", days: -1 });
+  });
+});
 
 describe("the first review", () => {
   it("is not overdue right after the first publication: it is due one interval later", () => {
-    expect(reviewInfo(never(), TODAY, "2026-11-20T09:12:00Z")).toEqual({ state: "ok", dueAt: "2027-05-20", days: 181, label: "First review due 2027-05-20", first: true });
+    expect(reviewInfo(never(), TODAY, localAt("2026-11-20", 9))).toEqual({ state: "ok", dueAt: "2027-05-20", days: 181, label: "First review due 2027-05-20", first: true });
   });
   it("becomes due and overdue by the same rule as a reviewed one", () => {
     expect(reviewInfo(never(), TODAY, "2026-06-01")).toMatchObject({ state: "soon", dueAt: "2026-12-01", label: "First review due 2026-12-01", first: true });
@@ -36,7 +58,7 @@ describe("My responsibilities and the first review", () => {
   const perms: Perms = { admin: false, catalog: false, processes: false, standards: false, owns: ["cloud-platform-team"], platforms: [], practices: [], memberPlatforms: [], memberPractices: [] };
   const fresh = { ...base(), id: "fresh", title: "Fresh", review: { intervalMonths: 6 } };
   const old = { ...base(), id: "old", title: "Old", review: { intervalMonths: 6 } };
-  const since = { process: { fresh: { createdAt: "2026-11-19T10:00:00Z" }, old: { createdAt: "2025-01-01T10:00:00Z" } } };
+  const since = { process: { fresh: { createdAt: localAt("2026-11-19", 10) }, old: { createdAt: "2025-01-01T10:00:00Z" } } };
   it("asks for no review of something just published, and for one long unreviewed", () => {
     const { tasks, owned } = responsibilities(perms, null, [fresh, old], [], { process: {}, standard: {} }, TODAY, since);
     expect(tasks.map((t) => `${t.kind}:${t.item.doc.id}`)).toEqual(["review-overdue:old"]);
@@ -51,8 +73,8 @@ describe("My responsibilities and the first review", () => {
 
 describe("when the first review is counted from", () => {
   it("is when it was first published, not when its first draft was saved", () => {
-    const meta = { createdAt: "2026-01-02T10:00:00Z", publishedAt: "2026-11-20T08:00:00Z" };
-    expect(firstPublished(meta)).toBe("2026-11-20T08:00:00Z");
+    const meta = { createdAt: "2026-01-02T10:00:00Z", publishedAt: localAt("2026-11-20", 8) };
+    expect(firstPublished(meta)).toBe(meta.publishedAt);
     expect(reviewOf(never(), meta, TODAY)).toMatchObject({ state: "ok", label: "First review due 2027-05-20", first: true });
     expect(needsReview(never(), meta, TODAY)).toBe(false);
     // counted from the first draft it would be overdue
@@ -65,7 +87,7 @@ describe("when the first review is counted from", () => {
   });
   it("is the same everywhere: the cards, My responsibilities and the top bar badge", () => {
     const doc = { ...base(), id: "fresh", title: "Fresh", review: { intervalMonths: 6 } };
-    const meta = { createdAt: "2025-01-01T10:00:00Z", publishedAt: "2026-11-20T08:00:00Z" };
+    const meta = { createdAt: localAt("2025-01-01", 10), publishedAt: localAt("2026-11-20", 8) };
     expect(reviewLine(doc, TODAY, meta)).toBe("");
     expect(reviewLine(doc, TODAY, { createdAt: meta.createdAt })).toBe("Overdue since 2025-07-01");
     const perms: Perms = { admin: false, catalog: false, processes: false, standards: false, owns: ["cloud-platform-team"], platforms: [], practices: [], memberPlatforms: [], memberPractices: [] };

@@ -82,12 +82,30 @@ describe("Home: recently updated, most viewed", () => {
   });
   it("when, in words", () => {
     const now = new Date("2026-11-20T09:00:00Z");
-    expect(agoText("2026-11-20T01:00:00Z", now)).toBe("today");
-    expect(agoText("2026-11-19T23:00:00Z", now)).toBe("yesterday");
-    expect(agoText("2026-11-15T12:00:00Z", now)).toBe("5 days ago");
-    expect(agoText("2026-10-30T12:00:00Z", now)).toBe("3 weeks ago");
-    expect(agoText("2026-06-01T12:00:00Z", now)).toBe("2026-06-01");
+    expect(agoText("2026-11-20T01:00:00Z", now, "UTC")).toBe("today");
+    expect(agoText("2026-11-19T23:00:00Z", now, "UTC")).toBe("yesterday");
+    expect(agoText("2026-11-15T12:00:00Z", now, "UTC")).toBe("5 days ago");
+    expect(agoText("2026-10-30T12:00:00Z", now, "UTC")).toBe("3 weeks ago");
+    expect(agoText("2026-06-01T12:00:00Z", now, "UTC")).toBe("2026-06-01");
     expect(agoText("nonsense", now)).toBe("");
+    // a day without a time is that day, wherever the reader is
+    const noon = new Date("2026-11-20T12:00:00Z"); // 01:00 on the 21st in Auckland, 04:00 on the 20th in Los Angeles
+    expect(agoText("2026-11-19", noon, "Pacific/Auckland")).toBe("2 days ago");
+    expect(agoText("2026-11-19", noon, "America/Los_Angeles")).toBe("yesterday");
+  });
+  it("when, in words, by the reader's day", () => {
+    // 23:30 in Los Angeles on the 22nd is 07:30 UTC on the 23rd
+    const evening = new Date("2026-11-23T07:30:00Z");
+    expect(agoText("2026-11-23T01:00:00Z", evening, "America/Los_Angeles")).toBe("today"); // 17:00 there, same evening
+    expect(agoText("2026-11-23T01:00:00Z", evening, "UTC")).toBe("today");
+    expect(agoText("2026-11-22T07:00:00Z", evening, "America/Los_Angeles")).toBe("yesterday"); // 23:00 on the 21st there
+    // 08:00 in Auckland on the 24th is 19:00 UTC on the 23rd
+    const morning = new Date("2026-11-23T19:00:00Z");
+    expect(agoText("2026-11-23T09:00:00Z", morning, "Pacific/Auckland")).toBe("yesterday"); // 22:00 on the 23rd there
+    expect(agoText("2026-11-23T09:00:00Z", morning, "UTC")).toBe("today");
+    expect(agoText("2026-11-23T11:30:00Z", morning, "Pacific/Auckland")).toBe("today"); // 00:30 on the 24th there
+    // the date it falls back to is the reader's day too
+    expect(agoText("2026-06-01T23:30:00Z", morning, "Pacific/Auckland")).toBe("2026-06-02");
   });
 });
 

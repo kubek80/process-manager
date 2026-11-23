@@ -226,6 +226,7 @@ POST /api/processes/request-gcp-project/publish?rev=1&note=Shorter%20summary&ove
         { text: "A move first cuts the step out exactly as a delete would, then puts it on every arrow into its new place: the flow changes with the numbering.", at: "const rest = deleteStep(cutFrom, id).steps;" },
         { text: "Moving down one place is a move before the step after the next (or to the end), so the keys and the drag go through the same `moveStepInFlow`.", at: "return moveStepInFlow(p, id, i + 2 < p.steps.length ? p.steps[i + 2].id : null);" },
         { text: "The one list of example texts; `exampleIssues` in `src/lib/editing.ts` flags each of them, so a new one must be added there too.", at: "export const EXAMPLE = {" },
+        { text: "A save is stamped (`updatedAt`) with the person's own day (`today` from `src/lib/dates.ts`), not the UTC day.", at: "export { today };" },
       ],
       tests: ["src/lib/__tests__/edit.test.ts", "src/lib/__tests__/editMove.test.ts", "src/lib/__tests__/editNames.test.ts", "e2e/editscreen.spec.ts"],
     },

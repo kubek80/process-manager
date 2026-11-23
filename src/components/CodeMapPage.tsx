@@ -1,5 +1,5 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import { ArrowDown, ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, FileCode2, FlaskConical, Layers, Maximize2, MessageSquareText, Search, Table2, Workflow } from "lucide-react";
+import { ArrowDown, ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, FileCode2, FlaskConical, Layers, MessageSquareText, Search, Table2, Workflow } from "lucide-react";
 import { AREAS, CATEGORIES } from "../codemap";
 import type { CodeCategory, CodeChart, CodeExample, CodeFile, CodeTable } from "../codemap/types";
 import {
@@ -10,8 +10,8 @@ import { useMedia } from "../lib/media";
 import { wordsOf } from "../lib/search";
 import { ApiError, copyText, go, href, loadSource, loadSystem, parseRoute, type CodeView } from "../lib/store";
 import { Marked } from "./DocCard";
-import { FlowView } from "./FlowView";
-import { LoadError, Modal, scrollToStart } from "./ui";
+import { ProcessPicture } from "./ProcessPicture";
+import { LoadError, scrollToStart } from "./ui";
 import "../codemap.css";
 
 /**
@@ -27,8 +27,6 @@ import "../codemap.css";
 const WIDE = "(min-width: 1120px)";
 /** At most this many hits of one category are shown before "Show all". */
 const HITS_SHOWN = 8;
-/** The smallest zoom a chart is drawn at on a category's page: a wider chart scrolls sideways. */
-const CHART_MIN = 0.9;
 /** The viewer's own choices on this page, kept in the browser (per viewer, never shared). */
 const WRAP_KEY = "pm.codemap.wrap", FILES_KEY = "pm.codemap.files";
 /** How long a place that was jumped to stays marked. */
@@ -414,26 +412,10 @@ function CategoryView({ category: c, heading }: { category: CodeCategory; headin
   );
 }
 
-const NO_STEPS = new Set<string>();
-
+/** A chart of the map: the one picture of a process (`ProcessPicture`), with its title above and a place in the address. */
 function Chart({ chart }: { chart: CodeChart }) {
-  const [big, setBig] = useState(false);
   const at = `chart-${chart.process.id}`;
-  return (
-    <figure className="cm-chart guide-fig" id={anchorOf(at)} data-at={at} tabIndex={-1}>
-      <div className="cm-chart-head">
-        <h3>{chart.process.title}</h3>
-        <button type="button" className="btn small ghost" onClick={() => setBig(true)} aria-label={`Enlarge the chart “${chart.process.title}”`}><Maximize2 size={14} aria-hidden="true" />Enlarge</button>
-      </div>
-      <FlowView bare bareMin={CHART_MIN} editable={false} process={chart.process} selectedId={null} done={NO_STEPS} feedback={[]} onSelect={() => {}} />
-      <figcaption><Txt text={chart.caption} /></figcaption>
-      {big && (
-        <Modal title={chart.process.title} subtitle={<Txt text={chart.caption} />} onClose={() => setBig(false)} className="cm-enlarge">
-          <FlowView editable={false} follow={false} process={chart.process} selectedId={null} done={NO_STEPS} feedback={[]} onSelect={() => {}} />
-        </Modal>
-      )}
-    </figure>
-  );
+  return <ProcessPicture className="cm-chart" id={anchorOf(at)} data-at={at} tabIndex={-1} title={chart.process.title} process={chart.process} caption={<Txt text={chart.caption} />} />;
 }
 
 function TableBlock({ table: t, from }: { table: CodeTable; from: string }) {

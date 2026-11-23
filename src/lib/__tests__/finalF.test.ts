@@ -20,8 +20,10 @@ describe("the tiers in the corner of a card stay on one line", () => {
 describe("the review mark on a card says what the page says", () => {
   const TODAY = "2026-11-20";
   const never = { ...base(), review: { intervalMonths: 6 } };
+  // 10:00 of that day where the test runs: a first publication counts from the reader's day
+  const at10 = (y: number, m: number, d: number) => new Date(y, m - 1, d, 10).toISOString();
   it("a first review that is due reads “First review due …”", () => {
-    const line = reviewLine(never, TODAY, { publishedAt: "2026-06-01T10:00:00Z" });
+    const line = reviewLine(never, TODAY, { publishedAt: at10(2026, 6, 1) });
     expect(line).toBe("First review due 2026-12-01");
     expect(reviewMarkText(line)).toBe("First review due 2026-12-01");
     expect(reviewOverdue(line)).toBe(false);
@@ -30,7 +32,7 @@ describe("the review mark on a card says what the page says", () => {
     const due = reviewLine({ ...base(), review: { intervalMonths: 6, lastReviewedAt: "2026-06-01" } }, TODAY);
     expect(reviewMarkText(due)).toBe("Review due 2026-12-01");
     expect(reviewOverdue(due)).toBe(false);
-    const late = reviewLine(never, TODAY, { publishedAt: "2026-05-01T10:00:00Z" });
+    const late = reviewLine(never, TODAY, { publishedAt: at10(2026, 5, 1) });
     expect(reviewMarkText(late)).toBe("Review overdue since 2026-11-01");
     expect(reviewOverdue(late)).toBe(true);
     expect(reviewOverdue("Never reviewed")).toBe(true);

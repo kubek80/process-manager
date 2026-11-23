@@ -21,23 +21,36 @@ func ValidLink(s string) bool { return linkPattern.MatchString(s) }
 // ValidEmail reports whether s looks like an email address.
 func ValidEmail(s string) bool { return emailPattern.MatchString(s) }
 
-// Problems lists what is wrong with the contact details, each a plain sentence. what names the
-// entry, e.g. `the platform “Google Cloud”`.
+// Problems lists what is wrong with the contact details, each a plain sentence in the app's words
+// for the same problem (issueText for the lists, src/lib/editing.ts). what names the entry, e.g.
+// `the platform “Google Cloud”` (EntryWords).
 func (c *Contacts) Problems(what string) []string {
 	if c == nil {
 		return nil
 	}
 	var out []string
-	if c.Email != "" && (!ValidEmail(c.Email) || len(c.Email) > 120) {
-		out = append(out, fmt.Sprintf("The group email of %s is not an email address.", what))
+	switch {
+	case c.Email == "":
+	case len(c.Email) > 120:
+		out = append(out, fmt.Sprintf("Shorten the group email of %s to at most 120 characters.", what))
+	case !ValidEmail(c.Email):
+		out = append(out, fmt.Sprintf("The group email of %s is not an email address: write one, like team@company.com.", what))
 	}
 	links := []struct{ label, value string }{
-		{"Slack channel link", c.SlackURL}, {"Google Chat space link", c.ChatURL}, {"Confluence page", c.Confluence},
-		{"page", c.Page}, {"request form", c.Form},
+		{"link to the Slack channel", c.SlackURL}, {"link to the Chat space", c.ChatURL}, {"Confluence page", c.Confluence},
+		{"page link", c.Page}, {"request form", c.Form},
 	}
 	for _, l := range links {
-		if l.value != "" && (!ValidLink(l.value) || len(l.value) > 300) {
-			out = append(out, fmt.Sprintf("The %s of %s must be a link that starts with http:// or https://.", l.label, what))
+		switch {
+		case l.value == "":
+		case len(l.value) > 300:
+			out = append(out, fmt.Sprintf("Shorten the %s of %s to at most 300 characters.", l.label, what))
+		case !ValidLink(l.value):
+			spaces := ""
+			if strings.ContainsAny(strings.TrimSpace(l.value), " \t\n") {
+				spaces = " and have no spaces"
+			}
+			out = append(out, fmt.Sprintf("The %s of %s must start with https://%s.", l.label, what, spaces))
 		}
 	}
 	return out

@@ -230,14 +230,20 @@ func Check(kind string, body []byte, l Lists) error {
 		if err := json.Unmarshal(body, &c); err != nil {
 			return fmt.Errorf("%w: not the lists: %v", ErrInvalid, err)
 		}
+		// in the app's words (duplicateSentence in src/lib/validate.ts): an id never changes, so one is removed
 		for _, key := range ListKeys {
 			list := c.ByKey(key)
-			seen := map[string]bool{}
+			first := map[string]string{}
 			for i, n := range list {
-				if seen[n.ID] {
-					add("%s[%d].id: duplicate id %q", key, i, n.ID)
+				if name, seen := first[n.ID]; seen {
+					both := ""
+					if a, b := strings.TrimSpace(name), strings.TrimSpace(n.Name); a != "" && b != "" {
+						both = fmt.Sprintf(" (“%s” and “%s”)", a, b)
+					}
+					add("%s[%d].id: Two %s have the id “%s”%s: remove one of them.", key, i, key, n.ID, both)
+					continue
 				}
-				seen[n.ID] = true
+				first[n.ID] = n.Name
 			}
 		}
 		// links people follow are http:// or https:// only, also when the format was not checked
@@ -246,7 +252,7 @@ func Check(kind string, body []byte, l Lists) error {
 			list []Named
 		}{{"team", c.Teams}, {"practice", c.Practices}, {"platform", c.Platforms}} {
 			for _, n := range g.list {
-				problems = append(problems, n.Contacts.Problems(fmt.Sprintf("the %s “%s”", g.noun, n.Name))...)
+				problems = append(problems, n.Contacts.Problems(EntryWords(g.noun, n))...)
 			}
 		}
 		sort.Strings(problems) // the lists are visited in no fixed order
@@ -260,6 +266,18 @@ func Check(kind string, body []byte, l Lists) error {
 		problems = problems[:3]
 	}
 	return fmt.Errorf("%w: %s%s", ErrInvalid, strings.Join(problems, "; "), more)
+}
+
+// EntryWords names an entry of the lists in a sentence as the app does (listEntryWords in
+// src/lib/editing.ts): by its name, else by its id, never by its place: `the platform “Google Cloud”`.
+func EntryWords(noun string, n Named) string {
+	if name := strings.TrimSpace(n.Name); name != "" {
+		return fmt.Sprintf("the %s “%s”", noun, name)
+	}
+	if id := strings.TrimSpace(n.ID); id != "" {
+		return fmt.Sprintf("the %s with the id “%s”", noun, id)
+	}
+	return fmt.Sprintf("a %s without a name", noun)
 }
 
 // ListKeys are the keys of the lists in the catalog document, in the order it has them.

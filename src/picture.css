@@ -1,0 +1,28 @@
+/* A process drawn as a picture in a text (ProcessPicture.tsx): the Guide's and the code map's
+   charts. The drawing is the map's own (styles.css, detail.css); here only what a picture adds. */
+
+.process-picture { margin: 4px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
+.process-picture > .picture-title { font-size: 15.5px; }
+.process-picture > figcaption { font-size: 13px; color: var(--text-3); max-width: 80ch; }
+/* as high as its drawing: it never scrolls up and down, so a scroll or a swipe over it moves the page */
+.flow-wrap.picture-inline .flow-scroll, .flow-wrap.picture-print .flow-scroll { max-height: none; }
+.flow-wrap.picture .flow-head { padding: 6px 8px 6px 12px; }
+.flow-wrap.picture .map-tools { gap: 6px; }
+.flow-wrap.picture .block-main:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.flow-scroll.pannable .block-main[role="img"] { cursor: inherit; }
+
+/* enlarged: a dialog as large as the window */
+.modal.picture-dialog { width: calc(100vw - 32px); max-width: none; }
+.modal.picture-dialog .modal-body { padding: 12px 16px 16px; }
+.modal.picture-dialog .flow-scroll { max-height: calc(100vh - 210px); }
+
+@media (max-width: 600px) {
+  /* the legend wraps above the tools; the tools stay on one line */
+  .flow-wrap.picture .map-tools { margin-left: 0; }
+}
+
+@media print {
+  .process-picture { break-inside: avoid; }
+  .flow-wrap.picture .map-tools { display: none; }
+  .flow-wrap.picture .flow-viewport::before, .flow-wrap.picture .flow-viewport::after { display: none; }
+}

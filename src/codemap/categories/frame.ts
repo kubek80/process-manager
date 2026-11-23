@@ -141,9 +141,11 @@ export const frame: CodeCategory = {
     },
     {
       path: "src/lib/dates.ts",
-      role: "The one way dates and times are written in the app.",
+      role: "The one way dates and times are written in the app, and the one place that knows the reader's day: `today`, `dayOf`, `daysBetween`, `addDays`, `addMonths`, `isDay`.",
       requirements: [
         { text: "A plain date is returned untouched: `new Date(\"2026-11-13\")` is UTC midnight and would be shown as the day before west of UTC.", at: "if (value && DAY_ONLY.test(value)) return value;" },
+        { text: "Today and the day of a moment are the reader's, in the browser's zone unless a zone is named (for tests and the UTC-day scripts); no other code builds a day by hand, which `dates.test.ts` checks over `src/` and `scripts/`.", at: "export function today(now: Date = new Date(), zone?: string): string {" },
+        { text: "The arithmetic on days is on calendar days, the same in every zone; months run on past a shorter month as the server's `AddDate` does.", at: "export function addMonths(day: string, n: number): string {" },
       ],
       tests: ["src/lib/__tests__/dates.test.ts"],
     },

@@ -174,9 +174,11 @@ export const saving: CodeCategory = {
     },
     {
       path: "server/internal/docs/review.go",
-      role: "Writes a review confirmation into a body and edits top-level fields without changing the order of the others.",
+      role: "Writes a review confirmation into a body and edits top-level fields without changing the order of the others; says whether a day is today somewhere on Earth.",
       requirements: [
-        { text: "The document's own rhythm is kept when it is a whole number of months from 1; only a document without one gets the default (6 for a process, 12 for a standard, given by the caller).", at: "if json.Unmarshal(old, &r) == nil && r.IntervalMonths >= 1 {" },
+        { text: "The document's own rhythm is kept when it is a whole number of months from 1; only a document without one gets the default (6 for a process, 12 for a standard, given by the caller).", at: "if r.IntervalMonths >= 1 {" },
+        { text: "The review date never goes back: somebody behind UTC confirming on their own day after somebody ahead of UTC keeps the later date. Test: `TestWithReviewNeverMovesTheReviewDateBack`.", at: "if _, err := time.Parse(time.DateOnly, r.LastReviewedAt); err == nil && r.LastReviewedAt > date {" },
+        { text: "A day a person sends as their today is taken from the day at UTC-12 to the day at UTC+14; outside that it is a wrong clock. Test: `TestTodayIsTheDayOfTheZoneFromUTCMinus12ToPlus14`.", at: "func TodaySomewhere(day string, now time.Time) bool {" },
       ],
       tests: ["server/internal/httpapi/review_test.go"],
     },

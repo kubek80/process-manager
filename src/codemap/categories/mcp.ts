@@ -149,6 +149,7 @@ export const mcp: CodeCategory = {
         { text: "Drafts are read only to tell them apart from nothing and are never returned; working drafts are never read at all (only `documents` through `docs.Store`).", at: "if e == nil || e.draft() {" },
         { text: "A reference gives a title and link only for a published document: a reference to a draft looks exactly like one to an id that does not exist.", at: "if e := l.published(kind, id); e != nil {" },
         { text: "A document never reviewed counts its first review from its first publication, as `reviewOf` in `src/lib/lifecycle.ts` does; only without that date is it overdue at once. A change of the rule must be made in both.", at: "if first && e.published.IsZero() {" },
+        { text: "An agent has no reader's day: today and the first publication are UTC days, while the portal counts in the reader's day, so near midnight a review can show as due a day earlier or later for an agent than for a reader far from UTC.", at: "today, _ := time.Parse(time.DateOnly, now.UTC().Format(time.DateOnly))" },
         { text: "An agent may do only steps of `me` that are not approvals.", at: "AgentMayDo: st.Actor == \"me\" && st.Type != \"approval\"," },
       ],
       tests: ["server/internal/mcpserver/server_test.go", "server/internal/mcpserver/search_test.go"],

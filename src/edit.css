@@ -503,15 +503,7 @@ body:has(.edit-screen) .toast p span { white-space: pre-line; }
 .people-rows .row > .actor-name, .people-rows .row.indent > textarea { width: 100%; }
 /* the name has no button after it: how to reach them ends at the same right edge */
 .people-rows .row.indent { padding-right: 0; }
-/* every field with a problem, the moment it has one: outlined, and what to do in a line under it */
-.edit-fields .has-problem { outline: 2px solid var(--bad); outline-offset: 1px; }
-.edit-fields .has-example { outline: 2px solid var(--warn); outline-offset: 1px; }
-.edit-fields [data-problem] { flex-wrap: wrap; }
-.edit-fields [data-problem]::after {
-  content: attr(data-problem); display: block; flex-basis: 100%; grid-column: 1 / -1; order: 99;
-  margin-top: 1px; font-size: 12.5px; font-weight: 550; line-height: 1.35; color: var(--bad); white-space: normal;
-}
-.edit-fields [data-problem].problem-example::after { color: var(--warn); }
+/* every field with a problem, the moment it has one: styles.css (`useFieldMarks`, shared with Admin › Lists) */
 .edit-fields .row[data-problem]::after { padding-left: 28px; }
 .edit-fields .row.indent[data-problem]::after { padding-left: 0; }
 /* a line of the Publish list that would take back a change somebody published since */

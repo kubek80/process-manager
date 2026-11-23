@@ -51,7 +51,7 @@ func TestDuplicateIdsInTheNewLists(t *testing.T) {
 	for _, key := range []string{"practices", "platforms", "categories"} {
 		body := `{"tiers":[],"environments":[],"languages":[],"teams":[{"id":"a","name":"A"}],"` + key + `":[{"id":"a","name":"A"},{"id":"a","name":"B"}],"tools":[]}`
 		err := docs.Check(docs.Catalog, []byte(body), docs.Lists{})
-		if !errors.Is(err, docs.ErrInvalid) || !strings.Contains(err.Error(), key+`[1].id: duplicate id "a"`) {
+		if !errors.Is(err, docs.ErrInvalid) || !strings.Contains(err.Error(), key+`[1].id: Two `+key+` have the id “a” (“A” and “B”): remove one of them.`) {
 			t.Errorf("%s: %v", key, err)
 		}
 	}
@@ -112,6 +112,34 @@ func TestHowToReachAGroupIsChecked(t *testing.T) {
 		if err := docs.Check(docs.Catalog, lists(bad), docs.Lists{}); err == nil || !errors.Is(err, docs.ErrInvalid) || !strings.Contains(err.Error(), "the platform “P”") {
 			t.Errorf("%s: %v", bad, err)
 		}
+	}
+}
+
+// A refusal of the lists reads as the app says the same problem (issueText for the lists): by the
+// entry's name, else its id, never by its place.
+func TestProblemsOfTheListsAreSentencesThatNameTheEntry(t *testing.T) {
+	long := "https://example.com/" + strings.Repeat("a", 300)
+	for contacts, want := range map[string]string{
+		`{"slackUrl":"www.slack.com/x"}`:   "The link to the Slack channel of the platform “Google Cloud” must start with https://.",
+		`{"chatUrl":"https://a b"}`:        "The link to the Chat space of the platform “Google Cloud” must start with https:// and have no spaces.",
+		`{"page":"javascript:alert(1)"}`:   "The page link of the platform “Google Cloud” must start with https://.",
+		`{"form":"` + long + `"}`:          "Shorten the request form of the platform “Google Cloud” to at most 300 characters.",
+		`{"email":"cloud at example.com"}`: "The group email of the platform “Google Cloud” is not an email address: write one, like team@company.com.",
+	} {
+		body := `{"tiers":[],"environments":[],"languages":[],"tools":[],"teams":[],"practices":[],"platforms":[{"id":"google-cloud","name":"Google Cloud","contacts":` + contacts + `}]}`
+		if err := docs.Check(docs.Catalog, []byte(body), docs.Lists{}); err == nil || err.Error() != "invalid: "+want {
+			t.Errorf("%s: %v", contacts, err)
+		}
+	}
+	if got := docs.EntryWords("team", docs.Named{ID: "cloud-platform"}); got != "the team with the id “cloud-platform”" {
+		t.Errorf("an entry without a name: %q", got)
+	}
+	if got := docs.EntryWords("tool", docs.Named{}); got != "a tool without a name" {
+		t.Errorf("an entry without a name or an id: %q", got)
+	}
+	tools := `{"tiers":[],"environments":[],"languages":[],"teams":[],"tools":[{"id":"terraform","name":"Terraform"},{"id":"terraform","name":"Terraform Cloud"}]}`
+	if err := docs.Check(docs.Catalog, []byte(tools), docs.Lists{}); err == nil || err.Error() != "invalid: tools[1].id: Two tools have the id “terraform” (“Terraform” and “Terraform Cloud”): remove one of them." {
+		t.Errorf("duplicate ids: %v", err)
 	}
 }
 

@@ -78,7 +78,7 @@ code.cm-path { background: none; border: 0; padding: 0; color: var(--text-2); }
 .cm-lost { color: var(--warn); }
 
 /* charts, tables, examples */
-.cm-chart h3, .cm-example h3 { font-size: 15.5px; }
+.cm-example h3 { font-size: 15.5px; }
 .cm-table, .cm-example { display: grid; gap: 10px; min-width: 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); scroll-margin-top: 84px; }
 .cm-table:focus { outline: none; }
 .cm-table:focus-visible { outline: 2px solid var(--accent); }
@@ -192,12 +192,8 @@ code.cm-path { background: none; border: 0; padding: 0; color: var(--text-2); }
 .cm-first li span { color: var(--text-2); }
 .cm-overview > .cm-nosource { max-width: 760px; }
 
-/* charts: never smaller than readable; a wider one scrolls inside its box */
+/* charts: drawn by ProcessPicture (picture.css); here only where a jump lands */
 .cm-chart { scroll-margin-top: 72px; }
-.cm-chart-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.modal.cm-enlarge { width: calc(100vw - 32px); max-width: none; }
-.modal.cm-enlarge .modal-body { padding: 12px 16px 16px; }
-.modal.cm-enlarge .flow-scroll { max-height: calc(100vh - 210px); }
 
 /* the index of the tables and the files of a part */
 .cm-part-head { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid var(--line); }

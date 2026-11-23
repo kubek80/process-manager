@@ -215,6 +215,7 @@ export const formats: CodeCategory = {
       role: "`npm run reviews [folder]`: lists the processes and standards whose review is overdue or due within 30 days, by owning team.",
       requirements: [
         { text: "Exits 1 when something is overdue, so a scheduled job can notify the owners; it reads files (the sample, or a folder from `npm run export`), never the database.", at: "process.exit(overdue ? 1 : 0);" },
+        { text: "It has no reader: today is the UTC day, as the MCP server counts it.", at: "const utcToday = today(new Date(), \"UTC\");" },
       ],
       tests: ["src/lib/__tests__/review.test.ts"],
     },

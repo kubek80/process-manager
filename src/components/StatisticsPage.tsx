@@ -8,7 +8,7 @@ import {
 } from "../lib/statistics";
 import { href, loadStatistics } from "../lib/store";
 import { LoadError, Loading } from "./ui";
-import { countingDay } from "../lib/dates";
+import { countingDay, formatDate } from "../lib/dates";
 import { KindIcon, kindWord } from "./marks";
 import "../requests.css";
 
@@ -81,7 +81,7 @@ export function StatisticsSection() {
       {error && <LoadError what="The statistics could not be loaded." error={error} onRetry={load} />}
       {!stats && !error && <Loading />}
       {stats && <>
-        <p className="muted small stat-range">{stats.from ? `From ${stats.from} to ${stats.to}` : `Up to ${stats.to}`}</p>
+        <p className="muted small stat-range">{stats.from ? `From ${formatDate(stats.from)} to ${formatDate(stats.to)}` : `Up to ${formatDate(stats.to)}`}</p>
         {deletedNote(stats.totals) && <p className="muted small stat-deleted">{deletedNote(stats.totals)}</p>}
         <div className="stat-row stat-totals">
           <div className="stat"><strong>{n(stats.totals.views)}</strong><span>views</span></div>

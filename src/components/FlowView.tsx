@@ -1,10 +1,10 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, Clock, Flag, Hand, Maximize2, Minus, Plus, User, Workflow, Wrench } from "lucide-react";
+import { Check, Clock, Expand, Flag, Hand, Maximize2, Minus, Plus, User, Workflow, Wrench } from "lucide-react";
 import type { Feedback, Process, StepType } from "../types";
 import { diamondPoints, L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import { toolName, useCatalog } from "../lib/catalog";
-import { afterFit, fitWhole, hiddenEdges, isZoomWheel, laneChars, laneColumn, laneLabel, openingZoom, panHint, scrollForZoom, TOUCH, scrollToCentre, stepZoom, wheelZoom, wrapWords, zoomKey } from "../lib/zoom";
+import { afterFit, fitWhole, hiddenEdges, isZoomWheel, laneChars, laneColumn, laneLabel, openingZoom, panHint, PICTURE_MIN, pictureZoom, PRINT_WIDTH, scrollForZoom, TOUCH, scrollToCentre, stepZoom, wheelZoom, wrapWords, zoomKey } from "../lib/zoom";
 import { pageFontFamily, useFontsLoaded, useMedia } from "../lib/media";
 import { openCount } from "./Feedback";
 import { EntryIcon } from "./EntryIcon";
@@ -21,16 +21,22 @@ const NO_PAN = "button:not(.block-main), a, input, select, textarea, label, .qui
 /** How far the pointer moves before a press becomes a drag of the map (and no longer a click). */
 const PAN_START = 5;
 
-export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, onEnter, editable = true, bare, bareMin, openMin, follow = !bare, legend = true }: {
+/**
+ * How a process is drawn as a picture in a text (always through `ProcessPicture`): "inline" in
+ * the text, "enlarged" in its dialog as large as the window, "print" whole on paper. A picture
+ * is for looking: nothing to select, edit or report; compact blocks; it pans and zooms as the
+ * map does, and opens by `pictureZoom` (`src/lib/zoom.ts`).
+ */
+export type PictureMode = "inline" | "enlarged" | "print";
+
+export function FlowView({ process, selectedId, done, feedback, onSelect, onInsert, onMoveToLane, onReport, onEnter, editable = true, picture, onEnlarge, openMin, follow = !picture, legend = true }: {
   /** Enter on a block: after selecting it (the editing screen moves the keyboard to its fields). */
   onEnter?: (id: string) => void;
-  editable?: boolean; bare?: boolean;
-  /**
-   * Only with `bare`: the smallest zoom the picture opens at. Left out (the Guide), a picture gets
-   * as small as its column needs (down to 30%). Given (Admin › Code map), a wider flow keeps that
-   * size and scrolls sideways inside its box, its cut edges faded as on the reader's map.
-   */
-  bareMin?: number;
+  editable?: boolean;
+  /** Drawn as a picture in a text, not as the map of a page: see `PictureMode`. */
+  picture?: PictureMode;
+  /** A button "Enlarge" among the zoom tools (a picture in a text): its name for a screen reader, and what it opens. */
+  onEnlarge?: { label: string; open: () => void };
   /** The legend of the kinds of steps. The editing screen leaves it out: every block names its kind, and the map needs the room. */
   legend?: boolean;
   /** The smallest zoom the map opens at (60%): names stay readable, a wider flow scrolls sideways. "Fit" shows the whole flow, whatever zoom that takes. */
@@ -45,7 +51,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   onMoveToLane?: (stepId: string, actorId: string) => void;
 }) {
   const { catalog } = useCatalog();
-  const L = bare ? L_COMPACT : L_FULL;
+  const L = picture ? L_COMPACT : L_FULL;
   const layout = useMemo(() => layoutProcess(process, L), [process, L]);
   // The lane names are a column of their own beside the scrolled drawing, outside it: nothing of
   // the drawing passes under it. Its text keeps its size at every zoom; the column gets narrower
@@ -54,7 +60,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const touch = useMedia(TOUCH);
   // the lane names are measured in the page's font: once a font arrives (Roboto under Theming), they are measured again
   useFontsLoaded();
-  const column = (z: number) => (bare ? 136 : laneColumn(z, narrow));
+  const column = (z: number) => (picture ? (narrow ? 96 : 136) : laneColumn(z, narrow));
   const [zoom, setZoomState] = useState(1);
   const HEADW = column(zoom);
   // the zoom as the last event left it: several wheel events can arrive before the next render
@@ -68,11 +74,12 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const [dropLane, setDropLane] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const [panning, setPanning] = useState(false);
-  // Dragging the map with the mouse moves it around. Touch screens scroll it natively, in both
-  // directions. A press that moved is a drag, not a click: the click that follows is swallowed.
+  // Dragging the map with the mouse moves it around (a picture too). Touch screens scroll it
+  // natively, in both directions; a picture is as high as its drawing, so a swipe up or down
+  // scrolls the page on. A press that moved is a drag, not a click: the click that follows is swallowed.
   useEffect(() => {
     const el = scroller.current;
-    if (!el || bare) return;
+    if (!el || picture === "print") return;
     let start: { x: number; y: number; left: number; top: number; id: number } | null = null;
     let moved = false;
     const down = (e: PointerEvent) => {
@@ -117,12 +124,12 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
       el.removeEventListener("pointerup", up);
       el.removeEventListener("pointercancel", up);
     };
-  }, [bare]);
+  }, [picture]);
   // Ctrl + scroll (Cmd on a Mac, a pinch on a trackpad) zooms around the pointer; a plain scroll
-  // is left alone, so the page keeps scrolling
+  // is left alone, so the page keeps scrolling (over a picture in a text too)
   useEffect(() => {
     const el = scroller.current;
-    if (!el || bare) return;
+    if (!el || picture === "print") return;
     const wheel = (e: WheelEvent) => {
       if (!isZoomWheel(e)) return;
       e.preventDefault(); // not the browser's own zoom of the whole page
@@ -136,7 +143,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
     };
     el.addEventListener("wheel", wheel, { passive: false });
     return () => el.removeEventListener("wheel", wheel);
-  }, [bare]);
+  }, [picture]);
   // the lane names follow the drawing up and down (they are outside its scrolling box)
   const lanesBox = useRef<HTMLDivElement>(null);
   const syncLanes = () => {
@@ -190,6 +197,14 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const fit = () => {
     const el = scroller.current;
     if (!el) return;
+    // a picture in a text: back to how it opened
+    if (picture === "inline") {
+      scrollTo.current = { left: 0, top: 0 };
+      fitted.current = false;
+      setZoom(working.current);
+      el.scrollTo({ left: 0, top: 0 });
+      return;
+    }
     // the height the map can have: its own limit, and what is left of the screen below its top
     const max = parseFloat(getComputedStyle(el).maxHeight);
     const room = roomBelow(el) - el.getBoundingClientRect().top - 8;
@@ -223,11 +238,14 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   useLayoutEffect(() => {
     if (opened.current === process.id || (opened.current !== null && editable)) return;
     opened.current = process.id;
-    // a picture in the guide never scrolls: it gets as small as its column needs
-    // the map uses its height: a long flow opens as large as fits it, and scrolls sideways
+    // the map uses its height: a long flow opens as large as fits it, and scrolls sideways; a
+    // picture in a text opens as large as fits its column, never below readable (`pictureZoom`),
+    // and keeps that height from the first paint
     const el = scroller.current;
-    const room = el && !bare ? mapHeight(el) : 0;
-    const z = openingZoom(viewWidth(), drawW, bare ? (bareMin ?? 0.3) : opening, column, room ? { view: room - 14, content: layout.height } : undefined);
+    const room = el && picture !== "inline" && picture !== "print" ? mapHeight(el) : 0;
+    const z = picture === "inline" || picture === "print"
+      ? pictureZoom(picture === "print" ? Math.min(viewWidth(), PRINT_WIDTH) : viewWidth(), drawW, column, picture === "print")
+      : openingZoom(viewWidth(), drawW, picture ? PICTURE_MIN : opening, column, room ? { view: room - 14, content: layout.height } : undefined);
     working.current = z;
     fitted.current = false;
     setZoom(z);
@@ -260,18 +278,18 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const [edges, setEdges] = useState({ left: false, right: false });
   useEffect(() => {
     const el = scroller.current;
-    if (!el || (bare && bareMin === undefined)) return;
+    if (!el) return;
     const check = () => setEdges((e) => { const n = hiddenEdges(el.scrollLeft, el.scrollWidth, el.clientWidth); return n.left === e.left && n.right === e.right ? e : n; });
     check();
     el.addEventListener("scroll", check, { passive: true });
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(check) : null;
     ro?.observe(el);
     return () => { el.removeEventListener("scroll", check); ro?.disconnect(); };
-  }, [bare, bareMin, zoom, layout.width]);
+  }, [zoom, layout.width]);
 
   const focus = hover ?? selectedId;
   const titleOf = (id: string) => { const i = process.steps.findIndex((s) => s.id === id); return i < 0 ? id : process.steps[i].title?.trim() || `step ${i + 1}`; };
-  const Main = bare ? "div" : "button";
+  const Main = picture ? "div" : "button";
   const usedTypes = [...new Set(process.steps.map((s) => s.type))];
   const toolIcon = (id: string) => catalog.tools.find((t) => t.id === id)?.icon;
   const POP_W = 340, POP_H = 330;
@@ -316,9 +334,9 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
     }
   };
   return (
-    <div className={`flow-wrap ${bare ? "bare" : ""}`} ref={wrapBox}>
+    <div className={`flow-wrap ${picture ? `picture picture-${picture}` : ""}`} ref={wrapBox}>
       <div className="flow-head">
-        {legend && narrow && !bare ? <LegendButton types={usedTypes} /> : legend ? (
+        {legend && narrow && !picture ? <LegendButton types={usedTypes} /> : legend ? (
           <div className="legend" role="group" aria-label="Kinds of steps">
             {usedTypes.map((t) => (
               <span key={t} className="legend-item"><TypeIcon type={t} size={20} />{STEP_META[t].label}</span>
@@ -331,14 +349,15 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
             <span className="kbd">+</span> on an arrow inserts a step{touch ? "" : " · drag a block to another lane"} · <span className="flow-tip-loop"><svg width="20" height="8" aria-hidden="true"><path d="M0,4 H20" className="edge back" /></svg>loop back</span>
           </p>
         </>)}
-        {!bare && <div className="map-tools">
-          {legend && <span className="map-pan-hint"><Hand size={14} aria-hidden="true" />{touch ? `${panHint(true).move} · ${panHint(true).zoom}` : <>Drag to move · <kbd className="key">{zoomKey()}</kbd> + scroll to zoom</>}</span>}
-          <div className="zoom" role="group" aria-label="Zoom">
-            <button className="btn small ghost" onClick={() => fit()} title="Show the whole flow"><Maximize2 size={14} />Fit</button>
+        {picture !== "print" && <div className="map-tools">
+          {legend && picture !== "inline" && <span className="map-pan-hint"><Hand size={14} aria-hidden="true" />{touch ? `${panHint(true).move} · ${panHint(true).zoom}` : <>Drag to move · <kbd className="key">{zoomKey()}</kbd> + scroll to zoom</>}</span>}
+          <div className="zoom" role="group" aria-label="Zoom" title={picture === "inline" ? (touch ? `${panHint(true).move} · ${panHint(true).zoom}` : `Drag to move · ${zoomKey()} + scroll to zoom`) : undefined}>
+            <button className="btn small ghost" onClick={() => fit()} title={picture === "inline" ? "Back to the size it opened at" : "Show the whole flow"}><Maximize2 size={14} />Fit</button>
             <button className="icon-btn" onClick={() => step(-1)} aria-label="Zoom out"><Minus size={16} /></button>
             <button className="zoom-val" onClick={() => setZoom(1)} aria-label={`Zoom ${Math.round(zoom * 100)}%, press for 100%`}>{Math.round(zoom * 100)}%</button>
             <button className="icon-btn" onClick={() => step(1)} aria-label="Zoom in"><Plus size={16} /></button>
           </div>
+          {onEnlarge && <button type="button" className="btn small ghost flow-enlarge" onClick={onEnlarge.open} aria-label={onEnlarge.label}><Expand size={14} aria-hidden="true" />Enlarge</button>}
         </div>}
       </div>
       <div className={`flow-viewport ${edges.left ? "fade-left" : ""} ${edges.right ? "fade-right" : ""}`} style={{ "--head": `${HEADW}px` } as React.CSSProperties}>
@@ -366,7 +385,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
             })}
           </div>
         </div>
-      <div className={`flow-scroll ${bare ? "" : "pannable"} ${panning ? "panning" : ""}`} ref={scroller}>
+      <div className={`flow-scroll ${picture === "print" ? "" : "pannable"} ${panning ? "panning" : ""}`} ref={scroller}>
         <div className="flow-stage" style={{ width: stageW, height: height * zoom }}>
           <div className="flow-draw" style={{ width: stageW, height: height * zoom }}>
         <div className={`flow-canvas ${drag ? "dragging" : ""}`} style={{ width: Math.ceil(stageW / zoom) + L.HEADER, height, zoom, marginLeft: -L.HEADER, "--z": zoom } as React.CSSProperties} onMouseDown={() => setAdding(null)}>
@@ -430,12 +449,13 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                     <polygon className="diamond-shape" points={diamondPoints(L.W, L.H, 1)} />
                   </svg>
                 )}
-                {/* in the guide a chart is a picture: nothing to open, so nothing to tab through */}
-                <Main className="block-main" {...(bare ? {} : {
-                  onClick: () => { leaveFit("select"); onSelect(s.id); }, tabIndex: tabStop === s.id ? 0 : -1, onKeyDown: (e: React.KeyboardEvent) => roam(e, s.id),
+                {/* a picture has nothing to open: its steps are one Tab stop to read them in order with the arrow keys */}
+                <Main className="block-main" {...(picture === "print" ? {} : {
+                  ...(picture ? { role: "img" } : { onClick: () => { leaveFit("select"); onSelect(s.id); } }),
+                  tabIndex: tabStop === s.id ? 0 : -1, onKeyDown: (e: React.KeyboardEvent) => roam(e, s.id),
                   "aria-label": `${n.index + 1}. ${s.title || "(no name yet)"}, ${meta.label}${process.actors[n.lane] ? `, by ${process.actors[n.lane].name}` : ""}`,
                 })}>
-                  {!decision && <TypeIcon type={s.type} size={bare ? 30 : 34} />}
+                  {!decision && <TypeIcon type={s.type} size={picture ? 30 : 34} />}
                   <span className="block-text">
                     <span className="block-type">{meta.label}</span>
                     <span className={`block-title ${s.title?.trim() ? "" : "unnamed"}`.trim()}>{s.title?.trim() ? s.title : "(no name yet)"}</span>
@@ -447,9 +467,9 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                   </span>
                 </Main>
                 <span className="block-num">{done.has(s.id) ? <Check size={12} strokeWidth={3} /> : n.index + 1}</span>
-                {(flags > 0 || (!bare && onReport)) && (
+                {(flags > 0 || (!picture && onReport)) && (
                   <span className="block-corner">
-                    {!bare && onReport && (
+                    {!picture && onReport && (
                       <button type="button" className="block-report" draggable={false} title="Report a problem with this step" tabIndex={tabStop === s.id ? 0 : -1}
                         aria-label={`Report a problem with step ${n.index + 1}: ${s.title}`}
                         onMouseDown={(ev) => ev.stopPropagation()} onDragStart={(ev) => { ev.preventDefault(); ev.stopPropagation(); }}

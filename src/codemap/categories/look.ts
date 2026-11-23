@@ -205,6 +205,13 @@ export const look: CodeCategory = {
       ],
     },
     {
+      path: "src/picture.css",
+      role: "What a process drawn as a picture in a text adds to the map's look: its caption, its compact tools, the Enlarge dialog and printing it whole.",
+      requirements: [
+        { text: "A picture inline has no height limit: it never scrolls up and down, so the page scrolls on over it.", at: ".flow-wrap.picture-inline .flow-scroll, .flow-wrap.picture-print .flow-scroll { max-height: none; }" },
+      ],
+    },
+    {
       path: "src/print.css",
       role: "The printed page: light paper whatever the theme, without the top bar and controls.",
       requirements: [

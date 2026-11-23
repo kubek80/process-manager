@@ -48,6 +48,8 @@ function describe(e: ErrorObject): string {
         ? "must be upper case with dashes, e.g. \"SEC-LOG-01\""
       : String(e.params.pattern).startsWith("^https?")
           ? "must be a full link starting with http:// or https://"
+          : String(e.params.pattern).includes("@")
+          ? "must be an email address"
           : `must match the pattern ${e.params.pattern}`;
     case "type": return `must be of type ${e.params.type}`;
     case "minLength": return e.params.limit === 1 ? "is empty" : `is too short (minimum ${e.params.limit} characters)`;
@@ -197,22 +199,86 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
   return issues;
 }
 
+/** The lists in the order the lists document has them, each with what one entry and several are called. */
+export const LIST_WORDS = {
+  tiers: { one: "tier", many: "tiers" }, environments: { one: "environment", many: "environments" }, languages: { one: "language", many: "languages" },
+  teams: { one: "team", many: "teams" }, practices: { one: "practice", many: "practices" }, platforms: { one: "platform", many: "platforms" },
+  categories: { one: "category", many: "categories" }, tools: { one: "tool", many: "tools" },
+} as const;
+
+/**
+ * Full check of the lists: the schema, then ids that must be unique within one list. Schema
+ * problems keep the checker's path and message (`issueText` with "lists" words them, naming the
+ * entry); the rest are whole sentences already.
+ */
 export function validateCatalog(data: unknown): Issue[] {
   const issues: Issue[] = [];
   if (!validateCatalogSchema(data)) {
-    for (const e of validateCatalogSchema.errors ?? []) issues.push({ level: "error", path: prettyPath(e.instancePath), message: describe(e) });
+    const seen = new Set<string>();
+    for (const e of validateCatalogSchema.errors ?? []) {
+      const issue: Issue = { level: "error", path: prettyPath(e.instancePath), message: message(e, data) };
+      const key = issue.path + issue.message;
+      if (!seen.has(key)) { seen.add(key); issues.push(issue); }
+    }
     return issues;
   }
   const c = data as unknown as Catalog;
   // ids are unique within one list; a team, a practice and a platform may share one
-  (["tiers", "environments", "languages", "teams", "practices", "platforms", "categories", "tools"] as const).forEach((key) => {
-    const seen = new Set<string>();
+  (Object.keys(LIST_WORDS) as (keyof typeof LIST_WORDS)[]).forEach((key) => {
+    const first = new Map<string, string>();
     (c[key] ?? []).forEach((x, i) => {
-      if (seen.has(x.id)) issues.push({ level: "error", path: `${key}[${i}].id`, message: `duplicate id "${x.id}"` });
-      seen.add(x.id);
+      if (first.has(x.id)) issues.push({ level: "error", path: `${key}[${i}].id`, message: duplicateSentence(key, x.id, first.get(x.id)!, x.name) });
+      else first.set(x.id, x.name);
     });
   });
   return issues;
+}
+
+/**
+ * Two entries of one list with the same id, as the server says it too (`docs.Check`): "Two tools
+ * have the id “terraform” (“Terraform” and “Terraform Cloud”): remove one of them." An id is made
+ * once from the name and never changes, so removing one is what can be done on the page.
+ */
+export function duplicateSentence(key: keyof typeof LIST_WORDS, id: string, a: string, b: string): string {
+  const names = [a, b].map((n) => (typeof n === "string" ? n.trim() : ""));
+  const both = names.every(Boolean) ? ` (“${names[0]}” and “${names[1]}”)` : "";
+  return `Two ${LIST_WORDS[key].many} have the id “${id}”${both}: remove one of them.`;
+}
+
+/**
+ * The problems of a save the server refused, as the app's own checker would have found them, so
+ * that `issueText` words them alike: the format's ("does not match the format: /teams/3/name:
+ * minLength: got 0, want 1; …") and the checker's ("teams[2].id: …"), each by its place. `more`:
+ * how many the server left out ("(and 2 more)"). Null when the refusal is not a list of problems
+ * (it is shown as it is).
+ */
+export function refusalIssues(error: string): { issues: Issue[]; more: number } | null {
+  let text = (typeof error === "string" ? error : "").trim();
+  const format = text.startsWith("does not match the format: ");
+  if (format) text = text.slice("does not match the format: ".length);
+  let more = 0;
+  const tail = text.match(/ \(and (\d+) more\)$/);
+  if (tail) { more = Number(tail[1]); text = text.slice(0, -tail[0].length); }
+  const parts = text.split("; ").map((part) => {
+    const m = part.match(/^(\/[^:\s]*|[A-Za-z$]+(?:\[\d+\])?(?:\.[A-Za-z$]+(?:\[\d+\])?)*): (.+)$/s);
+    if (m) return { level: "error" as const, path: m[1].startsWith("/") ? prettyPath(m[1] === "/" ? "" : m[1]) : m[1], message: serverMessage(m[2]) };
+    // a whole sentence of the server's checker ("The group email of the team “X” is not an email address.")
+    return /^[A-Z“]/.test(part) ? { level: "error" as const, path: "", message: part } : null;
+  });
+  if (!text || parts.some((p) => p === null)) return null;
+  return { issues: parts as Issue[], more };
+}
+
+/** A message of the server's format check in the words of the app's own (`describe`). */
+function serverMessage(m: string): string {
+  let x: RegExpMatchArray | null;
+  if ((x = m.match(/^minLength: got (\d+), want (\d+)/))) return x[1] === "0" ? "is empty" : `is too short (minimum ${x[2]} characters)`;
+  if ((x = m.match(/^maxLength: got \d+, want (\d+)/))) return `is too long (maximum ${x[1]} characters)`;
+  if ((x = m.match(/^missing propert(?:y|ies) '([^']+)'/))) return `is missing the required field "${x[1]}"`;
+  if ((x = m.match(/^additional properties '([^']+)'/))) return `has a field "${x[1]}" that the schema does not allow - remove or rename it`;
+  if ((x = m.match(/does not match pattern '(.*)'$/s))) return describe({ keyword: "pattern", params: { pattern: x[1].replace(/\\\\/g, "\\") } } as unknown as ErrorObject);
+  if ((x = m.match(/^got (\w+), want (.+)$/))) return `must be of type ${x[2]}`;
+  return m;
 }
 
 /**

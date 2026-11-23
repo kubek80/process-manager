@@ -160,6 +160,7 @@ export const reading: CodeCategory = {
       requirements: [
         { text: "By date, what has no date comes last and the same date goes by name, so the order is the same on every load.", at: "export function sortResults<T extends Sortable>(" },
         { text: "Home's short lists hold only published documents in use: a draft never appears there, also not for its editors.", at: "export const shownOnHome = (r: Listed) =>" },
+        { text: "\"Today\", \"yesterday\" and \"3 days ago\" count the reader's days, not UTC days.", at: "const days = daysBetween(day, today(now, zone));" },
       ],
       tests: ["src/lib/__tests__/sorting.test.ts", "src/lib/__tests__/searchScreens.test.ts"],
     },
@@ -202,11 +203,13 @@ export const reading: CodeCategory = {
     },
     {
       path: "src/components/FlowView.tsx",
-      role: "The swim-lane map of a process: on the reader's page, on the editing screen and (bare) in the Guide.",
+      role: "The swim-lane map of a process: on the reader's page, on the editing screen and, as a picture (`picture`), in the Guide and the code map through `ProcessPicture`.",
       requirements: [
         { text: "Only the current block has `tabIndex` 0: the map is one Tab stop, so Tab leaves it at once however many steps it has.", at: "tabIndex: tabStop === s.id ? 0 : -1" },
         { text: "The arrow keys, Home and End move between steps in the order of the flow.", at: "const to = e.key === \"ArrowRight\" || e.key === \"ArrowDown\" ? at + 1" },
-        { text: "The bare map (the Guide) uses the compact measures and neither zooms nor pans: no wheel or drag handler is installed for it.", at: "const L = bare ? L_COMPACT : L_FULL;" },
+        { text: "A picture opens by `pictureZoom` (as large as fits, never below `PICTURE_MIN`), not by the map's rule that uses the height: it is as high as its drawing, so a plain wheel or a vertical swipe over it scrolls the page, never the picture.", at: "? pictureZoom(picture === \"print\" ? Math.min(viewWidth(), PRINT_WIDTH) : viewWidth(), drawW, column, picture === \"print\")" },
+        { text: "Only Ctrl or ⌘ + wheel (a trackpad pinch) zooms, on the map and on a picture alike; any other wheel event is left to the browser, so a page with many pictures never traps the reader.", at: "if (!isZoomWheel(e)) return;" },
+        { text: "\"Fit\" on a picture returns to the size it opened at; on the map it shows the whole flow.", at: "if (picture === \"inline\") {" },
       ],
       tests: ["e2e/map.spec.ts", "e2e/editor.spec.ts", "e2e/layout.spec.ts"],
     },
@@ -286,7 +289,7 @@ export const reading: CodeCategory = {
       requirements: [
         { text: "Never reviewed and no known first publication: overdue at once, since nobody knows how long it went unreviewed.", at: "if (!last && !isDate(start)) return { state: \"overdue\", label: \"Never reviewed\" };" },
         { text: "A stored review date that cannot be read counts as overdue instead of taking the page down.", at: "if (last && !isDate(last)) return { state: \"overdue\", label: \"Review date cannot be read\" };" },
-        { text: "Days are counted between UTC days (`today` from `toISOString`), as the MCP server counts them; not the reader's local day.", at: "export function reviewInfo(" },
+        { text: "Days are the reader's: `today` is the reader's day and a first publication counts from the day it fell on for the reader; a stored review date is used as written. The MCP server and `npm run reviews` count in UTC days, so near midnight a review can be due a day earlier or later there.", at: "export function reviewInfo(p: Pick<Governed, \"status\" | \"review\">, today = readersToday(), since?: string): ReviewInfo {" },
       ],
       tests: ["src/lib/__tests__/review.test.ts", "src/lib/__tests__/demo.test.ts"],
     },
@@ -400,12 +403,21 @@ export const reading: CodeCategory = {
       ],
       tests: ["src/lib/__tests__/pageHead.test.ts"],
     },
+    {
+      path: "src/components/ProcessPicture.tsx",
+      role: "A process drawn as a picture in a text (the Guide's and the code map's charts): the box, the caption, the map's tools, Enlarge and printing, written once.",
+      requirements: [
+        { text: "Draws with `FlowView` (`picture`), never with a drawing of its own: a picture looks and moves exactly like the map of a process, with one set of zoom rules (`src/lib/zoom.ts`).", at: "<FlowView key={printing ? \"print\" : \"screen\"} picture={printing ? \"print\" : \"inline\"}" },
+        { text: "Enlarge opens the same flow in a dialog as large as the window (`picture-dialog`); Escape closes it and gives the focus back to Enlarge.", at: "<Modal title={name} subtitle={caption} onClose={() => setBig(false)} className=\"picture-dialog\">" },
+        { text: "Printing draws every picture again, whole and fitted to the paper, before the browser lays out the page; one set of window listeners serves all the pictures of a page.", at: "function watchPrinting(changed: () => void) {" },
+      ],
+    },
     // ---- the Guide
     {
       path: "src/components/GuidePage.tsx",
       role: "The in-app Guide: the main documentation, with flow charts drawn by the map itself.",
       requirements: [
-        { text: "A chart is the map itself, bare and not editable, so the Guide's charts look exactly like a process.", at: "<FlowView bare editable={false}" },
+        { text: "Every chart is a `ProcessPicture`: the map itself, not editable, with the same dragging, zoom tools and Enlarge as every other picture; there is no chart code of the Guide's own.", at: "<ProcessPicture className=\"guide-fig\" process={signInFlow}" },
       ],
       tests: ["e2e/frame.spec.ts"],
     },

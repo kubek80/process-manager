@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlignLeft, CircleAlert, CircleCheck, Download, FoldVertical, Search, TriangleAlert, UnfoldVertical } from "lucide-react";
+import { AlignLeft, CircleAlert, CircleCheck, Download, FoldVertical, Search, UnfoldVertical } from "lucide-react";
 import type { Issue } from "../types";
 import { hasErrors } from "../lib/validate";
 import { download } from "../lib/store";
-import { CopyButton } from "./ui";
+import { issuePlace, issueText } from "../lib/editing";
+import { CopyButton, IssueList } from "./ui";
 import { JsonEditor, type JsonEditorHandle } from "./JsonEditor";
 
 type Parsed = { value?: unknown; error?: string };
@@ -25,11 +26,14 @@ export function JsonView<T extends { id: string }>({ doc, noun, validate, schema
     const issues = validate(value);
     const id = (value as { id?: unknown } | null)?.id;
     if (typeof id === "string" && id !== doc.id)
-      issues.unshift({ level: "error", path: "id", message: `must stay "${doc.id}" - the ${noun} is known by this id` });
+      issues.unshift({ level: "error", path: "id", message: `The id must stay “${doc.id}”: the ${noun} is known by it.` });
     return issues;
   }, [validate, doc.id, noun]);
 
   const parsed = useMemo(() => parse(text), [text]);
+  // a problem in the words of the editing screen, by its place in words; where it is in the JSON comes second
+  const kind = noun === "standard" ? "standard" : "process";
+  const words = useCallback((i: Issue, value: unknown) => `${issuePlace(kind, value, i.path)}: ${issueText(i, kind)}`, [kind]);
   const issues = useMemo(() => (parsed.error ? [] : check(parsed.value)), [parsed, check]);
   const ok = !parsed.error && !hasErrors(issues);
   const lines = text.split("\n").length;
@@ -55,7 +59,7 @@ export function JsonView<T extends { id: string }>({ doc, noun, validate, schema
           <button className="btn small ghost" onClick={() => editor.current?.unfoldAll()} title="Expand everything"><UnfoldVertical size={14} />Unfold</button>
           <button className="btn small ghost" onClick={() => editor.current?.format()} title="Re-indent the JSON"><AlignLeft size={14} />Format</button>
         </div>
-        <JsonEditor ref={editor} value={canonical} onChange={edit} check={check} />
+        <JsonEditor ref={editor} value={canonical} onChange={edit} check={check} words={words} />
       </div>
 
       <div className="json-side">
@@ -68,16 +72,8 @@ export function JsonView<T extends { id: string }>({ doc, noun, validate, schema
         </div>
         {parsed.error && <button className="btn small" onClick={() => editor.current?.nextProblem()}><CircleAlert size={14} />Go to the problem</button>}
         {issues.length > 0 && (
-          <ul className="issues clickable">
-            {issues.map((i, k) => (
-              <li key={k} className={i.level}>
-                <button onClick={() => editor.current?.reveal(i.path)} title="Show in the editor">
-                  {i.level === "error" ? <CircleAlert size={15} /> : <TriangleAlert size={15} />}
-                  <span><code>{i.path}</code> {i.message}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <IssueList issues={issues} label="What the checker found" pickTitle="Show in the editor" onPick={(i) => editor.current?.reveal(i.path)}
+            place={(i) => issuePlace(kind, parsed.value, i.path)} text={(i) => issueText(i, kind)} detail={(i) => i.path || undefined} />
         )}
         <div className="btn-col">
           <CopyButton label="Copy JSON" text={() => text} />

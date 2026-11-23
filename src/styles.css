@@ -206,6 +206,24 @@ a.btn { color: var(--action-other, var(--accent)); }
 .issues li { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-2); }
 .issues li svg { flex: none; margin-top: 2px; }
 .issues li.error svg { color: var(--bad); } .issues li.warning svg { color: var(--warn); }
+.issue-place { font-weight: 650; color: var(--text); }
+.issue-detail { margin-left: 6px; font-size: 11.5px; color: var(--text-3); background: none; border: 0; padding: 0; overflow-wrap: anywhere; }
+/* every field with a problem, the moment it has one (`useFieldMarks`): outlined, and what to do in a
+   line under it - on the editing screen and in Admin › Lists alike */
+:is(.edit-fields, .cat-detail) .has-problem { outline: 2px solid var(--bad); outline-offset: 1px; }
+:is(.edit-fields, .cat-detail) .has-example { outline: 2px solid var(--warn); outline-offset: 1px; }
+:is(.edit-fields, .cat-detail) [data-problem] { flex-wrap: wrap; }
+:is(.edit-fields, .cat-detail) [data-problem]::after {
+  content: attr(data-problem); display: block; flex-basis: 100%; grid-column: 1 / -1; order: 99;
+  margin-top: 1px; font-size: 12.5px; font-weight: 550; line-height: 1.35; color: var(--bad); white-space: normal;
+}
+:is(.edit-fields, .cat-detail) [data-problem].problem-example::after { color: var(--warn); }
+/* a field that says its own problem under it already (the contact details) does not say it twice */
+:is(.edit-fields, .cat-detail) [data-problem]:has(> .field-error)::after { content: none; }
+/* Admin › Lists: what stops saving the lists, above them */
+.cat-issues-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0 0 10px; font-size: 15px; font-weight: 650; color: var(--bad); }
+.cat-issues-head svg { align-self: center; flex: none; }
+.cat-issues-head span { font-size: 13px; font-weight: 450; color: var(--text-2); }
 .check { display: flex; gap: 9px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; font-size: 13.5px; margin: 10px 0; }
 .check svg { flex: none; margin-top: 2px; }
 .check.good { background: var(--good-bg); color: var(--good); }
@@ -573,7 +591,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .cat-new h2 { font-size: 22px; letter-spacing: -.015em; }
 .cat-new .field { width: 100%; }
 .block:not([draggable="true"]) { cursor: default; }
-.flow-wrap.bare .flow-scroll { max-height: none; }
 
 /* ---------- guide ---------- */
 .guide { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 40px; max-width: 1640px; }
@@ -648,7 +665,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .guide-table td:first-child { white-space: nowrap; width: 1%; padding-right: 24px; }
 .guide-table td:last-child { color: var(--text-2); }
 .guide-hero, .guide-cards, .guide-dl, .guide-blocks { max-width: 1040px; }
-.flow-wrap.bare .flow-head { padding: 8px 12px; }
 
 /* ---------- life-cycle, languages, resources ---------- */
 .tier-tag.status-draft { background: var(--warn-bg); border-color: transparent; color: var(--warn); }

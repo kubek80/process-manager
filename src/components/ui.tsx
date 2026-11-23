@@ -365,15 +365,27 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   );
 }
 
-export function IssueList({ issues }: { issues: Issue[] }) {
+/**
+ * A checker's problems as a list, each an instruction in the words of `issueText` (`text`; never
+ * a path), with where it is in front (`place`) and a secondary detail after it (`detail`, such as
+ * the place in the JSON) when that helps. With `onPick` each is a button that leads to its field.
+ */
+export function IssueList({ issues, text, place, detail, onPick, pickTitle, label }: {
+  issues: Issue[]; text: (i: Issue) => string; place?: (i: Issue) => string; detail?: (i: Issue) => string | undefined;
+  onPick?: (i: Issue) => void; pickTitle?: string;
+  /** What the list is called for a screen reader. */
+  label?: string;
+}) {
   return (
-    <ul className="issues">
-      {issues.map((i, k) => (
-        <li key={k} className={i.level}>
-          {i.level === "error" ? <CircleAlert size={15} /> : <TriangleAlert size={15} />}
-          <span><code>{i.path}</code> {i.message}</span>
-        </li>
-      ))}
+    <ul className={`issues ${onPick ? "clickable" : ""}`} aria-label={label}>
+      {issues.map((i, k) => {
+        const more = detail?.(i);
+        const body = <>
+          {i.level === "error" ? <CircleAlert size={15} aria-hidden="true" /> : <TriangleAlert size={15} aria-hidden="true" />}
+          <span className="issue-words">{place && <b className="issue-place">{place(i)}</b>}{place && " "}{text(i)}{more && <code className="issue-detail">{more}</code>}</span>
+        </>;
+        return <li key={k} className={i.level}>{onPick ? <button type="button" title={pickTitle} onClick={() => onPick(i)}>{body}</button> : body}</li>;
+      })}
     </ul>
   );
 }

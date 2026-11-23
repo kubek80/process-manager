@@ -50,11 +50,13 @@ export interface JsonEditorHandle { nextProblem: () => void; reveal: (path: stri
 
 export const JsonEditor = forwardRef<JsonEditorHandle, {
   value: string; onChange: (text: string) => void; check: (value: unknown) => Issue[]; readOnly?: boolean;
-}>(function JsonEditor({ value, onChange, check, readOnly }, ref) {
+  /** A problem in words, as the list beside the editor says it (`issueText`): shown at its line. */
+  words: (issue: Issue, value: unknown) => string;
+}>(function JsonEditor({ value, onChange, check, readOnly, words }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const cb = useRef({ onChange, check });
-  cb.current = { onChange, check };
+  const cb = useRef({ onChange, check, words });
+  cb.current = { onChange, check, words };
 
   useEffect(() => {
     const parseLint = jsonParseLinter();
@@ -64,7 +66,7 @@ export const JsonEditor = forwardRef<JsonEditorHandle, {
       try { parsed = JSON.parse(v.state.doc.toString()); } catch { return parseLint(v); }
       return cb.current.check(parsed).map((i) => {
         const at = locate(v.state, i.path) ?? { from: 0, to: 1 };
-        return { ...at, severity: i.level, message: `${i.path}: ${i.message}` };
+        return { ...at, severity: i.level, message: cb.current.words(i, parsed) };
       });
     }, { delay: 250 });
     const extensions: Extension[] = [

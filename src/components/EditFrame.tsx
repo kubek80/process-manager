@@ -9,6 +9,7 @@ import { useMe } from "../lib/session";
 import { draftAudience } from "../lib/rights";
 import { useMedia } from "../lib/media";
 import { TOUCH } from "../lib/zoom";
+import { focusWhenShown, useFieldMarks } from "../lib/fieldMarks";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import type { Notice } from "./EditSession";
 import { FeedbackItem, type FeedbackTarget } from "./Feedback";
@@ -123,7 +124,6 @@ const KindOf = createContext<"process" | "standard" | undefined>(undefined);
  */
 function focusIssueField(issue: Issue, kind: "process" | "standard", mark: (el: HTMLElement | null) => void) {
   const { selectors, label } = issueField(issue.path, kind);
-  let tries = 40;
   const find = (): HTMLElement | null => {
     const box = document.querySelector<HTMLElement>(".edit-fields");
     if (!box) return null;
@@ -139,60 +139,27 @@ function focusIssueField(issue: Issue, kind: "process" | "standard", mark: (el: 
     }
     return null;
   };
-  const attempt = () => {
-    const el = find();
-    if (!el) { if (tries-- > 0) setTimeout(attempt, 40); return; }
-    el.scrollIntoView({ block: "center" });
-    el.focus({ preventScroll: true });
-    mark(el);
-  };
   // after the list has closed and given the keyboard back to its button
-  setTimeout(attempt, 60);
+  focusWhenShown(find, mark);
 }
 
 /**
- * Marks every field that has a problem, the moment it has one: the field is outlined
- * (`.has-problem`, calmer `.has-example` for an example text still to replace) with
- * aria-invalid, and the line around it says what to do under it (`data-problem`, shown by CSS),
- * so nothing is added to what React draws. `issues`: the problems of what the fields show.
+ * Where the editing screen shows the field a problem is about, for `useFieldMarks`: the field
+ * `issueField` names, else the field whose label is the field's name.
  */
-function useFieldMarks(issues: Issue[] | undefined, kind: "process" | "standard") {
-  useEffect(() => {
-    const box = document.querySelector<HTMLElement>(".edit-fields");
-    if (!box) return;
-    const wanted = new Map<HTMLElement, { text: string; example: boolean; holder: HTMLElement }>();
-    for (const issue of issues ?? []) {
-      if (issue.level !== "error") continue;
-      const { selectors, label } = issueField(issue.path, kind);
-      let el: HTMLElement | null = selectors[0] ? box.querySelector<HTMLElement>(selectors[0]) : null;
-      if (!el && label) {
-        const want = label.toLowerCase();
-        for (const f of box.querySelectorAll<HTMLElement>(".field")) {
-          const text = (f.querySelector(".field-label")?.firstChild?.textContent ?? "").trim().toLowerCase();
-          if (text && text === want) { el = f.querySelector<HTMLElement>("input, textarea, select"); break; }
-        }
+function editingField(kind: "process" | "standard") {
+  return (issue: Issue, box: HTMLElement): HTMLElement | null => {
+    const { selectors, label } = issueField(issue.path, kind);
+    let el: HTMLElement | null = selectors[0] ? box.querySelector<HTMLElement>(selectors[0]) : null;
+    if (!el && label) {
+      const want = label.toLowerCase();
+      for (const f of box.querySelectorAll<HTMLElement>(".field")) {
+        const text = (f.querySelector(".field-label")?.firstChild?.textContent ?? "").trim().toLowerCase();
+        if (text && text === want) { el = f.querySelector<HTMLElement>("input, textarea, select"); break; }
       }
-      if (!el || wanted.has(el)) continue;
-      const holder = el.closest<HTMLElement>(".field, .mini-field, .path-row, .ins-rows > li") ?? el.parentElement ?? el;
-      wanted.set(el, { text: issueText(issue, kind), example: isExampleIssue(issue), holder });
     }
-    for (const el of box.querySelectorAll<HTMLElement>(".has-problem, .has-example")) {
-      if (wanted.has(el)) continue;
-      el.classList.remove("has-problem", "has-example");
-      el.removeAttribute("aria-invalid");
-      el.removeAttribute("aria-description");
-    }
-    const holders = new Set([...wanted.values()].map((w) => w.holder));
-    for (const h of box.querySelectorAll<HTMLElement>("[data-problem]")) if (!holders.has(h)) h.removeAttribute("data-problem");
-    for (const [el, w] of wanted) {
-      el.classList.toggle("has-problem", !w.example);
-      el.classList.toggle("has-example", w.example);
-      el.setAttribute("aria-invalid", "true");
-      el.setAttribute("aria-description", w.text);
-      w.holder.setAttribute("data-problem", w.text);
-      w.holder.classList.toggle("problem-example", w.example);
-    }
-  });
+    return el;
+  };
 }
 
 /**
@@ -649,7 +616,10 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
   const fieldsBox = useRef<HTMLElement>(null);
   useEffect(() => { fieldsBox.current?.scrollTo({ top: 0 }); }, [selection]);
   // the field the checker's list led to stays outlined until its problem is gone
-  useFieldMarks(fieldIssues, kind);
+  useFieldMarks(fieldIssues, {
+    box: () => document.querySelector<HTMLElement>(".edit-fields"),
+    find: editingField(kind), text: (i) => issueText(i, kind), example: isExampleIssue,
+  });
   const [marked, setMarked] = useState<{ el: HTMLElement; issue: Issue } | null>(null);
   useEffect(() => {
     if (!marked) return;

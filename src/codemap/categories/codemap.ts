@@ -107,6 +107,7 @@ export const codemap: CodeCategory = {
         { text: "Tells the two cases apart: `source: false` (\"shown only where the portal runs beside its source code\") and a 404 for one file while source is shown (\"not tracked by git yet, or not a text file\").", at: "if (e instanceof ApiError && e.status === 404) return { state: shows ? \"missing\" : \"off\" } as Source;" },
         { text: "Before following a link out of a block of a category, the block is put into the current address (`keepPlace`), so that the browser's Back returns to it and not to the top of a long page.", at: "if (a && block?.dataset.at) keepPlace({ category: c.id, at: block.dataset.at });" },
         { text: "The text is drawn as one row per line with no library and no highlighting; a file of 3,000 lines draws in well under a second.", at: "const SourceText = memo(" },
+        { text: "A chart is a `ProcessPicture` like the Guide's (dragging, zoom tools, Enlarge, printing whole), with its title above and its place in the address (`?at=chart-…`); the page has no chart code of its own.", at: "return <ProcessPicture className=\"cm-chart\"" },
       ],
       tests: ["src/lib/__tests__/codemap.test.ts"],
     },
