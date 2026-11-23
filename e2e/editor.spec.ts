@@ -226,6 +226,10 @@ test("the JSON editor marks problems on the line and applies valid edits", async
   await replaceAll(original.replace('"actor": "cloud-governance"', '"actor": "nobody"'));
   const finding = page.locator(".json-side .issues li", { hasText: "Who does it is not one of the participants" });
   await expect(finding).toBeVisible();
+  // where it is in words first, then what to do, then the place in the JSON as a detail
+  await expect(finding.locator(".issue-place")).toHaveText("Step 3 “Review the request at the governance board”");
+  await expect(finding.locator(".issue-detail")).toHaveText("steps[2].actor");
+  await expect(finding.getByRole("button")).toHaveAttribute("title", "Show in the editor");
   await expect(page.locator(".json-side .check.bad")).toContainText("Not applied to the draft");
   await finding.getByRole("button").click();
   await expect(page.locator(".cm-lintRange-error")).toHaveText('"nobody"');

@@ -289,7 +289,7 @@ test("a category: its parts in order with chips, readable charts that enlarge, e
   await expect(page.locator("#code-must li[id^=code-must-]")).toHaveCount(VECTORS.requirements.length);
   await expect(page.locator("#code-must .cm-comment[role=note]")).toHaveCount(VECTORS.requirements.length);
 
-  // the charts: every step drawn, never shrunk below readable; Enlarge opens it with the zoom
+  // the charts: every step drawn, never shrunk below readable, with the zoom tools; Enlarge opens it larger
   const charts = page.locator("figure.cm-chart");
   await expect(charts).toHaveCount(VECTORS.charts.length);
   const chart = charts.first();
@@ -299,15 +299,17 @@ test("a category: its parts in order with chips, readable charts that enlarge, e
   await expect(chart.locator(".block")).toHaveCount(first.steps.length);
   await chart.scrollIntoViewIfNeeded();
   await expect(chart.locator(".block").first()).toBeVisible();
+  // a picture opens whole at 70% or more, or cut at 80% (`pictureZoom`)
   const scale = await chart.locator(".flow-canvas").evaluate((e) => Number(getComputedStyle(e).zoom));
-  expect(scale).toBeGreaterThanOrEqual(0.9);
+  expect(scale).toBeGreaterThanOrEqual(0.7);
+  await expect(chart.getByRole("group", { name: "Zoom" })).toBeVisible();
   const titleHeight = (await chart.locator(".block-title").first().boundingBox())!.height;
   expect(titleHeight, "a step's name is drawn at a readable size").toBeGreaterThanOrEqual(11);
   await expect(chart.locator("figcaption")).not.toHaveText(/^\s*$/);
   const enlarge = chart.getByRole("button", { name: `Enlarge the chart “${first.title}”` });
   await enlarge.click();
   const dialog = page.getByRole("dialog", { name: first.title });
-  await expect(dialog).toHaveClass(/cm-enlarge/);
+  await expect(dialog).toHaveClass(/\bpicture-dialog\b/);
   await expect(dialog.getByRole("group", { name: "Zoom" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Zoom in" })).toBeVisible();
   await expect(dialog.locator(".block")).toHaveCount(first.steps.length);

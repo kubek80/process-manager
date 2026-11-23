@@ -131,15 +131,24 @@ test("teams and tools are a read-only directory", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Open ServiceNow" })).toBeVisible();
 });
 
-test("the guide explains the app with flow charts that fit the page", async ({ page }) => {
+test("the guide explains the app with flow charts that fit the page or show where they go on", async ({ page }) => {
   const errors = watchErrors(page);
   await open(page, "/guide");
   await expect(page.getByRole("heading", { name: "How Process Manager works" })).toBeVisible();
   await expect(page.locator(".guide-fig .block").first()).toBeVisible();
-  // every flow chart fits its column: nothing to scroll sideways
-  const overflow = await page.locator(".guide-fig .flow-scroll").evaluateAll((els) => els.map((e) => e.scrollWidth - e.clientWidth));
-  expect(overflow.length).toBeGreaterThanOrEqual(7);
-  expect(overflow.every((px) => px === 0)).toBe(true);
+  // every flow chart either fits its column whole, or opens at 80% with its cut edge faded (the
+  // rules and the tools are in pictures.spec.ts); after Fit none is left to scroll sideways
+  const figs = page.locator("figure.process-picture.guide-fig");
+  expect(await figs.count()).toBeGreaterThanOrEqual(7);
+  for (const fig of await figs.all()) {
+    const over = await fig.locator(".flow-scroll").evaluate((e) => e.scrollWidth - e.clientWidth);
+    if (over > 0) {
+      await expect(fig.locator(".zoom-val")).toHaveText("80%");
+      await expect(fig.locator(".flow-viewport")).toHaveClass(/fade-right/);
+    }
+    await fig.getByRole("button", { name: "Fit" }).click();
+    await expect.poll(() => fig.locator(".flow-scroll").evaluate((e) => e.scrollWidth - e.clientWidth)).toBeLessThanOrEqual(0);
+  }
 
   // the guide covers using, editing, AI assistants, administration and running it
   const toc = page.locator(".guide-toc");

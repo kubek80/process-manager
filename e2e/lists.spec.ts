@@ -392,3 +392,176 @@ for (const [width, theme] of [[1440, "light"], [390, "dark"]] as const) {
     await expect(toast).toBeVisible();
   });
 }
+
+// ---------- problems of the lists, in words
+
+/** What is focused right now, as the lists' problems leave it. */
+const focused = (page: Page) => page.evaluate(() => {
+  const el = document.activeElement as HTMLElement | null;
+  return { id: el?.id ?? "", field: el?.dataset.field ?? "", invalid: el?.getAttribute("aria-invalid") ?? "", says: el?.getAttribute("aria-description") ?? "" };
+});
+
+/** A field without its length limit (as text pasted from elsewhere, or lists imported), then filled. */
+async function fillUnlimited(page: Page, selector: string, text: string) {
+  const field = page.locator(".cat-detail").locator(selector);
+  await field.evaluate((e) => e.removeAttribute("maxlength"));
+  await field.fill(text);
+}
+
+for (const who of [DANA, ALEX]) {
+  test(`broken lists say what to fix by name, and each problem leads to its field (${who.split("@")[0]})`, async ({ page }) => {
+    test.setTimeout(60_000);
+    await signIn(page, who);
+    await open(page, "/admin/lists");
+    const panel = page.locator("section.issues-panel.cat-issues");
+    await expect(item(page, "Cloud Platform team")).toBeVisible();
+    await expect(panel).toHaveCount(0);
+
+    // five problems at once, in three lists
+    await item(page, "Cloud Platform team").click();
+    await page.locator("#lists-team-email").fill("cloud-platform-at-company");
+    await page.locator("#lists-team-slackUrl").fill("cloud-platform");
+    await tab(page, "Categories").click();
+    await item(page, "Network").click();
+    await fillUnlimited(page, '[data-field="description"]', "Everything about networks. ".repeat(10));
+    await tab(page, "Tools").click();
+    await page.locator(".cat-item", { has: page.getByText("GitHub", { exact: true }) }).click();
+    await page.locator('.cat-detail [data-field="url"]').fill("github");
+    await item(page, "ServiceNow").click();
+    await page.locator('.cat-detail [data-field="name"]').fill("");
+
+    const team = "the team “Cloud Platform team”";
+    const wanted: [string, string, string, (f: Awaited<ReturnType<typeof focused>>) => boolean][] = [
+      [`The group email of ${team} is not an email address: write one, like team@company.com.`, "Teams", "Cloud Platform team", (f) => f.id === "lists-team-email"],
+      [`The link to the Slack channel of ${team} is not a whole link: write it with https:// at the start.`, "Teams", "Cloud Platform team", (f) => f.id === "lists-team-slackUrl"],
+      ["Shorten the description of the category “Network” to at most 200 characters.", "Categories", "Network", (f) => f.field === "description"],
+      ["The link of the tool “GitHub” is not a whole link: write it with https:// at the start.", "Tools", "GitHub", (f) => f.field === "url"],
+      ["Give the tool with the id “servicenow” a name.", "Tools", "Unnamed", (f) => f.field === "name"],
+    ];
+    await expect(panel.locator("h2#cat-issues-head")).toContainText("5 to fix");
+    await expect(panel.locator("h2#cat-issues-head")).toContainText("The lists can be saved once these are fixed. Press one to go to it.");
+    const list = panel.getByRole("list", { name: "What is to fix in the lists" });
+    await expect(list.locator("li.error")).toHaveCount(5);
+    const said = (await list.locator("li").allTextContents()).map((t) => t.trim());
+    expect([...said].sort()).toEqual(wanted.map(([s]) => s).sort());
+    // in words: never a path or a position in a list
+    for (const s of said) expect(s).not.toMatch(/\/(teams|tools|categories|contacts)\/|\[\d+\]|\/\d+\//);
+    // nothing can be saved meanwhile
+    await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Save changes" })).toHaveAttribute("title", "Fix the problems first");
+
+    // each one leads to its list, its entry and its field, which says the same
+    await tab(page, "Languages").click();
+    for (const [sentence, listName, entry, isField] of wanted) {
+      await list.locator("li", { hasText: sentence }).getByRole("button", { name: sentence }).click();
+      await expect(tab(page, listName)).toHaveAttribute("aria-selected", "true");
+      await expect(page.locator(".cat-detail h2")).toHaveText(entry);
+      await expect.poll(async () => isField(await focused(page)), { message: `the field of “${sentence}” is focused` }).toBe(true);
+      expect(await focused(page)).toMatchObject({ invalid: "true", says: sentence });
+      await expect(page.locator(".cat-detail [data-problem]", { has: page.locator(":focus") })).toHaveAttribute("data-problem", sentence);
+    }
+    await expect(list.locator("li button").first()).toHaveAttribute("title", "Go to it");
+
+    // fixing one lowers the count
+    await list.getByRole("button", { name: wanted[0][0] }).click();
+    await expect.poll(async () => (await focused(page)).id).toBe("lists-team-email");
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.type("cloud-platform@company.com");
+    await expect(panel.locator("h2#cat-issues-head")).toContainText("4 to fix");
+    await expect(list.locator("li")).toHaveCount(4);
+    await expect(page.locator("#lists-team-email")).not.toHaveAttribute("aria-invalid", "true");
+
+    // Discard: nothing left to fix
+    await page.getByRole("button", { name: "Discard" }).click();
+    await expect(panel).toHaveCount(0);
+    expect((await readCatalog(page)).tools.find((t: { id: string }) => t.id === "servicenow").name).toBe("ServiceNow");
+  });
+}
+
+test("a save the server refuses reads as the same sentences; a reader of Teams & tools sees no problems", async ({ page }) => {
+  await signIn(page, DANA);
+  await open(page, "/admin/lists");
+  await item(page, "DNS team").click();
+  await page.locator(".cat-detail").getByLabel("What they do").fill("Changed for a test that is refused.");
+  // the lists as the app sends them, broken on the way: only the server finds it. The server
+  // checks the format first (the group email), then its own rules (two tools with one id).
+  let breakIt: (lists: Record<string, any>) => void = () => {};
+  await page.route("**/api/catalog?*", async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    const lists = route.request().postDataJSON();
+    breakIt(lists);
+    return route.continue({ postData: JSON.stringify(lists) });
+  });
+  const toast = page.locator(".toast", { hasText: "The lists could not be saved." });
+  for (const [broken, sentence] of [
+    [(l: Record<string, any>) => { l.teams = l.teams.map((t: { id: string; contacts?: object }) => (t.id === "dns-team" ? { ...t, contacts: { ...t.contacts, email: "not an address" } } : t)); },
+      "The group email of the team “DNS team” is not an email address: write one, like team@company.com."],
+    [(l: Record<string, any>) => { l.tools = [...l.tools, { id: "terraform", name: "Terraform Cloud" }]; },
+      "Two tools have the id “terraform” (“Terraform” and “Terraform Cloud”): remove one of them."],
+  ] as const) {
+    breakIt = broken;
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(toast).toBeVisible();
+    await expect(toast).toContainText(sentence);
+    const said = (await toast.textContent()) ?? "";
+    for (const raw of ["tools[", "/tools/", "/teams/", "pattern", "does not match"]) expect(said).not.toContain(raw);
+    await toast.getByRole("button", { name: "Close this message" }).click();
+    await expect(toast).toHaveCount(0);
+  }
+  await page.unroute("**/api/catalog?*");
+  await page.getByRole("button", { name: "Discard" }).click();
+  expect((await readCatalog(page)).teams.find((t: { id: string }) => t.id === "dns-team").description ?? "").not.toContain("refused");
+
+  // the server refuses broken lists sent straight to it as well (in its own terms: the app words them)
+  const lists = await readCatalog(page);
+  const version = Number((await page.request.get("/api/catalog")).headers()["x-document-version"]);
+  const broken = { ...lists, teams: lists.teams.map((t: { id: string; contacts?: object }) => (t.id === "dns-team" ? { ...t, contacts: { ...t.contacts, email: "not an address" } } : t)) };
+  const refused = await page.request.put(`/api/catalog?base=${version}`, { data: broken, headers: CSRF });
+  expect(refused.status()).toBe(400);
+
+  // Teams & tools changes nothing, so it shows no problems, even of lists stored broken
+  await signIn(page, SAM);
+  await page.route("**/api/catalog", async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    body.teams = body.teams.map((t: { id: string }) => (t.id === "dns-team" ? { ...t, name: "", contacts: { email: "not an address" } } : t));
+    await route.fulfill({ response: res, json: body });
+  });
+  await open(page, "/catalog");
+  await expect(page.getByRole("heading", { name: /Teams, tools/ })).toBeVisible();
+  await expect(item(page, "Cloud Platform team")).toBeVisible();
+  await expect(page.locator(".cat-issues, .issues-panel")).toHaveCount(0);
+});
+
+test("the problems of the lists on a phone in dark: no sideways scroll, readable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page, ALEX);
+  await page.addInitScript(() => { try { localStorage.setItem("pm:theme", "dark"); } catch { /* ignore */ } });
+  await open(page, "/admin/lists");
+  await item(page, "Cloud Platform team").click();
+  await page.locator("#lists-team-slackUrl").fill("a channel without a link");
+  await page.locator(".cat-detail").getByLabel("Name", { exact: true }).fill("");
+  const panel = page.locator("section.cat-issues");
+  await expect(panel.locator("h2")).toContainText("2 to fix");
+  await expect(panel.locator("li")).toHaveText([
+    "Give the team with the id “cloud-platform-team” a name.",
+    "The link to the Slack channel of the team with the id “cloud-platform-team” is not a whole link: remove the spaces and write it with https:// at the start.",
+  ]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  for (const box of await panel.locator("li button").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON())))
+    expect(box.right).toBeLessThanOrEqual(390);
+  // light words on a dark panel
+  const [ink, ground] = await panel.locator("li button .issue-words").first().evaluate((e) => {
+    const lum = (c: string) => { const [r, g, b] = (c.match(/[\d.]+/g) ?? []).map(Number); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    let bg = "rgba(0, 0, 0, 0)", el: Element | null = e;
+    while (el && /rgba\(\d+, \d+, \d+, 0\)|transparent/.test(bg)) { bg = getComputedStyle(el).backgroundColor; el = el.parentElement; }
+    return [lum(getComputedStyle(e).color), lum(bg)];
+  });
+  expect(ink - ground, "the words are lighter than the panel").toBeGreaterThan(90);
+  // pressing one brings its field into view on the narrow screen
+  await panel.getByRole("button", { name: /a name\.$/ }).click();
+  await expect(page.locator('.cat-detail [data-field="name"]')).toBeFocused();
+  await expect(page.locator('.cat-detail [data-field="name"]')).toBeInViewport();
+  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(panel).toHaveCount(0);
+});
