@@ -162,10 +162,12 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
   const uses = current ? usesOf(key, current.id, docs) : [];
   // people who are still members: the server refuses to remove an entry that roles point to
   const stillMembers = current && GROUP_OF[key] && members ? membersOf(members, GROUP_OF[key]!, current.id).length + membersOf(members, GROUP_OF[key]!, current.id, "member").length : 0;
+  // two entries with the same id: removing one leaves everything that uses the id with the other
+  const twin = !!current && rows.filter((r) => r.id === current.id).length > 1;
   const isNew = (id: string) => !((catalog[key] ?? []) as Row[]).some((r) => r.id === id);
 
   const setRows = (next: Row[]) => setDraft({ ...draft, [key]: next });
-  const upd = (patch: Partial<Row>) => current && setRows(rows.map((r) => (r.id === current.id ? { ...r, ...patch } : r)));
+  const upd = (patch: Partial<Row>) => current && setRows(rows.map((r) => (r === current ? { ...r, ...patch } : r)));
   const move = (dir: -1 | 1) => {
     if (!current) return;
     const i = rows.findIndex((r) => r.id === current.id), j = i + dir;
@@ -186,8 +188,9 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
   const latest = useRef(draft);
   latest.current = draft;
   const remove = (entry: Row) => {
-    const list = key, at = rows.findIndex((r) => r.id === entry.id);
-    const next = rows.filter((r) => r.id !== entry.id);
+    // only this entry: another one with the same id (lists imported with a mistake) stays
+    const list = key, at = rows.includes(entry) ? rows.indexOf(entry) : rows.findIndex((r) => r.id === entry.id);
+    const next = rows.filter((_, i) => i !== at);
     setRows(next);
     setSelected(next[Math.min(at, next.length - 1)]?.id ?? null);
     notify.info(`${entry.name || `The ${KINDS[list].noun}`} removed`, {
@@ -288,7 +291,7 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
               const n = used.length;
               const rank = rows.findIndex((x) => x.id === r.id);
               return (
-                <li key={r.id}>
+                <li key={`${r.id}/${rank}`}>
                   <button className={`cat-item ${current?.id === r.id ? "on" : ""}`} onClick={() => { setSelected(r.id); setAdding(false); }}>
                     <EntryIcon icon={WITH_ICON.includes(key) ? r.icon : undefined} size={32}
                       fallback={<span className="cat-avatar">{ORDERED.includes(key) ? rank + (key === "tiers" ? 0 : 1) : r.name.slice(0, 1).toUpperCase()}</span>} />
@@ -403,10 +406,10 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
 
               {editor && (
                 <div className="cat-danger">
-                  <button className="btn danger" disabled={uses.length > 0 || stillMembers > 0} onClick={() => remove(current)}>
+                  <button className="btn danger" disabled={!twin && (uses.length > 0 || stillMembers > 0)} onClick={() => remove(current)}>
                     <Trash2 size={15} />Remove this {kind.noun}
                   </button>
-                  <span className="muted small">{removeHint(countOf(uses), stillMembers, kind.noun)}</span>
+                  <span className="muted small">{twin ? `Another ${kind.noun} has the same id: what uses it keeps the other one.` : removeHint(countOf(uses), stillMembers, kind.noun)}</span>
                 </div>
               )}
             </>
