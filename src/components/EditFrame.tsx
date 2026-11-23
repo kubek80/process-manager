@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
-  ArrowLeft, BookOpen, ChevronDown, Lightbulb, ChevronRight, CircleAlert, CircleCheck, Crosshair, Flag, GripVertical, Info, Link2, ListChecks, ListTree, MoreHorizontal,
+  ArrowLeft, BookOpen, ChevronDown, ChevronUp, Lightbulb, ChevronRight, CircleAlert, CircleCheck, Crosshair, Flag, GripVertical, Info, Link2, ListChecks, ListTree, MoreHorizontal,
   PanelLeftClose, PanelLeftOpen, PanelRight, Plus, Redo2, Send, ShieldCheck, Trash2, TriangleAlert, Undo2, Users, Workflow, X, type LucideIcon,
 } from "lucide-react";
 import type { Feedback, Issue } from "../types";
@@ -10,6 +10,7 @@ import { draftAudience } from "../lib/rights";
 import { useMedia } from "../lib/media";
 import { TOUCH } from "../lib/zoom";
 import { focusWhenShown, useFieldMarks } from "../lib/fieldMarks";
+import { factsOf, fieldKey, focusSameField, STEP_KEYS, stepKey } from "../lib/stepping";
 import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
 import type { Notice } from "./EditSession";
 import { FeedbackItem, type FeedbackTarget } from "./Feedback";
@@ -90,6 +91,31 @@ export function focusSelectedInOutline(name?: string) {
   requestAnimationFrame(attempt);
 }
 
+/**
+ * Going to the item before or after the selected one (a step, a requirement) from the head of its
+ * fields: `go` is missing at an end. `to` is the selection it leads to ("steps/<id>").
+ */
+export interface StepWay { label: string; to?: string; go?: () => void }
+export interface Stepper { noun: "step" | "requirement"; prev: StepWay; next: StepWay }
+const Stepping = createContext<{ stepper?: Stepper; step: (dir: -1 | 1) => void }>({ step: () => {} });
+
+/** The two arrows beside "Step 3 of 10": quiet, named by where they lead, unavailable (still shown) at the ends. */
+function StepArrows() {
+  const { stepper, step } = useContext(Stepping);
+  if (!stepper) return null;
+  const arrow = (dir: -1 | 1) => {
+    const way = dir < 0 ? stepper.prev : stepper.next;
+    const off = !way.go;
+    return (
+      <button className={`icon-btn step-arrow ${off ? "off" : ""}`} aria-label={way.label} aria-disabled={off || undefined}
+        title={`${way.label}${off ? "" : ` (${dir < 0 ? STEP_KEYS.prev : STEP_KEYS.next})`}`} onClick={() => step(dir)}>
+        {dir < 0 ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
+    );
+  };
+  return <span className="step-arrows" role="group" aria-label={stepper.noun === "step" ? "Go through the steps" : "Go through the requirements"}>{arrow(-1)}{arrow(1)}</span>;
+}
+
 /** The heading of the fields panel: what is selected, and what can be done with it as a whole. */
 export function FieldsHead({ icon, kicker, title, tools }: { icon?: ReactNode; kicker?: ReactNode; title: string; tools?: ReactNode }) {
   return (
@@ -100,6 +126,7 @@ export function FieldsHead({ icon, kicker, title, tools }: { icon?: ReactNode; k
           {kicker && <span className="step-kicker">{kicker}</span>}
           <h2>{title}</h2>
         </div>
+        <StepArrows />
       </div>
       {tools && <div className="fields-tools">{tools}</div>}
     </header>
@@ -388,6 +415,7 @@ export function Outline({ entries, selected, onSelect, issues, feedback, onAdd, 
         })}
       </ul>
       {items.length > 1 && !touch && <p className="outline-tip">Drag <GripVertical size={12} aria-hidden="true" /> to move, or Alt + ↑ ↓</p>}
+      {items.length > 1 && !touch && <p className="outline-tip">Alt + Page Up / Down: the one before or after</p>}
     </nav>
   );
 }
@@ -511,7 +539,7 @@ function Checker({ issues, place, onPick, reason, onReason, kind, fixBefore }: {
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="checker" ref={box}>
-      <button className={`eb-status ${sum.level}`} aria-expanded={open} aria-haspopup="dialog" disabled={!issues.length && !reason} onClick={() => (open ? close() : setOpen(true))}
+      <button className={`eb-status ${sum.level}`} aria-expanded={open} aria-haspopup="dialog" aria-controls={open ? "edit-checker" : undefined} disabled={!issues.length && !reason} onClick={() => (open ? close() : setOpen(true))}
         title={issues.length ? "Show what is to fix" : "Nothing to fix"}>
         {sum.level === "bad" ? <CircleAlert size={15} /> : sum.level === "warn" ? <TriangleAlert size={15} /> : sum.level === "hint" ? <Lightbulb size={15} /> : <CircleCheck size={15} />}{sum.text}
       </button>
@@ -537,7 +565,7 @@ function CheckerPop({ issues, place, reason, onClose, onPick, kind, fixBefore }:
     </li>
   );
   return (
-    <div ref={ref} className="checker-pop" role="dialog" aria-label="What is to fix" tabIndex={-1}>
+    <div ref={ref} id="edit-checker" className="checker-pop" role="dialog" aria-label="What is to fix" tabIndex={-1}>
       {reason && <p className={`checker-reason ${reason.tone}`} role="alert"><CircleAlert size={16} /><span>{reason.text}</span></p>}
       {fix.length > 0 && <>
         {/* a draft is always saved: what is to fix stops publishing (only bringing back a document
@@ -560,7 +588,7 @@ function CheckerPop({ issues, place, reason, onClose, onPick, kind, fixBefore }:
  */
 export interface BarAction { label: string; run: () => void; blocked?: string; unavailable?: string; busy?: boolean }
 
-export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo, onBack, discard, save, publish, more, unsaved, saveLine, banners, outline, middle, fields, fieldsLabel, selection, panel, setPanel, json, notice, onNotice, fieldIssues, fixBefore }: {
+export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo, onBack, discard, save, publish, more, unsaved, saveLine, banners, outline, middle, fields, fieldsLabel, selection, panel, setPanel, json, notice, onNotice, fieldIssues, fixBefore, stepper }: {
   kind: "process" | "standard"; title: string; state: EditState;
   issues: Issue[]; place: (i: Issue) => string; onPickIssue: (i: Issue) => void;
   undo: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void; undoTitle?: string; redoTitle?: string };
@@ -589,6 +617,8 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
   fixBefore?: (i: Issue) => "saving" | "publishing";
   /** The problems of what the fields panel shows: each marks its own field. */
   fieldIssues?: Issue[];
+  /** The item before and after the selected one, for the arrows in the head of the fields and Alt + Page Up / Down. */
+  stepper?: Stepper;
 }) {
   const off = (unavailable: boolean) => (unavailable ? { "aria-disabled": true, className: "eb-icon off" } : { className: "eb-icon" });
   const noun = kind === "process" ? "process" : "standard";
@@ -605,6 +635,11 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
     setRail(next);
     try { localStorage.setItem(outlineKey(email), next ? "rail" : "open"); } catch { /* not remembered */ }
   };
+  // a laptop (1100-1279 px): the outline is always the narrow rail; its button opens the whole
+  // outline over the fields for a moment (choosing in it closes it again)
+  const laptop = useMedia(LAPTOP);
+  const railShown = laptop ? panel !== "outline" : rail;
+  const widen = () => (laptop ? setPanel("outline") : chooseRail(false));
   const items: MenuItem[] = phone
     ? [
         { label: "Undo", icon: <Undo2 size={16} />, run: undo.undo, blocked: undo.canUndo ? undefined : "Nothing to undo." },
@@ -616,6 +651,45 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
   // a new selection shows its fields from the top
   const fieldsBox = useRef<HTMLElement>(null);
   useEffect(() => { fieldsBox.current?.scrollTo({ top: 0 }); }, [selection]);
+  // stepping to the item before or after: the keyboard stays in the same field (see src/lib/stepping.ts)
+  const pending = useRef<{ to: string; key: string | null; outline: boolean } | null>(null);
+  const step = (dir: -1 | 1) => {
+    const way = dir < 0 ? stepper?.prev : stepper?.next;
+    if (!way?.go || !way.to) return;
+    const a = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const inFields = !!a?.closest(".edit-fields");
+    // pressed again before the keyboard was back in its field: the field of the first press counts
+    const before = pending.current;
+    pending.current = inFields && a ? { to: way.to, key: fieldKey(factsOf(a)), outline: false }
+      : before ? { ...before, to: way.to } : { to: way.to, key: null, outline: !!a?.closest(".edit-outline") };
+    // leaving the field first does what leaving it always does (a new step takes its address from its name)
+    if (inFields) a?.blur();
+    // at once (not a frame later): a second press right after goes on from the item now selected
+    way.go();
+  };
+  // the shortcut works wherever the keyboard is on the screen, also while it is between two items
+  const latestStep = useRef(step);
+  latestStep.current = step;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const dir = stepKey(e);
+      if (!dir || e.defaultPrevented || document.querySelector("[role=dialog][aria-modal=true]")) return;
+      e.preventDefault();
+      latestStep.current(dir);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+  useEffect(() => {
+    const p = pending.current;
+    if (!p || selection !== p.to) return;
+    pending.current = null;
+    if (p.outline) { focusSelectedInOutline(); return; }
+    if (p.key === null) return;
+    requestAnimationFrame(() => { const box = document.querySelector(".edit-fields-body"); if (box) focusSameField(box, p.key); });
+  }, [selection]);
+  // where the fields column is: the editing screen's messages and the checker's list open over it
+  useColumnPlace(fieldsBox, !!json);
   // the field the checker's list led to stays outlined until its problem is gone
   useFieldMarks(fieldIssues, {
     box: () => document.querySelector<HTMLElement>(".edit-fields"),
@@ -638,7 +712,7 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
     });
   };
   return (
-    <div className={`edit-screen panel-${panel ?? "none"} ${json ? "json" : ""} ${rail ? "outline-rail" : ""}`}>
+    <div className={`edit-screen panel-${panel ?? "none"} ${json ? "json" : ""} ${railShown ? "outline-rail" : ""}`}>
       <header className={`edit-bar state-${state.key}`}>
         <button className="eb-btn eb-back" aria-label="Back to reading" onClick={onBack} title={`Back to reading this ${noun}`}><ArrowLeft size={16} /><span className="eb-label eb-long">Back to reading</span><span className="eb-label eb-short" aria-hidden="true">Back</span></button>
         <div className="eb-title">
@@ -679,12 +753,12 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
         <aside id="edit-outline" className="edit-outline" aria-label="Outline">
           <div className="panel-close"><b>Outline</b><button className="icon-btn" onClick={() => setPanel(null)} aria-label="Close the outline"><X size={18} /></button></div>
           <div className="outline-head">
-            <button className="icon-btn outline-toggle" onClick={() => chooseRail(!rail)} aria-expanded={!rail} aria-controls="edit-outline"
-              aria-label={rail ? "Show the outline with names" : "Narrow the outline"} title={rail ? "Show the outline with names" : "Narrow the outline to give the map more room"}>
-              {rail ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+            <button className="icon-btn outline-toggle" onClick={() => (railShown ? widen() : laptop ? setPanel(null) : chooseRail(true))} aria-expanded={!railShown} aria-controls="edit-outline"
+              aria-label={railShown ? "Show the outline with names" : "Narrow the outline"} title={railShown ? "Show the outline with names" : "Narrow the outline to give the map more room"}>
+              {railShown ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
             </button>
           </div>
-          <Rail.Provider value={{ rail, open: () => chooseRail(false) }}>{outline}</Rail.Provider>
+          <Rail.Provider value={{ rail: railShown, open: widen }}>{outline}</Rail.Provider>
         </aside>
         <aside ref={fieldsBox} className={`edit-fields ${selection?.includes("/") ? "on-item" : ""}`} aria-label={`Fields: ${fieldsLabel}`} onKeyDown={(e) => {
           // Escape in the fields goes back to the selected item in the outline
@@ -696,7 +770,7 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
           requestAnimationFrame(() => item.focus());
         }}>
           <div className="panel-close"><button className="btn small ghost" onClick={() => setPanel(null)}><ArrowLeft size={16} />{kind === "process" ? "Back to the map" : "Back to the requirements"}</button></div>
-          <KindOf.Provider value={kind}>{fields}</KindOf.Provider>
+          <KindOf.Provider value={kind}><Stepping.Provider value={{ stepper, step }}>{fields}</Stepping.Provider></KindOf.Provider>
         </aside>
         {/* after the fields: what they change, as readers will see it ("Skip to the page" leads here) */}
         <main className="edit-middle" aria-label="What readers will see">{middle}</main>
@@ -707,6 +781,51 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
 }
 
 export type Panel = "outline" | "fields" | null;
+
+/** A laptop: the outline is the narrow rail, and opens over the fields on demand. */
+const LAPTOP = "(min-width: 1100px) and (max-width: 1279px)";
+
+/**
+ * Tells the page where the fields column is (`--edit-fields-left`, `--edit-fields-width`) and
+ * where the editing bar ends (`--edit-bar-bottom`): the editing screen's messages and the
+ * checker's list are placed over the fields with them (edit.css). Gone when the screen is left,
+ * or while the fields are not shown (the JSON view), so messages elsewhere keep their place. A
+ * message that comes over the field being typed in scrolls the fields so that it stays in view.
+ */
+function useColumnPlace(fieldsBox: React.RefObject<HTMLElement | null>, off: boolean) {
+  useEffect(() => {
+    const root = document.documentElement;
+    const names = ["--edit-fields-left", "--edit-fields-width", "--edit-bar-bottom", "--edit-messages"];
+    const clear = () => names.forEach((n) => root.style.removeProperty(n));
+    const box = fieldsBox.current;
+    if (off || !box || typeof ResizeObserver === "undefined") { clear(); return; }
+    const place = () => {
+      const r = box.getBoundingClientRect();
+      if (!r.width) { clear(); return; }
+      root.style.setProperty("--edit-fields-left", `${Math.round(r.left)}px`);
+      root.style.setProperty("--edit-fields-width", `${Math.round(r.width)}px`);
+      root.style.setProperty("--edit-bar-bottom", `${Math.round(document.querySelector(".edit-bar")?.getBoundingClientRect().bottom ?? 0)}px`);
+    };
+    // a new message: the field being typed in stays above it
+    const messages = () => {
+      const toasts = document.querySelector<HTMLElement>(".toasts");
+      const t = toasts?.getBoundingClientRect();
+      root.style.setProperty("--edit-messages", `${Math.ceil(t?.height ?? 0)}px`);
+      const a = document.activeElement;
+      if (!t || !t.height || !(a instanceof HTMLElement) || !box.contains(a)) return;
+      const over = a.getBoundingClientRect().bottom + 12 - t.top;
+      if (over > 0) box.scrollBy({ top: over });
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    for (const el of [box, document.querySelector(".edit-outline"), document.querySelector(".edit-bar"), document.querySelector(".edit-body")]) if (el) ro.observe(el);
+    const toasts = document.querySelector(".toasts");
+    const watch = new ResizeObserver(messages);
+    if (toasts) watch.observe(toasts);
+    window.addEventListener("resize", place);
+    return () => { ro.disconnect(); watch.disconnect(); window.removeEventListener("resize", place); clear(); };
+  }, [fieldsBox, off]);
+}
 
 /** Whether the screen is as narrow as a phone (the stylesheet's breakpoint for the editing screen). */
 function useNarrow() {

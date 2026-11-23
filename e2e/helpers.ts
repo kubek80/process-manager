@@ -129,7 +129,7 @@ export async function outline(page: Page, name: string | RegExp) {
   await nav.getByRole("button", { name: typeof name === "string" ? new RegExp(`^${esc(name)}(\\s|,|$)`) : name }).click();
 }
 
-/** The fields panel on the right of the editing screen. */
+/** The fields panel of the editing screen, next to the outline. */
 export const fields = (page: Page) => page.locator(".edit-fields");
 
 /** "Save draft" and wait until it is saved (the state on the editing bar no longer says "Not saved yet"). */

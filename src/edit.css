@@ -20,6 +20,7 @@
 .edit-screen > .edit-body { flex: 1 1 0; }
 /* the JSON of the whole document takes the whole width */
 .edit-screen.json .edit-body { grid-template-columns: minmax(0, 1fr); }
+.edit-screen.json .edit-body > .edit-middle { grid-column: auto; }
 .edit-screen.json .edit-outline, .edit-screen.json .edit-fields, .edit-screen.json .panel-strip { display: none; }
 /* "Back to the editor" at the right end, away from "Back to reading" in the bar; the editor takes the height */
 .json-head { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -113,7 +114,8 @@
 /* a laptop: the map gets the room the side columns can spare */
 @media (max-width: 1500px) { .edit-body { grid-template-columns: 232px 372px minmax(0, 1fr); } }
 .edit-outline, .edit-middle, .edit-fields { min-height: 0; overflow: auto; overscroll-behavior: contain; }
-.edit-outline { border-right: 1px solid var(--line); background: var(--surface); padding: 12px 8px 24px; }
+/* the outline reads as the way around: the quieter page ground; the fields are the white sheet one works on */
+.edit-outline { border-right: 1px solid var(--line); background: var(--bg); padding: 12px 8px 24px; }
 .edit-middle { padding: 12px 16px 16px; }
 .edit-fields { border-right: 1px solid var(--line); background: var(--surface); }
 /* a step or requirement is selected: the edge towards the map (or the requirements) takes the
@@ -131,8 +133,9 @@
 .depth-1 .outline-item { padding: 5px 8px 5px 10px; margin-left: 12px; font-weight: 500; font-size: 13px; color: var(--text-2); border-left: 3px solid var(--lane, var(--line)); border-radius: 0 8px 8px 0; }
 /* a level is a fact, never a problem: strong ink for must, lighter for should and may (as the level bars) */
 .outline-row.lvl-must { --lane: var(--text); } .outline-row.lvl-should { --lane: var(--text-3); } .outline-row.lvl-may { --lane: var(--line-strong); }
-.outline-item:hover { background: var(--surface-2); }
-.outline-row.on > .outline-item { background: var(--accent-soft); color: var(--accent); }
+.outline-item:hover { background: color-mix(in srgb, var(--surface) 70%, var(--bg)); }
+/* the selected row is a piece of the white sheet beside it: white, reaching the outline's edge */
+.outline-row.on > .outline-item { background: var(--surface); color: var(--accent); margin-right: -8px; border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .depth-1.on > .outline-item { color: var(--text); font-weight: 600; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent); }
 /* names wrap to two lines rather than being cut short; the whole name is in the tooltip */
 .outline-label { flex: 1; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; line-height: 1.3; }
@@ -176,12 +179,13 @@
 .outline-toggle { width: 30px; height: 30px; color: var(--text-3); }
 .outline-toggle:hover { color: var(--text); }
 .outline-sec-icon, .outline-short { display: none; }
-@media (min-width: 1280px) {
-  .edit-screen.outline-rail .edit-body { grid-template-columns: 64px 400px minmax(0, 1fr); }
+@media (min-width: 1280px) { .edit-screen.outline-rail .edit-body { grid-template-columns: 64px 400px minmax(0, 1fr); } }
+@media (min-width: 1100px) {
   .outline-rail .edit-outline { padding: 8px 6px 24px; overflow-x: hidden; }
+  .outline-rail .outline-row.on > .outline-item { margin-right: -6px; }
   .outline-rail .outline-head { justify-content: center; margin: 0 0 6px; }
   .outline-rail .outline-label, .outline-rail .outline-count, .outline-rail .outline-tip, .outline-rail .outline-grip,
-  .outline-rail .outline-flag, .outline-rail .outline-n, .outline-rail .outline-add-text, .outline-rail .outline-add-help { display: none; }
+  .outline-rail .outline-n, .outline-rail .outline-add-text, .outline-rail .outline-add-help { display: none; }
   .outline-rail .outline-item { position: relative; flex-direction: column; justify-content: center; gap: 1px; min-height: 40px; padding: 5px 2px; }
   .outline-rail .depth-1 .outline-item { margin-left: 0; padding: 4px 2px; }
   .outline-rail .outline-row.depth-0 { margin-top: 8px; }
@@ -189,12 +193,24 @@
   .outline-rail .outline-sec-icon { display: grid; place-items: center; color: var(--text-2); }
   .outline-rail .outline-row.on .outline-sec-icon { color: var(--accent); }
   .outline-rail .outline-short { display: block; font-size: 11px; font-weight: 650; line-height: 1.2; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  /* open feedback: the flag alone, in the corner opposite the problems */
+  .outline-rail .outline-flag { position: absolute; top: 2px; left: 2px; font-size: 0; gap: 0; }
   .outline-rail .outline-mark { position: absolute; top: 1px; right: 1px; min-width: 15px; height: 15px; padding: 0 3px; font-size: 9.5px; }
   .outline-rail .outline-add-line { flex: 1 0 100%; justify-content: center; width: 100%; margin: 4px 0 0; padding: 6px 0; }
 }
 @media (min-width: 1280px) and (max-width: 1500px) { .edit-screen.outline-rail .edit-body { grid-template-columns: 64px 372px minmax(0, 1fr); } }
-/* below 1280 the outline slides over, with names: no rail and no button for it */
-@media (max-width: 1279px) { .outline-head { display: none; } }
+/* a laptop (1100-1279): always the rail; its button opens the whole outline over the fields for a
+   moment, and choosing in it closes it again. Nothing covers the fields otherwise. */
+@media (min-width: 1100px) and (max-width: 1279px) {
+  .edit-screen .edit-body { grid-template-columns: 64px 380px minmax(0, 1fr); }
+  .edit-body > .edit-fields { grid-column: 2; }
+  .edit-body > .edit-middle { grid-column: 3; }
+  .panel-outline .edit-outline { position: absolute; z-index: 20; top: 0; bottom: 0; left: 0; width: 300px; box-shadow: var(--shadow-3); }
+  .panel-outline .outline-head { display: none; }
+  .panel-outline .edit-outline .panel-close { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px 10px; }
+}
+/* below 1100 the outline slides over, with names: no rail and no button for it */
+@media (max-width: 1099px) { .outline-head { display: none; } }
 
 /* what readers will see, always editable: the column after the fields */
 /* never wider than its column: a long line inside wraps or is cut, the column never scrolls sideways;
@@ -281,11 +297,21 @@
 .start-last b { color: var(--text-2); }
 
 /* the fields of what is selected */
-.edit-fields-body { padding: 16px 18px 48px; }
+/* room at the end for a message over the fields, so the last field can be scrolled above it */
+.edit-fields-body { padding: 16px 18px calc(48px + var(--edit-messages, 0px)); }
 .fields-section-title { font-size: 19px; letter-spacing: -.01em; margin-bottom: 4px; }
 .fields-head { display: grid; gap: 10px; padding-bottom: 12px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
 .fields-title { display: flex; gap: 12px; align-items: flex-start; }
 .fields-title h2 { font-size: 19px; line-height: 1.25; letter-spacing: -.01em; margin-top: 2px; overflow-wrap: anywhere; }
+/* the arrows beside "Step 3 of 10": quiet, unavailable (not gone) at the ends */
+.fields-title { position: relative; }
+/* in the corner, beside the small line only: the name below keeps the whole width */
+.step-arrows { position: absolute; top: -4px; right: -6px; display: inline-flex; gap: 2px; }
+.fields-title > div { min-width: 0; }
+.fields-title:has(.step-arrows) .step-kicker { min-height: 20px; padding-right: 54px; }
+.step-arrow { width: 28px; height: 24px; border-radius: 6px; color: var(--text-3); }
+.step-arrow:hover:not(.off) { color: var(--text); background: var(--surface-2); }
+.step-arrow.off { opacity: .35; cursor: default; }
 .fields-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .edit-fields-inner { display: grid; grid-template-columns: minmax(0, 1fr); }
 .edit-section { padding: 16px 0 4px; }
@@ -401,10 +427,14 @@
 .publish-changes { margin: 4px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13.5px; max-height: 40vh; overflow: auto; overflow-wrap: anywhere; }
 .publish-sentence { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); }
 
-/* a laptop: the outline slides over, from the left, over the fields: choosing in it closes it and
-   the fields of what was chosen are right there */
 @media (max-width: 1279px) {
-  .edit-body { grid-template-columns: 380px minmax(0, 1fr); }
+  .panel-scrim { display: block; position: absolute; inset: 0; z-index: 15; background: rgba(10, 12, 20, .3); }
+  .panel-fields .panel-scrim { display: none; }
+  .eb-title h1 { max-width: 24vw; }
+}
+/* a narrow laptop or tablet: the outline slides over, from the left, over the fields: choosing in
+   it closes it and the fields of what was chosen are right there */
+@media (max-width: 1099px) {
   /* a closed panel is out of sight and out of the way of Tab and screen readers */
   .edit-outline { position: absolute; z-index: 20; top: 0; bottom: 0; left: 0; width: 300px; transform: translateX(-105%); visibility: hidden; transition: transform .18s ease-out, visibility 0s .18s; box-shadow: var(--shadow-3); }
   .panel-outline .edit-outline { transform: none; visibility: visible; transition-delay: 0s; }
@@ -412,9 +442,6 @@
   .panel-strip .fields-toggle { display: none; }
   .panel-close { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px 10px; }
   .edit-fields .panel-close { display: none; }
-  .panel-scrim { display: block; position: absolute; inset: 0; z-index: 15; background: rgba(10, 12, 20, .3); }
-  .panel-fields .panel-scrim { display: none; }
-  .eb-title h1 { max-width: 24vw; }
 }
 /* a narrow laptop or tablet: fewer words on the bar */
 .eb-short { display: none; }
@@ -429,8 +456,8 @@
   .edit-bar { flex-wrap: wrap; }
   /* when the actions wrap, More starts the second row at the left edge: its menu opens to the right */
   .more-menu .menu-pop { right: auto; left: 0; }
-  .edit-body { grid-template-columns: 340px minmax(0, 1fr); }
 }
+@media (max-width: 1099px) { .edit-body { grid-template-columns: 340px minmax(0, 1fr); } }
 /* a phone: the fields slide over too, the bar takes two rows */
 @media (max-width: 767px) {
   .eb-label { display: none !important; }
@@ -533,3 +560,13 @@ body:has(.edit-screen) .toast p span { white-space: pre-line; }
   .preview-before-line { flex-wrap: wrap; white-space: normal; row-gap: 0; }
   .preview-before-show { margin-left: 0; }
 }
+/* the editing screen's messages and the checker's list sit over the fields column (where one
+   works), never on the map; EditFrame tells where the column is. Not on a phone (see above) and
+   not in the JSON view, where the fields are not shown. */
+@media (min-width: 761px) {
+  body:has(.edit-screen:not(.json)) .toasts { left: calc(var(--edit-fields-left) + 8px); right: auto; width: calc(var(--edit-fields-width) - 16px); }
+  .edit-screen:not(.json) .checker-pop { position: fixed; top: calc(var(--edit-bar-bottom) + 6px); left: calc(var(--edit-fields-left) + 8px); right: auto;
+    width: max(calc(var(--edit-fields-width) - 16px), 360px); max-height: calc(100dvh - var(--edit-bar-bottom) - 24px); }
+}
+/* the checker's button while its list is open: pressed */
+.eb-status[aria-expanded="true"] { box-shadow: inset 0 0 0 1.5px currentColor; }

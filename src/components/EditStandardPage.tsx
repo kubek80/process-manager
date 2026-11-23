@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ListChecks, ListPlus, PenLine, Plus, ScrollText } from "lucide-react";
 import type { DocMeta, Feedback, Process, Standard } from "../types";
+import { stepLabel, stepTarget } from "../lib/stepping";
 import { addRequirement, appendRequirement, deleteRequirement, EXAMPLE, moveRequirementTo, shortName, tidyStandard, today, updateRequirement } from "../lib/edit";
 import { issueTarget, issuesByPlace, issuesFor, noteMove, selectionKey, STANDARD_SECTIONS, standardOutline, withoutEarlySuggestions, type Selection, type StandardSection } from "../lib/editing";
 import { isDrawableStandard, standardSchema, validateStandard } from "../lib/validate";
@@ -103,6 +104,16 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
     : s.issues), [drawable, draft, s.issues, left, d.saved]);
   const byPlace = useMemo(() => (drawable ? issuesByPlace("standard", draft, issues) : new Map()), [drawable, draft, issues]);
   const add = (after?: string) => { const r = addRequirement(draft, after); setDraft(r.standard); selectReq(r.id); s.setPanel("fields"); };
+  // the arrows in the head of a requirement's fields (and Alt + Page Up / Down): the one before and after
+  const stepper = current ? (() => {
+    const ids = draft.requirements.map((x) => x.id);
+    const way = (dir: -1 | 1) => {
+      const id = stepTarget(ids, current.id, dir);
+      const to = id ? draft.requirements.find((x) => x.id === id) : undefined;
+      return { label: stepLabel("requirement", dir, to && { n: ids.indexOf(to.id) + 1, name: to.title, id: to.id }), to: id && selectionKey({ section: "requirements", item: id }), go: id ? () => choose({ section: "requirements", item: id }) : undefined };
+    };
+    return { noun: "requirement" as const, prev: way(-1), next: way(1) };
+  })() : undefined;
   const sectionLabel = STANDARD_SECTIONS.find((x) => x.id === section)?.label ?? "About";
   const fieldsLabel = current ? `${current.id}: ${current.title || "(no name yet)"}` : sectionLabel;
   const helpers = processes.filter((p) => p.standards?.includes(draft.id) && statusOf(p) === "active");
@@ -226,7 +237,7 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
             if (dir === 1 && i >= 0 && i < ids.length - 1) put(ids[i + 2] ?? null);
           }} /> : null}
         middle={middle} fields={<div className="edit-fields-body">{fields}</div>} fieldsLabel={fieldsLabel}
-        panel={s.panel} setPanel={s.setPanel} json={s.json} />
+        panel={s.panel} setPanel={s.setPanel} json={s.json} stepper={stepper} />
       {s.dialogs}
     </>
   );

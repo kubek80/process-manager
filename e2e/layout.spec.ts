@@ -324,8 +324,35 @@ test("the editing screen reads outline, fields, what readers will see: on the sc
     await page.keyboard.press("Enter");
     await expect(middle).toBeFocused();
 
-    // two columns (the outline slides over from the left): the fields first, what readers will see after them
-    for (const width of [1279, 1100, 768]) {
+    // a laptop (1100-1279): the outline is always the narrow rail in a column of its own; nothing covers the fields
+    const sections = hash.startsWith("/p/") ? ["About", "Before you start", "Who takes part", "Steps", "Links and resources", "Standards it helps to meet"] : ["About", "Scope and exceptions", "Requirements", "Background"];
+    for (const width of [1279, 1100]) {
+      await page.setViewportSize({ width, height: 900 });
+      const at = `${hash} at ${width}`;
+      await expect(page.locator(".panel-strip"), at).toBeHidden();
+      await expect(outlineNav(page), at).toBeVisible();
+      const [o2, f2, m2] = [(await outline.boundingBox())!, (await side.boundingBox())!, (await middle.boundingBox())!];
+      expect(o2.width, `${at}: the rail`).toBeLessThan(80);
+      expect(Math.abs(o2.x + o2.width - f2.x), `${at}: the fields right after the rail`).toBeLessThanOrEqual(1);
+      expect(Math.abs(f2.x + f2.width - m2.x), `${at}: then what readers will see`).toBeLessThanOrEqual(1);
+      expect(m2.width, `${at}: the preview keeps its room`).toBeGreaterThan(640);
+      // every part of the outline can be chosen from the rail, by its icon, which has its name
+      for (const name of sections) {
+        await outlineNav(page).getByRole("button", { name: new RegExp(`^${name}(,|$)`) }).click();
+        await expect(side.locator(".fields-section-title"), `${at}: ${name}`).toHaveText(name);
+      }
+      // its button opens the whole outline over the fields; choosing closes it again
+      await outline.getByRole("button", { name: "Show the outline with names" }).click();
+      await expect(outlineNav(page).locator(".outline-label").first(), at).toBeVisible();
+      expect((await outline.boundingBox())!.width, `${at}: open`).toBeGreaterThan(250);
+      await outlineNav(page).getByRole("button", { name: item }).click();
+      await expect.poll(async () => (await outline.boundingBox())!.width, `${at}: closed by choosing`).toBeLessThan(80);
+      await expect(side.locator(".fields-head h2")).toBeInViewport();
+      expect(await sideways(page), at).toBe(0);
+    }
+
+    // below 1100 (the outline slides over from the left): the fields first, what readers will see after them
+    for (const width of [1099, 768]) {
       await page.setViewportSize({ width, height: 900 });
       const [f2, m2] = [(await side.boundingBox())!, (await middle.boundingBox())!];
       expect(f2.x, `${hash} at ${width}: the fields at the left`).toBeLessThanOrEqual(1);
@@ -349,6 +376,36 @@ test("the editing screen reads outline, fields, what readers will see: on the sc
     expect(m3.x).toBe(0);
     expect(m3.width).toBe(390);
   }
+});
+
+test("the outline lies on the quieter page ground and the fields on the white sheet, in both themes; the selected row is white", async ({ page }) => {
+  await signIn(page, DANA);
+  for (const theme of ["light", "dark"] as const) {
+    await page.addInitScript((t) => { try { localStorage.setItem("pm:theme", t); } catch { /* ignore */ } }, theme);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("about:blank");
+    await open(page, "/p/request-gcp-project/edit/approve-budget");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    const bg = (sel: string) => page.locator(sel).first().evaluate((e) => getComputedStyle(e).backgroundColor);
+    const [outlineBg, fieldsBg, pageBg] = [await bg(".edit-outline"), await bg(".edit-fields"), await bg(".edit-screen")];
+    expect(outlineBg, `${theme}: the outline differs from the fields`).not.toBe(fieldsBg);
+    expect(outlineBg, `${theme}: the outline is the page's ground`).toBe(pageBg);
+    expect(await bg('.edit-outline .outline-item[aria-current="true"]'), `${theme}: the selected row is a piece of the sheet`).toBe(fieldsBg);
+    // the selected row reaches the outline's edge, towards the fields
+    const [row, o] = [(await page.locator('.edit-outline .outline-item[aria-current="true"]').boundingBox())!, (await page.locator(".edit-outline").boundingBox())!];
+    expect(o.x + o.width - (row.x + row.width)).toBeLessThanOrEqual(2);
+  }
+});
+
+test("on a phone the editing screen's messages and the checker's list keep their place", async ({ page }) => {
+  await signIn(page, DANA);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page, "/p/request-gcp-project/edit");
+  await expect(page.locator(".edit-bar")).toBeVisible();
+  // the variables that place them over the fields are set, but a phone does not use them
+  const toasts = await page.locator(".toasts").evaluate((e) => { const s = getComputedStyle(e); return [s.top, s.left]; });
+  expect(toasts[0]).toBe("128px");
+  expect(toasts[1]).toBe("16px");
 });
 
 test("the editing bar reads “Back” and “More” on a tablet, and keeps their full names for screen readers", async ({ page }) => {

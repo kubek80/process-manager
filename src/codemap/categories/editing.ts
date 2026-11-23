@@ -143,6 +143,15 @@ POST /api/processes/request-gcp-project/publish?rev=1&note=Shorter%20summary&ove
       tests: ["e2e/editing.spec.ts", "e2e/savemodel.spec.ts", "e2e/members.spec.ts", "e2e/versions.spec.ts"],
     },
     {
+      path: "src/lib/stepping.ts",
+      role: "Going to the step or requirement before or after from the head of its fields: which item, what its arrow is called, the shortcut (Alt + Page Up / Down), and which field of the next item takes the keyboard.",
+      requirements: [
+        { text: "The shortcut is Alt + Page Up / Down and nothing else: Alt + ↑ ↓ moves an item, Alt + ← → is the browser's Back and Forward, Ctrl + Page Up / Down changes the browser's tab.", at: "if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return 0;" },
+        { text: "\"The same field\" is found by its `data-field`, else its name with the numbers taken out (an action leads to the first action of the next step), else the label of its field; failing that the keyboard goes to the first field.", at: 'return `name:${aria.replace(/\\d+/g, "#").replace(/[“"].*$/, "").trim()}`;' },
+      ],
+      tests: ["src/lib/__tests__/stepping.test.ts", "e2e/editscreen.spec.ts"],
+    },
+    {
       path: "src/lib/editing.ts",
       role: "The editing screen as plain functions: the kind of draft, the state on the bar, which call Save draft and Publish make, the outline, where a problem belongs and how it is worded, the Publish list and who publishes.",
       requirements: [
@@ -202,6 +211,8 @@ POST /api/processes/request-gcp-project/publish?rev=1&note=Shorter%20summary&ove
       path: "src/components/EditFrame.tsx",
       role: "The frame of the editing screen: the editing bar (state, Undo, Redo, Save draft, Publish…, More), then outline, fields panel and preview in that order, the checker's list and the Publish dialog.",
       requirements: [
+        { text: "Stepping to the item before or after leaves the field first (what leaving it does, such as giving a new step its address, happens), then keeps the keyboard in the same field of the next item once it is selected.", at: "if (inFields) a?.blur();" },
+        { text: "The editing screen's messages and the checker's list are placed over the fields column through CSS variables on the page, removed when the screen is left or the fields are not shown: messages on every other page keep their place.", at: "const clear = () => names.forEach((n) => root.style.removeProperty(n));" },
         { text: "The preview (`main.edit-middle`) comes after the fields in the page, as on the screen: Tab and screen readers meet outline, fields, preview, and \"Skip to the page\" (`skipToPage` in `App.tsx`) still lands on the preview, the editing screen's own main region.", at: '<main className="edit-middle" aria-label="What readers will see">{middle}</main>' },
         { text: "A press within `DELETE_PAUSE` of the delete button appearing is ignored: after a delete the next item's button is under the same pointer, and a double click would delete it too.", at: "onClick={() => { if (deleteReady(shown.current, performance.now())) onDelete(); }}" },
         { text: "The Publish dialog does nothing while publishing is blocked (`blocked` is the reason, shown on its button).", at: "if (blocked || busy) return;" },
@@ -327,7 +338,9 @@ POST /api/processes/request-gcp-project/publish?rev=1&note=Shorter%20summary&ove
       role: "The editing screen's layout: the dark editing bar, then outline | fields | preview, the panels that slide over on smaller screens, the field marks.",
       requirements: [
         { text: "The main button of the editing bar follows the brand only through the `-on-dark` tokens, readable on the bar's neutral dark in both themes.", at: "--eb-primary: var(--action-fill-on-dark);" },
-        { text: "The columns are outline | fields | preview: choosing and editing side by side, the result after them; below 1280 px the outline slides over the fields, and the fields stay the first column.", at: ".edit-body { position: relative; display: grid; grid-template-columns: 256px 400px minmax(0, 1fr); min-height: 0; }" },
+        { text: "From 1100 to 1279 px the outline is the rail in a column of its own, so nothing covers the fields; opened, it lies over them.", at: ".edit-screen .edit-body { grid-template-columns: 64px 380px minmax(0, 1fr); }" },
+        { text: "From 761 px the messages and the checker's list sit over the fields column, never on the map; on a phone they keep their own place.", at: "body:has(.edit-screen:not(.json)) .toasts { left: calc(var(--edit-fields-left) + 8px);" },
+        { text: "The columns are outline | fields | preview: choosing and editing side by side, the result after them; below 1100 px the outline slides over the fields, and the fields stay the first column.", at: ".edit-body { position: relative; display: grid; grid-template-columns: 256px 400px minmax(0, 1fr); min-height: 0; }" },
       ],
       tests: ["e2e/layout.spec.ts"],
     },

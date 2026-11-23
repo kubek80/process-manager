@@ -190,8 +190,13 @@ test("deleting a step inside a branch: no question, both answers kept, “delete
     const rest = t.getBoundingClientRect().height - head.getBoundingClientRect().height;
     return [Math.round(head.getBoundingClientRect().height / lh), Math.round(rest / lh)];
   });
-  expect(lines[0], "the head on one line").toBe(1);
-  expect(lines[1], "the answer's line on at most two").toBeLessThanOrEqual(2);
+  // (the message is as wide as the fields column: the head may take a second line there)
+  expect(lines[0], "the head on at most two lines").toBeLessThanOrEqual(2);
+  expect(lines[1], "the answer's line on at most three").toBeLessThanOrEqual(3);
+  // it sits over the fields, where one was working, never on the map
+  const [t, f] = [(await toast.boundingBox())!, (await fields(page).boundingBox())!];
+  expect(t.x, "the message starts within the fields").toBeGreaterThanOrEqual(f.x);
+  expect(t.x + t.width, "and ends within them").toBeLessThanOrEqual(f.x + f.width);
   // the focus is on the step now selected, in the outline: a second press cannot delete it
   await expect(outlineNav(page).locator('.outline-item[aria-current="true"]')).toBeFocused();
   await expect(map(page).locator(".block")).toHaveCount(9);
@@ -204,6 +209,115 @@ test("deleting a step inside a branch: no question, both answers kept, “delete
   await expect.poll(() => outlineTitles(page)).toContain("Add your project to the project factory");
   // what Undo says is what is true now
   await expect(page.locator(".toast", { hasText: /is back\.$/ })).toContainText(/Step “Add your project to the proje(ct factory|…)” is back\./);
+});
+
+test("the arrows beside “Step 1 of 10” and Alt + Page Up / Down walk the steps, the keyboard staying in the same field", async ({ page, request }) => {
+  const id = `${PREFIX}walk`;
+  await copyOf(request, GCP, id, "Editscreen demo walk");
+  await signIn(page, ALEX);
+  await openEditor(page, "process", id);
+  await outline(page, /^1 Decide the project details/);
+  const head = fields(page).locator(".fields-head");
+  const title = head.locator("h2");
+  const prev = head.getByRole("button", { name: /^(Previous|No previous) step/ });
+  const next = head.getByRole("button", { name: /^(Next|No next) step/ });
+  // named by where they lead; unavailable, but there, at an end
+  await expect(prev).toHaveAccessibleName("No previous step");
+  await expect(prev).toHaveAttribute("aria-disabled", "true");
+  await expect(next).toHaveAccessibleName("Next step: Raise the 'New GCP project' request");
+  await expect(next).toHaveAttribute("title", /\(Alt \+ Page Down\)$/);
+  await expect(page.locator(".outline-tip", { hasText: "Alt + Page Up / Down" })).toBeVisible();
+  // type a name, step on, type the next: the keyboard stays in the name
+  const name = fields(page).locator("input.step-title");
+  await name.fill("Decide the details");
+  await page.keyboard.press("Alt+PageDown");
+  await expect(title).toHaveText("Raise the 'New GCP project' request");
+  await expect(name).toBeFocused();
+  await expect(head).toContainText("Step 2 of 10");
+  await expect(outlineNav(page).locator('.outline-item[aria-current="true"]')).toContainText("Raise the 'New GCP project' request");
+  await expect(map(page).locator(".block.selected")).toContainText("Raise the 'New GCP project' request");
+  await expect(prev).toHaveAccessibleName("Previous step: Decide the details");
+  await expect.poll(() => outlineTitles(page), { message: "what was typed is kept" }).toContain("Decide the details");
+  // an action leads to the first action of the step before
+  await fields(page).getByRole("textbox", { name: "Action 2" }).focus();
+  await page.keyboard.press("Alt+PageUp");
+  await expect(title).toHaveText("Decide the details");
+  await expect(fields(page).getByRole("textbox", { name: "Action 1" })).toBeFocused();
+  // the next step has no action: its first field
+  await page.keyboard.press("Alt+PageDown");
+  await expect(title).toHaveText("Raise the 'New GCP project' request");
+  await fields(page).getByRole("textbox", { name: "Action 1" }).focus();
+  await page.keyboard.press("Alt+PageDown");
+  await expect(title).toHaveText("Approve the monthly budget");
+  await expect(name).toBeFocused();
+  // the arrow itself keeps the keyboard, for the next press
+  await next.click();
+  await expect(title).toHaveText("Check naming, folder and ownership");
+  await expect(next).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(title).toHaveText("Details complete?");
+  // the last step: nothing after it, nothing happens
+  await outline(page, /^10 Check you can open the project/);
+  await expect(next).toHaveAccessibleName("No next step");
+  await expect(next).toHaveAttribute("aria-disabled", "true");
+  await name.focus();
+  await page.keyboard.press("Alt+PageDown");
+  await expect(title).toHaveText("Check you can open the project");
+  await expect(name).toBeFocused();
+  // stepping is not a change: Undo takes back the name typed before it
+  await bar(page).getByRole("button", { name: "Undo" }).click();
+  await expect.poll(() => outlineTitles(page)).toContain("Decide the project details");
+});
+
+test("the arrows and Alt + Page Up / Down walk a standard's requirements too", async ({ page }) => {
+  await signIn(page, DANA);
+  await openEditor(page, "standard", "secure-logging", "SEC-LOG-02");
+  const head = fields(page).locator(".fields-head");
+  await expect(head).toContainText("Requirement 2 of 5");
+  await expect(head.getByRole("button", { name: /^Previous requirement/ })).toHaveAccessibleName("Previous requirement: SEC-LOG-01 No secrets in logs");
+  await expect(head.getByRole("button", { name: /^Next requirement/ })).toHaveAccessibleName("Next requirement: SEC-LOG-03 Log security events");
+  const short = fields(page).getByRole("textbox", { name: /^Short name/ });
+  await short.focus();
+  await page.keyboard.press("Alt+PageDown");
+  await expect(head.locator("h2")).toHaveText("Log security events");
+  await expect(short).toBeFocused();
+  await expect(short).toHaveValue("Log security events");
+  await expect(outlineNav(page).locator('.outline-item[aria-current="true"]')).toContainText("SEC-LOG-03");
+  await page.keyboard.press("Alt+PageUp");
+  await page.keyboard.press("Alt+PageUp");
+  await expect(head.locator("h2")).toHaveText("No secrets in logs");
+  await expect(short).toBeFocused();
+  await expect(head.getByRole("button", { name: /^No previous requirement/ })).toHaveAttribute("aria-disabled", "true");
+});
+
+test("the checker's list opens over the fields, says it is open, closes with Escape, and a pick lands on the field", async ({ page, request }) => {
+  const id = `${PREFIX}checker`;
+  await copyOf(request, GCP, id, "Editscreen demo checker");
+  await signIn(page, ALEX);
+  await openEditor(page, "process", id);
+  await outline(page, /^3 Approve the monthly budget/);
+  await fields(page).locator("input.step-title").fill("");
+  await outline(page, /^1 /);
+  const chip = bar(page).locator(".eb-status");
+  await chip.click();
+  const pop = page.getByRole("dialog", { name: "What is to fix" });
+  await expect(pop).toBeVisible();
+  await expect(chip).toHaveAttribute("aria-expanded", "true");
+  await expect(chip).toHaveAttribute("aria-controls", (await pop.getAttribute("id"))!);
+  const [p, f, m] = [(await pop.boundingBox())!, (await fields(page).boundingBox())!, (await map(page).boundingBox())!];
+  expect(p.x, "it starts within the fields").toBeGreaterThanOrEqual(f.x);
+  expect(p.x + p.width, "it ends within them, not on the map").toBeLessThanOrEqual(Math.max(f.x + f.width, m.x));
+  await page.keyboard.press("Escape");
+  await expect(pop).toBeHidden();
+  await expect(chip).toBeFocused();
+  await expect(chip).toHaveAttribute("aria-expanded", "false");
+  await chip.click();
+  await pop.getByRole("button", { name: /Step 3 \(no name yet\)/ }).click();
+  await expect(pop).toBeHidden();
+  await expect(fields(page).locator("input.step-title")).toBeFocused();
+  // the field it leads to is not under anything
+  const field = (await fields(page).locator("input.step-title").boundingBox())!;
+  expect(field.y).toBeGreaterThan((await bar(page).boundingBox())!.y);
 });
 
 test("who does it: “Someone else” adds a participant and gives them the step; the kind is chosen in a pop-up", async ({ page, request }) => {

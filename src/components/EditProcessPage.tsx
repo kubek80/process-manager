@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Clock3, ListChecks, ListPlus, PenLine, Plus, Send, UserRound } from "lucide-react";
 import type { DocMeta, Feedback, Process, Standard, Step } from "../types";
+import { stepLabel, stepTarget } from "../lib/stepping";
 import { appendStep, deleteStep, EXAMPLE, flowMoveBlocked, insertStep, movedHead, moveStepInFlow, newDecisionNotice, nudgeStep, renameStepId, restructureNotice, shortName, slugify, tidy, today, updateStep } from "../lib/edit";
 import { issueTarget, issuesByPlace, noteMove, issuesFor, PROCESS_SECTIONS, processOutline, selectionKey, withoutEarlySuggestions, type ProcessSection, type Selection } from "../lib/editing";
 import { isDrawableProcess, processSchema, validateProcess } from "../lib/validate";
@@ -130,6 +131,16 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
       document.querySelector<HTMLInputElement>(".outline-add-form input")?.focus();
     });
   };
+  // the arrows in the head of a step's fields (and Alt + Page Up / Down): the step before and after
+  const stepper = step ? (() => {
+    const ids = draft.steps.map((x) => x.id);
+    const way = (dir: -1 | 1) => {
+      const id = stepTarget(ids, step.id, dir);
+      const to = id ? draft.steps.find((x) => x.id === id) : undefined;
+      return { label: stepLabel("step", dir, to && { n: ids.indexOf(to.id) + 1, name: to.title }), to: id && selectionKey({ section: "steps", item: id }), go: id ? () => choose({ section: "steps", item: id }) : undefined };
+    };
+    return { noun: "step" as const, prev: way(-1), next: way(1) };
+  })() : undefined;
   const sectionLabel = PROCESS_SECTIONS.find((x) => x.id === section)?.label ?? "About";
   const fieldsLabel = step ? `Step ${draft.steps.indexOf(step) + 1}: ${step.title || "(no name yet)"}` : sel.section === "steps" ? "Steps" : sectionLabel;
 
@@ -226,7 +237,7 @@ function ProcessEditor({ s, process, all, standards, feedback, item }: {
           onEnter={focusFields}
           moveBlocked={(id) => flowMoveBlocked(draft, id)} />}
         middle={middle} fields={<div className="edit-fields-body">{fields}</div>} fieldsLabel={fieldsLabel}
-        panel={s.panel} setPanel={s.setPanel} json={s.json} />
+        panel={s.panel} setPanel={s.setPanel} json={s.json} stepper={stepper} />
       {s.dialogs}
     </>
   );
