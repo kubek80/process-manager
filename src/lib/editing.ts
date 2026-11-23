@@ -378,7 +378,8 @@ export function listEntryWords(doc: unknown, list: string, index: number): strin
 /**
  * A problem of the lists as an instruction that names the list, the entry and the field by the
  * words of the page, never by a path: "Give the team “Cloud Platform team” a name.", "The link to
- * the Slack channel of the platform “Google Cloud” must start with https://.". One nobody foresaw
+ * the Slack channel of the platform “Google Cloud” is not a whole link: write it with https:// at
+ * the start.". One nobody foresaw
  * is still a sentence about its entry.
  */
 function listIssueText(path: string, message: string, doc: unknown): string {
@@ -410,7 +411,7 @@ function listIssueText(path: string, message: string, doc: unknown): string {
   if (/^is empty$|^is too short/.test(message)) return `Fill in the ${words} of ${entry}, or leave it out.`;
   const long = message.match(/^is too long \(maximum (\d+)/);
   if (long) return `Shorten the ${words} of ${entry} to at most ${long[1]} characters.`;
-  if (/full link/.test(message)) return `The ${words} of ${entry} must start with https://${/\s/.test(value.trim()) ? " and have no spaces" : ""}.`;
+  if (/full link/.test(message)) return `The ${words} of ${entry} is not a whole link: ${/\s/.test(value.trim()) ? "remove the spaces and " : ""}write it with https:// at the start.`;
   if (/email address/.test(message)) return `The group email of ${entry} is not an email address: write one, like team@company.com.`;
   const extra = message.match(/^has a field "([^"]+)"/);
   if (extra) return `${Entry} has a detail the portal does not know (“${extra[1]}”): ask whoever looks after the portal to remove it.`;

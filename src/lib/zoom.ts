@@ -194,20 +194,29 @@ export function hiddenEdges(scrollLeft: number, scrollWidth: number, clientWidth
 }
 
 /**
- * A process drawn as a picture in a text (`ProcessPicture`: the Guide, the code map) opens as
- * large as fits its column, at most 100%, and never below this: a step's name stays readable
- * (about 10 pixels), and a wider picture scrolls sideways with its cut edges shown.
+ * A process drawn as a picture in a text (`ProcessPicture`: the Guide, the code map) is seen
+ * whole when that is still readable: down to this zoom it opens whole.
+ */
+export const PICTURE_WHOLE_MIN = 0.7;
+/**
+ * A picture that would have to go below PICTURE_WHOLE_MIN to be whole opens at this zoom instead,
+ * cut: a step's name stays readable (about 10 pixels), and it scrolls sideways with its cut edges
+ * shown ("Fit" then shows it whole, at whatever size that takes).
  */
 export const PICTURE_MIN = 0.8;
 
 /**
- * The zoom a picture opens at: the largest that fits the width (`openingZoom`, without a height:
- * a picture is as high as its drawing, so it never scrolls up and down and the page scrolls on
- * over it), not below PICTURE_MIN. Printed (`print`), the whole picture fits the paper, however
- * small that makes it (down to ZOOM_FLOOR). "Fit" on a picture returns to this zoom.
+ * The zoom a picture opens at, by its width alone (a picture is as high as its drawing, so it never
+ * scrolls up and down and the page scrolls on over it): the largest zoom, at most 100% in steps of
+ * 5%, at which the whole flow fits its column, when that is PICTURE_WHOLE_MIN or more; otherwise
+ * PICTURE_MIN, cut. Printed (`print`), the whole picture fits the paper, however small that makes
+ * it (down to ZOOM_FLOOR).
  */
 export function pictureZoom(viewWidth: number, contentWidth: number, column: (z: number) => number = () => 0, print = false): number {
-  return openingZoom(viewWidth, contentWidth, print ? ZOOM_FLOOR : PICTURE_MIN, column);
+  if (print) return openingZoom(viewWidth, contentWidth, ZOOM_FLOOR, column);
+  if (!viewWidth || !contentWidth) return 1;
+  const whole = openingZoom(viewWidth, contentWidth, ZOOM_FLOOR, column);
+  return whole >= PICTURE_WHOLE_MIN && column(whole) + contentWidth * whole <= viewWidth ? whole : PICTURE_MIN;
 }
 
 /** The width a printed picture is fitted to: the column it has on the screen, at most the width of A4 paper inside its margins. */

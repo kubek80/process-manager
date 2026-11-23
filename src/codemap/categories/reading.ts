@@ -207,9 +207,9 @@ export const reading: CodeCategory = {
       requirements: [
         { text: "Only the current block has `tabIndex` 0: the map is one Tab stop, so Tab leaves it at once however many steps it has.", at: "tabIndex: tabStop === s.id ? 0 : -1" },
         { text: "The arrow keys, Home and End move between steps in the order of the flow.", at: "const to = e.key === \"ArrowRight\" || e.key === \"ArrowDown\" ? at + 1" },
-        { text: "A picture opens by `pictureZoom` (as large as fits, never below `PICTURE_MIN`), not by the map's rule that uses the height: it is as high as its drawing, so a plain wheel or a vertical swipe over it scrolls the page, never the picture.", at: "? pictureZoom(picture === \"print\" ? Math.min(viewWidth(), PRINT_WIDTH) : viewWidth(), drawW, column, picture === \"print\")" },
+        { text: "A picture opens by `pictureZoom`, not by the map's rule that uses the height: whole where that takes 70% or more (`PICTURE_WHOLE_MIN`, at most 100%), else at 80% (`PICTURE_MIN`), cut, with the faded edge. It is as high as its drawing, so a plain wheel or a vertical swipe over it scrolls the page, never the picture.", at: "? pictureZoom(picture === \"print\" ? Math.min(viewWidth(), PRINT_WIDTH) : viewWidth(), drawW, column, picture === \"print\")" },
         { text: "Only Ctrl or ⌘ + wheel (a trackpad pinch) zooms, on the map and on a picture alike; any other wheel event is left to the browser, so a page with many pictures never traps the reader.", at: "if (!isZoomWheel(e)) return;" },
-        { text: "\"Fit\" on a picture returns to the size it opened at; on the map it shows the whole flow.", at: "if (picture === \"inline\") {" },
+        { text: "\"Fit\" shows the whole flow by one rule on the map and on a picture alike (`fitWhole`, down to `ZOOM_FLOOR`); a picture's box gets lower only when a person presses it, never on its own.", at: "const z = fitWhole({ width: viewWidth(), height }, { width: drawW, height: layout.height }, column);" },
       ],
       tests: ["e2e/map.spec.ts", "e2e/editor.spec.ts", "e2e/layout.spec.ts"],
     },

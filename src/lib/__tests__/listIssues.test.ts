@@ -44,19 +44,19 @@ describe("the problems of the lists, in words", () => {
     ]);
   });
 
-  it("links: must start with https://, and say so when it holds spaces", () => {
+  it("links: a whole link with https:// at the start, and say so when it holds spaces", () => {
     const c = lists((x) => {
       x.platforms[0].contacts = { slackUrl: "www.slack.com/x", chatUrl: "https://chat example", confluence: "ftp://wiki", page: "javascript:alert(1)", form: "forms" };
       x.tools[1].url = "intranet/tool";
     });
     const p = `the platform “${c.platforms[0].name}”`;
     expect(words(c)).toEqual([
-      `The link to the Slack channel of ${p} must start with https://.`,
-      `The link to the Chat space of ${p} must start with https:// and have no spaces.`,
-      `The Confluence page of ${p} must start with https://.`,
-      `The page link of ${p} must start with https://.`,
-      `The request form of ${p} must start with https://.`,
-      `The link of the tool “${c.tools[1].name}” must start with https://.`,
+      `The link to the Slack channel of ${p} is not a whole link: write it with https:// at the start.`,
+      `The link to the Chat space of ${p} is not a whole link: remove the spaces and write it with https:// at the start.`,
+      `The Confluence page of ${p} is not a whole link: write it with https:// at the start.`,
+      `The page link of ${p} is not a whole link: write it with https:// at the start.`,
+      `The request form of ${p} is not a whole link: write it with https:// at the start.`,
+      `The link of the tool “${c.tools[1].name}” is not a whole link: write it with https:// at the start.`,
     ]);
   });
 
@@ -186,7 +186,7 @@ describe("a save of the lists the server refused", () => {
       ["teams[1].contacts.email", "must be an email address"],
     ]);
     expect(refusalText(error, "lists", c)).toBe(
-      `Give the team with the id “${c.teams[0].id}” a name. The link to the Slack channel of the team “${team(c, 1)}” must start with https://. ` +
+      `Give the team with the id “${c.teams[0].id}” a name. The link to the Slack channel of the team “${team(c, 1)}” is not a whole link: write it with https:// at the start. ` +
       `The group email of the team “${team(c, 1)}” is not an email address: write one, like team@company.com. And 3 more to fix.`);
   });
 

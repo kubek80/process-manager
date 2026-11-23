@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterFit, panHint, laneChars, wrapWords, fitWhole, hiddenEdges, laneColumn, laneLabel, openingZoom, pictureZoom, PICTURE_MIN, scrollToCentre, stepZoom, clampZoom, isZoomWheel, scrollForZoom, wheelZoom, zoomKey, ZOOM_FLOOR, ZOOM_MAX, ZOOM_MIN } from "../zoom";
+import { afterFit, panHint, laneChars, wrapWords, fitWhole, hiddenEdges, laneColumn, laneLabel, openingZoom, pictureZoom, PICTURE_MIN, PICTURE_WHOLE_MIN, scrollToCentre, stepZoom, clampZoom, isZoomWheel, scrollForZoom, wheelZoom, zoomKey, ZOOM_FLOOR, ZOOM_MAX, ZOOM_MIN } from "../zoom";
 
 describe("Ctrl + scroll on the map", () => {
   it("scrolling up zooms in, down zooms out, by about a tenth per notch of a mouse wheel", () => {
@@ -209,12 +209,18 @@ describe("how to move the map, by the device", () => {
 
 describe("a process drawn as a picture in a text", () => {
   const column = () => 136;
-  it("opens at full size where it fits, smaller where that makes it fit", () => {
+  it("opens whole at full size where it fits, smaller where that makes it fit", () => {
     expect(pictureZoom(1000, 800, column)).toBe(1);
     expect(pictureZoom(1000, 960, column)).toBe(0.9);
   });
-  it("never opens below readable: a wider picture keeps that size and scrolls sideways", () => {
+  it("opens whole down to 70%, also below the 80% a cut picture opens at", () => {
+    expect(PICTURE_WHOLE_MIN).toBe(0.7);
+    expect(pictureZoom(1036, 1200, column)).toBe(0.75); // 136 + 1200 × 0.75 = 1036
+    expect(pictureZoom(976, 1200, column)).toBe(0.7); // 136 + 1200 × 0.7 = 976
+  });
+  it("opens at 80%, cut, where being whole would take less than 70%", () => {
     expect(PICTURE_MIN).toBe(0.8);
+    expect(pictureZoom(975, 1200, column)).toBe(PICTURE_MIN);
     expect(pictureZoom(700, 2000, column)).toBe(PICTURE_MIN);
     expect(pictureZoom(390, 1200, () => 96)).toBe(PICTURE_MIN);
   });

@@ -11,8 +11,9 @@ import "../picture.css";
  * that the box, the caption, the tools and "Enlarge" are written once; it draws with the map
  * itself (`FlowView` with `picture`), so a picture looks and moves exactly like a process.
  *
- * - It opens as large as fits its column, never below readable (`pictureZoom`), keeps its height
- *   from the first paint and shows which edges are cut.
+ * - It opens whole where that is still readable (70% or more, at most 100%), else at 80%, cut,
+ *   with the cut edges shown (`pictureZoom`); it keeps that height from the first paint. "Fit"
+ *   shows the whole flow, as on the map.
  * - Dragging with the mouse pans it; a touch screen pans it natively (sideways; up and down the
  *   page scrolls on, since a picture is as high as its drawing). The tools zoom (Fit, −, the
  *   percentage, +), Ctrl or ⌘ + scroll and a trackpad pinch zoom around the pointer; a plain

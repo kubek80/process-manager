@@ -16,7 +16,7 @@ export const editing: CodeCategory = {
     "Retire, Unpublish, Bring back and Delete are in the More menu only and are ordinary saves (or the delete) of the stored document. The app offers them only to whoever may publish what is stored and blocks the first three while a working draft or unsaved changes exist. The server refuses a member (`notPublisher` in `server/internal/httpapi/content.go`) and any ordinary save while a working draft exists (`DraftPending` from `docs.Store.Save`, answered by `draftPending` in `server/internal/httpapi/drafts.go`).",
     "Nothing is lost by accident: leaving with unsaved changes asks first (`guardLeaving`), every change on the screen can be undone, Discard changes too (`UNDO_LIMIT` 100 steps, typing in one field within `BURST_MS` 800 ms is one step), a version saved by somebody else is followed only while there are no edits (`serverHas`), and a fault while drawing shows `EditingBoundary`, below the draft.",
     "Moving and deleting steps go through `moveStepInFlow`, `nudgeStep` and `deleteStep` (`src/lib/edit.ts`): they change the flow, not only the numbering, never ask first, never rename an answer of a decision, and say with Undo what changed in the flow (`restructureNotice`).",
-    "A problem is worded only by `issueText` and marked on its field only by `useFieldMarks`; the example texts of `EXAMPLE` are errors to fix before publishing (`exampleIssues`), not before saving; Undo and Redo say what they did through `steppedMessage` and `editNotice`, one message at a time, gone when the screen is left.",
+    "A problem is worded only by `issueText` and marked on its field only by `useFieldMarks` (`src/lib/fieldMarks.ts`, shared with Admin › Lists and the JSON view); the example texts of `EXAMPLE` are errors to fix before publishing (`exampleIssues`), not before saving; Undo and Redo say what they did through `steppedMessage` and `editNotice`, one message at a time, gone when the screen is left.",
   ],
   charts: [
     {
@@ -150,9 +150,19 @@ POST /api/processes/request-gcp-project/publish?rev=1&note=Shorter%20summary&ove
         { text: "After \"Save mine over theirs\" the revision sent is theirs (0 when it is gone, which creates a new draft); in every other case the one the changes came from.", at: "if (over?.draft) return over.exists ? over.version ?? 0 : 0;" },
         { text: "Creating the working draft sends `base` = the version the changes started from; without it the server would start the draft on the current version and a publish since would be overwritten unseen.", at: "if (rev === 0) return startedFrom || undefined;" },
         { text: "A message that is already a whole sentence (from the server or the checker's own rules) is kept; any other is rebuilt from the field's label, so no schema word or path reaches the person.", at: "if (/^[A-Z“]/.test(message)) return message;" },
+        { text: "A problem of the lists names its list and entry (`listEntryWords`: by name, else by id, never by place), since Admin › Lists shows all of them at once; one nobody foresaw is still a sentence about its entry. A save the server refused is worded the same way (`refusalText`).", at: 'if (kind === "lists") return listIssueText(path, message, doc);' },
         { text: "An example text left in is an error with one fixed message (`isExampleIssue` tells it apart): it blocks Publish… but not Save draft. A text added to `EXAMPLE` must be checked here too, or it could be published.", at: "const flag = (path: string) => out.push({ level: \"error\", path, message: EXAMPLE_MESSAGE });" },
       ],
-      tests: ["src/lib/__tests__/editing.test.ts", "src/lib/__tests__/saveDecision.test.ts", "src/lib/__tests__/editNames.test.ts", "src/lib/__tests__/editMove.test.ts"],
+      tests: ["src/lib/__tests__/editing.test.ts", "src/lib/__tests__/saveDecision.test.ts", "src/lib/__tests__/editNames.test.ts", "src/lib/__tests__/editMove.test.ts", "src/lib/__tests__/listIssues.test.ts"],
+    },
+    {
+      path: "src/lib/fieldMarks.ts",
+      role: "Marks each field that has a problem, on the editing screen and in Admin › Lists alike (`useFieldMarks`), and brings the keyboard to a field once it is shown (`focusWhenShown`).",
+      requirements: [
+        { text: "Only errors mark a field (`aria-invalid`, the words of `issueText` under it); suggestions never do, so a field is red only for what blocks publishing.", at: 'if (issue.level !== "error") continue;' },
+        { text: "The marks are classes and attributes set on what React drew (`.has-problem`, `data-problem`), never elements added to it; a mark whose problem is gone is taken off on the next draw.", at: 'el.classList.remove("has-problem", "has-example");' },
+      ],
+      tests: ["e2e/editscreen.spec.ts", "e2e/lists.spec.ts"],
     },
     {
       path: "src/lib/draft.ts",
@@ -192,7 +202,6 @@ POST /api/processes/request-gcp-project/publish?rev=1&note=Shorter%20summary&ove
       path: "src/components/EditFrame.tsx",
       role: "The frame of the editing screen: the editing bar (state, Undo, Redo, Save draft, Publish…, More), the outline, the preview, the fields panel, the checker's list and the Publish dialog.",
       requirements: [
-        { text: "Only errors mark a field (`aria-invalid`, the words of `issueText` under it); suggestions never do, so a field is red only for what blocks publishing.", at: 'if (issue.level !== "error") continue;' },
         { text: "A press within `DELETE_PAUSE` of the delete button appearing is ignored: after a delete the next item's button is under the same pointer, and a double click would delete it too.", at: "onClick={() => { if (deleteReady(shown.current, performance.now())) onDelete(); }}" },
         { text: "The Publish dialog does nothing while publishing is blocked (`blocked` is the reason, shown on its button).", at: "if (blocked || busy) return;" },
       ],
@@ -236,9 +245,11 @@ POST /api/processes/request-gcp-project/publish?rev=1&note=Shorter%20summary&ove
       requirements: [
         { text: "The schema checks are the generated `validators.generated.js`, never compiled in the browser (that needs `eval`, which the content security policy forbids). A schema changed without `npm run validators` leaves the app checking the old format while the server (`server/internal/schema`) checks the new one.", at: "import { validateCatalogDoc as validateCatalogSchema" },
         { text: "When the schema fails, only its problems are returned: the other rules index `steps`, `actors` and `next` and would throw on a broken shape.", at: "return issues; // semantic checks assume a schema-valid shape" },
+        { text: "Two entries of one list with the same id are named in the server's words too (`docs.Check`): an id never changes, so the sentence asks to remove one.", at: "export function duplicateSentence(" },
+        { text: "A refusal of the server is read back into the checker's own paths and messages (`refusalIssues`), so that it is worded by `issueText` like a problem the app found; one that is not a list of problems is shown as it is.", at: "export function refusalIssues(" },
         { text: "Whether the map can draw it at all, much weaker than valid: a document that is not drawable opens in the JSON to be repaired.", at: "export function isDrawableProcess(" },
       ],
-      tests: ["src/lib/__tests__/validate.test.ts", "src/lib/__tests__/demo.test.ts"],
+      tests: ["src/lib/__tests__/validate.test.ts", "src/lib/__tests__/demo.test.ts", "src/lib/__tests__/listIssues.test.ts"],
     },
     {
       path: "src/lib/diff.ts",
@@ -292,13 +303,17 @@ POST /api/processes/request-gcp-project/publish?rev=1&note=Shorter%20summary&ove
       requirements: [
         { text: "Text goes into the draft only when it parses and the checker finds no error; an id other than the document's own is an error.", at: "if (!r.error && !hasErrors(check(r.value))) onChange(r.value as T);" },
         { text: "Text with problems is not part of the draft, and the screen is told (`onPending`): leaving asks, and Save draft and Publish… say why they wait.", at: "const pending = !ok && text !== canonical;" },
+        { text: "Each finding is the editing screen's sentence (`issueText`) after its place in words (`issuePlace`); the path in the JSON comes last, small, to help find the line.", at: "place={(i) => issuePlace(kind, parsed.value, i.path)} text={(i) => issueText(i, kind)}" },
       ],
       tests: ["e2e/editor.spec.ts"],
     },
     {
       path: "src/components/JsonEditor.tsx",
       role: "The CodeMirror editor of the JSON view, its look in the portal's tokens, and the checker's findings as marks in the text.",
-      requirements: [{ text: "Syntax errors first; once the text parses, each problem of the checker is marked where its path is in the text (`locate`), else at the start.", at: "const lint = linter((v): Diagnostic[] => {" }],
+      requirements: [
+        { text: "Syntax errors first; once the text parses, each problem of the checker is marked where its path is in the text (`locate`), else at the start.", at: "const lint = linter((v): Diagnostic[] => {" },
+        { text: "A mark says the problem in the words of the list beside the editor (`words`), never a path and a schema message.", at: "message: cb.current.words(i, parsed)" },
+      ],
     },
     {
       path: "src/lib/jsonLocate.ts",

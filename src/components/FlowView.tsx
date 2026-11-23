@@ -197,14 +197,6 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const fit = () => {
     const el = scroller.current;
     if (!el) return;
-    // a picture in a text: back to how it opened
-    if (picture === "inline") {
-      scrollTo.current = { left: 0, top: 0 };
-      fitted.current = false;
-      setZoom(working.current);
-      el.scrollTo({ left: 0, top: 0 });
-      return;
-    }
     // the height the map can have: its own limit, and what is left of the screen below its top
     const max = parseFloat(getComputedStyle(el).maxHeight);
     const room = roomBelow(el) - el.getBoundingClientRect().top - 8;
@@ -352,7 +344,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
         {picture !== "print" && <div className="map-tools">
           {legend && picture !== "inline" && <span className="map-pan-hint"><Hand size={14} aria-hidden="true" />{touch ? `${panHint(true).move} · ${panHint(true).zoom}` : <>Drag to move · <kbd className="key">{zoomKey()}</kbd> + scroll to zoom</>}</span>}
           <div className="zoom" role="group" aria-label="Zoom" title={picture === "inline" ? (touch ? `${panHint(true).move} · ${panHint(true).zoom}` : `Drag to move · ${zoomKey()} + scroll to zoom`) : undefined}>
-            <button className="btn small ghost" onClick={() => fit()} title={picture === "inline" ? "Back to the size it opened at" : "Show the whole flow"}><Maximize2 size={14} />Fit</button>
+            <button className="btn small ghost" onClick={() => fit()} title="Show the whole flow"><Maximize2 size={14} />Fit</button>
             <button className="icon-btn" onClick={() => step(-1)} aria-label="Zoom out"><Minus size={16} /></button>
             <button className="zoom-val" onClick={() => setZoom(1)} aria-label={`Zoom ${Math.round(zoom * 100)}%, press for 100%`}>{Math.round(zoom * 100)}%</button>
             <button className="icon-btn" onClick={() => step(1)} aria-label="Zoom in"><Plus size={16} /></button>

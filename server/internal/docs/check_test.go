@@ -120,9 +120,9 @@ func TestHowToReachAGroupIsChecked(t *testing.T) {
 func TestProblemsOfTheListsAreSentencesThatNameTheEntry(t *testing.T) {
 	long := "https://example.com/" + strings.Repeat("a", 300)
 	for contacts, want := range map[string]string{
-		`{"slackUrl":"www.slack.com/x"}`:   "The link to the Slack channel of the platform “Google Cloud” must start with https://.",
-		`{"chatUrl":"https://a b"}`:        "The link to the Chat space of the platform “Google Cloud” must start with https:// and have no spaces.",
-		`{"page":"javascript:alert(1)"}`:   "The page link of the platform “Google Cloud” must start with https://.",
+		`{"slackUrl":"www.slack.com/x"}`:   "The link to the Slack channel of the platform “Google Cloud” is not a whole link: write it with https:// at the start.",
+		`{"chatUrl":"https://a b"}`:        "The link to the Chat space of the platform “Google Cloud” is not a whole link: remove the spaces and write it with https:// at the start.",
+		`{"page":"javascript:alert(1)"}`:   "The page link of the platform “Google Cloud” is not a whole link: write it with https:// at the start.",
 		`{"form":"` + long + `"}`:          "Shorten the request form of the platform “Google Cloud” to at most 300 characters.",
 		`{"email":"cloud at example.com"}`: "The group email of the platform “Google Cloud” is not an email address: write one, like team@company.com.",
 	} {

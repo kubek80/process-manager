@@ -48,9 +48,9 @@ func (c *Contacts) Problems(what string) []string {
 		case !ValidLink(l.value):
 			spaces := ""
 			if strings.ContainsAny(strings.TrimSpace(l.value), " \t\n") {
-				spaces = " and have no spaces"
+				spaces = "remove the spaces and "
 			}
-			out = append(out, fmt.Sprintf("The %s of %s must start with https://%s.", l.label, what, spaces))
+			out = append(out, fmt.Sprintf("The %s of %s is not a whole link: %swrite it with https:// at the start.", l.label, what, spaces))
 		}
 	}
 	return out
