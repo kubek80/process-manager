@@ -1,6 +1,7 @@
 /* ---------- the editing screen of a process or a standard ----------
-   A screen of its own: a dark editing bar instead of the top bar, then outline | what readers
-   will see | fields. Each column scrolls by itself. */
+   A screen of its own: a dark editing bar instead of the top bar, then outline | fields | what
+   readers will see: one chooses, edits next to where one chose, and sees the result after it.
+   Each column scrolls by itself. */
 /* (also on .look-light / .look-dark: the preview in Admin > Theming draws a small editing bar in the look being edited) */
 :root, .look-light, .look-dark {
   /* the bar is a neutral dark in both themes; the brand colour of the look reaches it through
@@ -106,14 +107,18 @@
 .edit-banners .banner { margin: 0 0 8px; }
 .check.info { background: var(--info-bg); color: var(--info); }
 
-/* the three columns */
-.edit-body { position: relative; display: grid; grid-template-columns: 256px minmax(0, 1fr) 400px; min-height: 0; }
+/* the three columns: outline | fields | what readers will see (the order of the page too, so Tab
+   and screen readers meet them in the same order) */
+.edit-body { position: relative; display: grid; grid-template-columns: 256px 400px minmax(0, 1fr); min-height: 0; }
 /* a laptop: the map gets the room the side columns can spare */
-@media (max-width: 1500px) { .edit-body { grid-template-columns: 232px minmax(0, 1fr) 372px; } }
+@media (max-width: 1500px) { .edit-body { grid-template-columns: 232px 372px minmax(0, 1fr); } }
 .edit-outline, .edit-middle, .edit-fields { min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .edit-outline { border-right: 1px solid var(--line); background: var(--surface); padding: 12px 8px 24px; }
 .edit-middle { padding: 12px 16px 16px; }
-.edit-fields { border-left: 1px solid var(--line); background: var(--surface); }
+.edit-fields { border-right: 1px solid var(--line); background: var(--surface); }
+/* a step or requirement is selected: the edge towards the map (or the requirements) takes the
+   accent of the selected block, quietly, so the fields and the block read as one */
+.edit-fields.on-item { border-right-color: var(--accent); box-shadow: inset -3px 0 0 color-mix(in srgb, var(--accent) 22%, transparent); }
 .panel-strip, .panel-close, .panel-scrim { display: none; }
 
 /* the outline */
@@ -172,7 +177,7 @@
 .outline-toggle:hover { color: var(--text); }
 .outline-sec-icon, .outline-short { display: none; }
 @media (min-width: 1280px) {
-  .edit-screen.outline-rail .edit-body { grid-template-columns: 64px minmax(0, 1fr) 400px; }
+  .edit-screen.outline-rail .edit-body { grid-template-columns: 64px 400px minmax(0, 1fr); }
   .outline-rail .edit-outline { padding: 8px 6px 24px; overflow-x: hidden; }
   .outline-rail .outline-head { justify-content: center; margin: 0 0 6px; }
   .outline-rail .outline-label, .outline-rail .outline-count, .outline-rail .outline-tip, .outline-rail .outline-grip,
@@ -187,13 +192,14 @@
   .outline-rail .outline-mark { position: absolute; top: 1px; right: 1px; min-width: 15px; height: 15px; padding: 0 3px; font-size: 9.5px; }
   .outline-rail .outline-add-line { flex: 1 0 100%; justify-content: center; width: 100%; margin: 4px 0 0; padding: 6px 0; }
 }
-@media (min-width: 1280px) and (max-width: 1500px) { .edit-screen.outline-rail .edit-body { grid-template-columns: 64px minmax(0, 1fr) 372px; } }
+@media (min-width: 1280px) and (max-width: 1500px) { .edit-screen.outline-rail .edit-body { grid-template-columns: 64px 372px minmax(0, 1fr); } }
 /* below 1280 the outline slides over, with names: no rail and no button for it */
 @media (max-width: 1279px) { .outline-head { display: none; } }
 
-/* the middle: what readers will see, always editable */
-/* never wider than its column: a long line inside wraps or is cut, the column never scrolls sideways */
-.edit-preview { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
+/* what readers will see, always editable: the column after the fields */
+/* never wider than its column: a long line inside wraps or is cut, the column never scrolls sideways;
+   it starts at the left, right after the fields (no empty band between them) */
+.edit-preview { max-width: 1100px; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
 .preview-label { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); }
 .preview-head { display: grid; gap: 3px; padding: 8px 12px; border-radius: 12px; border: 1px dashed transparent; width: 100%; text-align: left; }
 .preview-head h2 { font-size: 20px; letter-spacing: -.015em; line-height: 1.2; }
@@ -241,6 +247,8 @@
 .edit-middle:has(> .process-preview) { display: flex; flex-direction: column; }
 .edit-middle .flow-scroll { max-height: calc(100dvh - 210px); }
 .edit-preview.process-preview { width: 100%; display: flex; flex-direction: column; }
+/* the map is a canvas: it takes the whole column, to the right edge of the screen */
+.edit-preview.process-preview { max-width: none; }
 /* the map card is as tall as the map, and never taller than the room left in the column */
 .edit-preview.process-preview { flex: 1 1 auto; min-height: 0; }
 .process-preview > .flow-wrap { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 260px; }
@@ -393,9 +401,10 @@
 .publish-changes { margin: 4px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13.5px; max-height: 40vh; overflow: auto; overflow-wrap: anywhere; }
 .publish-sentence { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); }
 
-/* a laptop: the outline slides over */
+/* a laptop: the outline slides over, from the left, over the fields: choosing in it closes it and
+   the fields of what was chosen are right there */
 @media (max-width: 1279px) {
-  .edit-body { grid-template-columns: minmax(0, 1fr) 380px; }
+  .edit-body { grid-template-columns: 380px minmax(0, 1fr); }
   /* a closed panel is out of sight and out of the way of Tab and screen readers */
   .edit-outline { position: absolute; z-index: 20; top: 0; bottom: 0; left: 0; width: 300px; transform: translateX(-105%); visibility: hidden; transition: transform .18s ease-out, visibility 0s .18s; box-shadow: var(--shadow-3); }
   .panel-outline .edit-outline { transform: none; visibility: visible; transition-delay: 0s; }
@@ -420,7 +429,7 @@
   .edit-bar { flex-wrap: wrap; }
   /* when the actions wrap, More starts the second row at the left edge: its menu opens to the right */
   .more-menu .menu-pop { right: auto; left: 0; }
-  .edit-body { grid-template-columns: minmax(0, 1fr) 340px; }
+  .edit-body { grid-template-columns: 340px minmax(0, 1fr); }
 }
 /* a phone: the fields slide over too, the bar takes two rows */
 @media (max-width: 767px) {
@@ -449,6 +458,10 @@
   .edit-middle { padding: 12px 12px 32px; }
   .edit-fields { position: absolute; z-index: 20; top: 0; bottom: 0; right: 0; width: 100%; transform: translateX(105%); visibility: hidden; transition: transform .18s ease-out, visibility 0s .18s; box-shadow: var(--shadow-3); }
   .panel-fields .edit-fields { transform: none; visibility: visible; transition-delay: 0s; }
+  /* the fields cover the whole width: what readers will see is out of the way of Tab and screen
+     readers until they close (it comes after them in the page) */
+  .panel-fields .edit-middle { visibility: hidden; transition: visibility 0s .18s; }
+  .edit-fields.on-item { border-right-color: transparent; box-shadow: var(--shadow-3); }
   .edit-outline { width: min(320px, 88vw); }
   .panel-strip .fields-toggle { display: inline-flex; min-width: 0; flex: 1; }
   .panel-strip .fields-toggle span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

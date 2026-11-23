@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ALEX, CASEY, CSRF, DANA, JORDAN, RILEY, SAM, fields, meaningReady, open, signIn } from "./helpers";
+import { ALEX, CASEY, CSRF, DANA, JORDAN, RILEY, SAM, fields, meaningReady, open, outlineNav, signIn } from "./helpers";
 
 // What a phone, a tablet and a small laptop show. A page that scrolls sideways hides controls
 // off screen, so no page may be wider than the screen.
@@ -241,10 +241,10 @@ for (const theme of ["light", "dark"] as const) {
         const middle = page.locator(".edit-middle");
         const side = page.locator(".edit-fields");
         if (width >= 1280) {
-          // three columns side by side, none crushed
+          // three columns side by side, none crushed: outline, fields, what readers will see
           const [o, m, f] = [(await outline.boundingBox())!, (await middle.boundingBox())!, (await side.boundingBox())!];
-          expect(o.x + o.width, at).toBeLessThanOrEqual(m.x + 1);
-          expect(m.x + m.width, at).toBeLessThanOrEqual(f.x + 1);
+          expect(o.x + o.width, at).toBeLessThanOrEqual(f.x + 1);
+          expect(f.x + f.width, at).toBeLessThanOrEqual(m.x + 1);
           expect(m.width, at).toBeGreaterThan(500);
           expect(o.width, at).toBeGreaterThan(200);
           expect(f.width, at).toBeGreaterThan(300);
@@ -258,9 +258,9 @@ for (const theme of ["light", "dark"] as const) {
           await page.getByRole("button", { name: "Close the outline" }).click();
           await expect(page.getByRole("navigation", { name: /^Outline of the/ }), at).toBeHidden();
           if (width > 760) {
-            // the fields stay a column of their own next to the map
+            // the fields stay a column of their own, before the map
             const [m, f] = [(await middle.boundingBox())!, (await side.boundingBox())!];
-            expect(m.x + m.width, at).toBeLessThanOrEqual(f.x + 1);
+            expect(f.x + f.width, at).toBeLessThanOrEqual(m.x + 1);
             await expect(side, at).toBeInViewport();
           }
         }
@@ -282,6 +282,74 @@ for (const theme of ["light", "dark"] as const) {
     }
   });
 }
+
+test("the editing screen reads outline, fields, what readers will see: on the screen, for Tab and for “Skip to the page”", async ({ page }) => {
+  await signIn(page, DANA);
+  /** Which column the keyboard is in. */
+  const column = () => page.evaluate(() => {
+    const a = document.activeElement;
+    return a?.closest(".edit-outline") ? "outline" : a?.closest(".edit-fields") ? "fields" : a?.closest(".edit-middle") ? "preview" : "elsewhere";
+  });
+  const outline = page.locator(".edit-outline"), side = page.locator(".edit-fields"), middle = page.locator(".edit-middle");
+  for (const [hash, item] of [["/p/request-gcp-project/edit", /^3 /], ["/s/secure-logging/edit", /^SEC-LOG-02 /]] as const) {
+    // a laptop: three columns that meet, the fields between where one chooses and what it changes
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("about:blank"); // a fresh load: the keyboard starts at the top
+    await open(page, hash);
+    await outlineNav(page).getByRole("button", { name: item }).click();
+    await expect(side.locator(".fields-head h2")).toBeVisible();
+    const [o, f, m] = [(await outline.boundingBox())!, (await side.boundingBox())!, (await middle.boundingBox())!];
+    expect(Math.abs(o.x + o.width - f.x), `${hash}: the outline's right edge meets the fields`).toBeLessThanOrEqual(1);
+    expect(Math.abs(f.x + f.width - m.x), `${hash}: the fields' right edge meets what readers will see`).toBeLessThanOrEqual(1);
+    expect(m.x + m.width, `${hash}: what readers will see goes to the right edge`).toBeGreaterThanOrEqual(1439);
+    // the selected item's fields carry its accent on the edge towards the preview
+    await expect(side).toHaveClass(/\bon-item\b/);
+    // Tab from the selected item: the outline, then every field, then what readers will see, never back
+    await outlineNav(page).getByRole("button", { name: item }).focus();
+    const met: string[] = [await column()];
+    for (let i = 0; i < 120 && met[met.length - 1] !== "preview"; i++) {
+      await page.keyboard.press("Tab");
+      const c = await column();
+      if (c !== met[met.length - 1]) met.push(c);
+    }
+    expect(met, `${hash}: the order for the keyboard`).toEqual(["outline", "fields", "preview"]);
+    // the page's order is the screen's: outline, fields, what readers will see
+    expect(await page.locator(".edit-body > :is(.edit-outline, .edit-fields, .edit-middle)").evaluateAll((els) => els.map((e) => e.className.split(" ")[0]))).toEqual(["edit-outline", "edit-fields", "edit-middle"]);
+    // "Skip to the page" still leads to what readers will see
+    await page.goto("about:blank");
+    await open(page, hash);
+    await expect(page.locator(".edit-bar")).toBeVisible();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Skip to the page" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(middle).toBeFocused();
+
+    // two columns (the outline slides over from the left): the fields first, what readers will see after them
+    for (const width of [1279, 1100, 768]) {
+      await page.setViewportSize({ width, height: 900 });
+      const [f2, m2] = [(await side.boundingBox())!, (await middle.boundingBox())!];
+      expect(f2.x, `${hash} at ${width}: the fields at the left`).toBeLessThanOrEqual(1);
+      expect(Math.abs(f2.x + f2.width - m2.x), `${hash} at ${width}: then what readers will see`).toBeLessThanOrEqual(1);
+      await page.locator(".panel-strip").getByRole("button", { name: "Outline" }).click();
+      const o2 = (await outlineNav(page).boundingBox())!;
+      expect(o2.x, `${hash} at ${width}: the outline slides over the fields`).toBeLessThan(f2.x + f2.width);
+      // choosing closes it: the fields of what was chosen are where it was
+      await outlineNav(page).getByRole("button", { name: item }).click();
+      await expect(outlineNav(page)).toBeHidden();
+      await expect(side.locator(".fields-head h2")).toBeInViewport();
+    }
+
+    // a phone: one column, what readers will see; the fields slide over it and keep the keyboard to themselves
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(side.locator(".fields-head h2")).toBeInViewport(); // still open from the choice above
+    await expect(middle).toBeHidden();
+    await page.getByRole("button", { name: hash.startsWith("/p/") ? "Back to the map" : "Back to the requirements" }).click();
+    await expect(side).toBeHidden();
+    const m3 = (await middle.boundingBox())!;
+    expect(m3.x).toBe(0);
+    expect(m3.width).toBe(390);
+  }
+});
 
 test("the editing bar reads “Back” and “More” on a tablet, and keeps their full names for screen readers", async ({ page }) => {
   await signIn(page, DANA);

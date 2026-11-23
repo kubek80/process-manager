@@ -200,16 +200,17 @@ POST /api/processes/request-gcp-project/publish?rev=1&note=Shorter%20summary&ove
     },
     {
       path: "src/components/EditFrame.tsx",
-      role: "The frame of the editing screen: the editing bar (state, Undo, Redo, Save draft, Publish…, More), the outline, the preview, the fields panel, the checker's list and the Publish dialog.",
+      role: "The frame of the editing screen: the editing bar (state, Undo, Redo, Save draft, Publish…, More), then outline, fields panel and preview in that order, the checker's list and the Publish dialog.",
       requirements: [
+        { text: "The preview (`main.edit-middle`) comes after the fields in the page, as on the screen: Tab and screen readers meet outline, fields, preview, and \"Skip to the page\" (`skipToPage` in `App.tsx`) still lands on the preview, the editing screen's own main region.", at: '<main className="edit-middle" aria-label="What readers will see">{middle}</main>' },
         { text: "A press within `DELETE_PAUSE` of the delete button appearing is ignored: after a delete the next item's button is under the same pointer, and a double click would delete it too.", at: "onClick={() => { if (deleteReady(shown.current, performance.now())) onDelete(); }}" },
         { text: "The Publish dialog does nothing while publishing is blocked (`blocked` is the reason, shown on its button).", at: "if (blocked || busy) return;" },
       ],
-      tests: ["e2e/editor.spec.ts", "e2e/editscreen.spec.ts", "e2e/unnamed.spec.ts"],
+      tests: ["e2e/editor.spec.ts", "e2e/editscreen.spec.ts", "e2e/unnamed.spec.ts", "e2e/layout.spec.ts"],
     },
     {
       path: "src/components/EditProcessPage.tsx",
-      role: "The editing screen of a process (`#/p/:id/edit[/:stepId]`): its outline, the editable map in the middle and the fields of what is selected.",
+      role: "The editing screen of a process (`#/p/:id/edit[/:stepId]`): its outline, the fields of what is selected next to it and the editable map after them.",
       requirements: [
         { text: "Whoever may not draft the process gets no screen (`canDraft`). This only hides it: the server refuses their saves and answers `404` to their working-draft calls (`rbac.Perms.CanDraft`, `server/internal/httpapi/drafts.go`).", at: 'if (!canDraft(perms, "process", process)) return <NoRight' },
         { text: "A delete or a move says what it did to the flow with Undo (`restructureNotice`); a change that did nothing says nothing.", at: 'if (said) editNotice.info(said.title, { label: "Undo", run: () => d.undo() }, said.detail);' },
@@ -219,7 +220,7 @@ POST /api/processes/request-gcp-project/publish?rev=1&note=Shorter%20summary&ove
     },
     {
       path: "src/components/EditStandardPage.tsx",
-      role: "The editing screen of a standard (`#/s/:id/edit[/:REQ-ID]`): the outline of its requirements, the preview and the fields of what is selected.",
+      role: "The editing screen of a standard (`#/s/:id/edit[/:REQ-ID]`): the outline of its requirements, the fields of what is selected and the preview after them.",
       requirements: [
         { text: "Whoever may not draft the standard gets no screen (`canDraft`). This only hides it: the server refuses their saves and answers `404` to their working-draft calls (`rbac.Perms.CanDraft`).", at: 'if (!canDraft(perms, "standard", standard))' },
         { text: "A requirement is deleted at once with `deleteRequirement` (never the last one) and the message offers Undo; it is moved with `moveRequirementTo`, keeping its id.", at: "const next = deleteRequirement(draft, current.id);" },
@@ -323,8 +324,12 @@ POST /api/processes/request-gcp-project/publish?rev=1&note=Shorter%20summary&ove
     },
     {
       path: "src/edit.css",
-      role: "The editing screen's layout: the dark editing bar, outline, preview and fields, the panels that slide over on smaller screens, the field marks.",
-      requirements: [{ text: "The main button of the editing bar follows the brand only through the `-on-dark` tokens, readable on the bar's neutral dark in both themes.", at: "--eb-primary: var(--action-fill-on-dark);" }],
+      role: "The editing screen's layout: the dark editing bar, then outline | fields | preview, the panels that slide over on smaller screens, the field marks.",
+      requirements: [
+        { text: "The main button of the editing bar follows the brand only through the `-on-dark` tokens, readable on the bar's neutral dark in both themes.", at: "--eb-primary: var(--action-fill-on-dark);" },
+        { text: "The columns are outline | fields | preview: choosing and editing side by side, the result after them; below 1280 px the outline slides over the fields, and the fields stay the first column.", at: ".edit-body { position: relative; display: grid; grid-template-columns: 256px 400px minmax(0, 1fr); min-height: 0; }" },
+      ],
+      tests: ["e2e/layout.spec.ts"],
     },
   ],
   start: "src/components/EditSession.tsx",

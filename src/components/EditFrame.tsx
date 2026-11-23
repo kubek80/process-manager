@@ -19,9 +19,10 @@ import "../edit.css";
 /**
  * The editing screen of a process or a standard: a separate full-height screen, visibly not the
  * reader's page. The editing bar on top says what state the document is in and holds the
- * actions (the primary one, Publish, last); below it the outline (left), what readers will see
- * (middle) and the fields of what is selected (right). On a laptop the outline slides over; on a
- * phone the fields do too.
+ * actions (the primary one, Publish, last); below it the outline (left), the fields of what is
+ * selected next to it, and what readers will see after them (right): choose, edit, see the result,
+ * in that order on the screen and in the page (Tab, screen readers). On a laptop the outline slides
+ * over the fields; on a phone the fields slide over too.
  */
 
 /**
@@ -685,8 +686,7 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
           </div>
           <Rail.Provider value={{ rail, open: () => chooseRail(false) }}>{outline}</Rail.Provider>
         </aside>
-        <main className="edit-middle" aria-label="What readers will see">{middle}</main>
-        <aside ref={fieldsBox} className="edit-fields" aria-label={`Fields: ${fieldsLabel}`} onKeyDown={(e) => {
+        <aside ref={fieldsBox} className={`edit-fields ${selection?.includes("/") ? "on-item" : ""}`} aria-label={`Fields: ${fieldsLabel}`} onKeyDown={(e) => {
           // Escape in the fields goes back to the selected item in the outline
           if (e.key !== "Escape" || e.defaultPrevented || (e.target as Element).closest?.("[role=dialog], .kind-pop, .quick-add")) return;
           const item = document.querySelector<HTMLElement>(".outline [aria-current=true]");
@@ -698,6 +698,8 @@ export function EditFrame({ kind, title, state, issues, place, onPickIssue, undo
           <div className="panel-close"><button className="btn small ghost" onClick={() => setPanel(null)}><ArrowLeft size={16} />{kind === "process" ? "Back to the map" : "Back to the requirements"}</button></div>
           <KindOf.Provider value={kind}>{fields}</KindOf.Provider>
         </aside>
+        {/* after the fields: what they change, as readers will see it ("Skip to the page" leads here) */}
+        <main className="edit-middle" aria-label="What readers will see">{middle}</main>
         {panel && <div className="panel-scrim" onClick={() => setPanel(null)} aria-hidden="true" />}
       </div>
     </div>
