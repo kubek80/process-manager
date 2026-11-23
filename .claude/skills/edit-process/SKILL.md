@@ -27,7 +27,7 @@ The full modelling rules (how to split steps, choose block types, model decision
 - Life-cycle: a new process gets `"status": "draft"` and `"review": { "intervalMonths": 6 }`. Do not change `status` or `review.lastReviewedAt` unless asked; confirming a review is the owner's decision.
 - `resources` (on the process or on a step) hold links that help to do the work. Use `"kind": "skill"` for instructions an AI assistant can run in self-service, e.g. a skill that updates the IaC repository.
 - Do not invent links, durations or names that the source does not give. Leave optional fields out.
-- When changing an existing process, keep its `id` and the ids of unaffected steps, and set `updatedAt` to today.
+- When changing an existing process, keep its `id` and the ids of unaffected steps, and set `updatedAt` to today (your own calendar day, as the app stamps it).
 
 ## Check your work
 

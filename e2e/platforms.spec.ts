@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { answer, CASEY, CSRF, editState, fields, JORDAN, more, open, openEditor, outline, publish, publishChange, putDoc, putWorkingDraft, readProcess, readStandard, readWorkingDraft, refusal, RILEY, SAM, serverToday, signIn, unfold, versionOf } from "./helpers";
+import { answer, CASEY, CSRF, editState, fields, JORDAN, more, open, openEditor, outline, publish, publishChange, putDoc, putWorkingDraft, readProcess, readStandard, readWorkingDraft, readerToday, refusal, RILEY, SAM, signIn, unfold, versionOf } from "./helpers";
 
 // Jordan is an ordinary reader who is Platform owner of Google Cloud and Practice owner of
 // Engineering: he may change what belongs to them, and nothing else. Where the app hides a
@@ -244,7 +244,7 @@ test("a team Owner cannot edit and never sees unpublished changes, but confirms 
     await open(page, `/p/${GCP}/flow`);
     const before = await versionOf(page, "process", GCP);
     await page.getByRole("button", { name: "Mark as reviewed" }).click();
-    await expect.poll(async () => (await readProcess(page, GCP))!.review).toMatchObject({ lastReviewedAt: serverToday(), reviewedBy: "Casey Owner" });
+    await expect.poll(async () => (await readProcess(page, GCP))!.review).toMatchObject({ lastReviewedAt: readerToday(), reviewedBy: "Casey Owner" }); // the reader's day: the browser's zone
     expect(await versionOf(page, "process", GCP)).toBe(before + 1);
 
     const gcp = (await readProcess(page, GCP))!;

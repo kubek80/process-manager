@@ -41,7 +41,7 @@ Then check the code map (Admin › Code map, `src/codemap/categories/*.ts`): for
 | npm scripts, commands, folder names | Every place that names them: `README.md`, the Guide, `docs/backend.md`, `CLAUDE.md`, the skills in `.claude/skills/` |
 | The look of the portal: Admin › Theming, the tokens, the name or logo in the top bar (`src/lib/theme.ts`, `ThemeSection`, `Brand.tsx`, `src/theme.css`, `server/internal/theme`, `/api/theme`) | The Guide section “The look of the portal” and its chart (`themeFlow`), “The Admin panel”; “Look of the portal” and the API in `docs/backend.md`; the theming convention in `CLAUDE.md` |
 | The shared parts (`src/components/marks.tsx`, `src/controls.css`) or the words for levels, kinds and review marks | The Guide sections “Finding a process or standard” (Levels in words, the card), “Reading a process” and “Reading a standard”; the vocabulary in `CLAUDE.md` |
-| When a review is due, the first review (`reviewInfo`, `reviewOf`, `needsReview` in `src/lib/lifecycle.ts`, `meta[id].publishedAt`, the MCP server's `reviewOf`) | The Guide sections “Life-cycle and reviews” and “Your responsibilities”; “Reviews” and the API in `docs/backend.md`; the review state in `docs/mcp.md`; `CLAUDE.md` |
+| When a review is due, the first review, or how a day is counted (`reviewInfo`, `reviewOf`, `needsReview` in `src/lib/lifecycle.ts`, `meta[id].publishedAt`, `today` / `dayOf` in `src/lib/dates.ts`, the review call's `day`, the MCP server's `reviewOf`) | The Guide sections “Life-cycle and reviews”, “Your responsibilities” and “Dates and times” in “What it is”; “Reviews” and the API in `docs/backend.md`; the review state in `docs/mcp.md`; `CLAUDE.md` |
 | Any source file: added, moved, removed, or a rule it enforces | The code map, `src/codemap/categories/*.ts` (see step 1); a change to how the code map works, or to `GET /api/admin/source` / `PM_SOURCE_DIR`: the Guide section “The code map”, “Source files for the code map” and Settings in `docs/backend.md`, the code map convention in `CLAUDE.md` |
 | A screen shown in a screenshot (`docs/*.png`) so that the picture is now misleading | Retake it, or say in your summary that it is out of date |
 
@@ -57,7 +57,7 @@ grep -rn "old-name" README.md docs src/components/GuidePage.tsx .claude CLAUDE.m
 - **The Guide is for people who use the app**, including business analysts: plain words, what they can do and where, no code terms unless the section is under “Running it”. Lead with what the reader can do.
 - **One home per fact.** Details live in the Guide (using it) or `docs/backend.md` (operating it). `README.md` stays short and points to them.
 - **A new Guide section** needs an entry in `GROUPS` at the top of `GuidePage.tsx`, or it will not appear in the menu. Add its id to the list in the guide test in `e2e/consumer.spec.ts`.
-- **A new flow chart** is exported from `src/guide/flows.ts` and kept to seven columns or fewer so it fits without scrolling. It is validated automatically by the unit tests.
+- **A new flow chart** is exported from `src/guide/flows.ts` and shown with `ProcessPicture` (never a `FlowView` of its own). Keep it to seven columns or fewer: a chart opens whole only where it is still readable that way (70% or more), otherwise at 80%, cut, and the reader has to drag it or press Fit (`pictureZoom` in `src/lib/zoom.ts`). Its layout is validated automatically by the unit tests.
 - **Remove what is no longer true.** Deleting a stale sentence is an update.
 - Do not add change logs, dates or “recently added” notes to the documents; git has the history.
 

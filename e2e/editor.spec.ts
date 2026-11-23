@@ -204,7 +204,7 @@ test("reviews: the library shows what is due, and one click confirms a process",
   await expect(page.locator(".banner", { hasText: "Review overdue since 2026-09-02" })).toBeVisible();
   await page.getByRole("button", { name: "Mark as reviewed" }).click();
   await expect(page.locator(".banner", { hasText: "Review overdue" })).toHaveCount(0);
-  await expect(page.locator("header.doc-head")).toContainText(`Reviewed ${serverToday()}`); // dated by the server, not by this browser's clock
+  await expect(page.locator("header.doc-head")).toContainText(`Reviewed ${serverToday()}`); // the browser's clock (NOW) is today nowhere on Earth: the server dates it with its own UTC day
   await expect.poll(async () => (await readProcess(page, "onboard-site-to-akamai"))!.review).toEqual({ intervalMonths: 6, lastReviewedAt: serverToday(), reviewedBy: "Alex Editor" });
 
   // back in the list the filter is still on, and the process confirmed just now has left it

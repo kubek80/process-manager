@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { ALEX, CASEY, CSRF, SAM, open, readProcess, signIn } from "./helpers";
+import { ALEX, CASEY, CSRF, SAM, open, readerToday, readProcess, signIn } from "./helpers";
 
 // The reader's page of a process and of a standard: the head (kind, owner in words, how binding
 // as a neutral mark, the facts, the quiet line with dates), the tabs, and a first review that is
@@ -104,7 +104,8 @@ test("a first review is counted from the first publication: due later, not count
   expect(res.ok(), await res.text()).toBeTruthy();
   const { meta } = await (await request.get("/api/processes")).json();
   expect(meta[FRESH].publishedAt).toBeTruthy();
-  const due = new Date(meta[FRESH].publishedAt);
+  // counted from the reader's day of the first publication (the browser's zone), six calendar months on
+  const due = new Date(`${readerToday(undefined, new Date(meta[FRESH].publishedAt))}T00:00:00Z`);
   due.setUTCMonth(due.getUTCMonth() + 6);
 
   await signIn(page, CASEY); // Owner of the team: looks after its reviews

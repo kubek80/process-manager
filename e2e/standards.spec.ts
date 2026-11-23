@@ -319,7 +319,7 @@ test("mark a standard as reviewed, look at its history, edit its JSON", async ({
   await expect(page.locator(".banner", { hasText: "Review overdue" })).toBeVisible();
   await page.getByRole("button", { name: "Mark as reviewed" }).click();
   await expect(page.locator(".banner", { hasText: "Review overdue" })).toHaveCount(0);
-  await expect.poll(async () => (await readStandard(page, LOGGING))!.review).toEqual({ intervalMonths: 12, lastReviewedAt: serverToday(), reviewedBy: "Riley Security" });
+  await expect.poll(async () => (await readStandard(page, LOGGING))!.review).toEqual({ intervalMonths: 12, lastReviewedAt: serverToday(), reviewedBy: "Riley Security" }); // the clock installed above is today nowhere: the server's own UTC day
 
   await page.getByRole("button", { name: /^Version \d+$/ }).click();
   await expect(page.locator(".history li").first()).toContainText("Riley Security");

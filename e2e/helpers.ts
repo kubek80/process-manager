@@ -12,8 +12,19 @@ export const MORGAN = "morgan@example.com"; // Platform member of Google Cloud a
 export const CSRF = { "X-Requested-With": "process-manager" };
 
 
-/** Today as the server sees it. A review is dated by the server, whatever the clock of the browser says. */
+/**
+ * Today as the server sees it: the day in UTC. The server dates a review with it when the app
+ * sends no day, or one that is today nowhere on Earth (a browser clock installed far off).
+ */
 export const serverToday = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * Today for a reader in `zone`, by the real clock: the day "Mark as reviewed" and a save are
+ * dated with. Left out, the zone is the browser's own, which is the host's (playwright.config.ts
+ * sets no `timezoneId`: UTC here and in CI, but not on every developer's machine).
+ */
+export const readerToday = (zone?: string, now = new Date()) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 
 /**
  * Sign in through the API (fast). The sign-in screen itself is covered in auth.spec.ts. What

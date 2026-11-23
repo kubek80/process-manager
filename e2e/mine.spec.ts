@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ALEX, CASEY, DANA, JORDAN, RILEY, SAM, open, readProcess, report, serverToday, signIn } from "./helpers";
+import { ALEX, CASEY, DANA, JORDAN, RILEY, SAM, open, readProcess, readerToday, report, signIn } from "./helpers";
 
 const CSRF = { "X-Requested-With": "process-manager" };
 
@@ -50,7 +50,7 @@ test("an owner sees what is theirs and what needs them, and handles it from one 
   await row.getByRole("button", { name: "Still correct" }).click();
   await expect(page.getByText("“Mine demo” is recorded as reviewed today.")).toBeVisible();
   await expect(reviews.locator("li", { hasText: "Mine demo" })).toHaveCount(0);
-  expect((await readProcess(page, "mine-demo"))!.review).toEqual({ intervalMonths: 6, lastReviewedAt: serverToday(), reviewedBy: "Casey Owner" });
+  expect((await readProcess(page, "mine-demo"))!.review).toEqual({ intervalMonths: 6, lastReviewedAt: readerToday(), reviewedBy: "Casey Owner" }); // the day of the browser's zone
 
   // the feedback that is waiting, with what it is about and who wrote it
   const waiting = page.getByRole("region", { name: /Feedback waiting for you/ });
