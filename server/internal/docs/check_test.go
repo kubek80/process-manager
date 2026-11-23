@@ -137,6 +137,10 @@ func TestProblemsOfTheListsAreSentencesThatNameTheEntry(t *testing.T) {
 	if got := docs.EntryWords("tool", docs.Named{}); got != "a tool without a name" {
 		t.Errorf("an entry without a name or an id: %q", got)
 	}
+	same := `{"tiers":[],"environments":[],"languages":[],"teams":[],"tools":[{"id":"terraform","name":"Terraform"},{"id":"terraform","name":"Terraform"}]}`
+	if err := docs.Check(docs.Catalog, []byte(same), docs.Lists{}); err == nil || err.Error() != "invalid: tools[1].id: Two tools have the id “terraform”, both called “Terraform”: remove one of them." {
+		t.Errorf("duplicate ids and names: %v", err)
+	}
 	tools := `{"tiers":[],"environments":[],"languages":[],"teams":[],"tools":[{"id":"terraform","name":"Terraform"},{"id":"terraform","name":"Terraform Cloud"}]}`
 	if err := docs.Check(docs.Catalog, []byte(tools), docs.Lists{}); err == nil || err.Error() != "invalid: tools[1].id: Two tools have the id “terraform” (“Terraform” and “Terraform Cloud”): remove one of them." {
 		t.Errorf("duplicate ids: %v", err)

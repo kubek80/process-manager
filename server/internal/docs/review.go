@@ -17,7 +17,7 @@ const (
 // TodaySomewhere says whether day (2026-11-16) is today somewhere on Earth at now: from the day
 // it is at UTC-12 to the day it is at UTC+14. A person ahead of or behind UTC sends their own
 // day (the review they confirm, the day they save on), which may be the UTC day before or after;
-// that day is theirs and is taken as it is. A day outside that window is a wrong clock.
+// that day is theirs and is taken as it is. A day outside that window is a wrong clock (or no day).
 func TodaySomewhere(day string, now time.Time) bool {
 	d, err := time.Parse(time.DateOnly, day)
 	if err != nil || d.Format(time.DateOnly) != day {

@@ -91,11 +91,16 @@ describe("the problems of the lists, in words", () => {
   });
 
   it("two entries of one list with the same id: remove one, both named", () => {
-    const c = lists((x) => { x.tools.push({ id: x.tools[0].id, name: "Terraform Cloud" }); x.teams.push({ id: x.teams[0].id, name: "" }); });
+    const c = lists((x) => { x.tools.push({ id: x.tools[0].id, name: "Terraform Cloud" }); x.teams.push({ id: x.teams[0].id, name: " " }); });
     expect(words(c)).toEqual([
       `Two teams have the id “${c.teams[0].id}”: remove one of them.`,
       `Two tools have the id “${c.tools[0].id}” (“${c.tools[0].name}” and “Terraform Cloud”): remove one of them.`,
     ]);
+  });
+
+  it("two entries with the same id and the same name", () => {
+    const c = lists((x) => { x.tools.push({ ...x.tools[0] }); });
+    expect(words(c)).toEqual([`Two tools have the id “${c.tools[0].id}”, both called “${c.tools[0].name}”: remove one of them.`]);
   });
 
   it("an id that is missing or that the portal cannot use: remove the entry and add it again", () => {

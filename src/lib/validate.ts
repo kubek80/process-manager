@@ -236,12 +236,13 @@ export function validateCatalog(data: unknown): Issue[] {
 
 /**
  * Two entries of one list with the same id, as the server says it too (`docs.Check`): "Two tools
- * have the id “terraform” (“Terraform” and “Terraform Cloud”): remove one of them." An id is made
+ * have the id “terraform” (“Terraform” and “Terraform Cloud”): remove one of them." (", both called
+ * “Terraform”" when their names are the same too). An id is made
  * once from the name and never changes, so removing one is what can be done on the page.
  */
 export function duplicateSentence(key: keyof typeof LIST_WORDS, id: string, a: string, b: string): string {
   const names = [a, b].map((n) => (typeof n === "string" ? n.trim() : ""));
-  const both = names.every(Boolean) ? ` (“${names[0]}” and “${names[1]}”)` : "";
+  const both = !names.every(Boolean) ? "" : names[0] === names[1] ? `, both called “${names[0]}”` : ` (“${names[0]}” and “${names[1]}”)`;
   return `Two ${LIST_WORDS[key].many} have the id “${id}”${both}: remove one of them.`;
 }
 

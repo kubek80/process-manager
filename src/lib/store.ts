@@ -145,7 +145,8 @@ export const publishWorkingDraft = (kind: TargetKind, id: string, rev: number, n
 /**
  * Records that a process or standard was reviewed and is still correct: today and the person's
  * name, as a version of its own. For the team that owns it and for whoever may edit it. `day` is
- * the person's own today (not the UTC day); the server takes it while it is today somewhere on Earth.
+ * the person's own today (not the UTC day); the server takes it while it is today somewhere on
+ * Earth, and its own (UTC) day otherwise (a computer whose clock is wrong).
  */
 export const confirmReview = <T extends Process | Standard>(kind: TargetKind, id: string, base: number, day = today()) =>
   call<DocMeta & { document: T }>("POST", `/api/${kind === "process" ? "processes" : "standards"}/${id}/review?base=${base}&day=${day}`);

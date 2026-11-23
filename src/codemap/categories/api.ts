@@ -80,7 +80,7 @@ export const api: CodeCategory = {
         { text: "The regeneration is detached from the request (`WithoutCancel`), so a person closing the tab does not leave skills out of date. Test: `TestSkillsFollowASaveEvenWhenTheClientIsGone`.", at: "ctx = context.WithoutCancel(ctx)" },
         { text: "The answer waits for the skills at most `syncWait` (20 s) and never for the index, so a slow provider cannot slow a save. Test: `TestAHangingProviderNeitherSlowsASaveNorBlocksThePortal`.", at: "case <-time.After(syncWait):" },
         { text: "Before the lists were ever saved, `GET /api/catalog` is version 0 with the empty lists, so the first save is made from version 0 like any other.", at: "w.Header().Set(VersionHeader, \"0\")" },
-        { text: "`POST …/{id}/review?day=` records the person's own day (the app sends it), taken while it is today somewhere on Earth (`docs.TodaySomewhere`); without `day`, the UTC day. Test: `TestAReviewIsRecordedOnThePersonsOwnDay`.", at: "} else if !docs.TodaySomewhere(day, time.Now()) {" },
+        { text: "`POST …/{id}/review?day=` records the person's own day (the app sends it) while it is today somewhere on Earth (`docs.TodaySomewhere`); without `day`, or from a wrong clock, the server's UTC day: never refused for the day. Test: `TestAReviewIsRecordedOnThePersonsOwnDay`.", at: "if !docs.TodaySomewhere(day, time.Now()) {" },
       ],
       tests: ["server/internal/httpapi/versions_test.go", "server/internal/httpapi/api_test.go", "server/internal/httpapi/review_test.go"],
     },

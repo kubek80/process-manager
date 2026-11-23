@@ -882,14 +882,12 @@ func (a *api) reviewDoc(kind string) http.HandlerFunc {
 			return
 		}
 		// The day is the person's own (?day=, from the app): ahead of UTC it is already tomorrow
-		// for them, and that is the day they confirmed on. Taken while it is today somewhere on
-		// Earth; without it (an older app, a script), the UTC day.
+		// for them, and that is the day they confirmed on. It is taken while it is today somewhere
+		// on Earth. Without it (an older app, a script) or from a computer whose clock is wrong,
+		// the server's own day (UTC): the review is recorded either way, on a day that is today.
 		day := r.URL.Query().Get("day")
-		if day == "" {
+		if !docs.TodaySomewhere(day, time.Now()) {
 			day = time.Now().UTC().Format(time.DateOnly)
-		} else if !docs.TodaySomewhere(day, time.Now()) {
-			writeError(w, 400, fmt.Sprintf("The review can only be recorded for today, and %q is not today. Check the date of your computer and try again.", day))
-			return
 		}
 		body, err := docs.WithReview(current.Body, day, reviewerName(s.Name), reviewRhythm[kind])
 		if err == nil {

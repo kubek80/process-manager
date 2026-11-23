@@ -142,7 +142,7 @@ describe("catalog checks", () => {
   it("rejects a wrong shape", () => expect(hasErrors(validateCatalog({ teams: [] }))).toBe(true));
   it("rejects duplicate ids", () => {
     const issues = validateCatalog({ ...catalog, tools: [...catalog.tools, catalog.tools[0]] });
-    expect(issues[0].message).toContain("duplicate id");
+    expect(issues[0].message).toBe(`Two tools have the id “${catalog.tools[0].id}”, both called “${catalog.tools[0].name}”: remove one of them.`);
     for (const key of ["practices", "platforms", "categories"] as const) {
       const [issue] = validateCatalog({ ...catalog, [key]: [...catalog[key], catalog[key][0]] });
       expect(issue).toMatchObject({ level: "error", path: `${key}[${catalog[key].length}].id` });

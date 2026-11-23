@@ -237,7 +237,11 @@ func Check(kind string, body []byte, l Lists) error {
 			for i, n := range list {
 				if name, seen := first[n.ID]; seen {
 					both := ""
-					if a, b := strings.TrimSpace(name), strings.TrimSpace(n.Name); a != "" && b != "" {
+					switch a, b := strings.TrimSpace(name), strings.TrimSpace(n.Name); {
+					case a == "" || b == "":
+					case a == b:
+						both = fmt.Sprintf(", both called “%s”", a)
+					default:
 						both = fmt.Sprintf(" (“%s” and “%s”)", a, b)
 					}
 					add("%s[%d].id: Two %s have the id “%s”%s: remove one of them.", key, i, key, n.ID, both)

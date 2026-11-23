@@ -254,15 +254,16 @@ func TestAReviewIsRecordedOnThePersonsOwnDay(t *testing.T) {
 	if status != 200 || lastReviewed() != ahead {
 		t.Fatalf("a review from behind UTC: %d %v, stored %s", status, body, lastReviewed())
 	}
-	// a day that is today nowhere is a wrong clock: refused, in words, and nothing is stored
-	for _, day := range []string{time.Now().UTC().AddDate(0, 0, 2).Format(time.DateOnly), "2020-01-01", "tomorrow"} {
-		status, body = e.as(casey).do("POST", "/api/processes/"+gcp+"/review?day="+day, nil)
-		if status != 400 || !strings.Contains(body["error"].(string), "is not today") {
+	// a day that is today nowhere is a wrong clock: the review is still recorded, on the server's
+	// own day (UTC), and never on the wrong day
+	utc := time.Now().UTC().Format(time.DateOnly)
+	for _, day := range []string{time.Now().UTC().AddDate(0, 0, 3).Format(time.DateOnly), "2020-01-01", "tomorrow"} {
+		e := setup(t, nil)
+		status, body := e.as(casey).do("POST", "/api/processes/"+gcp+"/review?day="+day, nil)
+		d, _ := e.deps.Docs.Get(bg, docs.Process, gcp)
+		if status != 200 || !strings.Contains(string(d.Body), `"lastReviewedAt": "`+utc+`"`) {
 			t.Errorf("day %s: %d %v", day, status, body)
 		}
-	}
-	if lastReviewed() != ahead {
-		t.Fatalf("a refused review was stored: %s", lastReviewed())
 	}
 }
 
