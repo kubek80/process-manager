@@ -4,10 +4,11 @@ import { STEP_META, STEP_TYPES } from "./stepMeta";
 import standardSchema from "../../schema/standard.schema.json";
 import standardExample from "../../schema/example.standard.json";
 import type { Catalog, Issue, Process, Standard } from "../types";
+// "updatedAt" is the person's own day, as the editing screen stamps it
+import { today } from "./dates";
 
 export interface KnownProcess { id: string; title: string }
 
-const today = () => new Date().toISOString().slice(0, 10);
 
 /**
  * The instruction block. It is model-agnostic on purpose: it works when pasted into

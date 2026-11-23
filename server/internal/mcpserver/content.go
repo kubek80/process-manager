@@ -355,6 +355,9 @@ func reviewOf(e *entry, now time.Time) Review {
 	}
 	due := last.AddDate(0, int(r.IntervalMonths), 0)
 	out.DueAt = due.Format(time.DateOnly)
+	// An agent has no reader's day: today and the first publication are UTC days here, while the
+	// portal counts in the reader's own day. Near midnight a review can show as due a day
+	// earlier or later for an agent than for a reader far from UTC.
 	today, _ := time.Parse(time.DateOnly, now.UTC().Format(time.DateOnly))
 	days := int(due.Sub(today).Hours() / 24)
 	switch {

@@ -1,4 +1,5 @@
 import type { NextLink, Process, Requirement, Resource, Standard, Step, StepType } from "../types";
+import { today } from "./dates";
 
 /** A kebab-case id of at most 60 characters. Cut first, then trim, so a cut in the middle of "a - b" leaves no dash at the end. */
 export const slugify = (text: string) =>
@@ -11,7 +12,8 @@ export function uniqueId(base: string, existing: Iterable<string>): string {
   for (let i = 2; ; i++) if (!taken.has(`${root}-${i}`)) return `${root}-${i}`;
 }
 
-export const today = () => new Date().toISOString().slice(0, 10);
+/** The day a save is stamped with (`updatedAt`): the person's own day, not the UTC day. */
+export { today };
 
 // The helpers below also get documents that are not (yet) well-formed - an old revision, something
 // repaired by hand - so they pass through what they do not understand instead of failing on it.

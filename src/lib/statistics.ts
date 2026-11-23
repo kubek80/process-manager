@@ -1,4 +1,5 @@
 import type { Catalog, TargetKind } from "../types";
+import { addDays, formatShortDay } from "./dates";
 
 /** Use of processes and standards over a period, for admins (Admin > Statistics). */
 
@@ -90,16 +91,16 @@ export function groupTotals(stats: Pick<Statistics, "rows" | "groups">, by: Grou
 
 /**
  * The weeks from the first to the last, each one present: a week without any view is a zero,
- * not a gap that joins its neighbours. Weeks start on Monday (`YYYY-MM-DD`).
+ * not a gap that joins its neighbours. Weeks start on Monday (`YYYY-MM-DD`). The server cuts days
+ * and weeks in UTC (the page says so: `countingDay`); a week is a calendar day here, never shifted.
  */
 export function fillWeeks(trend: StatWeek[]): StatWeek[] {
   if (trend.length < 2) return [...trend];
   const sorted = [...trend].sort((a, b) => a.week.localeCompare(b.week));
   const by = new Map(sorted.map((w) => [w.week, w]));
   const out: StatWeek[] = [];
-  const end = Date.parse(`${sorted[sorted.length - 1].week}T00:00:00Z`);
-  for (let t = Date.parse(`${sorted[0].week}T00:00:00Z`); t <= end && out.length < 600; t += 7 * 86400_000) {
-    const week = new Date(t).toISOString().slice(0, 10);
+  const end = sorted[sorted.length - 1].week;
+  for (let week = sorted[0].week; week <= end && out.length < 600; week = addDays(week, 7)) {
     out.push(by.get(week) ?? { week, views: 0, people: 0, downloads: 0, days: 7 });
   }
   return out;
@@ -115,12 +116,8 @@ export function chartScale(max: number, lines = 4): { top: number; ticks: number
   return { top, ticks: Array.from({ length: lines + 1 }, (_, i) => i * step) };
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-/** "9 Nov" for the week of 2026-11-09. */
-export function weekLabel(week: string): string {
-  const [, m, d] = week.split("-").map(Number);
-  return m ? `${d} ${MONTHS[m - 1]}` : week;
-}
+/** "9 Nov" for the week of 2026-11-09: the week's day as the server wrote it, never shifted to the reader's zone. */
+export const weekLabel = (week: string): string => formatShortDay(week);
 
 /** Which week labels fit under the chart: every n-th, so they never run into each other. */
 export function labelEvery(weeks: number, room = 9): number {

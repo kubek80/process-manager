@@ -5,6 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { reviewInfo } from "../src/lib/lifecycle";
+import { today } from "../src/lib/dates";
 import type { Catalog, Governed } from "../src/types";
 
 // default: the seed content of the repository; pass a folder written by `npm run export` for live content
@@ -12,13 +13,15 @@ const root = path.resolve(process.argv[2] ?? ".");
 const catalog: Catalog = JSON.parse(fs.readFileSync(path.join(root, "catalog/catalog.json"), "utf8"));
 const byOwner = new Map<string, string[]>();
 let overdue = 0;
+// no reader here: today is the UTC day, as the MCP server counts it (the portal uses the reader's own day)
+const utcToday = today(new Date(), "UTC");
 
 for (const folder of ["processes", "standards"]) {
   const dir = path.join(root, folder);
   if (!fs.existsSync(dir)) continue;
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".json")).sort()) {
     const p: Governed = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
-    const r = reviewInfo(p);
+    const r = reviewInfo(p, utcToday);
     if (r.state !== "overdue" && r.state !== "soon") continue;
     if (r.state === "overdue") overdue++;
     const team = catalog.teams.find((t) => t.id === p.owner);

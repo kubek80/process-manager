@@ -1,4 +1,5 @@
 import type { Governed, Status } from "../types";
+import { addMonths, dayOf, daysBetween, isDay, today as readersToday } from "./dates";
 
 export type ReviewState = "none" | "ok" | "soon" | "overdue";
 export interface ReviewInfo {
@@ -10,17 +11,7 @@ export interface ReviewInfo {
 export const statusOf = (p: Pick<Governed, "status">): Status => p.status ?? "active";
 
 /** Whether a text is a real day in the form 2026-11-16 (the format only checks what it looks like). */
-export function isDate(iso: unknown): boolean {
-  if (typeof iso !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
-  const d = new Date(`${iso}T00:00:00Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso;
-}
-
-const addMonths = (iso: string, months: number) => {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCMonth(d.getUTCMonth() + months);
-  return d.toISOString().slice(0, 10);
-};
+export const isDate = (iso: unknown): boolean => isDay(iso);
 
 /** Within this many days a review is "due"; after its date it is "overdue". */
 export const DUE_DAYS = 30;
@@ -31,18 +22,23 @@ export const DUE_DAYS = 30;
  * (`firstPublished(meta[id])`: `meta[id].publishedAt`, from an older server `createdAt`). Its first review is
  * then due, and overdue, by the same rule as every later one. Without `since` nobody knows how
  * long it has gone unreviewed, so it is overdue.
+ *
+ * Days are the reader's: `today` is the reader's day unless given, and `since` (a moment) counts
+ * from the day it fell on for the reader. The stored review date is a calendar day and is used as
+ * written. The MCP server and `npm run reviews` have no reader and count in UTC days, so near
+ * midnight a review can be due a day earlier or later there than for a reader far from UTC.
  */
-export function reviewInfo(p: Pick<Governed, "status" | "review">, today = new Date().toISOString().slice(0, 10), since?: string): ReviewInfo {
+export function reviewInfo(p: Pick<Governed, "status" | "review">, today = readersToday(), since?: string): ReviewInfo {
   if (!p.review || statusOf(p) !== "active") return { state: "none", label: "No review planned" };
   const last = p.review.lastReviewedAt;
-  const start = since ? since.slice(0, 10) : "";
+  const start = since ? dayOf(since) : "";
   if (!last && !isDate(start)) return { state: "overdue", label: "Never reviewed" };
   // a date that cannot be read (stored from outside the app) must not take the page down:
   // nobody knows when it was reviewed, so it is due
   if (last && !isDate(last)) return { state: "overdue", label: "Review date cannot be read" };
   const first = !last;
   const dueAt = addMonths(last || start, p.review.intervalMonths);
-  const days = Math.round((Date.parse(dueAt) - Date.parse(today)) / 86400000);
+  const days = daysBetween(today, dueAt);
   const extra = first ? { first } : {};
   if (days < 0) return { state: "overdue", dueAt, days, label: `Review overdue since ${dueAt}`, ...extra };
   if (days <= DUE_DAYS) return { state: "soon", dueAt, days, label: first ? `First review due ${dueAt}` : `Review due ${dueAt}`, ...extra };

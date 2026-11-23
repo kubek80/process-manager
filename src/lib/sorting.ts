@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import type { DocMeta, TargetKind } from "../types";
+import { dayOf, daysBetween, isDay, today } from "./dates";
 
 // The order of the lists and the search results: the best match (with a search) or by name,
 // the newest first (when it was added), or the most recently updated first. The dates come from
@@ -94,15 +95,18 @@ export function mostViewed<T extends Listed>(results: T[], views: (r: T) => numb
     .slice(0, n);
 }
 
-/** When something was updated, in words: "today", "yesterday", "3 days ago", "2 weeks ago", else the date. */
-export function agoText(at: string, now: Date = new Date()): string {
-  const t = Date.parse(at);
-  if (!Number.isFinite(t)) return "";
-  const day = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  const days = Math.round((day(now) - day(new Date(t))) / 86_400_000);
+/**
+ * When something was updated, in words: "today", "yesterday", "3 days ago", "2 weeks ago", else
+ * the date. Days are the reader's (`zone`: the browser's by default): a save at 23:30 in Los
+ * Angeles is "today" there, though it is already tomorrow in UTC. A day without a time is used as written.
+ */
+export function agoText(at: string, now: Date = new Date(), zone?: string): string {
+  const day = dayOf(at, zone);
+  if (!isDay(day)) return "";
+  const days = daysBetween(day, today(now, zone));
   if (days <= 0) return "today";
   if (days === 1) return "yesterday";
   if (days < 14) return `${days} days ago`;
   if (days < 56) return `${Math.floor(days / 7)} weeks ago`;
-  return new Date(t).toISOString().slice(0, 10);
+  return day;
 }

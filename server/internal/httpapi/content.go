@@ -842,7 +842,7 @@ func reviewerName(name string) string {
 }
 
 // reviewDoc records that somebody confirmed a process or standard as still correct: today's
-// date and their name. This is the one change the owning team may make themselves -
+// date (their own day) and their name. This is the one change the owning team may make themselves -
 // they are the ones who are asked to review - besides everyone who may edit it. It is saved as
 // a version like every other change.
 func (a *api) reviewDoc(kind string) http.HandlerFunc {
@@ -881,7 +881,17 @@ func (a *api) reviewDoc(kind string) http.HandlerFunc {
 			a.conflict(w, r, kind, id, &docs.Conflict{Current: current, Exists: true})
 			return
 		}
-		body, err := docs.WithReview(current.Body, time.Now().UTC().Format("2006-01-02"), reviewerName(s.Name), reviewRhythm[kind])
+		// The day is the person's own (?day=, from the app): ahead of UTC it is already tomorrow
+		// for them, and that is the day they confirmed on. Taken while it is today somewhere on
+		// Earth; without it (an older app, a script), the UTC day.
+		day := r.URL.Query().Get("day")
+		if day == "" {
+			day = time.Now().UTC().Format(time.DateOnly)
+		} else if !docs.TodaySomewhere(day, time.Now()) {
+			writeError(w, 400, fmt.Sprintf("The review can only be recorded for today, and %q is not today. Check the date of your computer and try again.", day))
+			return
+		}
+		body, err := docs.WithReview(current.Body, day, reviewerName(s.Name), reviewRhythm[kind])
 		if err == nil {
 			err = a.Schemas.Validate(kind, body)
 		}

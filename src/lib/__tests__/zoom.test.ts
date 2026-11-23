@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterFit, panHint, laneChars, wrapWords, fitWhole, hiddenEdges, laneColumn, laneLabel, openingZoom, scrollToCentre, stepZoom, clampZoom, isZoomWheel, scrollForZoom, wheelZoom, zoomKey, ZOOM_FLOOR, ZOOM_MAX, ZOOM_MIN } from "../zoom";
+import { afterFit, panHint, laneChars, wrapWords, fitWhole, hiddenEdges, laneColumn, laneLabel, openingZoom, pictureZoom, PICTURE_MIN, scrollToCentre, stepZoom, clampZoom, isZoomWheel, scrollForZoom, wheelZoom, zoomKey, ZOOM_FLOOR, ZOOM_MAX, ZOOM_MIN } from "../zoom";
 
 describe("Ctrl + scroll on the map", () => {
   it("scrolling up zooms in, down zooms out, by about a tenth per notch of a mouse wheel", () => {
@@ -204,5 +204,25 @@ describe("how to move the map, by the device", () => {
   it("speaks of swiping and pinching on a touch screen, never of Ctrl", () => {
     expect(panHint(true)).toEqual({ move: "Swipe to move", zoom: "pinch to zoom" });
     expect(panHint(false, "Ctrl")).toEqual({ move: "Drag to move", zoom: "Ctrl + scroll to zoom" });
+  });
+});
+
+describe("a process drawn as a picture in a text", () => {
+  const column = () => 136;
+  it("opens at full size where it fits, smaller where that makes it fit", () => {
+    expect(pictureZoom(1000, 800, column)).toBe(1);
+    expect(pictureZoom(1000, 960, column)).toBe(0.9);
+  });
+  it("never opens below readable: a wider picture keeps that size and scrolls sideways", () => {
+    expect(PICTURE_MIN).toBe(0.8);
+    expect(pictureZoom(700, 2000, column)).toBe(PICTURE_MIN);
+    expect(pictureZoom(390, 1200, () => 96)).toBe(PICTURE_MIN);
+  });
+  it("prints whole, however small that makes it", () => {
+    expect(pictureZoom(680, 2000, column, true)).toBe(0.25);
+    expect(pictureZoom(680, 100000, column, true)).toBe(ZOOM_FLOOR);
+  });
+  it("is drawn at full size when nothing is known about its width yet", () => {
+    expect(pictureZoom(0, 800, column)).toBe(1);
   });
 });

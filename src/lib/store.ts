@@ -8,6 +8,7 @@ import { parseRequestsQuery, requestsQuery, type DocRequest, type NewRequest, ty
 import type { Period, Statistics } from "./statistics";
 import type { AdminUser, UserRole } from "./users";
 import { portalName, type Look } from "./theme";
+import { today } from "./dates";
 
 export class ApiError extends Error {
   /** Set when a save was refused because somebody else saved (or deleted) first. */
@@ -143,10 +144,11 @@ export const publishWorkingDraft = (kind: TargetKind, id: string, rev: number, n
 
 /**
  * Records that a process or standard was reviewed and is still correct: today and the person's
- * name, as a version of its own. For the team that owns it and for whoever may edit it.
+ * name, as a version of its own. For the team that owns it and for whoever may edit it. `day` is
+ * the person's own today (not the UTC day); the server takes it while it is today somewhere on Earth.
  */
-export const confirmReview = <T extends Process | Standard>(kind: TargetKind, id: string, base: number) =>
-  call<DocMeta & { document: T }>("POST", `/api/${kind === "process" ? "processes" : "standards"}/${id}/review?base=${base}`);
+export const confirmReview = <T extends Process | Standard>(kind: TargetKind, id: string, base: number, day = today()) =>
+  call<DocMeta & { document: T }>("POST", `/api/${kind === "process" ? "processes" : "standards"}/${id}/review?base=${base}&day=${day}`);
 
 export async function loadCatalog(): Promise<{ catalog: Catalog; version: number }> {
   const { data: c, headers } = await request<Partial<Catalog>>("GET", "/api/catalog");

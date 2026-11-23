@@ -193,3 +193,89 @@ func TestAReviewDateHasToBeADate(t *testing.T) {
 		t.Fatalf("got %s", out)
 	}
 }
+
+func TestTodayIsTheDayOfTheZoneFromUTCMinus12ToPlus14(t *testing.T) {
+	at := func(s string) time.Time {
+		v, err := time.Parse(time.RFC3339, s)
+		must(t, err)
+		return v
+	}
+	cases := []struct {
+		now, day string
+		want     bool
+	}{
+		// just after midnight UTC: still yesterday at UTC-12 (Baker Island), already the same day in Auckland
+		{"2026-11-23T00:05:00Z", "2026-11-22", true},
+		{"2026-11-23T00:05:00Z", "2026-11-23", true},
+		{"2026-11-23T00:05:00Z", "2026-11-24", false},
+		// just before midnight UTC: Kiritimati (UTC+14) and Auckland (UTC+13) are already in tomorrow
+		{"2026-11-23T23:55:00Z", "2026-11-24", true},
+		{"2026-11-23T23:55:00Z", "2026-11-23", true},
+		{"2026-11-23T23:55:00Z", "2026-11-22", false},
+		// at 10:00 UTC it is the 24th from UTC+14 on, the 22nd nowhere
+		{"2026-11-23T10:00:00Z", "2026-11-24", true},
+		{"2026-11-23T09:59:00Z", "2026-11-24", false},
+		{"2026-11-23T12:00:00Z", "2026-11-22", false},
+		{"2026-11-23T11:59:00Z", "2026-11-22", true},
+		// a wrong clock, or not a day at all
+		{"2026-11-23T12:00:00Z", "2026-12-23", false},
+		{"2026-11-23T12:00:00Z", "2026-11-31", false},
+		{"2026-11-23T12:00:00Z", "2026-11-3", false},
+		{"2026-11-23T12:00:00Z", "", false},
+	}
+	for _, c := range cases {
+		if got := docs.TodaySomewhere(c.day, at(c.now)); got != c.want {
+			t.Errorf("%s at %s: %v, want %v", c.day, c.now, got, c.want)
+		}
+	}
+}
+
+func TestAReviewIsRecordedOnThePersonsOwnDay(t *testing.T) {
+	e := setup(t, nil)
+	lastReviewed := func() string {
+		d, _ := e.deps.Docs.Get(bg, docs.Process, gcp)
+		var doc struct {
+			Review struct {
+				LastReviewedAt string `json:"lastReviewedAt"`
+			} `json:"review"`
+		}
+		must(t, json.Unmarshal(d.Body, &doc))
+		return doc.Review.LastReviewedAt
+	}
+	// the day at UTC+14 is today for somebody on Earth right now (Kiritimati): taken as it is
+	ahead := time.Now().UTC().Add(14 * time.Hour).Format(time.DateOnly)
+	status, body := e.as(casey).do("POST", "/api/processes/"+gcp+"/review?day="+ahead, nil)
+	if status != 200 || lastReviewed() != ahead {
+		t.Fatalf("a review from far ahead of UTC: %d %v, stored %s", status, body, lastReviewed())
+	}
+	// somebody behind UTC confirms on their own, earlier, day: the review date does not go back
+	behind := time.Now().UTC().Add(-12 * time.Hour).Format(time.DateOnly)
+	status, body = e.as(alex).do("POST", "/api/processes/"+gcp+"/review?day="+behind, nil)
+	if status != 200 || lastReviewed() != ahead {
+		t.Fatalf("a review from behind UTC: %d %v, stored %s", status, body, lastReviewed())
+	}
+	// a day that is today nowhere is a wrong clock: refused, in words, and nothing is stored
+	for _, day := range []string{time.Now().UTC().AddDate(0, 0, 2).Format(time.DateOnly), "2020-01-01", "tomorrow"} {
+		status, body = e.as(casey).do("POST", "/api/processes/"+gcp+"/review?day="+day, nil)
+		if status != 400 || !strings.Contains(body["error"].(string), "is not today") {
+			t.Errorf("day %s: %d %v", day, status, body)
+		}
+	}
+	if lastReviewed() != ahead {
+		t.Fatalf("a refused review was stored: %s", lastReviewed())
+	}
+}
+
+func TestWithReviewNeverMovesTheReviewDateBack(t *testing.T) {
+	out, err := docs.WithReview([]byte(`{"id": "x", "review": {"intervalMonths": 6, "lastReviewedAt": "2026-11-24"}}`), "2026-11-23", "Kim", 6)
+	must(t, err)
+	if !strings.Contains(string(out), `"lastReviewedAt": "2026-11-24"`) || !strings.Contains(string(out), `"reviewedBy": "Kim"`) {
+		t.Fatalf("got %s", out)
+	}
+	// an unreadable old date is replaced
+	out, err = docs.WithReview([]byte(`{"id": "x", "review": {"intervalMonths": 6, "lastReviewedAt": "9999-99-99"}}`), "2026-11-23", "", 6)
+	must(t, err)
+	if !strings.Contains(string(out), `"lastReviewedAt": "2026-11-23"`) {
+		t.Fatalf("got %s", out)
+	}
+}

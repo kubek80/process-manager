@@ -4,7 +4,27 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"time"
 )
+
+// The time zones furthest behind and ahead of UTC: at any moment, the days that are "today"
+// somewhere on Earth lie between these two.
+const (
+	earliestZone = -12 * time.Hour
+	latestZone   = 14 * time.Hour
+)
+
+// TodaySomewhere says whether day (2026-11-16) is today somewhere on Earth at now: from the day
+// it is at UTC-12 to the day it is at UTC+14. A person ahead of or behind UTC sends their own
+// day (the review they confirm, the day they save on), which may be the UTC day before or after;
+// that day is theirs and is taken as it is. A day outside that window is a wrong clock.
+func TodaySomewhere(day string, now time.Time) bool {
+	d, err := time.Parse(time.DateOnly, day)
+	if err != nil || d.Format(time.DateOnly) != day {
+		return false
+	}
+	return day >= now.UTC().Add(earliestZone).Format(time.DateOnly) && day <= now.UTC().Add(latestZone).Format(time.DateOnly)
+}
 
 // WithReview returns the document with its review recorded: who confirmed on which day that it
 // is still correct. The rhythm stays as it is; a document that had none gets defaultMonths.
@@ -18,9 +38,17 @@ func WithReview(body []byte, date, by string, defaultMonths int) ([]byte, error)
 	if old := pairs.get("review"); old != nil {
 		var r struct {
 			IntervalMonths float64 `json:"intervalMonths"` // the format also accepts 24.0 or 2.4e1 for 24
+			LastReviewedAt string  `json:"lastReviewedAt"`
 		}
-		if json.Unmarshal(old, &r) == nil && r.IntervalMonths >= 1 {
-			months = int(r.IntervalMonths)
+		if json.Unmarshal(old, &r) == nil {
+			if r.IntervalMonths >= 1 {
+				months = int(r.IntervalMonths)
+			}
+			// a person behind UTC may confirm on their day after somebody ahead of UTC confirmed on
+			// theirs: the review date never goes back
+			if _, err := time.Parse(time.DateOnly, r.LastReviewedAt); err == nil && r.LastReviewedAt > date {
+				date = r.LastReviewedAt
+			}
 		}
 	}
 	// the three fields in the order the app writes them

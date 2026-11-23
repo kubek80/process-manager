@@ -192,3 +192,23 @@ export function scrollToCentre(
 export function hiddenEdges(scrollLeft: number, scrollWidth: number, clientWidth: number): { left: boolean; right: boolean } {
   return { left: scrollLeft > 2, right: scrollLeft + clientWidth < scrollWidth - 2 };
 }
+
+/**
+ * A process drawn as a picture in a text (`ProcessPicture`: the Guide, the code map) opens as
+ * large as fits its column, at most 100%, and never below this: a step's name stays readable
+ * (about 10 pixels), and a wider picture scrolls sideways with its cut edges shown.
+ */
+export const PICTURE_MIN = 0.8;
+
+/**
+ * The zoom a picture opens at: the largest that fits the width (`openingZoom`, without a height:
+ * a picture is as high as its drawing, so it never scrolls up and down and the page scrolls on
+ * over it), not below PICTURE_MIN. Printed (`print`), the whole picture fits the paper, however
+ * small that makes it (down to ZOOM_FLOOR). "Fit" on a picture returns to this zoom.
+ */
+export function pictureZoom(viewWidth: number, contentWidth: number, column: (z: number) => number = () => 0, print = false): number {
+  return openingZoom(viewWidth, contentWidth, print ? ZOOM_FLOOR : PICTURE_MIN, column);
+}
+
+/** The width a printed picture is fitted to: the column it has on the screen, at most the width of A4 paper inside its margins. */
+export const PRINT_WIDTH = 680;
