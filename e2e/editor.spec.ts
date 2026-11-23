@@ -4,8 +4,8 @@ import {
   refusal, serverToday, signIn, unfold, watchErrors,
 } from "./helpers";
 
-// Changing a process on its editing screen: the map in the middle is always editable, the
-// outline on the left selects, the fields on the right change what is selected.
+// Changing a process on its editing screen: the outline on the left selects, the fields next to
+// it change what is selected, the map on the right is always editable.
 
 const LIB = "publish-internal-library";
 const AZURE = "request-azure-landing-zone";

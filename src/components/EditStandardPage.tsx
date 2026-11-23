@@ -71,14 +71,14 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
     else { if (reqId) selectReq(null); setSection(next.section as StandardSection); }
     if (open) s.setPanel("fields");
   };
-  // the selected requirement is brought into view in the middle
+  // the selected requirement is brought into view in what readers will see (the column on the right)
   useEffect(() => {
     if (!reqId) return;
     const t = setTimeout(() => document.getElementById(`req-${reqId}`)?.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" }), 30);
     return () => clearTimeout(t);
   }, [reqId]);
 
-  // while its fields are changed, the selected requirement stays in view in the middle
+  // while its fields are changed, the selected requirement stays in view on the right
   useEffect(() => {
     if (!reqId) return;
     const t = setTimeout(() => document.getElementById(`req-${reqId}`)?.scrollIntoView({ block: "nearest" }), 120);
@@ -163,7 +163,7 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
       </>),
       requirements: (
         <div className="empty-hint">
-          <p>{draft.requirements.length} requirement{draft.requirements.length === 1 ? "" : "s"}. Select one in the outline or in the middle to change it.</p>
+          <p>{draft.requirements.length} requirement{draft.requirements.length === 1 ? "" : "s"}. Select one in the outline or on the right to change it.</p>
           <p>To add several, type their names one after the other under <b>Add a requirement</b> at the end of the outline.</p>
           <button className="btn small" onClick={() => add()}><Plus size={14} />Add a requirement at the end</button>
         </div>
