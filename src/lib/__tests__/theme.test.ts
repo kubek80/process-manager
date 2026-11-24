@@ -67,8 +67,9 @@ describe("the derived tokens", () => {
     }
     const [c] = d.colors;
     // a yellow is far from Earth, the orange of warnings: nothing to be confused with
-    expect(c).toMatchObject({ part: "brand", chosen: "#facc15", adjusted: { light: true, dark: false }, like: [] });
-    expect(c.used.dark).toBe("#facc15");
+    // in the dark look it stays a yellow, made only a little lighter to read on its own soft tint with a margin
+    expect(c).toMatchObject({ part: "brand", chosen: "#facc15", adjusted: { light: true }, like: [] });
+    expect(distance(c.used.dark, "#facc15")).toBeLessThan(12);
     // the light tint stays a pale yellow, not a pale brown
     expect(d.tokens.light["accent-soft"]).toBe(mix("#facc15", "#ffffff", 0.1));
   });

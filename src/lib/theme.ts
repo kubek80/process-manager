@@ -70,7 +70,7 @@ export const PROBLEM_RED = "#be123c";
  * cannot tell red from green would hardly tell processes from standards (seenWithout); this teal
  * stays apart from Berry for them, from Land (success) and from the brand.
  */
-export const PROCESS_TEAL = "#0f766e";
+export const PROCESS_TEAL = "#0a8276";
 /** The colours of the default look, as the colour pickers show them. */
 export const DEFAULT_COLOR: Record<ColorPart, string> = {
   brand: DESIGNER.ocean, secondary: DESIGNER.sky, ink: DESIGNER.midnight, process: PROCESS_TEAL, standard: DESIGNER.berry,
@@ -517,9 +517,9 @@ export function fullTokens(look: Look, mode: Mode): Record<string, string> {
 }
 /** The map's tokens (styles.css): which look token each kind of step and each lane is drawn in, with its tile. */
 export const MAP_TOKENS: Record<string, [string, string]> = {
-  "step-work": ["accent", "accent-soft"], "step-check": ["kind-standard", "kind-standard-bg"], "step-system": ["kind-process", "kind-process-bg"], "step-plain": ["text-2", "surface-2"],
-  "lane-1": ["accent", "accent-soft"], "lane-2": ["mark-brown", "mark-brown-bg"], "lane-3": ["kind-process", "kind-process-bg"],
-  "lane-4": ["kind-standard", "kind-standard-bg"], "lane-5": ["mark-sky", "mark-sky-bg"], "lane-6": ["text-2", "surface-2"],
+  "step-work": ["accent", "accent-soft"], "step-check": ["kind-standard", "kind-standard-bg"], "step-system": ["kind-process", "kind-process-bg"], "step-plain": ["text-2", "line"],
+  "lane-1": ["accent", "accent-soft"], "lane-2": ["kind-process", "kind-process-bg"], "lane-3": ["mark-sky", "mark-sky-bg"],
+  "lane-4": ["text-2", "line"], "lane-5": ["kind-standard", "kind-standard-bg"], "lane-6": ["mark-brown", "mark-brown-bg"],
 };
 /** A colour that must read on a ground: text at 4.5:1 (worked out to TEXT_MIN), icons and outlines at 3:1. */
 export interface ReadingPair { what: string; fg: string; bg: string; min: number }

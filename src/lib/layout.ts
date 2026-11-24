@@ -13,9 +13,9 @@ export const BLOCK_MIN_H = BLOCK_TEXT.border * 2 + BLOCK_TEXT.padTop + BLOCK_TEX
 /** How wide the text of a block may be: its width less the border, padding, icon and gap. */
 export const blockTextWidth = (W: number, picture = false) => W - BLOCK_TEXT.border * 2 - BLOCK_TEXT.padLeft - BLOCK_TEXT.padRight - (picture ? BLOCK_TEXT.pictureIcon : BLOCK_TEXT.icon) - BLOCK_TEXT.iconGap;
 
-export const L = { W: 208, H: BLOCK_MIN_H, GAPX: 64, GAPY: 30, PADY: 16, PADX: 44, HEADER: 172 };
+export const L = { W: 216, H: BLOCK_MIN_H, GAPX: 64, GAPY: 30, PADY: 16, PADX: 44, HEADER: 172 };
 /** Tighter measures for the small charts in the guide (the same height: the type is the same). */
-export const L_COMPACT: typeof L = { W: 188, H: BLOCK_MIN_H, GAPX: 44, GAPY: 26, PADY: 22, PADX: 32, HEADER: 136 };
+export const L_COMPACT: typeof L = { W: 196, H: BLOCK_MIN_H, GAPX: 44, GAPY: 26, PADY: 22, PADX: 32, HEADER: 136 };
 
 export interface NodeBox { step: Step; index: number; lane: number; col: number; sub: number; x: number; y: number }
 export interface LaneBox { actorIndex: number; y: number; h: number }

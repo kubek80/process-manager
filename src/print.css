@@ -15,8 +15,8 @@
     --accent: var(--theme-light-accent, #1165dc); --accent-fill: var(--theme-light-accent-fill, #1971ed); --accent-ink: var(--theme-light-accent-ink, #ffffff); --accent-soft: var(--theme-light-accent-soft, #e8f1fd);
     --ocean-10: var(--theme-light-ocean-10, #e8f1fd); --ocean-35: var(--theme-light-ocean-35, #afcdf9); --ocean-75: var(--theme-light-ocean-75, #5395f2); --ocean-100: var(--theme-light-ocean-100, #1971ed);
     --sky-10: var(--theme-light-sky-10, #f0f9ff); --sky-35: var(--theme-light-sky-35, #c9ebff); --sky-75: var(--theme-light-sky-75, #8cd4ff); --sky-100: var(--theme-light-sky-100, #66c5ff);
-    --kind-process: var(--theme-light-kind-process, #0f766e); --kind-process-fill: var(--theme-light-kind-process-fill, #0f766e); --kind-process-ink: var(--theme-light-kind-process-ink, #ffffff);
-    --kind-process-bg: var(--theme-light-kind-process-bg, #e7f1f1); --kind-process-line: var(--theme-light-kind-process-line, #9fc8c5);
+    --kind-process: var(--theme-light-kind-process, #0a786e); --kind-process-fill: var(--theme-light-kind-process-fill, #0a8276); --kind-process-ink: var(--theme-light-kind-process-ink, #ffffff);
+    --kind-process-bg: var(--theme-light-kind-process-bg, #e7f3f1); --kind-process-line: var(--theme-light-kind-process-line, #9dc9c5);
     --kind-standard: var(--theme-light-kind-standard, #913199); --kind-standard-fill: var(--theme-light-kind-standard-fill, #913199); --kind-standard-ink: var(--theme-light-kind-standard-ink, #ffffff);
     --kind-standard-bg: var(--theme-light-kind-standard-bg, #f4eaf5); --kind-standard-line: var(--theme-light-kind-standard-line, #d3add6);
     --good: var(--theme-light-good, #007d43); --good-bg: var(--theme-light-good-bg, #e6f7ef); --good-fill: var(--theme-light-good-fill, #00b35f); --good-ink: var(--theme-light-good-ink, #11121c);

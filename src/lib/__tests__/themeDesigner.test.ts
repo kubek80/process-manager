@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
 import {
-  contrast, DEFAULT_COLOR, DEFAULT_LOOK, derive, DESIGNER, distance, groundOf, INK_TEXT, kindsAlikeToColourBlindText, lookProperties, mix, paletteName, PALETTES,
+  confusion, contrast, DEFAULT_COLOR, fullTokens, MAP_TOKENS, readingPairs, TEXT_MIN, DEFAULT_LOOK, derive, DESIGNER, distance, groundOf, INK_TEXT, kindsAlikeToColourBlindText, lookProperties, mix, paletteName, PALETTES,
   PROBLEM_RED, PROCESS_TEAL, seenWithout, SURFACES, TINT_STEPS, TOKENS, warningCount,
 } from "../theme";
 
@@ -70,7 +70,7 @@ describe("the designer's look is the default", () => {
     // Midnight is the ink of the light look and the ground of the dark one; Snow the surfaces; Sky at 10 % the page ground
     expect(d.tokens.light.text).toBe(DESIGNER.midnight);
     expect(d.tokens.dark.bg).toBe(DESIGNER.midnight);
-    expect(SURFACES.light).toEqual({ bg: mix(DESIGNER.sky, "#ffffff", 0.1), surface: "#ffffff", surface2: mix(DESIGNER.sky, "#ffffff", 0.1) });
+    expect(SURFACES.light).toEqual({ bg: mix(DESIGNER.sky, "#ffffff", 0.1), surface: "#ffffff", surface2: mix(DESIGNER.sky, "#ffffff", 0.1), raised: "#ffffff" });
     // Sun is the search mark as it is; Ocean the main button with white ink at 4.5:1
     expect(d.tokens.light["search-mark"]).toBe(DESIGNER.sun);
     expect(d.tokens.light["accent-fill"]).toBe(DESIGNER.ocean);
@@ -148,5 +148,75 @@ describe("the new parts of a look", () => {
       const text3 = derive(DEFAULT_LOOK).tokens[m]["text-3"];
       expect(contrast(text3, d.tokens[m].quiet), m).toBeGreaterThanOrEqual(4.5);
     }
+  });
+});
+
+describe("every pair of text and ground a look produces reads", () => {
+  // the default, and the looks a critic tried: a light ink, a red brand (Information follows it), a yellow second colour, Lagoon
+  const looks: [string, Parameters<typeof derive>[0]][] = [
+    ["the default look", {}],
+    ["a light ink", { ink: "#9aa0b4" }],
+    ["a red brand", { brand: "#d6336c" }],
+    ["a yellow second colour", { secondary: "#f3ea5d" }],
+    ["Lagoon", { ...PALETTES.find((p) => p.name === "Lagoon")!.colors, font: "inter" }],
+    ["a navy brand and a grey ink", { brand: "#0b1f3a", ink: "#3f3f46", quiet: "#8a6d3b", highlight: "#7c3aed" }],
+  ];
+  for (const [name, look] of looks) {
+    it(`in ${name}, in both themes`, () => {
+      const wrong: string[] = [];
+      for (const m of ["light", "dark"] as const) {
+        for (const p of readingPairs(fullTokens(look, m))) {
+          const c = contrast(p.fg, p.bg);
+          if (c < p.min) wrong.push(`${m}: ${p.what} ${c.toFixed(2)} < ${p.min}`);
+        }
+      }
+      expect(wrong).toEqual([]);
+    });
+  }
+  it("worked-out text keeps a margin over 4.5:1, so that a hover tint or a half-transparent ground still passes", () => {
+    const wrong: string[] = [];
+    for (const m of ["light", "dark"] as const) {
+      for (const p of readingPairs(fullTokens({}, m))) if (p.worked && contrast(p.fg, p.bg) < TEXT_MIN - 0.02) wrong.push(`${m}: ${p.what} ${contrast(p.fg, p.bg).toFixed(2)}`);
+    }
+    expect(wrong).toEqual([]);
+  });
+  it("every pair the map, the bar, the segments and the controls draw is in the list", () => {
+    const what = readingPairs(fullTokens({}, "dark")).map((p) => p.what);
+    for (const w of ["accent on seg-on", "text-3 on ocean-10", "bad on bad-bg", "bar-muted on bar-2", "step-check on its tile", "lane-2 on its tile", "control-line on surface", "mark-brown on mark-brown-bg"]) expect(what).toContain(w);
+  });
+});
+
+describe("the map joins the look", () => {
+  it("names no colour of its own: the kinds of steps and the lanes are tokens", async () => {
+    const { STEP_META, LANE_COLORS, LANE_TILES } = await import("../stepMeta");
+    const src = readFileSync(join(SRC, "lib", "stepMeta.ts"), "utf8");
+    expect(src).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    for (const m of Object.values(STEP_META)) { expect(m.color).toMatch(/^var\(--step-(work|check|system|plain)\)$/); expect(m.tile).toBe(m.color.replace(")", "-bg)")); }
+    expect(new Set(Object.values(STEP_META).map((m) => m.color)).size).toBe(4);
+    expect(LANE_COLORS).toEqual(LANE_TILES.map((t) => t.replace("-bg)", ")")));
+    for (const k of Object.keys(MAP_TOKENS)) expect(read("styles.css")).toContain(`--${k}: var(--${MAP_TOKENS[k][0]}); --${k}-bg: var(--${MAP_TOKENS[k][1]});`);
+  });
+  it("lanes are never a state, and neighbouring lanes differ also for people who cannot tell red from green", () => {
+    const states = ["good", "warn", "bad", "info"];
+    const lanes = Object.keys(MAP_TOKENS).filter((k) => k.startsWith("lane-"));
+    for (const l of lanes) expect(states).not.toContain(MAP_TOKENS[l][0]);
+    for (const m of ["light", "dark"] as const) {
+      const t = fullTokens({}, m);
+      for (let i = 0; i < lanes.length; i++) {
+        const a = t[MAP_TOKENS[lanes[i]][0]], b = t[MAP_TOKENS[lanes[(i + 1) % lanes.length]][0]];
+        const cb = Math.min(...(["deuteranopia", "protanopia"] as const).map((k) => distance(seenWithout(a, k), seenWithout(b, k))));
+        expect(Math.min(distance(a, b), cb), `${m}: ${lanes[i]} beside the next`).toBeGreaterThanOrEqual(15);
+        for (const s of ["good", "warn", "bad"]) expect(distance(a, t[s]), `${m}: ${lanes[i]} like ${s}`).toBeGreaterThanOrEqual(20);
+      }
+    }
+  });
+});
+
+describe("the warnings cover what a look cannot keep", () => {
+  it("a second colour like the highlight, and a red brand that Information follows", () => {
+    expect(derive({ secondary: "#f3ea5d" }).colors[0].warnings).toContain("The second colour looks like the highlight: the page ground and what is selected will look like words found by a search.");
+    expect(confusion("brand", "bad", true)).toContain("Notices that only inform are in the brand colour too: they will look like problem notices");
+    expect(confusion("brand", "bad", false)).not.toContain("Notices");
+    expect(derive({ brand: "#d6336c" }).colors[0].like).toContain("bad");
   });
 });

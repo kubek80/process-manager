@@ -22,8 +22,8 @@
   --ocean-10: var(--theme-light-ocean-10, #e8f1fd); --ocean-35: var(--theme-light-ocean-35, #afcdf9); --ocean-75: var(--theme-light-ocean-75, #5395f2); --ocean-100: var(--theme-light-ocean-100, #1971ed);
   --sky-10: var(--theme-light-sky-10, #f0f9ff); --sky-35: var(--theme-light-sky-35, #c9ebff); --sky-75: var(--theme-light-sky-75, #8cd4ff); --sky-100: var(--theme-light-sky-100, #66c5ff);
   /* the two kinds: a process has a round mark, a standard a square one; -fill and -ink as for the accent */
-  --kind-process: var(--theme-light-kind-process, #0f766e); --kind-process-fill: var(--theme-light-kind-process-fill, #0f766e); --kind-process-ink: var(--theme-light-kind-process-ink, #ffffff);
-  --kind-process-bg: var(--theme-light-kind-process-bg, #e7f1f1); --kind-process-line: var(--theme-light-kind-process-line, #9fc8c5);
+  --kind-process: var(--theme-light-kind-process, #0a786e); --kind-process-fill: var(--theme-light-kind-process-fill, #0a8276); --kind-process-ink: var(--theme-light-kind-process-ink, #ffffff);
+  --kind-process-bg: var(--theme-light-kind-process-bg, #e7f3f1); --kind-process-line: var(--theme-light-kind-process-line, #9dc9c5);
   --kind-standard: var(--theme-light-kind-standard, #913199); --kind-standard-fill: var(--theme-light-kind-standard-fill, #913199); --kind-standard-ink: var(--theme-light-kind-standard-ink, #ffffff);
   --kind-standard-bg: var(--theme-light-kind-standard-bg, #f4eaf5); --kind-standard-line: var(--theme-light-kind-standard-line, #d3add6);
   --good: var(--theme-light-good, #007d43); --good-bg: var(--theme-light-good-bg, #e6f7ef); --good-fill: var(--theme-light-good-fill, #00b35f); --good-ink: var(--theme-light-good-ink, #11121c);
@@ -63,8 +63,8 @@
   --ocean-10: var(--theme-dark-ocean-10, #0f173a); --ocean-35: var(--theme-dark-ocean-35, #12306c); --ocean-75: var(--theme-dark-ocean-75, #1658bb); --ocean-100: var(--theme-dark-ocean-100, #1971ed);
   --sky-10: var(--theme-dark-sky-10, #171f3c); --sky-35: var(--theme-dark-sky-35, #2d4d72); --sky-75: var(--theme-dark-sky-75, #5097c9); --sky-100: var(--theme-dark-sky-100, #66c5ff);
   /* the two kinds: a process has a round mark, a standard a square one; -fill and -ink as for the accent */
-  --kind-process: var(--theme-dark-kind-process, #15a89c); --kind-process-fill: var(--theme-dark-kind-process-fill, #0f766e); --kind-process-ink: var(--theme-dark-kind-process-ink, #ffffff);
-  --kind-process-bg: var(--theme-dark-kind-process-bg, #18283b); --kind-process-line: var(--theme-dark-kind-process-line, #184753);
+  --kind-process: var(--theme-dark-kind-process, #0da999); --kind-process-fill: var(--theme-dark-kind-process-fill, #0a8276); --kind-process-ink: var(--theme-dark-kind-process-ink, #ffffff);
+  --kind-process-bg: var(--theme-dark-kind-process-bg, #172a3c); --kind-process-line: var(--theme-dark-kind-process-line, #164752);
   --kind-standard: var(--theme-dark-kind-standard, #cc76d3); --kind-standard-fill: var(--theme-dark-kind-standard-fill, #913199); --kind-standard-ink: var(--theme-dark-kind-standard-ink, #ffffff);
   --kind-standard-bg: var(--theme-dark-kind-standard-bg, #2d1d42); --kind-standard-line: var(--theme-dark-kind-standard-line, #533765);
   --good: var(--theme-dark-good, #00b35f); --good-bg: var(--theme-dark-good-bg, #163238); --good-fill: var(--theme-dark-good-fill, #00b35f); --good-ink: var(--theme-dark-good-ink, #11121c);
@@ -114,13 +114,13 @@
   --step-work: var(--accent); --step-work-bg: var(--accent-soft);
   --step-check: var(--kind-standard); --step-check-bg: var(--kind-standard-bg);
   --step-system: var(--kind-process); --step-system-bg: var(--kind-process-bg);
-  --step-plain: var(--text-2); --step-plain-bg: var(--surface-2);
+  --step-plain: var(--text-2); --step-plain-bg: var(--line);
   --lane-1: var(--accent); --lane-1-bg: var(--accent-soft);
-  --lane-2: var(--mark-brown); --lane-2-bg: var(--mark-brown-bg);
-  --lane-3: var(--kind-process); --lane-3-bg: var(--kind-process-bg);
-  --lane-4: var(--kind-standard); --lane-4-bg: var(--kind-standard-bg);
-  --lane-5: var(--mark-sky); --lane-5-bg: var(--mark-sky-bg);
-  --lane-6: var(--text-2); --lane-6-bg: var(--surface-2);
+  --lane-2: var(--kind-process); --lane-2-bg: var(--kind-process-bg);
+  --lane-3: var(--mark-sky); --lane-3-bg: var(--mark-sky-bg);
+  --lane-4: var(--text-2); --lane-4-bg: var(--line);
+  --lane-5: var(--kind-standard); --lane-5-bg: var(--kind-standard-bg);
+  --lane-6: var(--mark-brown); --lane-6-bg: var(--mark-brown-bg);
 }
 /* The type scale (the designer's): body text has three sizes with their line heights (LG 16/24,
    MD 14/20, SM 12/16) and three weights (Regular 400, Medium 500, Bold 700), plus italic for
@@ -352,6 +352,8 @@ a.btn { color: var(--action-other, var(--accent)); }
 .block-meta { display: flex; gap: 10px; margin-top: auto; font-size: var(--fs-sm); line-height: var(--lh-sm); color: var(--text-3); white-space: nowrap; overflow: hidden; }
 /* each part of the line (tool, duration) shrinks and ends in "…" when the block is too narrow for it */
 .block-meta > span { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the duration is short and says the most: the tool's name gives way first */
+.block-meta > .meta-time { flex-shrink: 0; max-width: 70%; }
 .block-meta > span > :is(svg, img, .entry-icon) { display: inline-block; vertical-align: -2px; margin-right: 4px; }
 .block-num { position: absolute; top: -9px; left: 12px; min-width: 20px; height: 20px; padding: 0 5px; display: grid; place-items: center; border-radius: 999px; font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); font-variant-numeric: tabular-nums; background: var(--text); color: var(--surface); }
 .block.done .block-num { background: var(--good-fill); color: var(--good-ink); }

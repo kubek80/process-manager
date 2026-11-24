@@ -140,7 +140,7 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
             </p>
             <div className="btn-row">
               <button type="button" className="btn small" disabled={(isDefault && !d.dirty) || d.saving} onClick={backToDefault}>
-                <RotateCcw size={14} aria-hidden="true" />Back to the default look
+                <RotateCcw size={14} aria-hidden="true" />Back to the default look…
               </button>
               <span className="spacer" />
               <button type="button" className="btn small ghost" disabled={!d.canUndo} onClick={d.undo} title="Undo the last change here (Ctrl+Z)"><Undo2 size={14} aria-hidden="true" />Undo</button>
