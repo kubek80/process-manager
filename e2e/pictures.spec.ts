@@ -278,6 +278,8 @@ test("a code map chart is the same picture: tools, dragging, Enlarge, the openin
   await signIn(page, DANA);
   for (const [width, height] of [[1440, 900], [390, 844]]) {
     await page.setViewportSize({ width, height });
+    // a fresh page at each width: a picture chooses its zoom once, when it is first drawn
+    await page.goto("about:blank");
     await open(page, `/admin/code/${CHARTED.id}`);
     await expect(cmCharts(page)).toHaveCount(CHARTED.charts.length);
     await expect(cmCharts(page).first().locator(".block").first()).toBeVisible();
@@ -315,10 +317,13 @@ test("a code map address to a chart below other charts lands on it", async ({ pa
   await open(page, `/admin/code/${CHARTED.id}?at=chart-${last.id}`);
   const target = page.locator(`figure.cm-chart[data-at="chart-${last.id}"]`);
   await expect(target).toBeInViewport();
-  await page.waitForTimeout(800);
-  const top = await target.evaluate((e) => e.getBoundingClientRect().top);
-  expect(top).toBeGreaterThan(-4);
-  expect(top).toBeLessThan(300);
+  // the scroll is corrected once what is above it has settled (scrollToStart): it ends on the chart
+  const top = () => target.evaluate((e) => Math.round(e.getBoundingClientRect().top));
+  await expect.poll(top, { timeout: 4_000 }).toBeGreaterThan(-4);
+  expect(await top()).toBeLessThan(300);
+  await page.waitForTimeout(800); // and stays there
+  expect(await top()).toBeGreaterThan(-4);
+  expect(await top()).toBeLessThan(300);
 });
 
 // ---------- the maps of a page are unchanged

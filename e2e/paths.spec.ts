@@ -135,7 +135,7 @@ test("the editing screen's “Which path it is for”, on a process and a standa
   // a process that names none: one quiet fact, "Any path", no road
   await signIn(page, SAM);
   await open(page, `/p/${PROC}`);
-  await expect(page.locator(".path-any [aria-hidden='true']")).toHaveText("Any path"); // in sight; read out as the sentence
+  await expect(page.locator(".path-any .fact-text > [aria-hidden='true']")).toHaveText("Any path"); // in sight; read out as the sentence
   await expect(page.locator(".path-any")).toHaveText("This process applies whatever the path. Any path");
   await expect(page.locator(".path-any")).toHaveAttribute("title", "This process applies whatever the path.");
   await expect(road(page)).toHaveCount(0);
@@ -145,7 +145,7 @@ test("the editing screen's “Which path it is for”, on a process and a standa
   await outline(page, "About");
   const section = page.locator(".edit-fields").getByRole("button", { name: "Which path it is for", exact: true });
   await expect(section).toHaveAttribute("aria-expanded", "false"); // folded, with what is chosen
-  await expect(section.locator("xpath=..")).toContainText("Any path");
+  await expect(page.locator(".edit-fields").getByRole("region", { name: "Which path it is for" }).locator(".fold-summary")).toHaveText("Any path");
   await unfold(page, "Which path it is for");
   const chips = page.locator(".edit-fields").getByRole("group", { name: "Paths" });
   await expect(chips.getByRole("button")).toHaveText(["Any path", "Greenfield", "Brownfield", "Paved path"]);
@@ -155,7 +155,7 @@ test("the editing screen's “Which path it is for”, on a process and a standa
   await expect(chips.getByRole("button", { name: "Any path" })).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator(".edit-fields")).toContainText("only for the selected paths");
   // the preview shows the road at once
-  await expect(page.locator("main.edit-middle figure.path-road .path-lane.on")).toHaveText(["Brownfield"]);
+  await expect(page.locator("main.edit-middle figure.path-road .path-lane.on .path-name")).toHaveText(["Brownfield"]);
   await saveDraft(page);
   expect((await readProcess(page, PROC))!.paths).toBeUndefined(); // readers still see the published one
   await publish(page);
@@ -205,7 +205,9 @@ test("plates on cards and rows: one path named, two as plates; each read out", a
   await expect(repo.locator(".path-marks")).toHaveAttribute("title", "For: Greenfield, Paved path");
   await expect(repo.locator(".path-mark")).toHaveCount(2);
   await expect(repo.locator(".path-mark .path-name")).toHaveCount(0); // plates only
-  await expect(repo.locator(".path-marks")).toContainText("For: Greenfield Paved path"); // read out, the names hidden from sight
+  // read out, the names hidden from sight: "For: Greenfield, Paved path"
+  await expect(repo.locator(".path-marks > .sr-only")).toHaveText("For:");
+  await expect(repo.locator(".path-mark .sr-only")).toHaveText(["Greenfield", "Paved path"]);
   expect(await repo.locator(".path-mark").evaluateAll((es) => es.map((e) => [e.getAttribute("data-symbol"), e.getAttribute("title")]))).toEqual([
     ["sprout", "Greenfield, also called green field: Something new is built from scratch, with no system to fit into yet."],
     ["road", "Paved path, also called golden path or paved road: The ready-made, supported way, also called the golden path: templates and platforms that already meet the standards."],
@@ -236,7 +238,7 @@ test("the Path filter: made for a path, or not tied to one; in the address, and 
   await pickFilter(page, "Path", "Made for Greenfield");
   await expect(titles(page)).toHaveText(["Request a repository"]);
   await expect(page).toHaveURL(/[?&]path=greenfield(&|$)/);
-  await expect(page.locator(".chosen-filters, .filter-chips")).toContainText("Path: Made for Greenfield");
+  await expect(page.getByRole("group", { name: "Chosen filters" }).getByRole("button", { name: "Remove filter Path: Made for Greenfield" })).toBeVisible();
   await pickFilter(page, "Path", "Made for Greenfield");
   await pickFilter(page, "Path", "Not tied to a path");
   await expect(titles(page)).toHaveCount(3);
@@ -245,9 +247,14 @@ test("the Path filter: made for a path, or not tied to one; in the address, and 
 
   // the search: the paved path, from a link
   const other = await context.newPage();
-  await other.goto("/#/search?q=request&path=paved-path");
-  await expect(other.locator(".card .card-title")).toHaveCount(3);
-  expect((await other.locator(".card .card-title").allInnerTexts()).sort()).toEqual(["Request a GCP project", "Request a repository", "Request an Azure landing zone"]);
+  await other.goto("/#/processes?path=paved-path");
+  await expect(other.locator(".card .card-title")).toHaveCount(4);
+  expect((await other.locator(".card .card-title").allInnerTexts()).sort()).toEqual(["Onboard an API to Apigee", "Request a GCP project", "Request a repository", "Request an Azure landing zone"]);
+  await expect(other.getByRole("complementary", { name: "Filters" }).locator(".filter-dds").getByRole("button", { name: /^Path:/ })).toHaveAccessibleName(/^Path: Made for Paved path/);
+  // in the search, the same filter from the address
+  await other.goto("/#/search?q=gcp&path=paved-path");
+  await expect(other.locator(".card .card-title")).toHaveCount(2); // Infrastructure as code, found for "gcp" too, names no path
+  expect((await other.locator(".card .card-title").allInnerTexts()).sort()).toEqual(["Onboard an API to Apigee", "Request a GCP project"]);
   await expect(other.getByRole("complementary", { name: "Filters" }).locator(".filter-dds").getByRole("button", { name: /^Path:/ })).toHaveAccessibleName(/^Path: Made for Paved path/);
   await other.close();
 });
@@ -255,6 +262,7 @@ test("the Path filter: made for a path, or not tied to one; in the address, and 
 test("My application › Path hides what is made only for other paths and keeps what is for any path", async ({ page }) => {
   await signIn(page, SAM);
   await open(page, "/processes");
+  await expect(titles(page)).toHaveCount(7);
   await openApplication(page);
   const app = page.getByRole("complementary", { name: "Filters" }).locator(".filter-app");
   const path = app.getByRole("button", { name: /^Path:/ });
@@ -334,7 +342,7 @@ test("the paths of a working draft are shown to nobody who may not see the draft
     // the editor sees it in the draft only
     await signIn(page, ALEX);
     await openEditor(page, "process", PROC);
-    await expect(page.locator("main.edit-middle figure.path-road .path-lane.on")).toHaveText(["Brownfield"]);
+    await expect(page.locator("main.edit-middle figure.path-road .path-lane.on .path-name")).toHaveText(["Brownfield"]);
   } finally {
     await discardWorkingDraft(request, "process", PROC);
   }

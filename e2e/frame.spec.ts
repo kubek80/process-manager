@@ -154,8 +154,11 @@ test("Admin › Lists shows the id of an entry and keeps its save bar in view; T
   await expect(bar).toBeInViewport();
   await expect(bar).toContainText("Unsaved changes");
   await expect(bar.getByRole("button", { name: "Save changes" })).toBeInViewport();
-  const top = (await bar.boundingBox())!.y;
-  expect(top, "just under the top bar").toBeLessThan(80);
+  // further down the page it stays, stuck right under the top bar
+  await page.mouse.wheel(0, 600);
+  const topBar = (await page.locator(".topbar").boundingBox())!;
+  await expect.poll(async () => Math.round((await bar.boundingBox())!.y), { message: "just under the top bar" }).toBe(Math.round(topBar.y + topBar.height));
+  await expect(bar.getByRole("button", { name: "Save changes" })).toBeInViewport();
   await bar.getByRole("button", { name: "Discard" }).click();
   await expect(page.locator(".cat-toolbar.dirty")).toHaveCount(0);
 

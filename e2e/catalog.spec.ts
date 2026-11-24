@@ -73,7 +73,7 @@ test("a new environment can be chosen in a process; the lists of groups are sepa
   await expect(page.locator(".admin-nav a")).toHaveText(["Lists", "Skills", "Health"]); // no Access, Activity or System for a lists manager
   // teams, practices and platforms are three lists: a team is just a group of people, of no kind
   const tabs = page.getByRole("tablist", { name: "Lists" }).getByRole("tab");
-  const names = ["Teams", "Practices", "Platforms", "Categories", "Tools", "Application tiers", "Environments", "Languages"];
+  const names = ["Teams", "Practices", "Platforms", "Categories", "Tools", "Application tiers", "Paths", "Environments", "Languages"];
   await expect(tabs).toHaveText(names.map((n) => new RegExp(`^${n}\\s*\\d+$`)));
   // each tab counts its entries; the one chosen is marked, and says what the list is for under the tabs
   const lists = await readCatalog(page);

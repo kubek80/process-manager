@@ -629,7 +629,8 @@ test.describe("more of the editing screen", () => {
     await expect(dialog).toContainText("in another window or tab");
     await expect(page.getByRole("dialog", { name: "Somebody else saved the draft first" })).toHaveCount(0);
     await dialog.getByRole("button", { name: "Save mine over theirs" }).click();
-    expect(stepTitle((await readWorkingDraft(page, "process", id))!.doc)).toBe("From this window");
+    // the save takes a moment to reach the server
+    await expect.poll(async () => stepTitle((await readWorkingDraft(page, "process", id))!.doc)).toBe("From this window");
     await other.close();
   });
 
