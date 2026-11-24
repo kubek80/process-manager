@@ -12,7 +12,7 @@ import {
 } from "../lib/users";
 import { possessive } from "../lib/editing";
 import { confirmDialog, Field, LoadError, Loading, Modal, notify } from "./ui";
-import { ViewAsButton } from "./ViewAsBand";
+import { ViewAsButton, ViewAsPicker } from "./ViewAsBand";
 import "../users.css";
 
 const initial = (u: AdminUser) => (u.name || u.email).slice(0, 1).toUpperCase();
@@ -97,6 +97,8 @@ export function UsersSection() {
           </ul>
         )}
       </section>
+
+      <ViewAsPicker />
 
       <section className="admin-card">
         <h2>What each role can do</h2>

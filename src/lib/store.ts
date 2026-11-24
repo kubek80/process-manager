@@ -6,7 +6,7 @@ import { completeCatalog } from "./catalog";
 import { completePerms } from "./rights";
 import { parseRequestsQuery, requestsQuery, type DocRequest, type NewRequest, type RequestState, type RequestsView } from "./requests";
 import type { Period, Statistics } from "./statistics";
-import type { AdminUser, UserRole } from "./users";
+import type { AdminUser, KnownPerson, UserRole } from "./users";
 import { portalName, type Look } from "./theme";
 import { today } from "./dates";
 
@@ -68,6 +68,8 @@ export const logout = () => call<void>("POST", "/auth/logout");
 /** An admin starts (and stops) viewing the portal as somebody else; `/api/me` then answers as that person, with `viewedBy`. */
 export const startViewAs = (email: string) => call<{ email: string; name: string; until: string }>("POST", "/api/admin/view-as", { email });
 export const stopViewAs = () => call<void>("DELETE", "/api/admin/view-as");
+/** Everybody the portal knows by address, for choosing whose view to see (admins only). */
+export const loadPeople = async () => (await call<{ people?: KnownPerson[] }>("GET", "/api/admin/people")).people ?? [];
 
 // Content: processes, standards and the lists live in the database. Every save is a new
 // version; a save says which version it was made from (`base`) and is refused when somebody

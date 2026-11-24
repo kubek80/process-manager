@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { changeBlocked, isViewingAs, mayViewAs, NO_PERMS, opensChange, viewingRefusal } from "../rights";
-import { returnPlace, VIEW_AS_HOME, viewAsName, viewingEnds } from "../users";
+import { NO_ROLES_READER, NO_ROLES_READER_NAME, personOption, returnPlace, VIEW_AS_HOME, viewAsName, viewAsProblem, viewingEnds } from "../users";
 
 const admin = { ...NO_PERMS, admin: true, catalog: true, processes: true, standards: true };
 const dana = { user: { email: "dana@example.com", name: "Dana Admin" }, perms: admin };
@@ -54,5 +54,18 @@ describe("viewing the portal as somebody else", () => {
     expect(viewingEnds(undefined)).toBe("");
     expect(viewingEnds("nonsense")).toBe("");
     expect(viewAsName("Casey Owner")).toBe("View the portal as Casey Owner");
+  });
+  it("takes anybody by address, also somebody without roles, and the built-in reader with no roles", () => {
+    expect(viewAsProblem("", "dana@example.com")).toBe("Type the person's email address, or choose somebody from the list.");
+    expect(viewAsProblem("sam@", "dana@example.com")).toBe("That is not an email address. Write one, such as name@company.com.");
+    expect(viewAsProblem(" Dana@Example.com ", "dana@example.com")).toBe("This is you: the portal already shows your own view.");
+    expect(viewAsProblem("never.seen@example.org", "dana@example.com")).toBe("");
+    expect(viewAsProblem(NO_ROLES_READER, "dana@example.com")).toBe("");
+    expect(personOption({ email: "sam@example.com", name: "Sam Consumer", roles: false })).toBe("Sam Consumer · no roles");
+    expect(personOption({ email: "x@example.com", roles: true })).toBe("has roles");
+    // the same address and name as the server (server/internal/httpapi/viewas.go)
+    const go = fs.readFileSync(path.resolve(__dirname, "../../../server/internal/httpapi/viewas.go"), "utf8");
+    expect(go).toContain(`NoRolesReader     = "${NO_ROLES_READER}"`);
+    expect(go).toContain(`NoRolesReaderName = "${NO_ROLES_READER_NAME}"`);
   });
 });

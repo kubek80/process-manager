@@ -194,3 +194,22 @@ export function returnPlace(saved: string | null | undefined): string {
 export function viewingEnds(until?: string): string {
   return formatDateTime(until).split(" ")[1] ?? "";
 }
+
+/** "A reader with no roles": the view of somebody without any role, also where nobody like that has signed in yet. The server gives this address no rights whatever is stored for it. */
+export const NO_ROLES_READER = "reader@no-roles.invalid";
+export const NO_ROLES_READER_NAME = "A reader with no roles";
+
+/** Somebody the portal knows by address (`GET /api/admin/people`): with roles, or seen using it. */
+export interface KnownPerson { email: string; name?: string; roles: boolean }
+
+/** What stops "View as" for a typed address, in plain words; "" when it can start. */
+export function viewAsProblem(typed: string, me: string): string {
+  const email = typed.trim().toLowerCase();
+  if (!email) return "Type the person's email address, or choose somebody from the list.";
+  if (!looksLikeEmail(email)) return "That is not an email address. Write one, such as name@company.com.";
+  if (email === me.trim().toLowerCase()) return "This is you: the portal already shows your own view.";
+  return "";
+}
+
+/** The suggestions for the address field: name first where known, people with roles marked. */
+export const personOption = (p: KnownPerson) => `${p.name ? `${p.name} · ` : ""}${p.roles ? "has roles" : "no roles"}`;

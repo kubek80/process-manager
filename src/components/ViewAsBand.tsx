@@ -1,11 +1,13 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Eye, X } from "lucide-react";
 import type { Me } from "../types";
 import { changeBlocked, mayViewAs, opensChange } from "../lib/rights";
 import { personLabel } from "../lib/members";
 import { useMe } from "../lib/session";
-import { startViewAs, stopViewAs } from "../lib/store";
-import { returnPlace, VIEW_AS_BUTTON, viewAsHint, viewAsName, viewingEnds } from "../lib/users";
+import { loadPeople, startViewAs, stopViewAs } from "../lib/store";
+import {
+  NO_ROLES_READER, NO_ROLES_READER_NAME, personOption, returnPlace, VIEW_AS_BUTTON, viewAsHint, viewAsName, viewAsProblem, viewingEnds, type KnownPerson,
+} from "../lib/users";
 import { notify } from "./ui";
 import "../viewas.css";
 
@@ -94,19 +96,63 @@ export function ViewAsBand({ me }: { me: Me }) {
  * of a group). Shown only to whom `mayViewAs` allows; the portal then opens afresh as that
  * person, on Home, and "Stop viewing" returns to where it started.
  */
+/** Starts viewing as `email` and opens the portal afresh as that person, on Home; `done` runs when it was refused. */
+function beginViewing(email: string, label: string, done: () => void) {
+  const from = window.location.hash || "#/";
+  startViewAs(email).then(() => { remember(from); reopenAt("#/"); }, (e) => { done(); notify.error(`You cannot view the portal as ${label}.`, e); });
+}
+
 export function ViewAsButton({ email, name, className = "btn small" }: { email: string; name?: string; className?: string }) {
   const me = useMe();
   const [busy, setBusy] = useState(false);
   if (!mayViewAs(me, email)) return null;
   const label = personLabel({ email, name });
-  const start = () => {
-    setBusy(true);
-    const from = window.location.hash || "#/";
-    startViewAs(email).then(() => { remember(from); reopenAt("#/"); }, (e) => { setBusy(false); notify.error(`You cannot view the portal as ${label}.`, e); });
-  };
+  const start = () => { setBusy(true); beginViewing(email, label, () => setBusy(false)); };
   return (
     <button className={`${className} viewas-start`} disabled={busy} onClick={start} aria-label={viewAsName(label)} title={viewAsHint(label)}>
       <Eye size={14} aria-hidden="true" />{VIEW_AS_BUTTON}
     </button>
+  );
+}
+
+/**
+ * Admin › Access: view the portal as anybody, not only the people with roles. The address field
+ * suggests everybody the portal knows (`GET /api/admin/people`) and takes any address, which is
+ * then a signed-in person without roles; "A reader with no roles" needs no address at all.
+ */
+export function ViewAsPicker() {
+  const me = useMe();
+  const [typed, setTyped] = useState("");
+  const [tried, setTried] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [people, setPeople] = useState<KnownPerson[]>([]);
+  const allowed = mayViewAs(me, NO_ROLES_READER);
+  useEffect(() => { if (allowed) loadPeople().then(setPeople, () => { /* typing an address still works */ }); }, [allowed]);
+  if (!allowed) return null;
+  const problem = viewAsProblem(typed, me.user?.email ?? "");
+  const start = (email: string, label: string) => { setBusy(true); beginViewing(email, label, () => setBusy(false)); };
+  const go = () => {
+    setTried(true);
+    if (problem || busy) return;
+    const email = typed.trim().toLowerCase();
+    start(email, personLabel({ email, name: people.find((p) => p.email === email)?.name }));
+  };
+  return (
+    <section className="admin-card viewas-picker" aria-labelledby="viewas-picker-title">
+      <h2 id="viewas-picker-title"><Eye size={17} aria-hidden="true" />See the portal as somebody else</h2>
+      <p className="muted small">See exactly what a person sees: what they can read, their responsibilities, their bookmarks and requests, and which buttons they get. Choose anybody, also somebody without a role or an address the portal has not seen yet. You cannot change anything while you do, and it ends after an hour.</p>
+      <form className="viewas-pick" onSubmit={(e) => { e.preventDefault(); go(); }}>
+        <input type="email" list="viewas-people" value={typed} placeholder="Email address, e.g. name@company.com" aria-label="Email of the person whose view you want to see"
+          aria-invalid={tried && !!problem} aria-describedby={tried && problem ? "viewas-pick-problem" : undefined}
+          onChange={(e) => { setTyped(e.target.value); setTried(false); }} />
+        <datalist id="viewas-people">
+          {people.filter((p) => p.email !== me.user?.email.toLowerCase()).map((p) => <option key={p.email} value={p.email}>{personOption(p)}</option>)}
+        </datalist>
+        <button className="btn" disabled={busy}><Eye size={15} aria-hidden="true" />{VIEW_AS_BUTTON}</button>
+        <button type="button" className="btn ghost viewas-reader" disabled={busy} onClick={() => start(NO_ROLES_READER, NO_ROLES_READER_NAME)}
+          title="Somebody who can sign in but has no role at all: what every colleague sees.">View as {NO_ROLES_READER_NAME.toLowerCase()}</button>
+      </form>
+      {tried && problem && <p id="viewas-pick-problem" className="viewas-problem small" role="alert">{problem}</p>}
+    </section>
   );
 }

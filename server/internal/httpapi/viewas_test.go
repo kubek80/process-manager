@@ -262,7 +262,7 @@ func TestViewingAsSomebodyCountsNothing(t *testing.T) {
 	}
 }
 
-func TestOnlyAnAdminStartsViewingAndOnlyAsSomebodyElseTheyKnow(t *testing.T) {
+func TestOnlyAnAdminStartsViewingAndNeverAsThemselves(t *testing.T) {
 	e := setup(t, nil)
 	start := func(c *client, email string) (int, map[string]any) {
 		return c.do("POST", "/api/admin/view-as", map[string]string{"email": email})

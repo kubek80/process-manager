@@ -41,3 +41,9 @@ html.viewing-as :is(a[href^="#/p/"], a[href^="#/s/"]):is([href$="/edit"], [href*
   .viewas-band { display: none; }
   html.viewing-as body { padding-bottom: 0; }
 }
+
+/* Admin › Access: see the portal as anybody (ViewAsPicker) */
+.viewas-picker h2 { display: flex; align-items: center; gap: 8px; }
+.viewas-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.viewas-pick input { flex: 1 1 260px; min-width: 0; }
+.viewas-problem { margin: 6px 0 0; color: var(--bad); }

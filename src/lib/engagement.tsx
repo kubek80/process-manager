@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { TargetKind } from "../types";
 import { loadEngagement, recordViewOn, setBookmark, setUpvote, type EngagementData } from "./store";
 import { notify } from "../components/ui";
+import { useMe } from "./session";
+import { isViewingAs } from "./rights";
 
 /** How much a process or standard is used. All-time numbers from the server. */
 export interface Counts { views: number; people: number; downloads: number; upvotes: number; handled: number }
@@ -109,6 +111,9 @@ export function EngagementProvider({ children }: { children: ReactNode }) {
   const live = useRef(data);
   live.current = data;
   const seen = useRef(new Set<string>());
+  // an admin viewing the portal as somebody else counts no view: the server would refuse it
+  const viewing = useRef(false);
+  viewing.current = isViewingAs(useMe());
   const busy = useRef(new Set<string>());
   const changes = useRef<Change[]>([]);
   const loads = useRef({ started: 0, applied: 0 });
@@ -183,7 +188,7 @@ export function EngagementProvider({ children }: { children: ReactNode }) {
 
   const recordView = useCallback((kind: TargetKind, id: string) => {
     const k = keyOf(kind, id);
-    if (seen.current.has(k)) return;
+    if (viewing.current || seen.current.has(k)) return;
     seen.current.add(k);
     // the answer has the document's numbers after this view: they replace only that document's
     recordViewOn(kind, id).then((r) => {

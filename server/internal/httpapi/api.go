@@ -508,6 +508,7 @@ func (a *api) logout(w http.ResponseWriter, r *http.Request) {
 	if err == nil && a.SignOuts != nil {
 		// the person who signed in signs out, not the one whose view they were looking at
 		me := s.self()
+		a.endAllViewing(r.Context(), me)
 		if _, err := a.SignOuts.Mark(r.Context(), me.Email, a.Sessions.Now()); err != nil {
 			a.fail(w, r, err)
 			return
