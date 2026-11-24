@@ -4,15 +4,15 @@
    the look, never from the problem or the warning colour, so they follow light or dark and a
    changed look; each picture has an ink (--path-c: the picture and the tick), a plate (its ground)
    and a line (its edge):
-     sprout (greenfield)     the green of --good: the look has no green that is not a state
+     sprout (greenfield)     the look's green for marks (--mark-green on --mark-green-bg), which is not a state
      buildings (brownfield)  the quiet warm surface (--quiet, --quiet-line: Grain) with an ink drawn
                              from its line towards the text: a brown that never reads as a warning
      road (the paved path)   the brand colour (--accent) on the brand's tints (--ocean-10, its line --ocean-35)
      any other picture and the neutral signpost: the second ink on the second surface */
 :root, .look-light, .look-dark {
-  --path-sprout: var(--good);
-  --path-sprout-plate: color-mix(in srgb, var(--good) 12%, var(--surface));
-  --path-sprout-line: color-mix(in srgb, var(--good) 40%, transparent);
+  --path-sprout: var(--mark-green);
+  --path-sprout-plate: var(--mark-green-bg);
+  --path-sprout-line: color-mix(in srgb, var(--mark-green) 40%, transparent);
   --path-buildings: color-mix(in srgb, var(--quiet-line, #ecdabe) 30%, var(--text));
   --path-buildings-plate: var(--quiet, #f6eee1);
   --path-buildings-line: var(--quiet-line, #ecdabe);
