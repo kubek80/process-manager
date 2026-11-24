@@ -13,6 +13,7 @@ import { EntryIcon } from "./EntryIcon";
 import { useEngagement } from "../lib/engagement";
 import { engagementKnown } from "./Lists";
 import { Fact, KindIcon, KindTag, kindWord, LevelMark, NoLevelMark, PathMarks } from "./marks";
+import { pathsOf } from "../lib/paths";
 import "../lists.css";
 
 /** The text with the searched words marked; built as elements, never as HTML. */
@@ -46,6 +47,9 @@ const FACT_ICON: Record<string, typeof Users> = {
   owner: Users, platform: Layers, practice: Compass, environments: Server, languages: Code2,
   lead: Clock3, steps: UserCheck, rules: ListChecks, usedBy: CornerDownRight,
 };
+
+/** How long the tiers in a card's corner may be for one path to be named beside them ("All tiers", "Tier 0"). */
+export const CORNER_ROOM = 9;
 
 /** Where a process or standard opens; somebody who may fix a broken one gets its editing screen. */
 export const docHref = (kind: TargetKind, id: string, fix = false) =>
@@ -118,6 +122,11 @@ export function DocCard(props: DocCardProps) {
   const title = typeof doc.title === "string" && doc.title ? doc.title : doc.id;
   const category = doc.category ? catalog.categories.find((c) => c.id === doc.category)?.name ?? doc.category : NO_CATEGORY_LABEL;
   const tiers = tiersShort(doc, catalog);
+  // one path is also said by its name, on a touch screen too, when the corner has room for it
+  // (the tiers are short, as "All tiers"); two or more are pictures only (their names are the
+  // tooltip, read out, and on the page)
+  const onePath = pathsOf(catalog.paths, doc.paths).length === 1;
+  const namedPath = onePath && tiers.short.length <= CORNER_ROOM;
   const H = level === 2 ? "h2" : "h3";
   const feedbackHref = kind === "process" ? href({ page: "process", id: doc.id, tab: "feedback" }) : href({ page: "standard", id: doc.id, tab: "feedback" });
   const by = foundBy && foundBy.length > 0 ? [...foundBy].sort() : [];
@@ -159,7 +168,7 @@ export function DocCard(props: DocCardProps) {
           {/* the paths it is for, as pictures after the name */}
           <div className="row-title-line">
             <H className="card-title"><a className="card-link" href={docHref(kind, doc.id, fix)} title={title}><Marked text={title} words={words} /></a></H>
-            <PathMarks ids={doc.paths} catalog={catalog} className="row-paths" />
+            <PathMarks ids={doc.paths} catalog={catalog} className="row-paths" named={onePath} />
           </div>
           {best ? (
             <a className="row-hit" href={hitHref(kind, doc.id, best)}>
@@ -190,7 +199,7 @@ export function DocCard(props: DocCardProps) {
         {/* the paths it is for, as pictures (none: whatever the path), then the tiers on one line: a long
             list of tiers is counted ("3 tiers"), the full list is the tooltip and is read out */}
         <span className="card-corner">
-          <PathMarks ids={doc.paths} catalog={catalog} />
+          <PathMarks ids={doc.paths} catalog={catalog} named={namedPath} />
           <span className="card-tiers" title={`Applies to ${tiers.full}`}>
             {tiers.short === tiers.full
               ? <><span className="sr-only">Applies to: </span>{tiers.full}</>

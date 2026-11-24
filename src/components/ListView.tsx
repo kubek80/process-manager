@@ -108,7 +108,7 @@ export function ListView({ process, all, done, toggle, reset, selectedId, onSele
           return (
             <li key={s.id} id={print ? undefined : `step-${s.id}`}
               className={`step ${isMine ? "mine" : "other"} ${done.has(s.id) ? "done" : ""} ${selectedId === s.id ? "selected" : ""}`}
-              style={{ "--c": meta.color, "--lane": LANE_COLORS[laneIdx(s.actor) % LANE_COLORS.length] } as React.CSSProperties}>
+              style={{ "--c": meta.color, "--c-bg": meta.tile, "--lane": LANE_COLORS[laneIdx(s.actor) % LANE_COLORS.length] } as React.CSSProperties}>
               <div className="step-rail"><span className="step-num">{i + 1}</span></div>
               <div className="step-card">
                 <div className="step-head">

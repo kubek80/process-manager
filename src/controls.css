@@ -6,7 +6,7 @@
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* ---------- the kind: "PROCESS" round, "STANDARD" square ---------- */
-.kind-tag { display: inline-flex; align-items: center; gap: 5px; flex: none; height: 22px; padding: 0 9px 0 7px; font-size: var(--fs-sm); font-weight: var(--fw-strong); letter-spacing: .06em; text-transform: uppercase; line-height: 1; white-space: nowrap; }
+.kind-tag { display: inline-flex; align-items: center; gap: 5px; flex: none; height: 22px; padding: 0 9px 0 7px; font-size: var(--fs-sm); font-weight: var(--fw-strong); letter-spacing: .06em; text-transform: uppercase; line-height: var(--lh-sm); white-space: nowrap; }
 .kind-tag svg { flex: none; }
 .kind-tag.process { border-radius: 999px; background: var(--kind-process-bg); color: var(--kind-process); }
 .kind-tag.standard { border-radius: 4px; background: var(--kind-standard-bg); color: var(--kind-standard); box-shadow: inset 0 0 0 1px var(--kind-standard-line); }
@@ -48,8 +48,9 @@
    The chosen item is a raised neutral surface with a fine outline and its text in the brand colour:
    it reads as chosen by its shape alone (also for whoever cannot tell the brand colour from grey),
    and the filled brand colour stays for the one primary button of a view. */
-:root, .look-light { --seg-on: var(--surface); --seg-on-line: var(--line-strong); }
-:root[data-theme="dark"], .look-dark { --seg-on: color-mix(in srgb, var(--text) 13%, var(--surface-2)); --seg-on-line: color-mix(in srgb, var(--text) 30%, var(--surface-2)); }
+/* --seg-on (styles.css) is worked out in theme.ts, so that the brand colour's text reads on it in both looks */
+:root, .look-light { --seg-on-line: var(--line-strong); }
+:root[data-theme="dark"], .look-dark { --seg-on-line: var(--control-line); }
 /* where there is no room (a phone) it scrolls sideways inside itself instead of widening the page */
 .seg { display: inline-flex; flex: none; max-width: 100%; overflow-x: auto; scrollbar-width: none; padding: 3px; gap: 2px; border-radius: 10px; background: color-mix(in srgb, var(--line) 70%, transparent); }
 .seg::-webkit-scrollbar { display: none; }
@@ -59,9 +60,9 @@
 .seg-item.on { background: var(--seg-on); color: var(--accent); box-shadow: inset 0 0 0 1px var(--seg-on-line), var(--shadow-1); }
 .seg-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* a count inside an option: "Open 2" */
-.seg-item .seg-n { margin-left: 1px; font-weight: var(--fw-medium); font-variant-numeric: tabular-nums; opacity: .72; }
+.seg-item .seg-n { margin-left: 1px; font-weight: var(--fw-medium); font-variant-numeric: tabular-nums; color: var(--text-3); }
 /* a level's bars inside an option ("Must 4"): in the chosen one, in the colour of its text */
 .seg-item .level-bars { margin-right: 1px; }
 .seg-item.on .level-bars i { background: var(--ocean-35); }
 .seg-item.on .level-bars i.on { background: var(--accent); }
-.seg-item.on .seg-n { opacity: .85; }
+.seg-item.on .seg-n { color: inherit; }

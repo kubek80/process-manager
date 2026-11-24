@@ -51,6 +51,25 @@ describe("the type scale", () => {
     expect(wrong).toEqual([]);
   });
 
+  it("every line height is the one of its size: no normal, no multiplier, no length of its own", () => {
+    // a single-line badge (a count, a kind tag, a key) takes its size's line height too; its box is set by its height
+    const lhOk = /^var\(--lh-(sm|md|lg|h4|h3|h2|h1|display)(, *\d+px)?\)$/;
+    const wrong: string[] = [];
+    for (const f of sheets) {
+      for (const { selector, decls } of rules(readFileSync(join(SRC, f), "utf8"))) {
+        for (const [prop, value] of decls) {
+          if (prop === "line-height" && !lhOk.test(value) && value !== "inherit" && value !== "0") wrong.push(`${f}: ${selector.split("\n").pop()} { line-height: ${value} }`);
+          if (prop === "font" && value.includes("/") && !/\/var\(--lh-/.test(value)) wrong.push(`${f}: ${selector.split("\n").pop()} { font: ${value} }`);
+        }
+        const size = decls.find(([p]) => p === "font-size")?.[1] ?? "";
+        const lh = decls.find(([p]) => p === "line-height")?.[1] ?? "";
+        const step = /^var\(--fs-([a-z0-9]+)/.exec(size)?.[1];
+        if (step && lh.startsWith("var(--lh-") && !lh.startsWith(`var(--lh-${step}`)) wrong.push(`${f}: ${selector} (${size} with ${lh})`);
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+
   it("headings are told apart by their sizes and never take the regular weight", () => {
     const wrong: string[] = [];
     for (const f of sheets) {

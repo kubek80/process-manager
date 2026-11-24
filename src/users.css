@@ -28,7 +28,7 @@
 .role-switch { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
 .role-switch input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; padding: 0; accent-color: var(--accent); }
 .role-switch input:disabled { cursor: not-allowed; }
-.role-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+.role-name { display: flex; flex-direction: column; min-width: 0; }
 .role-name strong { font-size: var(--fs-md); line-height: var(--lh-md); font-weight: var(--fw-medium); }
 .role-name em { font-style: normal; font-size: var(--fs-sm); line-height: var(--lh-sm); color: var(--text-3); }
 .role-scopes { display: grid; gap: 6px; padding-left: 28px; }

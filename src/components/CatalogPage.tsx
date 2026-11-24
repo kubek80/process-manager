@@ -461,18 +461,24 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
  * per picture; the chosen one is pressed.
  */
 function SymbolField({ value, onChange }: { value?: PathSymbol; onChange: (symbol: PathSymbol | undefined) => void }) {
-  const label = PATH_SYMBOLS.find((x) => x.symbol === value)?.label ?? "None: a neutral signpost";
+  const NONE = "None: a neutral signpost";
+  const label = PATH_SYMBOLS.find((x) => x.symbol === value)?.label ?? NONE;
+  // the caption under the row names the picture pointed at or focused, else the chosen one
+  const [shown, setShown] = useState<string | null>(null);
+  const choice = (symbol: PathSymbol | undefined, name: string) => (
+    <button key={symbol ?? "none"} type="button" className="symbol-choice" data-symbol={symbol ?? "none"} aria-pressed={symbol ? value === symbol : !value} title={name} aria-label={name}
+      onClick={() => onChange(symbol)} onMouseEnter={() => setShown(name)} onMouseLeave={() => setShown(null)} onFocus={() => setShown(name)} onBlur={() => setShown(null)}>
+      <PathSymbolIcon symbol={symbol} size={22} />
+    </button>
+  );
   return (
     <div className="field" data-field="symbol">
       <span className="field-label">Picture<em>{label}</em></span>
       <div className="symbol-picker" role="group" aria-label="Picture">
-        {PATH_SYMBOLS.map((x) => (
-          <button key={x.symbol} type="button" className="symbol-choice" data-symbol={x.symbol} aria-pressed={value === x.symbol} title={x.label} aria-label={x.label}
-            onClick={() => onChange(x.symbol)}><PathSymbolIcon symbol={x.symbol} size={22} /></button>
-        ))}
-        <button type="button" className="symbol-choice" data-symbol="none" aria-pressed={!value} title="None: a neutral signpost" aria-label="None: a neutral signpost"
-          onClick={() => onChange(undefined)}><PathSymbolIcon size={22} /></button>
+        {PATH_SYMBOLS.map((x) => choice(x.symbol, x.label))}
+        {choice(undefined, NONE)}
       </div>
+      <p className="symbol-caption" aria-hidden="true">{shown ?? `Chosen: ${label}`}</p>
     </div>
   );
 }

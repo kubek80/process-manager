@@ -120,9 +120,9 @@
 /* one line: the kind (where kinds are mixed) and the category on the left, the tiers on the right;
    a long category ends in "…" (the whole name is its tooltip), a long list of tiers is counted */
 .card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 22px; }
-.card-eyebrow { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; min-width: 0; line-height: 22px; }
+.card-eyebrow { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; min-width: 0; }
 .card-cat { min-width: 0; font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-medium); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card-tiers { flex: none; max-width: 45%; font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--text-2); text-align: right; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-tiers { flex: none; max-width: 45%; font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--text-2); text-align: right; line-height: var(--lh-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .card-marks { display: flex; flex-wrap: wrap; gap: 6px; }
 .card-mark { display: inline-flex; align-items: center; gap: 4px; min-height: 22px; padding: 0 8px; border-radius: 6px; font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); background: var(--surface-2); color: var(--text-2); }
@@ -271,7 +271,7 @@
 .hero.list-hero .lead { margin-top: 4px; font-size: var(--fs-lg); line-height: var(--lh-lg); }
 
 /* ---------- the search box (Home, the results, the lists) ---------- */
-.search-box { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 5px 0 14px; max-width: 760px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; color: var(--text-3); box-shadow: var(--shadow-1); }
+.search-box { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 5px 0 14px; max-width: 760px; background: var(--surface); border: 1px solid var(--control-line); border-radius: 12px; color: var(--text-3); box-shadow: var(--shadow-1); }
 .search-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .search-box input, .search-box input:focus { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; outline: 0; box-shadow: none; background: none; color: var(--text); font-size: var(--fs-lg); line-height: var(--lh-lg); }
 .search-box input::placeholder { color: var(--text-3); }

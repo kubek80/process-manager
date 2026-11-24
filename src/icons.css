@@ -1,5 +1,5 @@
 /* Uploaded icons of tools and languages. A light, neutral tile so a transparent icon reads in both themes. */
-.entry-icon { display: inline-block; flex: none; object-fit: contain; vertical-align: middle; padding: 2px; border-radius: 22%; background: #f6f7fa; border: 1px solid var(--line); box-sizing: border-box; }
+.entry-icon { display: inline-block; flex: none; object-fit: contain; vertical-align: middle; padding: 2px; border-radius: 22%; background: var(--logo-plate); border: 1px solid var(--line); box-sizing: border-box; }
 /* in the lists: the icon takes the place of the initial letter */
 .cat-item .entry-icon { border-radius: 9px; padding: 3px; }
 .cat-detail-head .entry-icon { border-radius: 16px; padding: 6px; }
@@ -7,7 +7,7 @@
 .icon-field-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .icon-field-preview { display: grid; place-items: center; flex: none; width: 72px; height: 72px; border-radius: 16px; border: 1px dashed var(--line-strong); background: var(--surface-2); }
 .icon-field-preview .entry-icon { border-radius: 12px; padding: 4px; }
-.icon-field-none { font-size: var(--fs-sm); color: var(--text-3); text-align: center; line-height: 1.2; }
+.icon-field-none { font-size: var(--fs-sm); color: var(--text-3); text-align: center; line-height: var(--lh-sm); }
 .icon-field-actions { display: grid; gap: 6px; min-width: 0; }
 .icon-field-problem { margin: 6px 0 0; font-size: var(--fs-md); line-height: var(--lh-md); color: var(--bad); }
 .icon-spin { animation: icon-spin 1s linear infinite; }

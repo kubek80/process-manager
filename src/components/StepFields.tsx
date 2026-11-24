@@ -59,7 +59,7 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
   const focusIns = (i: number) => requestAnimationFrame(() => insRefs.current[i]?.focus());
 
   return (
-    <div className="edit-fields-inner step-fields" style={{ "--c": meta.color } as React.CSSProperties}>
+    <div className="edit-fields-inner step-fields" style={{ "--c": meta.color, "--c-bg": meta.tile } as React.CSSProperties}>
       <FieldsHead icon={<TypeIcon type={step.type} size={40} />} kicker={<><span className="who">{actor?.name ?? step.actor}</span><span>Step {index + 1} of {process.steps.length}</span></>}
         title={step.title || "(no name yet)"}
         tools={<>
@@ -236,7 +236,7 @@ function KindField({ type, onPick }: { type: StepType; onPick: (t: StepType) => 
     <div className="field kind-field">
       <span className="field-label" id={label}>Kind of step<em>{kindHint(type)}</em></span>
       <button className="kind-pick" aria-expanded={open} aria-haspopup="true" aria-describedby={label} onClick={() => setOpen(!open)}
-        style={{ "--c": STEP_META[type].color } as React.CSSProperties}>
+        style={{ "--c": STEP_META[type].color, "--c-bg": STEP_META[type].tile } as React.CSSProperties}>
         <TypeIcon type={type} size={26} /><span>{STEP_META[type].label}</span><ChevronDown size={15} aria-hidden="true" />
       </button>
       {open && <KindPop type={type} onClose={() => setOpen(false)} onPick={(t) => { onPick(t); setOpen(false); }} />}
@@ -274,7 +274,7 @@ function KindPop({ type, onPick, onClose }: { type: StepType; onPick: (t: StepTy
       <div className="type-grid">
         {STEP_TYPES.map((t) => (
           <button key={t} className={`type-opt ${type === t ? "on" : ""}`} aria-pressed={type === t} title={stepHelp(t)} tabIndex={t === stop ? 0 : -1}
-            style={{ "--c": STEP_META[t].color } as React.CSSProperties} onClick={() => onPick(t)} onKeyDown={(e) => roam(e, t)}
+            style={{ "--c": STEP_META[t].color, "--c-bg": STEP_META[t].tile } as React.CSSProperties} onClick={() => onPick(t)} onKeyDown={(e) => roam(e, t)}
             onMouseEnter={() => setHint(t)} onFocus={() => { setHint(t); setStop(t); }}>
             <TypeIcon type={t} size={24} /><span>{STEP_META[t].label}</span>
           </button>

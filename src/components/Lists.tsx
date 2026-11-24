@@ -4,7 +4,7 @@ import type { Process, Rigour, Standard, TargetKind } from "../types";
 import { href } from "../lib/store";
 import type { Profile } from "../lib/edit";
 import { EMPTY_CATALOG, useCatalog } from "../lib/catalog";
-import { appSummary, countText, countWords, DROPPED_FILTER_TEXT, emptyFilterText, FILTER_HINT, FILTER_LABEL, knownFilters, type Filters, PROFILE_HINT, PROFILE_KEYS, PROFILE_LABEL, RIGOURS, rigourFilterName, rigourOptionLabel, type FilterKey, type Option, type ProfileKey, type TypeTab } from "../lib/search";
+import { appSummary, countText, countWords, DROPPED_FILTER_TEXT, emptyFilterText, FILTER_HINT, FILTER_LABEL, NO_PATH, NO_PATH_LABEL, knownFilters, type Filters, PROFILE_HINT, PROFILE_KEYS, PROFILE_LABEL, RIGOURS, rigourFilterName, rigourOptionLabel, type FilterKey, type Option, type ProfileKey, type TypeTab } from "../lib/search";
 import { useRemembered } from "../lib/profile";
 import { LevelBars, PathMark } from "./marks";
 import type { ListView } from "../lib/paging";
@@ -184,6 +184,8 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast, single
 /** The picture of a path before its name in a filter (a path's own filter and the path of "My application"). */
 function OptionPath({ value }: { value: string }) {
   const { catalog } = useCatalog();
+  // what names no path ("Not tied to a path", "Any path") has the neutral signpost
+  if (value === NO_PATH || value === "") return <PathMark entry={{ id: NO_PATH, name: NO_PATH_LABEL }} />;
   const entry = (catalog.paths ?? []).find((x) => x.id === value);
   return entry ? <PathMark entry={{ ...entry, description: undefined }} /> : null;
 }

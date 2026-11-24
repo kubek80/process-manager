@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import { Check, Clock, Expand, Flag, Hand, Maximize2, Minus, Plus, User, Workflow, Wrench } from "lucide-react";
 import type { Feedback, Process, StepType } from "../types";
 import { diamondPoints, L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
-import { LANE_COLORS, STEP_META } from "../lib/stepMeta";
+import { LANE_COLORS, LANE_TILES, STEP_META } from "../lib/stepMeta";
 import { toolName, useCatalog } from "../lib/catalog";
 import { afterFit, fitWhole, hiddenEdges, isZoomWheel, laneChars, laneColumn, laneLabel, openingZoom, panHint, PICTURE_MIN, pictureZoom, PRINT_WIDTH, scrollForZoom, TOUCH, scrollToCentre, stepZoom, wheelZoom, wrapWords, zoomKey } from "../lib/zoom";
 import { pageFontFamily, useFontsLoaded, useMedia } from "../lib/media";
@@ -359,12 +359,12 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
             {layout.lanes.map((lane, k) => {
               const actor = process.actors[lane.actorIndex];
               const count = process.steps.filter((s) => s.actor === actor.id).length;
-              const color = LANE_COLORS[lane.actorIndex % LANE_COLORS.length];
+              const color = LANE_COLORS[lane.actorIndex % LANE_COLORS.length], tile = LANE_TILES[lane.actorIndex % LANE_TILES.length];
               const fits = laneLabel(lane.h * zoom, HEADW);
               const lines = wrapWords(actor.name, laneFits(HEADW, fits.small, fits.avatar, narrow) ?? laneChars(HEADW, fits.small, fits.avatar), fits.lines);
               return (
                 <div key={actor.id} className={`lane-label ${lane.actorIndex === 0 ? "me" : ""} ${k % 2 ? "even" : ""} ${fits.small ? "small" : ""}`}
-                  style={{ top: lane.y * zoom, height: lane.h * zoom, "--lane": color, "--lines": fits.lines } as React.CSSProperties} title={`${actor.name}: ${count} ${count === 1 ? "step" : "steps"}`}>
+                  style={{ top: lane.y * zoom, height: lane.h * zoom, "--lane": color, "--lane-bg": tile, "--lines": fits.lines } as React.CSSProperties} title={`${actor.name}: ${count} ${count === 1 ? "step" : "steps"}`}>
                   <div className="lane-head">
                     {fits.avatar && <span className="lane-avatar">{lane.actorIndex === 0 ? <User size={16} /> : (actor.name ?? "").trim().charAt(0).toUpperCase()}</span>}
                     <div className="lane-text">
@@ -383,10 +383,10 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
         <div className={`flow-canvas ${drag ? "dragging" : ""}`} style={{ width: Math.ceil(stageW / zoom) + L.HEADER, height, zoom, marginLeft: -L.HEADER, "--z": zoom } as React.CSSProperties} onMouseDown={() => setAdding(null)}>
           {layout.lanes.map((lane) => {
             const actor = process.actors[lane.actorIndex];
-            const color = LANE_COLORS[lane.actorIndex % LANE_COLORS.length];
+            const color = LANE_COLORS[lane.actorIndex % LANE_COLORS.length], tile = LANE_TILES[lane.actorIndex % LANE_TILES.length];
             return (
               <div key={actor.id} className={`lane ${lane.actorIndex === 0 ? "me" : ""} ${dropLane === actor.id ? "drop" : ""}`}
-                style={{ top: lane.y, height: lane.h, "--lane": color } as React.CSSProperties}
+                style={{ top: lane.y, height: lane.h, "--lane": color, "--lane-bg": tile } as React.CSSProperties}
                 onDragOver={(e) => { if (drag) { e.preventDefault(); setDropLane(actor.id); } }}
                 onDragLeave={() => setDropLane((d) => (d === actor.id ? null : d))}
                 onDrop={(e) => { e.preventDefault(); if (drag) onMoveToLane?.(drag, actor.id); setDrag(null); setDropLane(null); }} />
@@ -432,7 +432,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                 onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", s.id); setDrag(s.id); setAdding(null); }}
                 onDragEnd={() => { setDrag(null); setDropLane(null); }}
                 className={`block ${n.lane === 0 ? "mine" : ""} ${selectedId === s.id ? "selected" : ""} ${done.has(s.id) ? "done" : ""} ${s.type === "decision" ? "decision" : ""} ${drag === s.id ? "dragged" : ""}`}
-                style={{ left: n.x, top: n.y, width: L.W, height: L.H, "--c": meta.color } as React.CSSProperties}
+                style={{ left: n.x, top: n.y, width: L.W, height: L.H, "--c": meta.color, "--c-bg": meta.tile } as React.CSSProperties}
                 onMouseEnter={() => setHover(s.id)} onMouseLeave={() => setHover(null)}>
                 {/* a decision is a diamond whose corners are where the arrows meet it */}
                 {decision && (

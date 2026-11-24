@@ -40,7 +40,7 @@ export function QuickAdd({ process, at, onAdd, onClose, style, returnFocus }: {
       <div className="quick-types" role="group" aria-labelledby="quick-kind">
         {STEP_TYPES.map((t) => (
           <button type="button" key={t} className={type === t ? "on" : ""} aria-pressed={type === t} aria-label={STEP_META[t].label} title={`${STEP_META[t].label} - ${stepHelp(t)}`}
-            style={{ "--c": STEP_META[t].color } as React.CSSProperties} onClick={() => setType(t)}>
+            style={{ "--c": STEP_META[t].color, "--c-bg": STEP_META[t].tile } as React.CSSProperties} onClick={() => setType(t)}>
             <TypeIcon type={t} size={28} />
           </button>
         ))}

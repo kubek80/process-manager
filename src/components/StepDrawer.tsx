@@ -23,7 +23,7 @@ export function StepDrawer({ process, all, step, onClose, onSelect, feedback, re
   useLayer(panel, onClose, { watch: step.id });
 
   return (
-    <aside ref={panel} className="drawer" role="dialog" aria-labelledby={titleId} tabIndex={-1} style={{ "--c": meta.color } as React.CSSProperties}>
+    <aside ref={panel} className="drawer" role="dialog" aria-labelledby={titleId} tabIndex={-1} style={{ "--c": meta.color, "--c-bg": meta.tile } as React.CSSProperties}>
       <header className="drawer-head">
         <TypeIcon type={step.type} size={44} />
         <div className="drawer-title">

@@ -1,8 +1,21 @@
 import type { Process, Step } from "../types";
 
-export const L = { W: 208, H: 94, GAPX: 64, GAPY: 30, PADY: 16, PADX: 44, HEADER: 172 };
-/** Tighter measures for the small charts in the guide. */
-export const L_COMPACT: typeof L = { W: 188, H: 88, GAPX: 44, GAPY: 26, PADY: 22, PADX: 32, HEADER: 136 };
+/**
+ * What a block holds, top to bottom, in the type scale (styles.css `.block-main`, `.block-type`,
+ * `.block-title`, `.block-meta`): its padding, the kind of step (12/16), two lines of the title
+ * (14/20, a 1 px gap above) and the line of tool and duration (12/16), inside a 1 px border; and
+ * across: the padding, the type icon (34 px, 30 in a picture) and the gap beside it. The block's
+ * height is worked out from it, so that a title never sits on the line under it.
+ */
+export const BLOCK_TEXT = { padTop: 12, padBottom: 9, padLeft: 13, padRight: 10, border: 1, kicker: 16, titleGap: 1, titleLine: 20, titleLines: 2, meta: 16, breath: 4, icon: 34, pictureIcon: 30, iconGap: 10 } as const;
+/** The least height of a block: everything it holds, and a little air above the line of tool and duration. */
+export const BLOCK_MIN_H = BLOCK_TEXT.border * 2 + BLOCK_TEXT.padTop + BLOCK_TEXT.kicker + BLOCK_TEXT.titleGap + BLOCK_TEXT.titleLine * BLOCK_TEXT.titleLines + BLOCK_TEXT.breath + BLOCK_TEXT.meta + BLOCK_TEXT.padBottom;
+/** How wide the text of a block may be: its width less the border, padding, icon and gap. */
+export const blockTextWidth = (W: number, picture = false) => W - BLOCK_TEXT.border * 2 - BLOCK_TEXT.padLeft - BLOCK_TEXT.padRight - (picture ? BLOCK_TEXT.pictureIcon : BLOCK_TEXT.icon) - BLOCK_TEXT.iconGap;
+
+export const L = { W: 208, H: BLOCK_MIN_H, GAPX: 64, GAPY: 30, PADY: 16, PADX: 44, HEADER: 172 };
+/** Tighter measures for the small charts in the guide (the same height: the type is the same). */
+export const L_COMPACT: typeof L = { W: 188, H: BLOCK_MIN_H, GAPX: 44, GAPY: 26, PADY: 22, PADX: 32, HEADER: 136 };
 
 export interface NodeBox { step: Step; index: number; lane: number; col: number; sub: number; x: number; y: number }
 export interface LaneBox { actorIndex: number; y: number; h: number }

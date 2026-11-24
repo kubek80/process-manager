@@ -12,15 +12,15 @@
   html:root, html:root[data-theme="dark"] {
     --bg: #ffffff; --surface: var(--theme-light-surface, #ffffff); --surface-2: var(--theme-light-surface-2, #f0f9ff); --line: var(--theme-light-line, #e2e2e5); --line-strong: var(--theme-light-line-strong, #cacacf);
     --text: var(--theme-light-text, #0e0d26); --text-2: var(--theme-light-text-2, #3e3d51); --text-3: var(--theme-light-text-3, #656474);
-    --accent: var(--theme-light-accent, #1168e1); --accent-fill: var(--theme-light-accent-fill, #1971ed); --accent-ink: var(--theme-light-accent-ink, #ffffff); --accent-soft: var(--theme-light-accent-soft, #e8f1fd);
+    --accent: var(--theme-light-accent, #1165dc); --accent-fill: var(--theme-light-accent-fill, #1971ed); --accent-ink: var(--theme-light-accent-ink, #ffffff); --accent-soft: var(--theme-light-accent-soft, #e8f1fd);
     --ocean-10: var(--theme-light-ocean-10, #e8f1fd); --ocean-35: var(--theme-light-ocean-35, #afcdf9); --ocean-75: var(--theme-light-ocean-75, #5395f2); --ocean-100: var(--theme-light-ocean-100, #1971ed);
     --sky-10: var(--theme-light-sky-10, #f0f9ff); --sky-35: var(--theme-light-sky-35, #c9ebff); --sky-75: var(--theme-light-sky-75, #8cd4ff); --sky-100: var(--theme-light-sky-100, #66c5ff);
     --kind-process: var(--theme-light-kind-process, #0f766e); --kind-process-fill: var(--theme-light-kind-process-fill, #0f766e); --kind-process-ink: var(--theme-light-kind-process-ink, #ffffff);
     --kind-process-bg: var(--theme-light-kind-process-bg, #e7f1f1); --kind-process-line: var(--theme-light-kind-process-line, #9fc8c5);
     --kind-standard: var(--theme-light-kind-standard, #913199); --kind-standard-fill: var(--theme-light-kind-standard-fill, #913199); --kind-standard-ink: var(--theme-light-kind-standard-ink, #ffffff);
     --kind-standard-bg: var(--theme-light-kind-standard-bg, #f4eaf5); --kind-standard-line: var(--theme-light-kind-standard-line, #d3add6);
-    --good: var(--theme-light-good, #008045); --good-bg: var(--theme-light-good-bg, #e6f7ef); --good-fill: var(--theme-light-good-fill, #00b35f); --good-ink: var(--theme-light-good-ink, #11121c);
-    --warn: var(--theme-light-warn, #c84000); --warn-bg: var(--theme-light-warn-bg, #fff0e9); --warn-fill: var(--theme-light-warn-fill, #ff6720); --warn-ink: var(--theme-light-warn-ink, #11121c);
+    --good: var(--theme-light-good, #007d43); --good-bg: var(--theme-light-good-bg, #e6f7ef); --good-fill: var(--theme-light-good-fill, #00b35f); --good-ink: var(--theme-light-good-ink, #11121c);
+    --warn: var(--theme-light-warn, #c33e00); --warn-bg: var(--theme-light-warn-bg, #fff0e9); --warn-fill: var(--theme-light-warn-fill, #ff6720); --warn-ink: var(--theme-light-warn-ink, #11121c);
     --bad: var(--theme-light-bad, #be123c); --bad-bg: var(--theme-light-bad-bg, #f9e7ec); --bad-fill: var(--theme-light-bad-fill, #be123c); --bad-ink: var(--theme-light-bad-ink, #ffffff);
     --highlight: var(--theme-light-highlight, #f3ea5d); --highlight-ink: var(--theme-light-highlight-ink, #11121c); --search-mark: var(--theme-light-search-mark, #f3ea5d);
     --quiet: var(--theme-light-quiet, #f6eee1); --quiet-line: var(--theme-light-quiet-line, #ecdabe);
@@ -28,13 +28,13 @@
     --action-other: var(--theme-light-action-other); --action-other-line: var(--theme-light-action-other-line); --action-other-soft: var(--theme-light-action-other-soft);
     --info: var(--theme-light-info, var(--accent)); --info-bg: var(--theme-light-info-bg, var(--accent-soft)); --info-fill: var(--theme-light-info-fill, var(--accent-fill)); --info-ink: var(--theme-light-info-ink, var(--accent-ink));
     --shadow-1: none; --shadow-2: none; --shadow-3: none;
-    --seg-on: #ffffff; --seg-on-line: var(--line-strong);
+    --seg-on: var(--theme-light-seg-on, #ffffff); --seg-on-line: var(--line-strong); --control-line: var(--theme-light-control-line, #908e9a);
+    --mark-green: var(--theme-light-mark-green, #00753e); --mark-green-bg: var(--theme-light-mark-green-bg, #ccf0df);
+    --mark-brown: var(--theme-light-mark-brown, #8f662a); --mark-brown-bg: var(--theme-light-mark-brown-bg, #faf5ee);
+    --mark-sky: var(--theme-light-mark-sky, #006eb3); --mark-sky-bg: var(--theme-light-mark-sky-bg, #e0f3ff);
     color-scheme: light;
   }
-  /* what the dark theme lightens, back to the light formula */
-  html:root[data-theme="dark"] .type-icon { color: var(--c); background: color-mix(in srgb, var(--c) 14%, var(--surface)); }
-  html:root[data-theme="dark"] .step-kicker .who, html:root[data-theme="dark"] .block-type { color: color-mix(in srgb, var(--c) 72%, #000); }
-  html:root[data-theme="dark"] .instructions li > span { color: color-mix(in srgb, var(--c) 72%, #000); }
+  /* the map's colours (--step-…, --lane-…) are built on the tokens above, so paper gets their light values */
 
   /* colours, fills and marks print as on the screen (tags, level bars, ticks, kind colours) */
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }

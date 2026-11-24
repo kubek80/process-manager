@@ -123,7 +123,7 @@
 .preview-frame .preview-pane { border-style: dashed; cursor: default; }
 .preview-pane .pv-topbar > .nav { display: flex; }
 .preview-pane .pv-topbar .icon-btn { width: 32px; height: 32px; }
-.pv-input { display: flex; align-items: center; height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); font-size: var(--fs-md); line-height: var(--lh-md); }
+.pv-input { display: flex; align-items: center; height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--control-line); background: var(--surface); font-size: var(--fs-md); line-height: var(--lh-md); }
 /* the real top bar, not stuck to the window; the name is shown as on a wide screen */
 .pv-topbar.topbar { position: static; height: 50px; padding: 0 12px; gap: 8px; backdrop-filter: none; background: var(--surface); }
 .pv-topbar .brand-name { font-size: var(--fs-md); line-height: var(--lh-md); }

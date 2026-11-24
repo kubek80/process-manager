@@ -16,7 +16,7 @@ export const STEP_ICON: Record<StepType, LucideIcon> = {
 export function TypeIcon({ type, size = 36 }: { type: StepType; size?: number }) {
   const Icon = STEP_ICON[type] ?? SquareCheck;
   return (
-    <span className="type-icon" style={{ "--c": STEP_META[type]?.color ?? "#475569", width: size, height: size } as React.CSSProperties}>
+    <span className="type-icon" style={{ "--c": STEP_META[type]?.color ?? "var(--step-plain)", "--c-bg": STEP_META[type]?.tile ?? "var(--step-plain-bg)", width: size, height: size } as React.CSSProperties}>
       <Icon size={Math.round(size * 0.52)} strokeWidth={2} />
     </span>
   );

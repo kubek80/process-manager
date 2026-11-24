@@ -4,7 +4,7 @@
 
 /* ---------- the mark: what the person signed in is in a group ---------- */
 .rank-mark { display: inline-flex; align-items: center; gap: 5px; flex: none; height: 22px; padding: 0 9px 0 7px; border-radius: 999px;
-  font-size: var(--fs-sm); font-weight: var(--fw-medium); line-height: 1; white-space: nowrap; color: var(--accent); background: var(--accent-soft);
+  font-size: var(--fs-sm); font-weight: var(--fw-medium); line-height: var(--lh-sm); white-space: nowrap; color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--ocean-35); }
 .rank-mark svg { flex: none; }
 /* a member: the same shape, quieter - outlined, not filled */

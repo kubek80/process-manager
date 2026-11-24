@@ -1,39 +1,53 @@
 /* The paths (greenfield, brownfield, paved path, and those an organisation adds): their marks and
-   "Which path is this for" (PathMark, PathMarks, PathRoad in src/components/marks.tsx).
+   "Which path is this for" (PathMark, PathMarks, PathRoad, PathAny in src/components/marks.tsx).
    Every picture is told apart by its shape; its tint only helps. The tints come from the tokens of
-   the look (never the problem colour), so they follow the brand, the states and light or dark:
-     --path-sprout     a field with a sprout (greenfield): the success colour
-     --path-buildings  existing buildings (brownfield): the warning colour darkened towards the ink, a brown
-     --path-road       a paved road (the paved path): the brand colour
-     --path-other      every other picture and the neutral signpost: the second ink
-   Each mark sets --path-c to its picture's tint; the plate is that tint over the surface. */
+   the look, never from the problem or the warning colour, so they follow light or dark and a
+   changed look; each picture has an ink (--path-c: the picture and the tick), a plate (its ground)
+   and a line (its edge):
+     sprout (greenfield)     the green of --good: the look has no green that is not a state
+     buildings (brownfield)  the quiet warm surface (--quiet, --quiet-line: Grain) with an ink drawn
+                             from its line towards the text: a brown that never reads as a warning
+     road (the paved path)   the brand colour (--accent) on the brand's tints (--ocean-10, its line --ocean-35)
+     any other picture and the neutral signpost: the second ink on the second surface */
 :root, .look-light, .look-dark {
   --path-sprout: var(--good);
-  --path-buildings: color-mix(in srgb, var(--warn) 72%, var(--text));
+  --path-sprout-plate: color-mix(in srgb, var(--good) 12%, var(--surface));
+  --path-sprout-line: color-mix(in srgb, var(--good) 40%, transparent);
+  --path-buildings: color-mix(in srgb, var(--quiet-line, #ecdabe) 30%, var(--text));
+  --path-buildings-plate: var(--quiet, #f6eee1);
+  --path-buildings-line: var(--quiet-line, #ecdabe);
   --path-road: var(--accent);
+  --path-road-plate: var(--ocean-10);
+  --path-road-line: var(--ocean-35);
   --path-other: var(--text-2);
-  --path-plate-mix: 13%;
-  --path-line-mix: 40%;
+  --path-other-plate: var(--surface-2);
+  --path-other-line: var(--line-strong);
 }
-.path-mark, .path-lane { --path-c: var(--path-other); }
-.path-mark[data-symbol="sprout"], .path-lane[data-symbol="sprout"] { --path-c: var(--path-sprout); }
-.path-mark[data-symbol="buildings"], .path-lane[data-symbol="buildings"] { --path-c: var(--path-buildings); }
-.path-mark[data-symbol="road"], .path-lane[data-symbol="road"] { --path-c: var(--path-road); }
+.path-mark, .path-lane, .chip.path-chip, .symbol-choice, .cat-avatar.path-avatar, .path-any {
+  --path-c: var(--path-other); --path-plate: var(--path-other-plate); --path-line: var(--path-other-line);
+}
+:is(.path-mark, .path-lane, .chip.path-chip, .symbol-choice, .cat-avatar.path-avatar)[data-symbol="sprout"] {
+  --path-c: var(--path-sprout); --path-plate: var(--path-sprout-plate); --path-line: var(--path-sprout-line);
+}
+:is(.path-mark, .path-lane, .chip.path-chip, .symbol-choice, .cat-avatar.path-avatar)[data-symbol="buildings"] {
+  --path-c: var(--path-buildings); --path-plate: var(--path-buildings-plate); --path-line: var(--path-buildings-line);
+}
+:is(.path-mark, .path-lane, .chip.path-chip, .symbol-choice, .cat-avatar.path-avatar)[data-symbol="road"] {
+  --path-c: var(--path-road); --path-plate: var(--path-road-plate); --path-line: var(--path-road-line);
+}
 
 /* ---------- one mark: the picture on a small plate, the name beside it when named */
-.path-mark { display: inline-flex; align-items: center; gap: 6px; flex: none; min-width: 0; vertical-align: middle; }
+.path-mark { display: inline-flex; align-items: center; gap: 6px; flex: none; min-width: 0; max-width: 100%; vertical-align: middle; }
 .path-plate {
   display: inline-grid; place-items: center; flex: none; width: 20px; height: 20px; border-radius: 6px;
-  color: var(--path-c);
-  background: color-mix(in srgb, var(--path-c) var(--path-plate-mix), var(--surface));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--path-c) var(--path-line-mix), transparent);
+  color: var(--path-c); background: var(--path-plate); box-shadow: inset 0 0 0 1px var(--path-line);
 }
 .path-mark.md .path-plate { width: 24px; height: 24px; border-radius: 7px; }
 .path-symbol { display: block; flex: none; }
 .path-mark.named .path-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
 
 /* several together: plates side by side */
-.path-marks { display: inline-flex; align-items: center; gap: 3px; flex: none; min-width: 0; }
+.path-marks { display: inline-flex; align-items: center; gap: 3px; flex: none; min-width: 0; max-width: 100%; }
 .path-marks:has(.path-mark.named) { gap: 4px 12px; flex-wrap: wrap; }
 
 /* ---------- "Which path is this for": one road, a lane per path, the lanes of this document marked */
@@ -47,6 +61,7 @@
   position: relative; display: inline-flex; align-items: center; gap: 7px; min-width: 0; padding: 3px 10px 3px 4px; border-radius: 7px;
   font-size: var(--fs-sm, 12px); line-height: var(--lh-sm, 16px); font-weight: var(--fw-medium, 500); white-space: nowrap;
 }
+.path-lane .path-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* the dashes between two lanes, as on a road; gone beside a marked lane, which has an edge of its own */
 .path-lane + .path-lane { margin-left: 3px; }
 .path-lane + .path-lane::before {
@@ -55,68 +70,61 @@
 }
 .path-lane.on + .path-lane::before, .path-lane + .path-lane.on::before { border-left-color: transparent; }
 .path-lane .path-plate { width: 22px; height: 22px; }
-.path-lane.on { color: var(--text); background: color-mix(in srgb, var(--path-c) 10%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--path-c) 45%, transparent), var(--shadow-1); }
+.path-lane.on { color: var(--text); background: var(--surface); box-shadow: inset 0 0 0 1px var(--path-line), var(--shadow-1); }
 .path-lane.on .path-name { font-weight: var(--fw-strong, 700); }
 .path-check { flex: none; margin-left: -2px; color: var(--path-c); }
 /* a path this document is not for: drawn in outline, in the quiet ink */
 .path-lane.off { color: var(--text-3); }
 .path-lane.off .path-plate { color: var(--text-3); background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong); }
-/* for every path: every lane open (its picture in its tint, no edge), none ticked, and "Any of them" after the road */
-.path-road.any .path-lane.on { background: transparent; box-shadow: none; color: var(--text-2); }
-.path-road.any .path-lane.on .path-name { font-weight: var(--fw-medium, 500); }
-.path-road.any .path-lane + .path-lane::before { border-left-color: var(--line-strong); }
-.path-road-any { font-size: var(--fs-sm, 12px); line-height: var(--lh-sm, 16px); font-weight: var(--fw-medium, 500); color: var(--text-2); white-space: nowrap; }
 
-/* on a phone the lanes share the width */
+/* ---------- a document for any path (the most common case): one quiet fact, the neutral signpost and "Any path" */
+.path-any { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--text-2); white-space: nowrap; }
+.path-any .path-symbol { color: var(--text-3); }
+
+/* on a phone the lanes wrap rather than squeeze; the tick goes (the edge and the bold name mark the lane) */
 @media (max-width: 599px) {
   .path-road { display: flex; }
-  .path-lanes { flex: 1 1 100%; }
-  .path-lane { flex: 1 1 0; justify-content: flex-start; }
+  .path-lanes { flex: 0 1 auto; row-gap: 3px; }
+  .path-lane { flex: 0 1 auto; }
+  .path-check { display: none; }
 }
 
 /* ---------- where the marks sit */
-/* the corner of a card: the plates before the tiers */
-.card-corner { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; flex: 0 1 auto; min-width: 0; max-width: 60%; }
-.card-corner .card-tiers { min-width: 0; max-width: none; }
-/* a row: the plates after the name, on its line */
+/* the corner of a card: the plates before the tiers; one path also by its name (marks.tsx: CardPaths) */
+.card-corner { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; flex: 0 1 auto; min-width: 0; max-width: 64%; }
+.card-corner .card-tiers { flex: none; min-width: 0; max-width: none; }
+.card-corner .path-marks { flex: 0 1 auto; }
+.card-corner .path-name { font-size: var(--fs-sm, 12px); line-height: var(--lh-sm, 16px); font-weight: var(--fw-medium, 500); }
+/* a row: the plates after the name, on its line; one path also by its name on a wider screen */
 .row-title-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .row-title-line .card-title { flex: 0 1 auto; }
-.row-paths { position: relative; z-index: 1; }
+.row-paths { position: relative; z-index: 1; flex: 0 1 auto; }
 .row-paths .path-plate { width: 18px; height: 18px; border-radius: 5px; }
+.row-paths .path-name { font-size: var(--fs-sm, 12px); line-height: var(--lh-sm, 16px); }
+@media (max-width: 599px) { .row-paths .path-name { display: none; } }
 /* a filter's option and a chosen filter: the picture before the name */
 .filter-option-name .path-mark, .filter-chip .path-mark { margin-right: 6px; }
 .filter-option-name .path-plate, .filter-chip .path-plate { width: 18px; height: 18px; border-radius: 5px; }
-/* a chip of the editing screen: the picture before the name */
+/* a chip of the editing screen: the picture before the name, in its own tint, also when chosen */
 .chip .path-symbol { display: inline-block; vertical-align: -3px; margin-right: 5px; color: var(--path-c, currentColor); }
-.chip.path-chip { --path-c: var(--path-other); }
-.chip.path-chip[data-symbol="sprout"] { --path-c: var(--path-sprout); }
-.chip.path-chip[data-symbol="buildings"] { --path-c: var(--path-buildings); }
-.chip.path-chip[data-symbol="road"] { --path-c: var(--path-road); }
-.chip.path-chip.on .path-symbol { color: currentColor; }
 
 /* the reader's page and the editing preview: the road on the line of facts, at its end when there is room */
 .doc-facts .path-road, .preview-facts .path-road { margin-left: auto; }
 .preview-facts .path-road { margin-left: 0; flex-basis: 100%; }
 
-/* the picker of a picture in Admin › Lists */
+/* the picker of a picture in Admin › Lists, with the name of the picture pointed at, focused or chosen under it */
 .symbol-picker { display: flex; flex-wrap: wrap; gap: 6px; }
 .symbol-choice {
   display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 9px;
   background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--text-2);
 }
 .symbol-choice:hover { background: var(--surface-2); color: var(--text); }
-.symbol-choice[aria-pressed="true"] { color: var(--path-c); background: color-mix(in srgb, var(--path-c) 13%, var(--surface)); box-shadow: inset 0 0 0 2px var(--path-c); }
-.symbol-choice { --path-c: var(--accent); }
-.symbol-choice[data-symbol="sprout"] { --path-c: var(--path-sprout); }
-.symbol-choice[data-symbol="buildings"] { --path-c: var(--path-buildings); }
-.symbol-choice[data-symbol="road"] { --path-c: var(--path-road); }
+.symbol-choice[aria-pressed="true"] { color: var(--path-c); background: var(--path-plate); box-shadow: inset 0 0 0 2px var(--path-c); }
 .symbol-choice .path-symbol { width: 22px; height: 22px; }
+.symbol-caption { margin-top: 6px; font-size: var(--fs-sm, 12px); line-height: var(--lh-sm, 16px); color: var(--text-2); min-height: var(--lh-sm, 16px); }
 
 @media print {
   .path-plate, .path-lane, .path-lanes { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 /* the entry of a path in the lists: its picture in place of the initial */
-.cat-avatar.path-avatar { --path-c: var(--path-other); color: var(--path-c); background: color-mix(in srgb, var(--path-c) var(--path-plate-mix), var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--path-c) var(--path-line-mix), transparent); }
-.cat-avatar.path-avatar[data-symbol="sprout"] { --path-c: var(--path-sprout); }
-.cat-avatar.path-avatar[data-symbol="buildings"] { --path-c: var(--path-buildings); }
-.cat-avatar.path-avatar[data-symbol="road"] { --path-c: var(--path-road); }
+.cat-avatar.path-avatar { color: var(--path-c); background: var(--path-plate); box-shadow: inset 0 0 0 1px var(--path-line); }

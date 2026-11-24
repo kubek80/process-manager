@@ -11,7 +11,7 @@
 .req-vote { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: none; width: 52px; min-height: 56px; padding: 4px 0; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text-2); font-variant-numeric: tabular-nums; }
 .req-vote:hover { border-color: var(--accent); color: var(--accent); }
 .req-vote.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-.req-votes { font-size: var(--fs-lg); line-height: 1.1; }
+.req-votes { font-size: var(--fs-lg); line-height: var(--lh-lg); }
 .req-body { display: grid; gap: 6px; flex: 1; min-width: 0; }
 .req-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .req-state.state-open { background: var(--accent-soft); border-color: transparent; color: var(--accent); }

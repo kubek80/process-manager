@@ -17,7 +17,7 @@ code.cm-path { background: none; border: 0; padding: 0; color: var(--text-2); }
 .cm-cats { display: grid; gap: 14px; font-size: var(--fs-md); line-height: var(--lh-md); }
 .cm-cats ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
 .cm-cats-title { font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); padding: 0 8px 4px; }
-.cm-cats a { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 7px; color: var(--text-2); line-height: 1.3; }
+.cm-cats a { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 7px; color: var(--text-2); }
 .cm-cats a:hover { background: var(--surface-2); color: var(--text); }
 .cm-cats a.on { background: var(--accent-soft); color: var(--text); font-weight: var(--fw-strong); box-shadow: inset 2px 0 0 var(--accent); }
 .cm-cats-all { font-weight: var(--fw-medium); }

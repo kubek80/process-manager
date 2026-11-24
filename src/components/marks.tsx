@@ -50,8 +50,9 @@ import "../paths.css";
  *
  * <PathRoad ids={doc.paths} paths={catalog.paths} kind="process" />
  *   "Which path is this for": every path of the list as a lane of one road, the lanes of this
- *   document marked (tinted, with a check), the others in outline; when it names none, every
- *   lane is open (no edge, no check) and "Any of them" follows the road. The one larger picture, on the
+ *   document marked (edged, bold, with a check; no check on a phone), the others in outline. When
+ *   it names none (the most common case) there is no road: `PathAny`, one quiet fact with the
+ *   neutral signpost and "Any path" (class `.path-any`). The one larger picture, on the
  *   reader's page and in the editing preview. Classes: `.path-road`, `.path-lane.on|.off`.
  *
  * Classes without a component (src/controls.css):
@@ -159,9 +160,11 @@ const DRAWN: Record<PathSymbol | "none", ReactNode> = {
     <path d="M12.5 20.5V4.5h7v16" />
     <path d="M15.5 8h1M15.5 11.5h1M15.5 15h1M7.5 13h2M7.5 16.5h2" />
   </>,
+  // a road running to the horizon: its two edges, the horizon, the dashed middle line
   road: <>
-    <path d="M9.6 3.5 4 20.5M14.4 3.5 20 20.5" />
-    <path d="M12 4.5v2M12 10v2.5M12 16.5v4" />
+    <path d="M2 7h20" />
+    <path d="M10.4 7 3.5 21M13.6 7l6.9 14" />
+    <path d="M12 9.5v1.5M12 13.5v2M12 18v3" />
   </>,
   trail: <>
     <path d="M7 20.5c0-3.5 9-3 9-7s-7-3.3-7-7" strokeDasharray="2.2 2.6" />
@@ -254,23 +257,37 @@ export function PathRoad({ ids, paths, kind, className = "" }: { ids?: unknown; 
   // a path it names that is no longer in the list still shows, under its id
   for (const e of mine) if (!all.some((x) => x.id === e.id)) all.push(e);
   if (!all.length) return null;
-  const any = mine.length === 0;
-  const on = (id: string) => any || mine.some((e) => e.id === id);
+  // the most common case says nothing about a path: one quiet fact, not a road
+  if (!mine.length) return <PathAny kind={kind} className={className} />;
+  const on = (id: string) => mine.some((e) => e.id === id);
   return (
-    <figure className={`path-road ${any ? "any" : ""} ${className}`.replace(/\s+/g, " ").trim()} data-lanes={all.length}>
+    <figure className={`path-road ${className}`.trim()} data-lanes={all.length}>
       <figcaption className="path-road-title">Which path is this for</figcaption>
       <ul className="path-lanes" aria-label={pathsSentence(kind, mine)}>
         {all.map((e) => (
           <li key={e.id} className={`path-lane ${on(e.id) ? "on" : "off"}`} data-symbol={known(e.symbol)} data-path={e.id}
-            title={`${pathTitle(e)}${e.description ? `: ${e.description}` : ""}${any ? "" : on(e.id) ? " (this one)" : " (not this one)"}`}>
+            title={`${pathTitle(e)}${e.description ? `: ${e.description}` : ""}${on(e.id) ? " (this one)" : " (not this one)"}`}>
             <span className="path-plate"><PathSymbolIcon symbol={e.symbol} size={16} /></span>
             <span className="path-name">{e.name}</span>
-            {!any && on(e.id) && <Check size={14} aria-hidden="true" className="path-check" />}
-            <span className="sr-only">{any ? "" : on(e.id) ? ": yes" : ": no"}</span>
+            {on(e.id) && <Check size={14} aria-hidden="true" className="path-check" />}
+            <span className="sr-only">{on(e.id) ? ": yes" : ": no"}</span>
           </li>
         ))}
       </ul>
-      {any && <span className="path-road-any" aria-hidden="true" title={pathsSentence(kind, [])}>Any of them</span>}
     </figure>
+  );
+}
+
+/**
+ * A process or standard that names no path: it applies whatever the path. One quiet fact like the
+ * others of the head, the neutral signpost and "Any path"; the sentence is the tooltip and is read out.
+ */
+export function PathAny({ kind, className = "" }: { kind: TargetKind; className?: string }) {
+  const said = pathsSentence(kind, []);
+  return (
+    <span className={`path-any fact ${className}`.trim()} title={said}>
+      <PathSymbolIcon size={14} />
+      <span className="fact-text"><span className="sr-only">{said} </span><span aria-hidden="true">Any path</span></span>
+    </span>
   );
 }

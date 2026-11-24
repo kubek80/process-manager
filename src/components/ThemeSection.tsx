@@ -167,7 +167,7 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
           <section className="theme-group" aria-labelledby="theme-ground">
             <h3 id="theme-ground">Brand, second colour and ink</h3>
             {(["brand", "secondary", "ink"] as const).map((part) => (
-              <ColorField key={part} part={part} value={look[part]} use={derived.colors.find((c) => c.part === part)} onChange={(v) => set({ [part]: v })} />
+              <ColorField key={part} part={part} value={look[part]} use={derived.colors.find((c) => c.part === part)} onChange={(v) => set({ [part]: v })} infoChosen={!!look.info} />
             ))}
           </section>
 
@@ -368,7 +368,7 @@ function LogoField({ look, onChange }: { look: Look; onChange: (logo: string | u
   );
 }
 
-function ColorField({ part, value, fallback, use, onChange }: { part: ColorPart; value?: string; fallback?: string; use?: ColorUse; onChange: (v: string | undefined) => void }) {
+function ColorField({ part, value, fallback, use, onChange, infoChosen = false }: { part: ColorPart; value?: string; fallback?: string; use?: ColorUse; onChange: (v: string | undefined) => void; infoChosen?: boolean }) {
   const id = useId();
   // a part that follows another (the brand) shows that colour while it has none of its own
   const shown = value ?? fallback ?? DEFAULT_COLOR[part];
@@ -408,7 +408,7 @@ function ColorField({ part, value, fallback, use, onChange }: { part: ColorPart;
       )}
       {adjusted && part !== "ink" && <p className="color-note"><Info size={14} aria-hidden="true" /><span>{adjustedText(use!)}</span></p>}
       {use && (part === "brand" || part === "process" || part === "standard") && use.like.map((k) => (
-        <p key={k} className="color-note warn" tabIndex={-1}><TriangleAlert size={14} aria-hidden="true" /><span>{confusion(part, k)}</span></p>
+        <p key={k} className="color-note warn" tabIndex={-1}><TriangleAlert size={14} aria-hidden="true" /><span>{confusion(part, k, !infoChosen)}</span></p>
       ))}
       {use?.warnings.map((w) => (
         <p key={w} className="color-note warn" tabIndex={-1}><TriangleAlert size={14} aria-hidden="true" /><span>{w}</span></p>

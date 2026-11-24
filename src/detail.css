@@ -119,7 +119,7 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
 .block.decision::before { display: none; }
 .block.decision:hover, .block.decision.selected, .block.decision.mine { box-shadow: none; border: none; }
 .diamond { position: absolute; inset: 0; overflow: visible; pointer-events: none; filter: drop-shadow(0 1px 1.5px rgb(16 24 40 / .10)); }
-.diamond-shape { fill: color-mix(in srgb, var(--c) 6%, var(--surface)); stroke: color-mix(in srgb, var(--c) 60%, var(--line-strong)); stroke-width: 1.5; transition: stroke .15s; }
+.diamond-shape { fill: var(--surface); stroke: color-mix(in srgb, var(--c) 60%, var(--line-strong)); stroke-width: 1.5; transition: stroke .15s; }
 .block.decision:hover .diamond-shape { stroke: var(--c); }
 .diamond-ring { fill: none; stroke: var(--accent); stroke-width: 3; opacity: 0; }
 .block.decision.selected .diamond-shape { stroke: var(--accent); stroke-width: 2; }
@@ -134,7 +134,7 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
 .block.decision .block-text { flex: 0 1 auto; height: auto; max-width: 140px; align-items: center; justify-content: center; }
 /* the shape says "decision" (and the legend explains it); the word stays for screen readers, the title gets the room */
 .block.decision .block-type { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.block.decision .block-title { font-size: var(--fs-sm); line-height: 1.25; -webkit-line-clamp: 3; margin-top: 0; }
+.block.decision .block-title { font-size: var(--fs-sm); line-height: var(--lh-sm); -webkit-line-clamp: 3; margin-top: 0; }
 .block.decision .block-meta { display: none; }
 .block.decision .block-num { left: calc(50% - 10px); top: -10px; }
 .block.decision .block-corner { top: 2px; right: 26px; }
@@ -167,13 +167,13 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
 .flow-lanes-inner { position: absolute; top: 0; left: 0; right: 0; will-change: transform; }
 .lane-label { position: absolute; left: 0; right: 0; overflow: hidden; border-bottom: 1px solid var(--line); background: var(--surface); }
 .lane-label.even { background: var(--surface-2); }
-.lane-label.me { background: color-mix(in srgb, var(--lane) 6%, var(--surface)); }
+.lane-label.me { background: var(--ocean-10); }
 .flow-lanes .lane-head { position: static; width: 100%; height: 100%; padding: 0 10px 0 14px; border-right: 0; }
 /* a lane's name is broken between words into the lines it has (wrapWords in lib/zoom.ts) */
 .flow-lanes .lane-text strong { display: grid; overflow: hidden; }
 .flow-lanes .lane-text strong > .lane-line { display: block; font: inherit; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lane-label.small .lane-head { padding: 0 8px 0 12px; }
-.lane-label.small .lane-text strong { font-size: var(--fs-sm); line-height: 1.15; }
+.lane-label.small .lane-text strong { font-size: var(--fs-sm); line-height: var(--lh-sm); }
 .flow-stage { position: relative; }
 .flow-draw { position: relative; overflow: hidden; }
 .flow-draw > .flow-canvas { min-width: 0; }
