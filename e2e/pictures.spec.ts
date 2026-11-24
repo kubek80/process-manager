@@ -319,8 +319,11 @@ test("a code map address to a chart below other charts lands on it", async ({ pa
   await expect(target).toBeInViewport();
   // the scroll is corrected once what is above it has settled (scrollToStart): it ends on the chart
   const top = () => target.evaluate((e) => Math.round(e.getBoundingClientRect().top));
-  await expect.poll(top, { timeout: 4_000 }).toBeGreaterThan(-4);
-  expect(await top()).toBeLessThan(300);
+  await expect.poll(async () => {
+    const t = await top();
+    await page.waitForTimeout(300);
+    return t === (await top()) && t > -4 && t < 300 ? "still, on the chart" : t;
+  }, { timeout: 5_000 }).toBe("still, on the chart");
   await page.waitForTimeout(800); // and stays there
   expect(await top()).toBeGreaterThan(-4);
   expect(await top()).toBeLessThan(300);
