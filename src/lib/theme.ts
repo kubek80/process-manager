@@ -507,6 +507,49 @@ export function derive(look: Look): Derived {
   const kindsAlikeToColourBlind = MODES.filter((m) => !kindsAlike.includes(m) && (["deuteranopia", "protanopia"] as const).some((k) => distance(seenWithout(eff.process.text[m], k), seenWithout(eff.standard.text[m], k)) < ALIKE));
   return { tokens, colors, kindsAlike, kindsAlikeToColourBlind };
 }
+/**
+ * Every token of a look in one theme, as the page has them: the default look's (styles.css holds
+ * exactly these) with what the look works out on top.
+ */
+export function fullTokens(look: Look, mode: Mode): Record<string, string> {
+  defaults ??= derive(DEFAULT_LOOK);
+  return { ...defaults.tokens[mode], ...derive(look).tokens[mode] };
+}
+/** The map's tokens (styles.css): which look token each kind of step and each lane is drawn in, with its tile. */
+export const MAP_TOKENS: Record<string, [string, string]> = {
+  "step-work": ["accent", "accent-soft"], "step-check": ["kind-standard", "kind-standard-bg"], "step-system": ["kind-process", "kind-process-bg"], "step-plain": ["text-2", "surface-2"],
+  "lane-1": ["accent", "accent-soft"], "lane-2": ["mark-brown", "mark-brown-bg"], "lane-3": ["kind-process", "kind-process-bg"],
+  "lane-4": ["kind-standard", "kind-standard-bg"], "lane-5": ["mark-sky", "mark-sky-bg"], "lane-6": ["text-2", "surface-2"],
+};
+/** A colour that must read on a ground: text at 4.5:1 (worked out to TEXT_MIN), icons and outlines at 3:1. */
+export interface ReadingPair { what: string; fg: string; bg: string; min: number }
+/**
+ * Every pair of text (or icon, or outline) and ground that the look produces in one theme, with
+ * the contrast it needs: what the readability tests check for any look, so that a new pair cannot
+ * slip through. `worked`: pairs whose text is worked out here and aims at TEXT_MIN.
+ */
+export function readingPairs(t: Record<string, string>): (ReadingPair & { worked: boolean })[] {
+  const out: (ReadingPair & { worked: boolean })[] = [];
+  const add = (fg: string, bgs: string[], min = 4.5, worked = true) => { for (const bg of bgs) if (t[fg] && t[bg]) out.push({ what: `${fg} on ${bg}`, fg: t[fg], bg: t[bg], min, worked }); };
+  const grounds = ["bg", "surface", "surface-2", "seg-on", "ocean-10", "sky-10"];
+  add("text", [...grounds, "search-mark", "quiet", "accent-soft"]);
+  add("text-2", [...grounds, "quiet"]);
+  add("text-3", [...grounds, "quiet"]);
+  add("accent", [...grounds, "accent-soft"]);
+  for (const k of ["kind-process", "kind-standard"]) add(k, ["bg", "surface", "surface-2", `${k}-bg`]);
+  for (const k of ["good", "warn", "bad"]) add(k, ["bg", "surface", "surface-2", `${k}-bg`]);
+  for (const k of ["mark-green", "mark-brown", "mark-sky"]) add(k, ["surface", "surface-2", `${k}-bg`]);
+  add("bar-text", ["bar", "bar-2"]); add("bar-muted", ["bar", "bar-2"]);
+  // the designer's own fills keep their colour: their ink is checked at 4.5
+  for (const [ink, fill] of [["accent-ink", "accent-fill"], ["kind-process-ink", "kind-process-fill"], ["kind-standard-ink", "kind-standard-fill"], ["good-ink", "good-fill"], ["warn-ink", "warn-fill"], ["bad-ink", "bad-fill"], ["highlight-ink", "highlight"]]) add(ink, [fill], 4.5, false);
+  // the map: a kind of step's or a lane's icon and letters on its tile, and on the surface
+  for (const [name, [fg, tile]] of Object.entries(MAP_TOKENS)) {
+    if (t[fg] && t[tile]) out.push({ what: `${name} on its tile`, fg: t[fg], bg: t[tile], min: 3, worked: false }, { what: `${name} on the surface`, fg: t[fg], bg: t.surface, min: 4.5, worked: false });
+  }
+  add("control-line", ["bg", "surface", "surface-2"], CONTROL_MIN, false);
+  return out;
+}
+
 /** An ink too light for text, or for the ground of the dark look. */
 export const INK_TEXT = "This colour is too light to be the colour of text as it is: text is made darker in the light look, and the dark look's ground darker, so that everything stays readable.";
 
