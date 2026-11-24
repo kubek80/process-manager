@@ -146,6 +146,8 @@ The first admins are named in the server setting `PM_ADMINS`.
 
 ![Admin › Theming with its preview](docs/theming.png)
 
+![An alert on a page: review overdue, with what to do](docs/alert.png)
+
 ![A platform and its members](docs/platforms.png)
 
 ![The page of a platform](docs/group.png)
