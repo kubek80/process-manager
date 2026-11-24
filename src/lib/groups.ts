@@ -91,7 +91,7 @@ export const tidyLists = (c: Catalog): Catalog => ({
   ...c,
   teams: c.teams.map(tidyListEntry), practices: (c.practices ?? []).map(tidyListEntry), platforms: (c.platforms ?? []).map(tidyListEntry),
   categories: (c.categories ?? []).map(tidyListEntry), tools: c.tools.map(tidyListEntry), tiers: c.tiers.map(tidyListEntry),
-  environments: c.environments.map(tidyListEntry), languages: c.languages.map(tidyListEntry),
+  environments: c.environments.map(tidyListEntry), languages: c.languages.map(tidyListEntry), paths: (c.paths ?? []).map(tidyListEntry),
 });
 
 /**

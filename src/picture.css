@@ -2,8 +2,8 @@
    charts. The drawing is the map's own (styles.css, detail.css); here only what a picture adds. */
 
 .process-picture { margin: 4px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
-.process-picture > .picture-title { font-size: 15.5px; }
-.process-picture > figcaption { font-size: 13px; color: var(--text-3); max-width: 80ch; }
+.process-picture > .picture-title { font-size: var(--fs-lg); line-height: var(--lh-lg); }
+.process-picture > figcaption { font-size: var(--fs-md); line-height: var(--lh-md); color: var(--text-3); max-width: 80ch; }
 /* as high as its drawing: it never scrolls up and down, so a scroll or a swipe over it moves the page */
 .flow-wrap.picture-inline .flow-scroll, .flow-wrap.picture-print .flow-scroll { max-height: none; }
 .flow-wrap.picture .flow-head { padding: 6px 8px 6px 12px; }

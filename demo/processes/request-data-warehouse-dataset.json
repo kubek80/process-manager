@@ -9,6 +9,9 @@
   "practice": "data",
   "platform": "data-warehouse",
   "rigour": "mandatory",
+  "paths": [
+    "paved-path"
+  ],
   "languages": [
     "sql",
     "python"

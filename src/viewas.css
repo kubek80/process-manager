@@ -1,0 +1,43 @@
+/* Viewing the portal as somebody else (ViewAsBand): a band fixed to the bottom of the window,
+   in the warning state's fill, above everything (dialogs included), never printed. The page
+   keeps room for it: --viewas-h is its height, set by the band. Only tokens. */
+
+.viewas-band {
+  position: fixed; z-index: 70; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; gap: 8px 14px;
+  padding: 8px max(16px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: var(--warn-fill); color: var(--warn-ink);
+  border-top: 2px solid var(--warn-ink);
+  box-shadow: var(--shadow-3);
+  font-size: var(--fs-md, 14px); line-height: var(--lh-md, 20px);
+}
+.viewas-icon { flex: none; }
+.viewas-text { flex: 1; min-width: 0; margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; }
+.viewas-who { font-weight: var(--fw-strong, 700); overflow-wrap: anywhere; }
+.viewas-rule { font-weight: var(--fw-medium, 500); }
+.viewas-rule::before, .viewas-ends::before { content: "·"; margin-right: 14px; }
+.viewas-ends { font-variant-numeric: tabular-nums; }
+.viewas-band .viewas-stop { flex: none; background: var(--surface); color: var(--text); border-color: var(--warn-ink); }
+.viewas-band .viewas-stop:hover:not(:disabled) { background: var(--surface-2); border-color: var(--warn-ink); }
+.viewas-band .viewas-stop:focus-visible { outline: 2px solid var(--warn-ink); outline-offset: 2px; }
+
+/* room for the band: the pages scroll above it, the messages and the editing screen end above it */
+html.viewing-as body { padding-bottom: var(--viewas-h, 48px); }
+html.viewing-as .toasts { bottom: calc(16px + var(--viewas-h, 48px) + var(--bottom-bar, 0px)); }
+html.viewing-as .edit-screen { height: calc(100dvh - var(--viewas-h, 48px)); }
+html.viewing-as .overlay { padding-bottom: calc(5vh + var(--viewas-h, 48px)); }
+
+/* what would open the editing screen is visibly not available (the band says why when it is pressed) */
+html.viewing-as :is(a[href^="#/p/"], a[href^="#/s/"]):is([href$="/edit"], [href*="/edit/"]):not([href="#/p/edit"], [href="#/s/edit"]) { opacity: .55; cursor: not-allowed; }
+
+@media (max-width: 640px) {
+  .viewas-band { align-items: flex-start; }
+  .viewas-text { flex-direction: column; gap: 0; }
+  .viewas-rule::before, .viewas-ends::before { content: none; }
+  .viewas-ends { color: inherit; }
+}
+
+@media print {
+  .viewas-band { display: none; }
+  html.viewing-as body { padding-bottom: 0; }
+}

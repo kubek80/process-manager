@@ -1,6 +1,6 @@
 /* the share dialog: the link with its copy button, then the other ways of sharing */
 .share-link { display: flex; align-items: center; gap: 6px; }
-.share-link .share-url { flex: 1 1 auto; height: 38px; background: var(--surface-2); color: var(--text-2); font: 12.5px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace; text-overflow: ellipsis; }
+.share-link .share-url { flex: 1 1 auto; height: 38px; background: var(--surface-2); color: var(--text-2); font: var(--fs-sm)/var(--lh-sm) ui-monospace, "SF Mono", Menlo, Consolas, monospace; text-overflow: ellipsis; }
 .share-copy { width: 38px; height: 38px; border: 1px solid var(--line-strong); background: var(--surface); }
 .share-copy:hover { border-color: var(--accent); color: var(--accent); }
 .share-copy.copied, .share-copy.copied:hover { border-color: var(--good); background: var(--good-bg); color: var(--good); }
@@ -11,10 +11,10 @@
 .share-option.copied { border-color: var(--good); }
 .share-option.copied .share-icon { background: var(--good-bg); color: var(--good); }
 .share-text { display: flex; flex-direction: column; min-width: 0; }
-.share-text strong { font-size: 14px; font-weight: 600; }
-.share-text span { font-size: 12.5px; color: var(--text-3); }
-.share-copied { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--good-bg); color: var(--good); font-style: normal; font-size: 11.5px; font-weight: 650; }
-.share-status { min-height: 1.4em; margin: 10px 0 0; font-size: 13px; color: var(--good); }
+.share-text strong { font-size: var(--fs-md); line-height: var(--lh-md); font-weight: var(--fw-medium); }
+.share-text span { font-size: var(--fs-sm); line-height: var(--lh-sm); color: var(--text-3); }
+.share-copied { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--good-bg); color: var(--good); font-style: normal; font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); }
+.share-status { min-height: 1.4em; margin: 10px 0 0; font-size: var(--fs-md); line-height: var(--lh-md); color: var(--good); }
 .share-status.bad { color: var(--bad); }
-.share-manual p { margin: 0 0 6px; font-size: 13px; color: var(--text-2); }
-.share-manual textarea { width: 100%; font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.share-manual p { margin: 0 0 6px; font-size: var(--fs-md); line-height: var(--lh-md); color: var(--text-2); }
+.share-manual textarea { width: 100%; font: var(--fs-sm)/var(--lh-sm) ui-monospace, "SF Mono", Menlo, Consolas, monospace; }

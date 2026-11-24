@@ -114,7 +114,7 @@ func (o Options) resolve() (map[string]bool, int, error) {
 
 // Version changes whenever the text of the chunks is put together differently, so that an
 // index can tell that every stored chunk has to be embedded again.
-const Version = 2
+const Version = 3
 
 // The shapes below read only what the chunks need; every field is optional here, so a body
 // that lacks one never panics. The format itself is checked elsewhere (docs.Check).
@@ -134,6 +134,8 @@ type common struct {
 	Platform string   `json:"platform"`
 	Practice string   `json:"practice"`
 	Tags     []string `json:"tags"`
+	// Paths: what the whole document is for (greenfield, paved path…); a requirement has none.
+	Paths []string `json:"paths"`
 	where
 }
 
@@ -412,7 +414,8 @@ func (b *builder) name(list []docs.Named, id string) string {
 	return docs.Name(list, id)
 }
 
-// belongs: tags, category, platform, practice and owning team, by name.
+// belongs: tags, category, platform, practice, owning team and the paths it is for, by name
+// (a path with what else it is called: "Paved path (also called golden path, paved road)").
 func (b *builder) belongs(c common) []section {
 	l := b.lists
 	return []section{
@@ -421,6 +424,7 @@ func (b *builder) belongs(c common) []section {
 		{text: line("Platform", b.name(l.Platforms, c.Platform))},
 		{text: line("Practice", b.name(l.Practices, c.Practice))},
 		{text: line("Owned by", b.name(l.Teams, c.Owner))},
+		{text: line("Meant for the paths", docs.PathNames(l.Paths, c.Paths))},
 	}
 }
 

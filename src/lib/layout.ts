@@ -52,8 +52,8 @@ function midPoint(pts: Pt[]): Pt {
   return at;
 }
 
-/** How wide a label is drawn, near enough to keep labels apart (11.5px semi-bold text in a pill). */
-export const labelWidth = (text: string, max: number) => Math.min(max, 20 + text.length * 6.6);
+/** How wide a label is drawn, near enough to keep labels apart (12px bold text in a pill: --fs-sm, --fw-strong). */
+export const labelWidth = (text: string, max: number) => Math.min(max, 20 + text.length * 6.7);
 const LABEL_H = 20;
 
 /** Swim-lane layout: lanes are rows (one per actor), time flows left to right. */

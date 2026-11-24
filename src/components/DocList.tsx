@@ -14,7 +14,7 @@ import { openCount } from "./Feedback";
 import { DocCard } from "./DocCard";
 import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, OrderControls, Pager, profileChosen, ResultsBar, ResultsFoot, SearchBox, toResults, useLinkFilters, type Chosen, type FlagControl } from "./Lists";
 
-const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "owner"];
+const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "path", "owner"];
 const NOUN: Record<TargetKind, { one: string; many: string }> = { process: { one: "process", many: "processes" }, standard: { one: "standard", many: "standards" } };
 const PLACEHOLDER: Record<TargetKind, string> = { process: "Search processes: GCP, repository, Akamai…", standard: "Search standards: logging, Terraform, SEC-LOG-01…" };
 /** On a phone: the examples alone, short enough to be read whole (the heading says what is listed). */
@@ -126,7 +126,7 @@ export function DocList({ kind, processes, standards, standardIds, feedback, emp
   const nothing = kind === "process" ? processes.length === 0 : standards.length === 0;
   const panelId = `${kind}-filters`;
   // nothing found and nothing chosen to blame: no filters, order or pages to offer
-  const bare = n === 0 && filterCount(filters) === 0 && !bookmarked && !due && !(profile.tier || profile.environment || profile.language);
+  const bare = n === 0 && filterCount(filters) === 0 && !bookmarked && !due && !(profile.tier || profile.path || profile.environment || profile.language);
 
   return (
     <>

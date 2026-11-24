@@ -38,8 +38,8 @@ func TestParseKeepsOnlyWhatWasChosen(t *testing.T) {
 }
 
 func TestParseTakesTheButtonsTheStatesAndTheFont(t *testing.T) {
-	look, problems := theme.Parse([]byte(`{"mainButton": "#15803D", "otherButtons": "#0369a1", "success": "#166534", "warning": "#EA580C", "info": "#2563eb", "problem": "#b91c1c", "font": "roboto"}`))
-	want := theme.Look{MainButton: "#15803d", OtherButtons: "#0369a1", Success: "#166534", Warning: "#ea580c", Info: "#2563eb", Problem: "#b91c1c", Font: "roboto"}
+	look, problems := theme.Parse([]byte(`{"mainButton": "#15803D", "otherButtons": "#0369a1", "success": "#166534", "warning": "#EA580C", "info": "#2563eb", "problem": "#b91c1c", "font": "inter"}`))
+	want := theme.Look{MainButton: "#15803d", OtherButtons: "#0369a1", Success: "#166534", Warning: "#ea580c", Info: "#2563eb", Problem: "#b91c1c", Font: "inter"}
 	if len(problems) != 0 || look != want {
 		t.Fatalf("%+v %v", look, problems)
 	}
@@ -49,13 +49,35 @@ func TestParseTakesTheButtonsTheStatesAndTheFont(t *testing.T) {
 		"The colour of main buttons must be written as # and six digits or letters a-f, e.g. #4f46e5.",
 		"The colour of success must be written as # and six digits or letters a-f, e.g. #4f46e5.",
 		"The colour of problems must be written as # and six digits or letters a-f, e.g. #4f46e5.",
-		"The font must be “roboto”; leave it out to use the default font (Inter).",
+		"The font must be “inter”; leave it out to use the default font (Roboto).",
 	}
 	if strings.Join(problems, "|") != strings.Join(wantProblems, "|") {
 		t.Fatalf("%q", problems)
 	}
 	if _, problems := theme.Parse([]byte(`{"font": ""}`)); len(problems) != 1 {
 		t.Fatal(problems)
+	}
+	// a look saved while Roboto was a choice of its own stays valid
+	if look, problems := theme.Parse([]byte(`{"font": "roboto"}`)); len(problems) != 0 || look.Font != "roboto" {
+		t.Fatalf("%+v %v", look, problems)
+	}
+}
+
+func TestParseTakesTheSecondColourTheInkTheHighlightAndTheQuietSurface(t *testing.T) {
+	look, problems := theme.Parse([]byte(`{"secondary": "#66C5FF", "ink": "#0E0D26", "highlight": "#F3EA5D", "quiet": "#E6CDA8"}`))
+	want := theme.Look{Secondary: "#66c5ff", Ink: "#0e0d26", Highlight: "#f3ea5d", Quiet: "#e6cda8"}
+	if len(problems) != 0 || look != want {
+		t.Fatalf("%+v %v", look, problems)
+	}
+	_, problems = theme.Parse([]byte(`{"secondary": "sky", "ink": 1, "highlight": "#ff", "quiet": "#gggggg"}`))
+	wantProblems := []string{
+		"The ink must be a text.",
+		"The second colour must be written as # and six digits or letters a-f, e.g. #4f46e5.",
+		"The highlight must be written as # and six digits or letters a-f, e.g. #4f46e5.",
+		"The quiet surface must be written as # and six digits or letters a-f, e.g. #4f46e5.",
+	}
+	if strings.Join(problems, "|") != strings.Join(wantProblems, "|") {
+		t.Fatalf("%q", problems)
 	}
 }
 
@@ -72,9 +94,13 @@ func TestDescribeSaysWhatChanged(t *testing.T) {
 		{theme.Look{Logo: logo, Name: "A"}, theme.Look{Name: "A"}, "logo removed"},
 		{theme.Look{Name: "A", Process: "#111111"}, theme.Look{Name: "B", Standard: "#222222", Appearance: "device"},
 			"name “B”; colour of processes back to the default (teal); colour of standards #222222; appearance for new visitors as the device is set"},
-		{theme.Look{Success: "#166534", Font: "roboto"}, theme.Look{MainButton: "#15803d", OtherButtons: "#0369a1", Warning: "#ea580c", Info: "#2563eb", Problem: "#b91c1c"},
-			"colour of main buttons #15803d; colour of other buttons #0369a1; colour of success back to the default (green); colour of warnings #ea580c; colour of information #2563eb; colour of problems #b91c1c; font back to the default (Inter)"},
-		{theme.Look{}, theme.Look{Font: "roboto"}, "font Roboto"},
+		{theme.Look{Success: "#166534", Font: "inter"}, theme.Look{MainButton: "#15803d", OtherButtons: "#0369a1", Warning: "#ea580c", Info: "#2563eb", Problem: "#b91c1c"},
+			"colour of main buttons #15803d; colour of other buttons #0369a1; colour of success back to the default (Land); colour of warnings #ea580c; colour of information #2563eb; colour of problems #b91c1c; font back to the default (Roboto)"},
+		{theme.Look{}, theme.Look{Font: "inter"}, "font Inter"},
+		// "roboto" is the default font now: storing it or dropping it changes nothing people see
+		{theme.Look{Brand: "#0055aa"}, theme.Look{Brand: "#0055aa", Font: "roboto"}, "nothing changed"},
+		{theme.Look{Secondary: "#123456", Highlight: "#ffff00"}, theme.Look{Ink: "#111111", Quiet: "#eeddcc"},
+			"second colour back to the default (Sky); ink #111111; highlight back to the default (Sun); quiet surface #eeddcc"},
 		{theme.Look{Name: "A", Appearance: "dark"}, theme.Look{Brand: "#0055aa"}, "name back to the default (“Process Manager”); brand colour #0055aa; appearance for new visitors back to the default (light)"},
 	} {
 		if got := theme.Describe(c.old, c.new); got != c.want {

@@ -35,6 +35,7 @@ type process struct {
 	Rigour            string   `json:"rigour"`
 	EstimatedDuration string   `json:"estimatedDuration"`
 	Status            string   `json:"status"`
+	Paths             []string `json:"paths"`
 	Tiers             []string `json:"tiers"`
 	Languages         []string `json:"languages"`
 	Environments      []string `json:"environments"`
@@ -107,6 +108,7 @@ type standard struct {
 	Platform           string        `json:"platform"`
 	Scope              string        `json:"scope"`
 	Status             string        `json:"status"`
+	Paths              []string      `json:"paths"`
 	Tiers              []string      `json:"tiers"`
 	Languages          []string      `json:"languages"`
 	Environments       []string      `json:"environments"`
@@ -181,6 +183,14 @@ func (c Context) appliesTo(tiers, languages, environments []string) string {
 		part("languages", c.Lists.Languages, languages, "any language"),
 		part("environments", c.Lists.Environments, environments, "all environments"),
 	}, "; ")
+}
+
+// paths is the line that says which paths a document is for, or nothing when it names none
+// (it applies whatever the path, and the skill stays as it was before there were paths).
+func (c Context) paths(b *strings.Builder, ids []string) {
+	if len(ids) > 0 {
+		fmt.Fprintf(b, "- Meant for the paths: %s\n", docs.PathNames(c.Lists.Paths, ids))
+	}
 }
 
 func (c Context) team(id string) string {
@@ -283,6 +293,7 @@ func ForProcess(body []byte, c Context, extra map[string]string) ([]Generated, e
 		fmt.Fprintf(&b, "- Rigour: %s\n", text)
 	}
 	fmt.Fprintf(&b, "- Applies to: %s\n", c.appliesTo(p.Tiers, p.Languages, p.Environments))
+	c.paths(&b, p.Paths)
 	if p.EstimatedDuration != "" {
 		fmt.Fprintf(&b, "- Typical lead time: %s\n", p.EstimatedDuration)
 	}
@@ -453,6 +464,7 @@ func ForStandard(body []byte, c Context, extra map[string]string) ([]Generated, 
 		fmt.Fprintf(b, "- Issued by: %s\n", team)
 		c.placement(b, s.Category, s.Practice, s.Platform)
 		fmt.Fprintf(b, "- Applies to: %s\n", c.appliesTo(s.Tiers, s.Languages, s.Environments))
+		c.paths(b, s.Paths)
 		if s.Scope != "" {
 			fmt.Fprintf(b, "- Scope: %s\n", s.Scope)
 		}

@@ -8,6 +8,9 @@
   "category": "source-control",
   "platform": "github",
   "rigour": "mandatory",
+  "paths": [
+    "greenfield"
+  ],
   "estimatedDuration": "1 working day",
   "tags": [
     "github",

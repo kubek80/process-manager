@@ -9,6 +9,9 @@
   "practice": "engineering",
   "platform": "ci-cd",
   "scope": "Every repository that builds an application, a library or a container image. Documentation-only repositories are out of scope.",
+  "paths": [
+    "paved-path"
+  ],
   "tags": [
     "ci",
     "pipeline",

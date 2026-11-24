@@ -20,7 +20,7 @@ import "../search.css";
 export { Marked };
 
 /** The filters of the panel; the type is chosen with the tabs above the results. */
-const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "owner"];
+const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "path", "owner"];
 
 /** The one search box, on Home and on the results page (it lives with the lists, which use it too). */
 export { SearchBox };
@@ -175,7 +175,7 @@ export function SearchPage({ route, processes, standards, feedback, meta }: {
 
   // by meaning (and both ways) the order is the best match the server gave, unless another is chosen
   const sorted = useMemo(() => sortResults(out.results, sort, meta), [out.results, sort, meta]);
-  const anyChosen = filterCount(filters) > 0 || bookmarked || due || !!(profile.tier || profile.environment || profile.language);
+  const anyChosen = filterCount(filters) > 0 || bookmarked || due || !!(profile.tier || profile.path || profile.environment || profile.language);
   const withoutFilters = anyChosen && !out.results.length ? search({ processes, standards, catalog, q: shownQ, drafts, found }).results.length : 0;
   // drafts are not searched by meaning: an editor with drafts of their own is told where to find them
   const ownDrafts = processes.some((d) => d.status === "draft") || standards.some((d) => d.status === "draft");

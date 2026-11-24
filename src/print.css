@@ -10,21 +10,25 @@
 @media print {
   /* the light tokens, also when the screen is dark (the selectors outweigh the theme's own) */
   html:root, html:root[data-theme="dark"] {
-    --bg: #ffffff; --surface: #ffffff; --surface-2: #f6f7fa; --line: #dde1ea; --line-strong: #c3c9d6;
-    --text: #11131c; --text-2: #3f4659; --text-3: #5d6578;
-    --accent: var(--theme-light-accent, #4f46e5); --accent-fill: var(--theme-light-accent-fill, #4f46e5); --accent-ink: var(--theme-light-accent-ink, #ffffff); --accent-soft: var(--theme-light-accent-soft, #eef0ff);
+    --bg: #ffffff; --surface: var(--theme-light-surface, #ffffff); --surface-2: var(--theme-light-surface-2, #f0f9ff); --line: var(--theme-light-line, #e2e2e5); --line-strong: var(--theme-light-line-strong, #cacacf);
+    --text: var(--theme-light-text, #0e0d26); --text-2: var(--theme-light-text-2, #3e3d51); --text-3: var(--theme-light-text-3, #656474);
+    --accent: var(--theme-light-accent, #1168e1); --accent-fill: var(--theme-light-accent-fill, #1971ed); --accent-ink: var(--theme-light-accent-ink, #ffffff); --accent-soft: var(--theme-light-accent-soft, #e8f1fd);
+    --ocean-10: var(--theme-light-ocean-10, #e8f1fd); --ocean-35: var(--theme-light-ocean-35, #afcdf9); --ocean-75: var(--theme-light-ocean-75, #5395f2); --ocean-100: var(--theme-light-ocean-100, #1971ed);
+    --sky-10: var(--theme-light-sky-10, #f0f9ff); --sky-35: var(--theme-light-sky-35, #c9ebff); --sky-75: var(--theme-light-sky-75, #8cd4ff); --sky-100: var(--theme-light-sky-100, #66c5ff);
     --kind-process: var(--theme-light-kind-process, #0f766e); --kind-process-fill: var(--theme-light-kind-process-fill, #0f766e); --kind-process-ink: var(--theme-light-kind-process-ink, #ffffff);
-    --kind-process-bg: var(--theme-light-kind-process-bg, #e2f3f0); --kind-process-line: var(--theme-light-kind-process-line, #9fd6cd);
-    --kind-standard: var(--theme-light-kind-standard, #6d28d9); --kind-standard-fill: var(--theme-light-kind-standard-fill, #6d28d9); --kind-standard-ink: var(--theme-light-kind-standard-ink, #ffffff);
-    --kind-standard-bg: var(--theme-light-kind-standard-bg, #f1ebfd); --kind-standard-line: var(--theme-light-kind-standard-line, #cdb9f5);
+    --kind-process-bg: var(--theme-light-kind-process-bg, #e7f1f1); --kind-process-line: var(--theme-light-kind-process-line, #9fc8c5);
+    --kind-standard: var(--theme-light-kind-standard, #913199); --kind-standard-fill: var(--theme-light-kind-standard-fill, #913199); --kind-standard-ink: var(--theme-light-kind-standard-ink, #ffffff);
+    --kind-standard-bg: var(--theme-light-kind-standard-bg, #f4eaf5); --kind-standard-line: var(--theme-light-kind-standard-line, #d3add6);
+    --good: var(--theme-light-good, #008045); --good-bg: var(--theme-light-good-bg, #e6f7ef); --good-fill: var(--theme-light-good-fill, #00b35f); --good-ink: var(--theme-light-good-ink, #11121c);
+    --warn: var(--theme-light-warn, #c84000); --warn-bg: var(--theme-light-warn-bg, #fff0e9); --warn-fill: var(--theme-light-warn-fill, #ff6720); --warn-ink: var(--theme-light-warn-ink, #11121c);
+    --bad: var(--theme-light-bad, #be123c); --bad-bg: var(--theme-light-bad-bg, #f9e7ec); --bad-fill: var(--theme-light-bad-fill, #be123c); --bad-ink: var(--theme-light-bad-ink, #ffffff);
+    --highlight: var(--theme-light-highlight, #f3ea5d); --highlight-ink: var(--theme-light-highlight-ink, #11121c); --search-mark: var(--theme-light-search-mark, #f3ea5d);
+    --quiet: var(--theme-light-quiet, #f6eee1); --quiet-line: var(--theme-light-quiet-line, #ecdabe);
     --action-fill: var(--theme-light-action-fill, var(--accent-fill)); --action-ink: var(--theme-light-action-ink, var(--accent-ink));
     --action-other: var(--theme-light-action-other); --action-other-line: var(--theme-light-action-other-line); --action-other-soft: var(--theme-light-action-other-soft);
-    --good: var(--theme-light-good, #15803d); --good-bg: var(--theme-light-good-bg, #e9f7ee); --good-fill: var(--theme-light-good-fill, #15803d); --good-ink: var(--theme-light-good-ink, #ffffff);
-    --warn: var(--theme-light-warn, #b45309); --warn-bg: var(--theme-light-warn-bg, #fdf3e1); --warn-fill: var(--theme-light-warn-fill, #b45309); --warn-ink: var(--theme-light-warn-ink, #ffffff);
-    --bad: var(--theme-light-bad, #be123c); --bad-bg: var(--theme-light-bad-bg, #fdecef); --bad-fill: var(--theme-light-bad-fill, #be123c); --bad-ink: var(--theme-light-bad-ink, #ffffff);
     --info: var(--theme-light-info, var(--accent)); --info-bg: var(--theme-light-info-bg, var(--accent-soft)); --info-fill: var(--theme-light-info-fill, var(--accent-fill)); --info-ink: var(--theme-light-info-ink, var(--accent-ink));
     --shadow-1: none; --shadow-2: none; --shadow-3: none;
-    --seg-on: #ffffff; --seg-on-line: var(--line-strong); --search-mark: #fdeca6;
+    --seg-on: #ffffff; --seg-on-line: var(--line-strong);
     color-scheme: light;
   }
   /* what the dark theme lightens, back to the light formula */

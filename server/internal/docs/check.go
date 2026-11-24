@@ -9,14 +9,28 @@ import (
 )
 
 // The format of a document is checked against the JSON schema. This file checks what a schema
-// cannot: that the parts of a document fit together, and that it only names tiers, languages,
-// environments, categories, practices and platforms that exist. These are the same rules the checker in the browser treats as
+// cannot: that the parts of a document fit together, and that it only names tiers, paths,
+// languages, environments, categories, practices and platforms that exist. These are the same rules the checker in the browser treats as
 // errors (src/lib/validate.ts); what the browser only warns about is allowed here too.
 
 type dims struct {
 	Tiers        []string `json:"tiers"`
 	Languages    []string `json:"languages"`
 	Environments []string `json:"environments"`
+}
+
+// paths are the paths a whole process or standard is for (greenfield, brownfield, paved
+// path…): none means whatever the path. A requirement has none of its own.
+type paths struct {
+	Paths []string `json:"paths"`
+}
+
+func (p paths) check(l Lists, add func(string, ...any)) {
+	for i, id := range p.Paths {
+		if !has(l.Paths, id) {
+			add("paths[%d]: %q is not a known path. Known paths: %s", i, id, ids(l.Paths))
+		}
+	}
 }
 
 // belongs is where a process or standard sits: its category, practice and platform. The
@@ -59,6 +73,7 @@ type processShape struct {
 	ID string `json:"id"`
 	lifecycle
 	dims
+	paths
 	belongs
 	Owner         string   `json:"owner"`
 	ReplacedBy    string   `json:"replacedBy"`
@@ -87,6 +102,7 @@ type standardShape struct {
 	ID string `json:"id"`
 	lifecycle
 	dims
+	paths
 	belongs
 	Owner              string `json:"owner"`
 	ReplacedBy         string `json:"replacedBy"`
@@ -148,6 +164,7 @@ func Check(kind string, body []byte, l Lists) error {
 			return fmt.Errorf("%w: not a process: %v", ErrInvalid, err)
 		}
 		p.dims.check("", l, add)
+		p.paths.check(l, add)
 		p.belongs.check(l, add)
 		p.lifecycle.check(add)
 		if p.ReplacedBy != "" && p.ReplacedBy == p.ID {
@@ -212,6 +229,7 @@ func Check(kind string, body []byte, l Lists) error {
 			return fmt.Errorf("%w: not a standard: %v", ErrInvalid, err)
 		}
 		s.dims.check("", l, add)
+		s.paths.check(l, add)
 		s.belongs.check(l, add)
 		s.lifecycle.check(add)
 		if s.ReplacedBy != "" && s.ReplacedBy == s.ID {
@@ -285,7 +303,7 @@ func EntryWords(noun string, n Named) string {
 }
 
 // ListKeys are the keys of the lists in the catalog document, in the order it has them.
-var ListKeys = []string{"tiers", "environments", "languages", "teams", "practices", "platforms", "categories", "tools"}
+var ListKeys = []string{"tiers", "paths", "environments", "languages", "teams", "practices", "platforms", "categories", "tools"}
 
 // Uses is what one process or standard takes from the lists and which other documents it
 // names. Keys of Lists: see ListKeys.
@@ -330,6 +348,7 @@ func UsesOf(kind string, body []byte) Uses {
 			return u
 		}
 		dim(p.dims)
+		list("paths", p.Paths...)
 		where(p.belongs)
 		list("teams", p.Owner)
 		doc(Process, p.ReplacedBy)
@@ -352,6 +371,7 @@ func UsesOf(kind string, body []byte) Uses {
 			return u
 		}
 		dim(s.dims)
+		list("paths", s.Paths...)
 		where(s.belongs)
 		list("teams", s.Owner)
 		doc(Standard, s.ReplacedBy)

@@ -12,7 +12,7 @@ import type { Issue } from "../types";
 import { locate } from "../lib/jsonLocate";
 
 const theme = EditorView.theme({
-  "&": { height: "100%", fontSize: "13px", color: "var(--text)", backgroundColor: "var(--surface)" },
+  "&": { height: "100%", fontSize: "var(--fs-md, 14px)", lineHeight: "var(--lh-md, 20px)", color: "var(--text)", backgroundColor: "var(--surface)" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace', lineHeight: "1.6" },
   ".cm-content": { caretColor: "var(--accent)", padding: "12px 0" },
@@ -42,7 +42,7 @@ const highlight = HighlightStyle.define([
   { tag: t.propertyName, color: "var(--json-key)" },
   { tag: t.string, color: "var(--json-string)" },
   { tag: t.number, color: "var(--json-number)" },
-  { tag: [t.bool, t.null], color: "var(--json-atom)", fontWeight: "600" },
+  { tag: [t.bool, t.null], color: "var(--json-atom)", fontWeight: "var(--fw-strong, 700)" },
   { tag: [t.separator, t.squareBracket, t.brace], color: "var(--text-3)" },
 ]);
 

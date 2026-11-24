@@ -22,6 +22,7 @@ describe("the activity list", () => {
       "lists.save", "access.grant", "access.revoke", "access.change", "access.remove",
       "feedback.fixed", "feedback.reopen", "feedback.delete", "skill.guidance", "icon.upload", "theme.change",
       "request.create", "request.state", "request.delete", "content.import", "content.convert",
+      "viewas.start", "viewas.stop", "viewas.end",
     ];
     for (const a of server) expect(ACTION[a], a).toBeTruthy();
   });
@@ -109,5 +110,14 @@ describe("the activity list in words a reader knows", () => {
     ]);
     expect(detailParts("version 2")).toEqual([{ text: "version 2" }]);
     expect(detailParts("x@example.com: added Owner")).toEqual([{ text: "x@example.com", person: "x@example.com" }, { text: ": added Owner" }]);
+  });
+  it("says in the admin's name whose view of the portal they looked at, and why it ended by itself", () => {
+    const names = { "casey@example.com": "Casey Owner" };
+    expect(describeEntry(entry("viewas.start", "casey@example.com"), titles, names)).toMatchObject({
+      who: "Jordan Platform", words: "started viewing the portal as", target: { text: "Casey Owner", hint: "casey@example.com" },
+    });
+    expect(describeEntry(entry("viewas.end", "casey@example.com", { detail: "An hour had passed." }), titles, names)).toMatchObject({
+      words: "stopped viewing the portal as", detail: "An hour had passed.",
+    });
   });
 });

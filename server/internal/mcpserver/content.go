@@ -41,6 +41,7 @@ type common struct {
 	ReplacedBy   string     `json:"replacedBy"`
 	UpdatedAt    string     `json:"updatedAt"`
 	Tags         []string   `json:"tags"`
+	Paths        []string   `json:"paths"`
 	Tiers        []string   `json:"tiers"`
 	Environments []string   `json:"environments"`
 	Languages    []string   `json:"languages"`
@@ -261,9 +262,32 @@ type Header struct {
 	Practice   *Ref      `json:"practice,omitempty"`
 	Platform   *Ref      `json:"platform,omitempty"`
 	AppliesTo  AppliesTo `json:"appliesTo"`
+	Paths      []PathRef `json:"paths" jsonschema:"the paths it is meant for (greenfield: something new is built; brownfield: something that exists is changed or moved; paved path, also called the golden path: the ready-made, supported way); empty: whatever the path"`
 	Review     Review    `json:"review"`
 	UpdatedAt  string    `json:"updatedAt,omitempty"`
 	Link       string    `json:"link,omitempty" jsonschema:"the page in the portal"`
+}
+
+// PathRef is a path a document is meant for.
+type PathRef struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	AlsoCalled  []string `json:"alsoCalled,omitempty" jsonschema:"other words for it, e.g. golden path for the paved path"`
+	Description string   `json:"description,omitempty"`
+}
+
+func pathRefs(list []docs.Named, ids []string) []PathRef {
+	out := []PathRef{}
+	for _, id := range ids {
+		r := PathRef{ID: id, Name: id}
+		for _, n := range list {
+			if n.ID == id {
+				r = PathRef{ID: n.ID, Name: n.Name, AlsoCalled: docs.PathAlso[n.Symbol], Description: n.Description}
+			}
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 func ref(list []docs.Named, id string) *Ref {
@@ -324,6 +348,7 @@ func (s *Server) header(l *library, e *entry) Header {
 		Kind: e.kind, ID: e.doc.ID, Title: c.Title, Summary: c.Summary, Version: e.doc.Version, Status: e.status(), Retired: e.c.Status == "deprecated",
 		Owner: ref(l.lists.Teams, c.Owner), Category: ref(l.lists.Categories, c.Category), Practice: ref(l.lists.Practices, c.Practice), Platform: ref(l.lists.Platforms, c.Platform),
 		AppliesTo: AppliesTo{Tiers: refs(l.lists.Tiers, c.Tiers), Environments: refs(l.lists.Environments, c.Environments), Languages: refs(l.lists.Languages, c.Languages)},
+		Paths:     pathRefs(l.lists.Paths, c.Paths),
 		Review:    reviewOf(e, s.o.Now()), UpdatedAt: c.UpdatedAt, Link: s.link(e.kind, e.doc.ID),
 	}
 	if h.Retired {
@@ -552,12 +577,29 @@ func (s *Server) skillsOf(ctx context.Context, e *entry) []SkillRef {
 
 // ---------- standards
 
-// Profile is the application an agent works on: only what applies to it is returned.
+// Profile is the application an agent works on: only what applies to it is returned. Path is
+// the path of the work (a whole document names paths; a requirement does not).
 type Profile struct {
-	Tier, Environment, Language string // ids
+	Tier, Environment, Language, Path string // ids
 }
 
-func (p Profile) empty() bool { return p.Tier == "" && p.Environment == "" && p.Language == "" }
+func (p Profile) empty() bool {
+	return p.Tier == "" && p.Environment == "" && p.Language == "" && p.Path == ""
+}
+
+// onPath reports whether a document for these paths applies to the profile's path: one that
+// names none applies whatever the path.
+func (p Profile) onPath(paths []string) bool {
+	if p.Path == "" || len(paths) == 0 {
+		return true
+	}
+	for _, id := range paths {
+		if id == p.Path {
+			return true
+		}
+	}
+	return false
+}
 
 // applies reports whether something narrowed to these lists applies to the profile.
 func (p Profile) applies(tiers, environments, languages []string) bool {

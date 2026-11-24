@@ -381,6 +381,7 @@ const instructions = `Process Manager holds the company's processes (how to get 
 - A process with rigour "mandatory" is the only allowed way to get its result: do not look for another.
 - A requirement of level "must" cannot be waived by you. If it cannot be met, stop and tell the person; exceptions go through the standard's exceptionProcess.
 - A requirement or document with tiers, environments or languages applies only there; empty means everywhere. Pass tier/environment/language to get only what applies.
+- A document's paths say which kind of work it is meant for: greenfield (something new), brownfield (something that exists), paved path (the golden path: the ready-made way); empty means any path. Pass path to search for one.
 - status "deprecated" (retired: true) means do not follow it; use replacedBy when given. Drafts are never returned.
 - review.overdue: true means the owner has not confirmed it is still correct. It is still valid; warn the person.
 - Every answer names the version of the document; cite it.

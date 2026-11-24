@@ -58,6 +58,14 @@
       "maxLength": 400,
       "description": "What it covers and what it does not, in plain words, e.g. \"All services that handle customer data. Batch jobs are out of scope.\""
     },
+    "paths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/slug"
+      },
+      "description": "Ids of the paths (from the paths list) this standard is for, e.g. [\"paved-path\"]: greenfield = something new is built, brownfield = something that already exists is changed or moved, paved path = the ready-made, supported way (also called the golden path). Leave out when it applies whatever the path."
+    },
     "tiers": {
       "type": "array",
       "uniqueItems": true,

@@ -6,7 +6,7 @@ import type { Profile } from "../lib/edit";
 import { EMPTY_CATALOG, useCatalog } from "../lib/catalog";
 import { appSummary, countText, countWords, DROPPED_FILTER_TEXT, emptyFilterText, FILTER_LABEL, knownFilters, type Filters, PROFILE_HINT, PROFILE_KEYS, PROFILE_LABEL, RIGOURS, rigourFilterName, rigourOptionLabel, type FilterKey, type Option, type ProfileKey, type TypeTab } from "../lib/search";
 import { useRemembered } from "../lib/profile";
-import { LevelBars } from "./marks";
+import { LevelBars, PathMark } from "./marks";
 import type { ListView } from "../lib/paging";
 import { SORT_KEYS, sortLabel, sortOf, type SortKey } from "../lib/sorting";
 import { pageNumbers, PAGE_SIZES, showingText, type Page } from "../lib/paging";
@@ -170,7 +170,7 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast, single
               <label key={o.value} className={`filter-option ${o.chosen ? "on" : ""} ${off ? "off" : ""}`.trim()}>
                 <input type={single ? "radio" : "checkbox"} name={single ? id : undefined} checked={o.chosen} disabled={off} onChange={() => onToggle(o.value)}
                   aria-label={`${o.label}, ${countWords(o.count, atLeast)}`} />
-                <span className="filter-option-name">{name === "rigour" && isRigour(o.value) && <LevelBars level={o.value} />}{o.label}</span>
+                <span className="filter-option-name">{name === "rigour" && isRigour(o.value) && <LevelBars level={o.value} />}{(name === "path") && <OptionPath value={o.value} />}{o.label}</span>
                 <span className="filter-option-count" aria-hidden="true">{countText(o.count, atLeast)}</span>
               </label>
             );
@@ -179,6 +179,13 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast, single
       )}
     </div>
   );
+}
+
+/** The picture of a path before its name in a filter (a path's own filter and the path of "My application"). */
+function OptionPath({ value }: { value: string }) {
+  const { catalog } = useCatalog();
+  const entry = (catalog.paths ?? []).find((x) => x.id === value);
+  return entry ? <PathMark entry={{ ...entry, description: undefined }} /> : null;
 }
 
 /** A yes/no filter of the panel: "Only my bookmarks", "Only what needs a review". */
@@ -197,7 +204,7 @@ export interface FilterPanelProps {
   options: Record<FilterKey, Option[]>;
   onToggle: (key: FilterKey, value: string) => void;
   flags: FlagControl[];
-  /** "My application": one tier, environment and language, with how many results each gives. */
+  /** "My application": one tier, path, environment and language, with how many results each gives. */
   profile: Profile;
   onProfile: (p: Profile) => void;
   profileOptions: Record<ProfileKey, Option[]>;
@@ -351,6 +358,7 @@ export function profileChosen(profile: Profile, onChange: (p: Profile) => void, 
   const out: Chosen[] = [];
   const drop = (k: keyof Profile) => () => { const p = { ...profile }; delete p[k]; onChange(p); };
   if (profile.tier) out.push({ key: "p:tier", name: "Tier", value: name(catalog.tiers, profile.tier), remove: drop("tier") });
+  if (profile.path) out.push({ key: "p:path", name: "Path", value: name(catalog.paths ?? [], profile.path), remove: drop("path") });
   if (profile.environment) out.push({ key: "p:environment", name: "Environment", value: name(catalog.environments, profile.environment), remove: drop("environment") });
   if (profile.language) out.push({ key: "p:language", name: "Language", value: name(catalog.languages, profile.language), remove: drop("language") });
   return out;

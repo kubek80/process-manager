@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, ArrowUpRight, Boxes, CircleAlert, Code2, Compass, Server, ExternalLink, Layers, Plus, Search, Tag, Trash2, Users, Wrench } from "lucide-react";
-import type { Catalog, Contacts, Issue, Membership, Process, Standard } from "../types";
+import { ArrowDown, ArrowRight, ArrowUp, ArrowUpRight, Boxes, CircleAlert, Code2, Compass, Server, ExternalLink, Layers, Plus, Search, Signpost, Tag, Trash2, Users, Wrench } from "lucide-react";
+import type { Catalog, Contacts, Issue, Membership, PathSymbol, Process, Standard } from "../types";
+import { PATH_SYMBOLS, PathMark, PathSymbolIcon } from "./marks";
 import { GroupMembers } from "./TeamMembers";
 import { ContactFields } from "./ContactFields";
 import { ContactList, RankMark } from "./GroupParts";
@@ -20,8 +21,8 @@ import { checkerSummary, issueText, listIssueField, listIssuePlace, refusalText 
 import { focusWhenShown, useFieldMarks } from "../lib/fieldMarks";
 import { Field, IssueList, notify, useScrollFade } from "./ui";
 
-type Key = "teams" | "practices" | "platforms" | "categories" | "tools" | "tiers" | "environments" | "languages";
-type Row = { id: string; name: string; contact?: string; contacts?: Contacts; url?: string; description?: string; icon?: string };
+type Key = "teams" | "practices" | "platforms" | "categories" | "tools" | "tiers" | "paths" | "environments" | "languages";
+type Row = { id: string; name: string; contact?: string; contacts?: Contacts; url?: string; description?: string; icon?: string; symbol?: PathSymbol };
 
 const KINDS: Record<Key, {
   title: string; noun: string; icon: typeof Users; blurb: string;
@@ -60,6 +61,11 @@ const KINDS: Record<Key, {
     blurb: "A process applies to every tier or to a chosen few. Most critical first.",
     fields: [{ field: "description", label: "What makes an application this tier", placeholder: "e.g. Outage stops the business", long: true }],
   },
+  paths: {
+    title: "Paths", noun: "path", icon: Signpost,
+    blurb: "Which path a process or standard is for: something new, something that exists, the ready-made way. Each has a picture; readers see them in this order.",
+    fields: [{ field: "description", label: "What it means", placeholder: "e.g. Something new is built from scratch", long: true }],
+  },
   environments: {
     title: "Environments", noun: "environment", icon: Server,
     blurb: "Where things run. In the order work moves through them.",
@@ -71,10 +77,10 @@ const KINDS: Record<Key, {
     fields: [{ field: "description", label: "Notes", placeholder: "e.g. Includes TypeScript", long: true }],
   },
 };
-const KEYS: Key[] = ["teams", "practices", "platforms", "categories", "tools", "tiers", "environments", "languages"];
+const KEYS: Key[] = ["teams", "practices", "platforms", "categories", "tools", "tiers", "paths", "environments", "languages"];
 /** The lists whose entries have members. */
 const GROUP_OF: Partial<Record<Key, GroupKind>> = { teams: "team", practices: "practice", platforms: "platform" };
-const ORDERED: Key[] = ["tiers", "environments"]; // lists whose order means something
+const ORDERED: Key[] = ["tiers", "paths", "environments"]; // lists whose order means something (the paths: the order of the lanes of "Which path is this for")
 /** The lists whose entries can have an icon. */
 const WITH_ICON: Key[] = ["tools", "languages"];
 
@@ -90,6 +96,8 @@ function usesOf(key: Key, id: string, processes: (Process | Standard)[]): Use[] 
     } else if (key === "practices" || key === "platforms" || key === "categories") {
       const field = key === "practices" ? "practice" : key === "platforms" ? "platform" : "category";
       if (p[field] === id) how.push(key === "categories" ? "grouped here" : `belongs to this ${field}`);
+    } else if (key === "paths") {
+      if (Array.isArray(p.paths) && p.paths.includes(id)) how.push("is for this path");
     } else if (key === "tools") {
       const n = "steps" in p ? p.steps?.filter((s) => s.tool === id).length ?? 0 : 0;
       if (n) how.push(`${n} step${n > 1 ? "s" : ""}`);
@@ -295,7 +303,8 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                 <li key={shown.findIndex((x) => x.id === r.id) === at ? r.id : `${r.id}/${at}`}>
                   <button className={`cat-item ${current === r ? "on" : ""}`} onClick={() => { setSelected(r.id); setAdding(false); }}>
                     <EntryIcon icon={WITH_ICON.includes(key) ? r.icon : undefined} size={32}
-                      fallback={<span className="cat-avatar">{ORDERED.includes(key) ? rank + (key === "tiers" ? 0 : 1) : r.name.slice(0, 1).toUpperCase()}</span>} />
+                      fallback={key === "paths" ? <span className="cat-avatar path-avatar" data-symbol={r.symbol ?? "none"}><PathSymbolIcon symbol={r.symbol} size={18} /></span>
+                        : <span className="cat-avatar">{ORDERED.includes(key) ? rank + (key === "tiers" ? 0 : 1) : r.name.slice(0, 1).toUpperCase()}</span>} />
                     <span className="cat-item-text">
                       <span className="cat-item-line">
                         <strong>{r.name || "Unnamed"}{isNew(r.id) && <i>new</i>}</strong>
@@ -319,7 +328,7 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
               <h2>New {kind.noun}</h2>
               <p className="muted">Give it the name people already use. You can add the details afterwards.</p>
               <Field label="Name">
-                <input autoFocus value={newName} maxLength={40} placeholder={`e.g. ${key === "teams" ? "Cloud Platform team" : key === "practices" ? "Cyber security" : key === "platforms" ? "Google Cloud" : key === "categories" ? "Cloud" : key === "tools" ? "ServiceNow" : key === "tiers" ? "Tier 4" : key === "environments" ? "Pre-production" : "Rust"}`}
+                <input autoFocus value={newName} maxLength={40} placeholder={`e.g. ${key === "teams" ? "Cloud Platform team" : key === "practices" ? "Cyber security" : key === "platforms" ? "Google Cloud" : key === "categories" ? "Cloud" : key === "tools" ? "ServiceNow" : key === "tiers" ? "Tier 4" : key === "paths" ? "Lift and shift" : key === "environments" ? "Pre-production" : "Rust"}`}
                   onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
               </Field>
               <p className="muted small">Id: <code>{slugify(newName) ? newId : "…"}</code>. It is made from the name and never changes, even if you rename.</p>
@@ -335,7 +344,8 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
             <>
               <header className="cat-detail-head">
                 <EntryIcon icon={WITH_ICON.includes(key) ? current.icon : undefined} size={56}
-                  fallback={<span className="cat-avatar big">{ORDERED.includes(key) ? rows.findIndex((x) => x.id === current.id) + (key === "tiers" ? 0 : 1) : current.name.slice(0, 1).toUpperCase()}</span>} />
+                  fallback={key === "paths" ? <span className="cat-avatar big path-avatar" data-symbol={current.symbol ?? "none"}><PathSymbolIcon symbol={current.symbol} size={28} /></span>
+                    : <span className="cat-avatar big">{ORDERED.includes(key) ? rows.findIndex((x) => x.id === current.id) + (key === "tiers" ? 0 : 1) : current.name.slice(0, 1).toUpperCase()}</span>} />
                 <div>
                   <span className="eyebrow">{kind.noun}</span>
                   <h2>{group && !isNew(current.id) ? <a className="group-link" href={href({ page: "group", kind: group, id: current.id })}>{current.name || "Unnamed"}</a> : current.name || "Unnamed"}</h2>
@@ -354,6 +364,7 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                 <div className="form">
                   <Field label="Name"><input data-field="name" value={current.name} maxLength={40} onChange={(e) => upd({ name: e.target.value })} /></Field>
                   {WITH_ICON.includes(key) && <IconField key={current.id} icon={current.icon} name={current.name} onChange={(icon) => upd({ icon })} />}
+                  {key === "paths" && <SymbolField value={current.symbol} onChange={(symbol) => upd({ symbol })} />}
                   {group && <ContactFields key={`${key}/${current.id}`} kind={group} idPrefix={`lists-${group}`} value={{ description: current.description, contact: current.contact, contacts: current.contacts }}
                     onChange={(v) => upd({ description: v.description, contact: v.contact, contacts: v.contacts })} />}
                   {!group && kind.fields.map((f) => (
@@ -372,6 +383,12 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                 </div>
               ) : (
                 <dl className="cat-facts">
+                  {key === "paths" && (
+                    <div>
+                      <dt>How it is marked</dt>
+                      <dd><PathMark entry={current} named size="md" /></dd>
+                    </div>
+                  )}
                   {kind.fields.map((f) => current[f.field] && (
                     <div key={f.field}>
                       <dt>{f.label}</dt>
@@ -421,6 +438,27 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
 
       {editor && <BehindBanner d={d} meta={{ version, updatedAt: "", updatedBy: "", createdAt: "" }} noun="the lists" />}
       {editor && <ConflictDialog d={d} kind="catalog" id="catalog" noun="the lists" />}
+    </div>
+  );
+}
+
+/**
+ * The picture of a path, chosen from the built-in ones (or none: a neutral signpost). One button
+ * per picture; the chosen one is pressed.
+ */
+function SymbolField({ value, onChange }: { value?: PathSymbol; onChange: (symbol: PathSymbol | undefined) => void }) {
+  const label = PATH_SYMBOLS.find((x) => x.symbol === value)?.label ?? "None: a neutral signpost";
+  return (
+    <div className="field" data-field="symbol">
+      <span className="field-label">Picture<em>{label}</em></span>
+      <div className="symbol-picker" role="group" aria-label="Picture">
+        {PATH_SYMBOLS.map((x) => (
+          <button key={x.symbol} type="button" className="symbol-choice" data-symbol={x.symbol} aria-pressed={value === x.symbol} title={x.label} aria-label={x.label}
+            onClick={() => onChange(x.symbol)}><PathSymbolIcon symbol={x.symbol} size={22} /></button>
+        ))}
+        <button type="button" className="symbol-choice" data-symbol="none" aria-pressed={!value} title="None: a neutral signpost" aria-label="None: a neutral signpost"
+          onClick={() => onChange(undefined)}><PathSymbolIcon size={22} /></button>
+      </div>
     </div>
   );
 }

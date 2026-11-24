@@ -7,7 +7,7 @@ import { usePerms } from "../lib/session";
 import type { Profile } from "../lib/edit";
 import { quietReview, statusOf, type ReviewInfo } from "../lib/lifecycle";
 import { Field } from "./ui";
-import { Fact, KindTag } from "./marks";
+import { Fact, KindTag, PathRoad, PathSymbolIcon } from "./marks";
 import { VersionTag } from "./Editing";
 import { GroupLink, OwnedBy } from "./GroupParts";
 import { formatDate } from "../lib/dates";
@@ -55,6 +55,33 @@ export function DimsEditor({ value, onChange, narrow }: { value: Dims; onChange:
         );
       })}
     </>
+  );
+}
+
+/**
+ * Chips to choose the paths a process or standard is for, each with its picture: the same control
+ * as the tiers. Nothing selected means whatever the path. A path it names that is no longer in the
+ * list still shows (under its id), so that it can be taken away.
+ */
+export function PathsEditor({ value, onChange }: { value: string[] | undefined; onChange: (paths: string[] | undefined) => void }) {
+  const { catalog } = useCatalog();
+  const picked = value ?? [];
+  const all = [...(catalog.paths ?? [])];
+  for (const id of picked) if (!all.some((x) => x.id === id)) all.push({ id, name: `${id} (not in the list)` });
+  return (
+    <div className="field">
+      <span className="field-label">Paths<em>{picked.length ? "only for the selected paths" : "whatever the path"}</em></span>
+      <div className="chips" role="group" aria-label="Paths">
+        <button className={`chip ${picked.length === 0 ? "on" : ""}`} aria-pressed={picked.length === 0} onClick={() => onChange(undefined)}>Any path</button>
+        {all.map((x) => (
+          <button key={x.id} className={`chip path-chip ${picked.includes(x.id) ? "on" : ""}`} data-symbol={x.symbol ?? "none"} aria-pressed={picked.includes(x.id)} title={x.description}
+            onClick={() => {
+              const next = all.map((y) => y.id).filter((id) => (id === x.id ? !picked.includes(id) : picked.includes(id)));
+              onChange(next.length ? next : undefined);
+            }}><PathSymbolIcon symbol={x.symbol} size={15} />{x.name}</button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -159,6 +186,7 @@ export function PreviewFacts({ kind, doc, children }: { kind: TargetKind; doc: G
       {!doc.owner && <span className="preview-owner none">{kind === "process" ? "No owning team yet" : "Not issued by a team yet"}</span>}
       {children}
       <WhereFacts doc={doc} />
+      <PathRoad ids={doc.paths} paths={catalog.paths} kind={kind} />
     </span>
   );
 }
@@ -200,7 +228,7 @@ export function DocHead({ kind, doc, meta, review, facts, actions, notice, onBac
         {actions && <div className="head-actions">{actions}</div>}
       </div>
       {notice && <div className="doc-notices">{notice}</div>}
-      <div className="doc-facts">{facts}<WhereFacts doc={doc} links /></div>
+      <div className="doc-facts">{facts}<WhereFacts doc={doc} links /><PathRoad ids={doc.paths} paths={catalog.paths} kind={kind} /></div>
       <div className="doc-foot">
         <p className="doc-when">
           {doc.updatedAt && <span className="doc-changed" title="When what it says last changed. Versions lists every time it was stored: saved, imported or confirmed in a review.">Content changed {formatDate(doc.updatedAt)}</span>}

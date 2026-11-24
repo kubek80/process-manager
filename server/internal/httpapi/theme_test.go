@@ -106,7 +106,7 @@ func TestALookThatDoesNotFitIsRefusedWithAReasonPerProblem(t *testing.T) {
 		"The colour of processes must be written as # and six digits or letters a-f, e.g. #4f46e5.",
 		"The colour of problems must be written as # and six digits or letters a-f, e.g. #4f46e5.",
 		"The appearance must be “light”, “dark” or “device” (follow the device's setting).",
-		"The font must be “roboto”; leave it out to use the default font (Inter).",
+		"The font must be “inter”; leave it out to use the default font (Roboto).",
 	}
 	if strings.Join(problems, "\n") != strings.Join(want, "\n") || out["error"] != strings.Join(want, " ") {
 		t.Fatalf("problems:\n%s", strings.Join(problems, "\n"))
@@ -132,14 +132,16 @@ func TestALookThatDoesNotFitIsRefusedWithAReasonPerProblem(t *testing.T) {
 func TestButtonsStatesAndFontAreStoredAndServedToEveryone(t *testing.T) {
 	e := setup(t, nil)
 	d := e.as(dana)
-	look := map[string]string{"mainButton": "#15803D", "otherButtons": "#0369a1", "success": "#166534", "warning": "#ea580c", "info": "#2563eb", "problem": "#b91c1c", "font": "roboto"}
+	look := map[string]string{"mainButton": "#15803D", "otherButtons": "#0369a1", "success": "#166534", "warning": "#ea580c", "info": "#2563eb", "problem": "#b91c1c", "font": "inter",
+		"secondary": "#66C5FF", "ink": "#0e0d26", "highlight": "#f3ea5d", "quiet": "#e6cda8"}
 	if status, out := d.do("PUT", "/api/admin/theme?rev=0", look); status != 200 {
 		t.Fatalf("%d %v", status, out)
 	}
 	status, out := e.anonymous().do("GET", "/api/theme", nil)
 	got, _ := out["look"].(map[string]any)
 	if status != 200 || got["mainButton"] != "#15803d" || got["otherButtons"] != "#0369a1" || got["success"] != "#166534" || got["warning"] != "#ea580c" ||
-		got["info"] != "#2563eb" || got["problem"] != "#b91c1c" || got["font"] != "roboto" || len(got) != 7 {
+		got["info"] != "#2563eb" || got["problem"] != "#b91c1c" || got["font"] != "inter" ||
+		got["secondary"] != "#66c5ff" || got["ink"] != "#0e0d26" || got["highlight"] != "#f3ea5d" || got["quiet"] != "#e6cda8" || len(got) != 11 {
 		t.Fatalf("%d %v", status, out)
 	}
 	// back to the default for some parts: they are left out
@@ -158,7 +160,7 @@ func TestButtonsStatesAndFontAreStoredAndServedToEveryone(t *testing.T) {
 			details = append(details, en.Detail)
 		}
 	}
-	if len(details) != 2 || !strings.Contains(strings.Join(details, "|"), "font back to the default (Inter)") {
+	if len(details) != 2 || !strings.Contains(strings.Join(details, "|"), "font back to the default (Roboto)") {
 		t.Fatalf("%q", details)
 	}
 }

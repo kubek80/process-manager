@@ -46,8 +46,9 @@ const FIELD: Record<string, string> = {
 };
 /** Where a field is called otherwise in one place. */
 const IN: Partial<Record<FieldContext, Record<string, string>>> = {
-  process: { resources: "links and resources" },
-  standard: { owner: "issued by", resources: "background" },
+  // a document's paths (greenfield, brownfield…); a requirement's review "paths" are files
+  process: { resources: "links and resources", paths: "paths" },
+  standard: { owner: "issued by", resources: "background", paths: "paths" },
   step: { title: "what happens", description: "context", resources: "skills and links", processId: "process" },
   requirement: { title: "short name", review: "signs of a violation", processId: "process that helps to comply" },
   participant: { description: "how to reach them" },

@@ -7,8 +7,8 @@ import { useDraft } from "../lib/draft";
 import { ICON_TYPES, iconContentType, iconFileProblem } from "../lib/icons";
 import { iconUrl, loadAdminLook, saveLook, uploadIcon, type SavedLook } from "../lib/store";
 import {
-  confusion, DEFAULT_APPEARANCE, DEFAULT_COLOR, DEFAULT_NAME, derive, forgetOwnChoice, isDark, kindsAlikeText, lookProblems, lookProperties, MAX_NAME, nameOf,
-  normalizeHex, PALETTES, STATE_PARTS, warningCount, warningsText, takeLook, tidyLook, underlineLinks, useLook, type Appearance, type ColorPart, type ColorUse, type Font, type Look,
+  confusion, DEFAULT_APPEARANCE, DEFAULT_COLOR, DEFAULT_NAME, derive, DESIGNER, forgetOwnChoice, isDark, kindsAlikeText, kindsAlikeToColourBlindText, lookProblems, lookProperties, MAX_NAME, nameOf,
+  normalizeHex, paletteName, PALETTES, TINT_STEPS, STATE_PARTS, warningCount, warningsText, takeLook, tidyLook, underlineLinks, useLook, type Appearance, type ColorPart, type ColorUse, type Font, type Look,
 } from "../lib/theme";
 import { BrandLogo } from "./Brand";
 import { DocCard } from "./DocCard";
@@ -32,7 +32,9 @@ export function ThemeSection({ processes, standards }: { processes: Process[]; s
 }
 
 const COLOR_TEXT: Record<ColorPart, { label: string; hint: string }> = {
-  brand: { label: "Brand colour", hint: "Links, focus rings, what is selected, and the main buttons unless they have a colour of their own" },
+  brand: { label: "Brand colour", hint: "Links, focus rings, what is selected, and the main buttons unless they have a colour of their own. Its tints colour soft backgrounds" },
+  secondary: { label: "Second colour", hint: "The page ground and the light tints of tables, rows and toned-down areas; never text" },
+  ink: { label: "Ink", hint: "Text, the editing bar, and the ground of the dark look" },
   process: { label: "Processes", hint: "The mark and tag of every process" },
   standard: { label: "Standards", hint: "The mark and tag of every standard" },
   mainButton: { label: "Main buttons", hint: "The one main action of a view, such as Publish, Save or Search" },
@@ -40,13 +42,22 @@ const COLOR_TEXT: Record<ColorPart, { label: string; hint: string }> = {
   success: { label: "Success", hint: "Published, saved, nothing to fix, done" },
   warning: { label: "Warning", hint: "Review due, drafts, unsaved changes, a step that loops back" },
   info: { label: "Information", hint: "Notices that only tell something, such as what readers still see" },
-  problem: { label: "Problem", hint: "Review overdue, what is to fix, errors, buttons that delete" },
+  problem: { label: "Problem", hint: "Review overdue, what is to fix, errors, buttons that delete. The designer's palette has no red: this one is the portal's own" },
+  highlight: { label: "Highlight", hint: "Words found by a search, in the results and on the page" },
+  quiet: { label: "Quiet surface", hint: "A warm, calm ground for notes and asides" },
 };
+/** What each colour of the designer's palette does in the default look (Snow has no setting: the surfaces stay white so that every colour is measured against them). */
+const DESIGNER_JOBS: { name: keyof typeof DESIGNER; job: string }[] = [
+  { name: "ocean", job: "Brand, links, main buttons" }, { name: "sky", job: "Second colour: page ground and tints" },
+  { name: "snow", job: "Surfaces" }, { name: "midnight", job: "Ink: text, editing bar, dark look" },
+  { name: "land", job: "Success" }, { name: "earth", job: "Warnings" }, { name: "berry", job: "Standards" },
+  { name: "sun", job: "Highlights" }, { name: "grain", job: "Quiet surface" },
+];
 /** What a colour left at its default does, where that is not simply the default colour. */
 const DEFAULT_TEXT: Partial<Record<ColorPart, string>> = { mainButton: "Follows the brand", info: "Follows the brand", otherButtons: "Neutral" };
 const FONT_CHOICES: { id: Font | undefined; label: string; family: string }[] = [
-  { id: undefined, label: "Default (Inter)", family: '"Inter Variable", Inter, system-ui, sans-serif' },
-  { id: "roboto", label: "Roboto", family: '"Roboto Variable", Roboto, system-ui, sans-serif' },
+  { id: undefined, label: "Default (Roboto)", family: '"Roboto Variable", Roboto, Helvetica, Arial, sans-serif' },
+  { id: "inter", label: "Inter", family: '"Inter Variable", Inter, system-ui, sans-serif' },
 ];
 const APPEARANCES: { id: Appearance; label: string; icon?: typeof Sun }[] = [
   { id: "device", label: "As the device is set" },
@@ -141,8 +152,25 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
             <LogoField look={look} onChange={(logo) => set({ logo })} />
           </section>
 
+          <section className="theme-group" aria-labelledby="theme-palette">
+            <h3 id="theme-palette">The designer's palette</h3>
+            <p className="muted small">The default look. Every colour below starts from it; change any of them, or go back to it with “Back to the default”. Two colours are the portal's own: a teal for processes, so that people who cannot tell red from green still tell them from standards in Berry, and a red for problems, which the palette does not have.</p>
+            <ul className="designer-palette" aria-label="The designer's palette">
+              {DESIGNER_JOBS.map(({ name, job }) => (
+                <li key={name}><i style={{ background: DESIGNER[name] }} aria-hidden="true" /><b>{name[0].toUpperCase() + name.slice(1)}</b><code>{DESIGNER[name]}</code><span className="muted">{job}</span></li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="theme-group" aria-labelledby="theme-ground">
+            <h3 id="theme-ground">Brand, second colour and ink</h3>
+            {(["brand", "secondary", "ink"] as const).map((part) => (
+              <ColorField key={part} part={part} value={look[part]} use={derived.colors.find((c) => c.part === part)} onChange={(v) => set({ [part]: v })} />
+            ))}
+          </section>
+
           <section className="theme-group" aria-labelledby="theme-colours">
-            <h3 id="theme-colours">Brand and kinds</h3>
+            <h3 id="theme-colours">Kinds</h3>
             <div className="palettes-head">
               <span className="field-label">Ready-made colours<em>They set the brand and the two kinds; buttons and states keep what you chose for them</em></span>
               <span className="palette-legend muted small" aria-hidden="true">
@@ -165,11 +193,14 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
                 );
               })}
             </div>
-            {(["brand", "process", "standard"] as const).map((part) => (
+            {(["process", "standard"] as const).map((part) => (
               <ColorField key={part} part={part} value={look[part]} use={derived.colors.find((c) => c.part === part)} onChange={(v) => set({ [part]: v })} />
             ))}
             {derived.kindsAlike.length > 0 && (
               <p className="color-note warn" role="status" tabIndex={-1}><TriangleAlert size={14} aria-hidden="true" /><span>{kindsAlikeText(derived.kindsAlike)}</span></p>
+            )}
+            {derived.kindsAlikeToColourBlind.length > 0 && (
+              <p className="color-note warn" role="status" tabIndex={-1}><TriangleAlert size={14} aria-hidden="true" /><span>{kindsAlikeToColourBlindText(derived.kindsAlikeToColourBlind)}</span></p>
             )}
           </section>
 
@@ -188,11 +219,20 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
             ))}
           </section>
 
+          <section className="theme-group" aria-labelledby="theme-marks">
+            <h3 id="theme-marks">Highlight and quiet surface</h3>
+            {(["highlight", "quiet"] as const).map((part) => (
+              <ColorField key={part} part={part} value={look[part]} use={derived.colors.find((c) => c.part === part)} onChange={(v) => set({ [part]: v })} />
+            ))}
+          </section>
+
           <section className="theme-group" aria-labelledby="theme-font">
             <h3 id="theme-font">Font</h3>
+            <p className="muted small">Text comes in three sizes and three weights, set by the portal; only the font can be chosen.</p>
             <div className="seg" role="radiogroup" aria-labelledby="theme-font">
               {FONT_CHOICES.map((f) => {
-                const on = look.font === f.id;
+                // a look saved when Roboto was a choice of its own shows as the default it now is
+                const on = (look.font === "roboto" ? undefined : look.font) === f.id;
                 return (
                   <button key={f.label} type="button" role="radio" aria-checked={on} className={`seg-item ${on ? "on" : ""}`} style={{ fontFamily: f.family }}
                     onClick={() => set({ font: f.id })}>
@@ -201,7 +241,7 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
                 );
               })}
             </div>
-            {look.font && <button type="button" className="btn small ghost theme-font-default" onClick={() => set({ font: undefined })}>Back to the default</button>}
+            {look.font && look.font !== "roboto" && <button type="button" className="btn small ghost theme-font-default" onClick={() => set({ font: undefined })}>Back to the default</button>}
           </section>
 
           <section className="theme-group" aria-labelledby="theme-appearance">
@@ -346,7 +386,7 @@ function ColorField({ part, value, fallback, use, onChange }: { part: ColorPart;
     <div className="color-field" role="group" aria-labelledby={`${id}-l`}>
       <div className="color-head">
         <span className="field-label" id={`${id}-l`}>{label}<em>{hint}</em></span>
-        {!value && <span className="color-default">{DEFAULT_TEXT[part] ?? "Default"}</span>}
+        {!value && <span className="color-default">{DEFAULT_TEXT[part] ?? `Default${paletteName(DEFAULT_COLOR[part]) ? `: ${paletteName(DEFAULT_COLOR[part])}` : ""}`}</span>}
       </div>
       <div className="color-inputs">
         <input type="color" className="color-swatch" value={shown} onChange={(e) => onChange(e.target.value.toLowerCase())} aria-label={`${label}: pick a colour`} />
@@ -356,20 +396,33 @@ function ColorField({ part, value, fallback, use, onChange }: { part: ColorPart;
         {value && <button type="button" className="btn small ghost" onClick={() => onChange(undefined)} aria-label={`${label}: back to the default`}>Back to the default</button>}
       </div>
       {wrong && <span className="field-error" id={`${id}-e`}>Write the colour as # and six digits or letters a-f, e.g. #0055aa.</span>}
-      {use && (
+      {(part === "brand" || part === "secondary") && <Tints color={shown} />}
+      {use && !NO_TEXT.includes(part) && (
         <div className="color-used">
           <span className="muted">In use:</span>
           <span className="color-chip"><i style={{ background: use.used.light }} />Light <code>{use.used.light}</code></span>
           <span className="color-chip"><i style={{ background: use.used.dark }} />Dark <code>{use.used.dark}</code></span>
         </div>
       )}
-      {adjusted && <p className="color-note"><Info size={14} aria-hidden="true" /><span>{adjustedText(use!)}</span></p>}
+      {adjusted && part !== "ink" && <p className="color-note"><Info size={14} aria-hidden="true" /><span>{adjustedText(use!)}</span></p>}
       {use && (part === "brand" || part === "process" || part === "standard") && use.like.map((k) => (
         <p key={k} className="color-note warn" tabIndex={-1}><TriangleAlert size={14} aria-hidden="true" /><span>{confusion(part, k)}</span></p>
       ))}
       {use?.warnings.map((w) => (
         <p key={w} className="color-note warn" tabIndex={-1}><TriangleAlert size={14} aria-hidden="true" /><span>{w}</span></p>
       ))}
+    </div>
+  );
+}
+
+/** Parts that are never text: their "In use" line would say nothing. */
+const NO_TEXT: ColorPart[] = ["secondary", "highlight", "quiet"];
+
+/** The designer's four tints of a colour (10, 35, 75 and 100 %), for backgrounds only. */
+function Tints({ color }: { color: string }) {
+  return (
+    <div className="color-tints" aria-label="Its tints, for backgrounds only">
+      {TINT_STEPS.map((n) => <span key={n} className="color-tint"><i style={{ background: `color-mix(in srgb, ${color} ${n}%, ${DESIGNER.snow})` }} aria-hidden="true" />{n} %</span>)}
     </div>
   );
 }
@@ -462,6 +515,8 @@ function LookPreview({ look, processes, standards }: { look: Look; processes: Pr
                 <span className="field-label">A field, selected</span>
                 <span className="pv-input pv-focused">Text someone typed</span>
               </div>
+              <p className="pv-found">A word <mark className="search-mark">found</mark> by the search</p>
+              <p className="pv-quiet">A note on the quiet surface.</p>
               <div className="seg" aria-hidden="true">
                 <span className="seg-item on">Chosen</span>
                 <span className="seg-item">Other</span>

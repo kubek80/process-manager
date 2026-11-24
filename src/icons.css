@@ -7,17 +7,17 @@
 .icon-field-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .icon-field-preview { display: grid; place-items: center; flex: none; width: 72px; height: 72px; border-radius: 16px; border: 1px dashed var(--line-strong); background: var(--surface-2); }
 .icon-field-preview .entry-icon { border-radius: 12px; padding: 4px; }
-.icon-field-none { font-size: 11.5px; color: var(--text-3); text-align: center; line-height: 1.2; }
+.icon-field-none { font-size: var(--fs-sm); color: var(--text-3); text-align: center; line-height: 1.2; }
 .icon-field-actions { display: grid; gap: 6px; min-width: 0; }
-.icon-field-problem { margin: 6px 0 0; font-size: 13px; color: var(--bad); }
+.icon-field-problem { margin: 6px 0 0; font-size: var(--fs-md); line-height: var(--lh-md); color: var(--bad); }
 .icon-spin { animation: icon-spin 1s linear infinite; }
 @keyframes icon-spin { to { transform: rotate(360deg); } }
 .icon-field-actions .btn-row { margin-top: 0; }
 /* the tool a step is done in, with its icon */
 .step-tool { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 .step-tool .entry-icon { padding: 1px; border-radius: 4px; }
-a.step-tool { color: var(--accent); font-weight: 600; }
+a.step-tool { color: var(--accent); font-weight: var(--fw-medium); }
 a.step-tool:hover { text-decoration: underline; }
-.step-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 6px; font-size: 13px; color: var(--text-2); }
+.step-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 6px; font-size: var(--fs-md); line-height: var(--lh-md); color: var(--text-2); }
 .step-facts > span, .step-facts > a { display: inline-flex; align-items: center; gap: 5px; }
 .step-facts .label { color: var(--text-3); }

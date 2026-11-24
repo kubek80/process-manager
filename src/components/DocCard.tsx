@@ -12,7 +12,7 @@ import { BookmarkButton, UpvoteButton } from "./Engage";
 import { EntryIcon } from "./EntryIcon";
 import { useEngagement } from "../lib/engagement";
 import { engagementKnown } from "./Lists";
-import { Fact, KindIcon, KindTag, kindWord, LevelMark, NoLevelMark } from "./marks";
+import { Fact, KindIcon, KindTag, kindWord, LevelMark, NoLevelMark, PathMarks } from "./marks";
 import "../lists.css";
 
 /** The text with the searched words marked; built as elements, never as HTML. */
@@ -156,7 +156,11 @@ export function DocCard(props: DocCardProps) {
       <li className={`card row ${status === "deprecated" ? "retired" : ""} ${status === "draft" ? "draft" : ""}`.trim()} data-kind={kind} data-id={doc.id}>
         {showKind && <KindTag kind={kind} size="icon" />}
         <div className="row-main">
-          <H className="card-title"><a className="card-link" href={docHref(kind, doc.id, fix)} title={title}><Marked text={title} words={words} /></a></H>
+          {/* the paths it is for, as pictures after the name */}
+          <div className="row-title-line">
+            <H className="card-title"><a className="card-link" href={docHref(kind, doc.id, fix)} title={title}><Marked text={title} words={words} /></a></H>
+            <PathMarks ids={doc.paths} catalog={catalog} className="row-paths" />
+          </div>
           {best ? (
             <a className="row-hit" href={hitHref(kind, doc.id, best)}>
               <span className="card-hit-where">{HIT_WORD[best.where]}</span>{" "}
@@ -183,11 +187,15 @@ export function DocCard(props: DocCardProps) {
           {showKind && <KindTag kind={kind} />}
           <span className="card-cat" title={category}>{category}</span>
         </span>
-        {/* one line: a long list of tiers is counted ("3 tiers"), the full list is the tooltip and is read out */}
-        <span className="card-tiers" title={`Applies to ${tiers.full}`}>
-          {tiers.short === tiers.full
-            ? <><span className="sr-only">Applies to: </span>{tiers.full}</>
-            : <><span className="sr-only">Applies to: {tiers.full}</span><span aria-hidden="true">{tiers.short}</span></>}
+        {/* the paths it is for, as pictures (none: whatever the path), then the tiers on one line: a long
+            list of tiers is counted ("3 tiers"), the full list is the tooltip and is read out */}
+        <span className="card-corner">
+          <PathMarks ids={doc.paths} catalog={catalog} />
+          <span className="card-tiers" title={`Applies to ${tiers.full}`}>
+            {tiers.short === tiers.full
+              ? <><span className="sr-only">Applies to: </span>{tiers.full}</>
+              : <><span className="sr-only">Applies to: {tiers.full}</span><span aria-hidden="true">{tiers.short}</span></>}
+          </span>
         </span>
       </div>
       {/* the title and the summary are one part, so that the titles of a row of cards start at the same height */}

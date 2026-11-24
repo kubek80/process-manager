@@ -4,6 +4,7 @@ import type { Membership } from "../types";
 import { GROUP, knownNames, looksLikeEmail, membersOf, OWNER_ROLE, personLabel, type GroupKind, type GroupRank } from "../lib/members";
 import { addedNote, nameFromMembers } from "../lib/groups";
 import { PersonLink } from "./PersonLink";
+import { ViewAsButton } from "./ViewAsBand";
 import { canManageMembers, groupRank } from "../lib/rights";
 import { useMe, usePerms } from "../lib/session";
 import { addGroupMember, grantAccess, loadAccess, loadMembers, loadUsers, removeGroupMember, revokeAccess, type Access } from "../lib/store";
@@ -56,6 +57,7 @@ function Person({ email, name, you, sub, action }: { email: string; name?: strin
         <PersonLink person={{ email, name }}>{label}</PersonLink>
         {(you || sub) && <em>{you && "You"}{you && sub && " · "}{sub}</em>}
       </span>
+      <ViewAsButton email={email} name={name} className="btn small ghost" />
       {action}
     </li>
   );

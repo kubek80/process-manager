@@ -9,6 +9,10 @@
   "practice": "operations",
   "platform": "observability",
   "scope": "Services of tier 0 to 2 that run in production. Tier 3 tools and batch jobs are out of scope.",
+  "paths": [
+    "greenfield",
+    "paved-path"
+  ],
   "tiers": [
     "tier-0",
     "tier-1",

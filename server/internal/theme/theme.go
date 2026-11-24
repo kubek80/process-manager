@@ -1,7 +1,9 @@
 // Package theme keeps the look of the portal that an admin sets in Admin > Theming: the name,
-// the logo, the brand colour, the colours of processes and standards, of the buttons and of the
-// states (success, warning, information, problem), the font and the appearance for people who
-// have not chosen light or dark themselves. Only what the admin chose is stored; the
+// the logo, the brand colour, the second colour, the ink, the colours of processes and standards,
+// of the buttons and of the states (success, warning, information, problem), the highlight, the
+// quiet surface, the font and the appearance for people who have not chosen light or dark
+// themselves. The default look is the designer's palette (Ocean, Sky, Snow, Midnight, Sun, Earth,
+// Grain, Land, Berry); it lives in the app (src/lib/theme.ts), nothing of it is stored. Only what the admin chose is stored; the
 // app works out the readable variants of the colours for light and for dark itself.
 package theme
 
@@ -32,11 +34,14 @@ const MaxName = 40
 
 // Look is what the admin chose. An empty field is the default look of that part.
 type Look struct {
-	Name     string `json:"name,omitempty"`
-	Logo     string `json:"logo,omitempty"`     // an uploaded icon (see package icons)
-	Brand    string `json:"brand,omitempty"`    // #rrggbb
-	Process  string `json:"process,omitempty"`  // #rrggbb
-	Standard string `json:"standard,omitempty"` // #rrggbb
+	Name  string `json:"name,omitempty"`
+	Logo  string `json:"logo,omitempty"`  // an uploaded icon (see package icons)
+	Brand string `json:"brand,omitempty"` // #rrggbb
+	// The second primary colour (default Sky) and the ink of text and dark surfaces (default Midnight).
+	Secondary string `json:"secondary,omitempty"` // #rrggbb
+	Ink       string `json:"ink,omitempty"`       // #rrggbb
+	Process   string `json:"process,omitempty"`   // #rrggbb
+	Standard  string `json:"standard,omitempty"`  // #rrggbb
 	// The colour of the one main button of a view, and of the other (outlined) buttons.
 	MainButton   string `json:"mainButton,omitempty"`   // #rrggbb
 	OtherButtons string `json:"otherButtons,omitempty"` // #rrggbb
@@ -45,7 +50,10 @@ type Look struct {
 	Warning string `json:"warning,omitempty"` // #rrggbb
 	Info    string `json:"info,omitempty"`    // #rrggbb
 	Problem string `json:"problem,omitempty"` // #rrggbb
-	// Font of the portal: one of Fonts; empty is the default font (Inter).
+	// The highlight (default Sun: the words a search found) and the quiet surface (default Grain).
+	Highlight string `json:"highlight,omitempty"` // #rrggbb
+	Quiet     string `json:"quiet,omitempty"`     // #rrggbb
+	// Font of the portal: one of Fonts; empty is the default font (Roboto).
 	Font string `json:"font,omitempty"`
 	// Appearance for people who have not chosen light or dark themselves: light, dark or device.
 	Appearance string `json:"appearance,omitempty"`
@@ -54,8 +62,9 @@ type Look struct {
 // Appearances are the values Appearance may have.
 var Appearances = []string{"light", "dark", "device"}
 
-// Fonts are the values Font may have besides the default (empty).
-var Fonts = []string{"roboto"}
+// Fonts are the values Font may have besides the default (empty: Roboto). "roboto" is what looks
+// saved while Roboto was a choice of its own; it stays valid and means the default font.
+var Fonts = []string{"roboto", "inter"}
 
 // fields are the parts of a look in the order they are checked and described, with what to
 // call them in a sentence.
@@ -63,6 +72,8 @@ var fields = []struct{ key, what string }{
 	{"name", "The name"},
 	{"logo", "The logo"},
 	{"brand", "The brand colour"},
+	{"secondary", "The second colour"},
+	{"ink", "The ink"},
 	{"process", "The colour of processes"},
 	{"standard", "The colour of standards"},
 	{"mainButton", "The colour of main buttons"},
@@ -71,12 +82,15 @@ var fields = []struct{ key, what string }{
 	{"warning", "The colour of warnings"},
 	{"info", "The colour of information"},
 	{"problem", "The colour of problems"},
+	{"highlight", "The highlight"},
+	{"quiet", "The quiet surface"},
 	{"appearance", "The appearance"},
 	{"font", "The font"},
 }
 
 // colorFields are the keys of fields that hold a colour.
-var colorFields = map[string]bool{"brand": true, "process": true, "standard": true, "mainButton": true, "otherButtons": true, "success": true, "warning": true, "info": true, "problem": true}
+var colorFields = map[string]bool{"brand": true, "secondary": true, "ink": true, "process": true, "standard": true, "mainButton": true, "otherButtons": true,
+	"success": true, "warning": true, "info": true, "problem": true, "highlight": true, "quiet": true}
 
 var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
@@ -117,9 +131,9 @@ func Parse(body []byte) (Look, []string) {
 		values[f.key] = s
 	}
 	lower := func(k string) string { return strings.ToLower(values[k]) }
-	look := Look{Name: values["name"], Logo: values["logo"], Brand: lower("brand"), Process: lower("process"), Standard: lower("standard"),
+	look := Look{Name: values["name"], Logo: values["logo"], Brand: lower("brand"), Secondary: lower("secondary"), Ink: lower("ink"), Process: lower("process"), Standard: lower("standard"),
 		MainButton: lower("mainButton"), OtherButtons: lower("otherButtons"), Success: lower("success"), Warning: lower("warning"), Info: lower("info"), Problem: lower("problem"),
-		Appearance: values["appearance"], Font: values["font"]}
+		Highlight: lower("highlight"), Quiet: lower("quiet"), Appearance: values["appearance"], Font: values["font"]}
 	if _, ok := values["name"]; ok {
 		name, problem := docs.CheckText(look.Name, "The name", false)
 		look.Name = name
@@ -143,8 +157,8 @@ func Parse(body []byte) (Look, []string) {
 	if v, ok := values["appearance"]; ok && v != "light" && v != "dark" && v != "device" {
 		problems = append(problems, "The appearance must be “light”, “dark” or “device” (follow the device's setting).")
 	}
-	if v, ok := values["font"]; ok && v != "roboto" {
-		problems = append(problems, "The font must be “roboto”; leave it out to use the default font (Inter).")
+	if v, ok := values["font"]; ok && v != "roboto" && v != "inter" {
+		problems = append(problems, "The font must be “inter”; leave it out to use the default font (Roboto).")
 	}
 	return look, problems
 }
@@ -183,17 +197,22 @@ func Describe(old, new Look) string {
 	default:
 		parts = append(parts, "logo replaced")
 	}
-	text("brand colour", old.Brand, new.Brand, "indigo")
+	text("brand colour", old.Brand, new.Brand, "Ocean")
+	text("second colour", old.Secondary, new.Secondary, "Sky")
+	text("ink", old.Ink, new.Ink, "Midnight")
 	text("colour of processes", old.Process, new.Process, "teal")
-	text("colour of standards", old.Standard, new.Standard, "violet")
+	text("colour of standards", old.Standard, new.Standard, "Berry")
 	text("colour of main buttons", old.MainButton, new.MainButton, "the brand colour")
 	text("colour of other buttons", old.OtherButtons, new.OtherButtons, "neutral")
-	text("colour of success", old.Success, new.Success, "green")
-	text("colour of warnings", old.Warning, new.Warning, "amber")
+	text("colour of success", old.Success, new.Success, "Land")
+	text("colour of warnings", old.Warning, new.Warning, "Earth")
 	text("colour of information", old.Info, new.Info, "the brand colour")
 	text("colour of problems", old.Problem, new.Problem, "red")
-	font := map[string]string{"roboto": "Roboto"}
-	text("font", font[old.Font], font[new.Font], "Inter")
+	text("highlight", old.Highlight, new.Highlight, "Sun")
+	text("quiet surface", old.Quiet, new.Quiet, "Grain")
+	// a look that stored "roboto" has the default font: going from it to nothing changes nothing people see
+	font := map[string]string{"inter": "Inter"}
+	text("font", font[old.Font], font[new.Font], "Roboto")
 	appearance := map[string]string{"light": "light", "dark": "dark", "device": "as the device is set"}
 	text("appearance for new visitors", appearance[old.Appearance], appearance[new.Appearance], "light")
 	if len(parts) == 0 {

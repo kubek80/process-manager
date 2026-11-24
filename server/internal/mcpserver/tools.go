@@ -142,7 +142,7 @@ func (s *Server) addTools(srv *mcp.Server) {
 		Name:        "search_processes",
 		Annotations: readOnly("Search processes"),
 		Description: "Find the company's ACTIVE processes - how to get something done, e.g. \"get a GCP project\", \"onboard a site to Akamai\". " +
-			"Give the person's need as query and/or filters (ids or names, any case). With tier, environment or language only processes that apply to that application are returned. " +
+			"Give the person's need as query and/or filters (ids or names, any case). With tier, environment or language only processes that apply to that application are returned; with path (greenfield, brownfield, paved path = golden path) only those for that path or for any path. " +
 			"Returns id, title, summary, version, owner team with contact, category, practice, platform, rigour (mandatory = the only allowed way), where it applies, review state, and the matching steps. " +
 			"Then read one with get_process or get_my_steps.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, in SearchInput) (SearchOutput, string, error) {
@@ -154,7 +154,7 @@ func (s *Server) addTools(srv *mcp.Server) {
 		Annotations: readOnly("Search standards"),
 		Description: "Find the company's ACTIVE standards - rules that applications, code and infrastructure must meet, e.g. logging, code review, infrastructure as code. " +
 			"Give a query and/or filters (ids or names, any case). rigour finds standards with at least one requirement of that level (must = mandatory, should = recommended, may = optional). " +
-			"With tier, environment or language only standards and requirements that apply to that application are returned. " +
+			"With tier, environment or language only standards and requirements that apply to that application are returned; with path only standards for that path or for any path. " +
 			"Returns each standard with version, owner, review state, the requirements that apply (id, title, level) and the matching requirements. Then read one with get_standard.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, in SearchInput) (SearchOutput, string, error) {
 		out, err := s.search(ctx, docs.Standard, s.caller(req), in)
@@ -454,15 +454,16 @@ type Group struct {
 
 // Catalog is the answer of get_catalog.
 type Catalog struct {
-	Teams        []Group `json:"teams" jsonschema:"own processes and standards; members are its owners"`
-	Practices    []Group `json:"practices" jsonschema:"disciplines such as security; members may change what belongs to it"`
-	Platforms    []Group `json:"platforms" jsonschema:"what teams build on; members may change what belongs to it"`
-	Categories   []Ref   `json:"categories"`
-	Tools        []Ref   `json:"tools" jsonschema:"systems used in steps, with their link"`
-	Tiers        []Ref   `json:"tiers" jsonschema:"application tiers, most critical first"`
-	Environments []Ref   `json:"environments"`
-	Languages    []Ref   `json:"languages"`
-	MembersShown bool    `json:"membersShown" jsonschema:"false: members are only given to callers that present the shared secret"`
+	Teams        []Group   `json:"teams" jsonschema:"own processes and standards; members are its owners"`
+	Practices    []Group   `json:"practices" jsonschema:"disciplines such as security; members may change what belongs to it"`
+	Platforms    []Group   `json:"platforms" jsonschema:"what teams build on; members may change what belongs to it"`
+	Categories   []Ref     `json:"categories"`
+	Tools        []Ref     `json:"tools" jsonschema:"systems used in steps, with their link"`
+	Tiers        []Ref     `json:"tiers" jsonschema:"application tiers, most critical first"`
+	Paths        []PathRef `json:"paths" jsonschema:"the paths a process or standard can be meant for: greenfield, brownfield, paved path (golden path) and any the company added"`
+	Environments []Ref     `json:"environments"`
+	Languages    []Ref     `json:"languages"`
+	MembersShown bool      `json:"membersShown" jsonschema:"false: members are only given to callers that present the shared secret"`
 }
 
 func plain(list []docs.Named) []Ref {
@@ -517,6 +518,7 @@ func (s *Server) catalog(ctx context.Context) (Catalog, error) {
 	return Catalog{
 		Teams: groups(lists.Teams, rbac.Owner, ""), Practices: groups(lists.Practices, rbac.PracticeOwner, rbac.PracticeMember), Platforms: groups(lists.Platforms, rbac.PlatformOwner, rbac.PlatformMember),
 		Categories: plain(lists.Categories), Tools: plain(lists.Tools), Tiers: plain(lists.Tiers), Environments: plain(lists.Environments), Languages: plain(lists.Languages),
+		Paths:        pathRefs(lists.Paths, idsOf(lists.Paths)),
 		MembersShown: show,
 	}, nil
 }
@@ -608,8 +610,17 @@ func myStepsText(m MySteps) string {
 }
 
 func catalogText(c Catalog) string {
-	return fmt.Sprintf("%s, %s, %s, %s, %s, %s, %s, %s.",
+	return fmt.Sprintf("%s, %s, %s, %s, %s, %s, %s, %s, %s.",
 		plural(len(c.Teams), "team", "teams"), plural(len(c.Practices), "practice", "practices"), plural(len(c.Platforms), "platform", "platforms"),
 		plural(len(c.Categories), "category", "categories"), plural(len(c.Tools), "tool", "tools"), plural(len(c.Tiers), "tier", "tiers"),
-		plural(len(c.Environments), "environment", "environments"), plural(len(c.Languages), "language", "languages"))
+		plural(len(c.Paths), "path", "paths"), plural(len(c.Environments), "environment", "environments"), plural(len(c.Languages), "language", "languages"))
+}
+
+// idsOf is the ids of a list, in its order.
+func idsOf(list []docs.Named) []string {
+	out := make([]string, 0, len(list))
+	for _, n := range list {
+		out = append(out, n.ID)
+	}
+	return out
 }

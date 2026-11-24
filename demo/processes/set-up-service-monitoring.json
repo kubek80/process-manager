@@ -9,6 +9,9 @@
   "practice": "operations",
   "platform": "observability",
   "rigour": "recommended",
+  "paths": [
+    "paved-path"
+  ],
   "estimatedDuration": "1 working day",
   "tags": [
     "monitoring",

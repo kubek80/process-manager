@@ -45,6 +45,8 @@ export interface Governed {
   practice?: string;
   /** Id of the platform it belongs to. The owners of the platform may change it. */
   platform?: string;
+  /** Ids of the paths it is for (greenfield, brownfield, paved path…); none: whatever the path. */
+  paths?: string[];
   tiers?: string[];
   languages?: string[];
   environments?: string[];
@@ -95,6 +97,10 @@ export interface Standard extends Governed {
 export interface Issue { level: "error" | "warning"; path: string; message: string }
 
 export interface Tier { id: string; name: string; description?: string }
+/** The pictures an entry of the paths can carry (`PathMark` draws them); none: a neutral mark. */
+export type PathSymbol = "sprout" | "buildings" | "road" | "trail" | "bridge" | "flask" | "rocket" | "sunset";
+/** A path a process or standard can be for: greenfield, brownfield, paved path, or one an organisation adds. */
+export interface PathEntry { id: string; name: string; symbol?: PathSymbol; description?: string }
 export interface Environment { id: string; name: string; description?: string }
 /** `icon`: id of an uploaded square image (see `iconUrl` in the store). */
 export interface Language { id: string; name: string; icon?: string; description?: string }
@@ -128,6 +134,8 @@ export interface Catalog {
   tiers: Tier[]; environments: Environment[]; languages: Language[];
   teams: Team[]; practices: Practice[]; platforms: Platform[]; categories: Category[];
   tools: Tool[];
+  /** The paths; missing in lists stored before there were paths (the loader fills in an empty one). */
+  paths?: PathEntry[];
 }
 
 export type TargetKind = "process" | "standard";
@@ -183,6 +191,11 @@ export interface Me {
    * it is off, and from an older server). Missing from an older server: not offered.
    */
   search?: { meaning: boolean; outside: boolean; provider?: "builtin" | "vertex" };
+  /**
+   * Set while an admin views the portal as somebody else: the admin (who signed in), and when it
+   * ends by itself. `user` and `perms` are then the other person's; nothing can be changed.
+   */
+  viewedBy?: { email: string; name: string; until?: string };
 }
 
 export type Role = "admin" | "catalog-manager" | "process-editor" | "standards-editor" | "owner" | "platform-owner" | "practice-owner" | "platform-member" | "practice-member";

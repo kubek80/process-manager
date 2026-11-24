@@ -8,6 +8,9 @@
   "category": "api",
   "platform": "apigee",
   "rigour": "mandatory",
+  "paths": [
+    "paved-path"
+  ],
   "tiers": [
     "tier-0",
     "tier-1",

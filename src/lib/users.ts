@@ -1,5 +1,7 @@
 import type { Role } from "../types";
 import { groupKindOf, looksLikeEmail, type GroupKind } from "./members";
+import { formatDateTime } from "./dates";
+import { opensChange } from "./rights";
 
 // Admin > Access: the people with roles, one entry per person, and the dialog that sets all of a
 // person's roles at once. The server has the last word; what can be told before sending is told
@@ -169,4 +171,26 @@ export function userMatches(user: AdminUser, q: string, groups: Groups): boolean
   if (!words.length) return true;
   const text = [user.name ?? "", user.email, ...shownRoles(user).map((r) => roleLine(r, groups))].join(" ").toLowerCase();
   return words.every((w) => text.includes(w));
+}
+
+// Viewing the portal as somebody else: who may start it is decided in ./rights (`mayViewAs`);
+// these are its words and where "Stop viewing" goes.
+
+/** The button on a person's entry, and its full name for screen readers. */
+export const VIEW_AS_BUTTON = "View as";
+export const viewAsName = (label: string) => `View the portal as ${label}`;
+/** What the button explains on hover. */
+export const viewAsHint = (label: string) => `See the portal exactly as ${label} sees it: what they can read, their responsibilities and their buttons. You cannot change anything while you do; it ends after an hour.`;
+
+/** Where "Stop viewing" goes when the place viewing started from is not known: Admin › Access. */
+export const VIEW_AS_HOME = "#/admin/access";
+
+/** The place to go back to after viewing: the one remembered when it started (a place of the portal, never the editing screen), else Admin › Access. */
+export function returnPlace(saved: string | null | undefined): string {
+  return saved && /^#\/[^\s<>"]*$/.test(saved) && !opensChange(saved) ? saved : VIEW_AS_HOME;
+}
+
+/** "15:42": when viewing ends by itself, in the reader's own time; "" when not known. */
+export function viewingEnds(until?: string): string {
+  return formatDateTime(until).split(" ")[1] ?? "";
 }

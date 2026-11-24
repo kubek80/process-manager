@@ -689,6 +689,9 @@ type Named struct {
 	Contacts    *Contacts `json:"contacts,omitempty"`
 	URL         string    `json:"url,omitempty"`
 	Description string    `json:"description,omitempty"`
+	// Symbol: the picture of a path (greenfield's sprout, the paved path's road…); empty for a
+	// neutral mark and for the other lists.
+	Symbol string `json:"symbol,omitempty"`
 }
 
 // Contacts is how to reach a team, platform or practice (schema/catalog.schema.json): every
@@ -710,6 +713,7 @@ func (c *Contacts) Empty() bool { return c == nil || *c == Contacts{} }
 // Lists is the catalog document. A list that is missing is empty.
 type Lists struct {
 	Tiers        []Named `json:"tiers"`
+	Paths        []Named `json:"paths"`
 	Environments []Named `json:"environments"`
 	Languages    []Named `json:"languages"`
 	Teams        []Named `json:"teams"`
@@ -720,7 +724,7 @@ type Lists struct {
 }
 
 // EmptyCatalog is served before any lists exist.
-const EmptyCatalog = `{"tiers":[],"environments":[],"languages":[],"teams":[],"practices":[],"platforms":[],"categories":[],"tools":[]}`
+const EmptyCatalog = `{"tiers":[],"paths":[],"environments":[],"languages":[],"teams":[],"practices":[],"platforms":[],"categories":[],"tools":[]}`
 
 // Lists returns the catalog. A missing catalog is empty, not an error.
 func (s *Store) Lists(ctx context.Context) (Lists, error) {
@@ -780,6 +784,8 @@ func (l Lists) ByKey(key string) []Named {
 	switch key {
 	case "tiers":
 		return l.Tiers
+	case "paths":
+		return l.Paths
 	case "environments":
 		return l.Environments
 	case "languages":

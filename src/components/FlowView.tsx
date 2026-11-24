@@ -531,9 +531,10 @@ function laneFits(column: number, small: boolean, avatar: boolean, narrow = fals
   const family = pageFontFamily();
   // the padding and type of the lane names (smaller on a phone: see detail.css)
   const room = column - (narrow ? 18 : small ? 20 : 24) - (avatar && !narrow ? 40 : 0) - 2;
-  const size = small ? 11.5 : narrow ? 12.5 : 13.5;
+  // the type scale's sizes (--fs-sm, --fs-md) in bold (--fw-strong), as styles.css and detail.css set them
+  const size = small || narrow ? 12 : 14;
   return (line: string) => {
-    ctx.font = `650 ${size}px ${family}`;
+    ctx.font = `700 ${size}px ${family}`;
     return ctx.measureText(line).width <= room;
   };
 }

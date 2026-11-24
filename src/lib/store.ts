@@ -65,6 +65,9 @@ export async function loadMe(): Promise<Me> {
 }
 export const devLogin = (email: string) => call<void>("POST", "/auth/dev/login", { email });
 export const logout = () => call<void>("POST", "/auth/logout");
+/** An admin starts (and stops) viewing the portal as somebody else; `/api/me` then answers as that person, with `viewedBy`. */
+export const startViewAs = (email: string) => call<{ email: string; name: string; until: string }>("POST", "/api/admin/view-as", { email });
+export const stopViewAs = () => call<void>("DELETE", "/api/admin/view-as");
 
 // Content: processes, standards and the lists live in the database. Every save is a new
 // version; a save says which version it was made from (`base`) and is refused when somebody
@@ -313,7 +316,7 @@ export type Route =
   | { page: "group"; kind: GroupKind; id: string };
 
 /** The lists of Teams & tools, as the address names them. */
-export const CATALOG_LISTS = ["teams", "practices", "platforms", "categories", "tools", "tiers", "environments", "languages"] as const;
+export const CATALOG_LISTS = ["teams", "practices", "platforms", "categories", "tools", "tiers", "paths", "environments", "languages"] as const;
 export type CatalogList = (typeof CATALOG_LISTS)[number];
 /** Which list of Teams & tools is open and which entry is chosen: `#/catalog/platforms/google-cloud`. */
 export interface CatalogView { list?: CatalogList; id?: string }
@@ -331,6 +334,8 @@ export interface SearchState {
   platform?: string[];
   /** The team that maintains it. */
   owner?: string[];
+  /** The paths it is for (greenfield, paved path…); "-" for what names none. */
+  path?: string[];
   /** The page of the results shown, from 1 (1 is left out of the address). */
   pageNo?: number;
   /** How many results a page shows: 12, 24 or 48; left out, the person's own choice. */
@@ -344,7 +349,7 @@ export interface SearchState {
 export type ListState = Omit<SearchState, "type" | "mode">;
 /** Only what a list keeps of a search address. */
 const listOf = (r: SearchState): ListState => { const { type: _t, mode: _m, ...rest } = r; void _t; void _m; return rest; };
-const SEARCH_LISTS = ["type", "rigour", "category", "practice", "platform", "owner"] as const;
+const SEARCH_LISTS = ["type", "rigour", "category", "practice", "platform", "owner", "path"] as const;
 const SEARCH_SIZES = [12, 24, 48];
 const SEARCH_ALLOWED: Partial<Record<(typeof SEARCH_LISTS)[number], string[]>> = { type: ["process", "standard"], rigour: ["mandatory", "recommended", "optional"] };
 /**

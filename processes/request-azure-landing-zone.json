@@ -8,6 +8,9 @@
   "category": "cloud",
   "platform": "azure",
   "rigour": "mandatory",
+  "paths": [
+    "greenfield"
+  ],
   "estimatedDuration": "2-3 weeks",
   "tags": [
     "azure",

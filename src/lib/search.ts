@@ -1,6 +1,7 @@
 import type { Catalog, Level, Process, Rigour, Standard, TargetKind } from "../types";
 import type { SearchState } from "./store";
 import { appliesTo, type Profile } from "./edit";
+import { pathWords } from "./paths";
 
 // One search over processes and standards: every word of the query must be found somewhere in a
 // document; the filters narrow the results down (several values of one filter: any of them;
@@ -10,11 +11,14 @@ import { appliesTo, type Profile } from "./edit";
 /** The filters of the lists and the results page; the results page carries them in the address. */
 export type Filters = Omit<SearchState, "q" | "pageNo" | "size" | "mode" | "sort">;
 export type FilterKey = keyof Filters;
-export const FILTER_KEYS: FilterKey[] = ["type", "category", "platform", "practice", "rigour", "owner"];
-export const FILTER_LABEL: Record<FilterKey, string> = { type: "Type", rigour: "Rigour", category: "Category", practice: "Practice", platform: "Platform", owner: "Owner" };
+export const FILTER_KEYS: FilterKey[] = ["type", "category", "platform", "practice", "rigour", "owner", "path"];
+export const FILTER_LABEL: Record<FilterKey, string> = { type: "Type", rigour: "Rigour", category: "Category", practice: "Practice", platform: "Platform", owner: "Owner", path: "Path" };
 /** The category value of what has no category: not a valid id, so it cannot clash with one. */
 export const NO_CATEGORY = "-";
 export const NO_CATEGORY_LABEL = "Other";
+/** The path value of what names no path (it applies whatever the path): not a valid id either. */
+export const NO_PATH = "-";
+export const NO_PATH_LABEL = "Any path (names none)";
 export const KINDS: TargetKind[] = ["process", "standard"];
 export const KIND_LABEL: Record<TargetKind, string> = { process: "Processes", standard: "Standards" };
 export const RIGOURS: Rigour[] = ["mandatory", "recommended", "optional"];
@@ -57,7 +61,7 @@ export interface Option { value: string; label: string; count: number; chosen: b
 export interface SearchInput {
   processes: Process[];
   standards: Standard[];
-  catalog: Pick<Catalog, "teams" | "tools"> & Partial<Pick<Catalog, "categories" | "practices" | "platforms" | "tiers" | "environments" | "languages">>;
+  catalog: Pick<Catalog, "teams" | "tools"> & Partial<Pick<Catalog, "categories" | "practices" | "platforms" | "tiers" | "environments" | "languages" | "paths">>;
   q?: string;
   filters?: Filters;
   /**
@@ -111,6 +115,12 @@ const str = (x: unknown) => (typeof x === "string" ? x : "");
 const list = <T,>(x: T[] | undefined): T[] => (Array.isArray(x) ? x.filter((v) => v && typeof v === "object") : []);
 const nameIn = (l: { id: string; name: string }[] | undefined, id?: string) => (id ? (l ?? []).find((x) => x.id === id)?.name ?? id : "");
 
+/** The words of the paths a document names: each one's name and its other names ("golden path" for the paved path). */
+function pathsNamed(c: SearchInput["catalog"], ids: unknown): string[] {
+  return pathIds(ids).flatMap((id) => { const e = (c.paths ?? []).find((x) => x.id === id); return e ? pathWords(e) : [id]; });
+}
+const pathIds = (ids: unknown) => (Array.isArray(ids) ? ids.filter((x): x is string => typeof x === "string" && x !== "") : []);
+
 function item(hit: Hit, texts: unknown[]): Item {
   const t = texts.map(str).filter(Boolean);
   return { hit, texts: t, norms: t.map(fold) };
@@ -121,7 +131,7 @@ function index(kind: TargetKind, d: Process | Standard, c: SearchInput["catalog"
     { norm: fold(str(d.title)), weight: WEIGHT.title },
     { norm: fold(str(d.id)), weight: WEIGHT.id },
     { norm: fold((Array.isArray(d.tags) ? d.tags : []).map(str).join(" ")), weight: WEIGHT.tags },
-    { norm: fold([nameIn(c.categories, d.category), nameIn(c.practices, d.practice), nameIn(c.platforms, d.platform), nameIn(c.teams, d.owner)].join(" ")), weight: WEIGHT.names },
+    { norm: fold([nameIn(c.categories, d.category), nameIn(c.practices, d.practice), nameIn(c.platforms, d.platform), nameIn(c.teams, d.owner), ...pathsNamed(c, d.paths)].join(" ")), weight: WEIGHT.names },
     { norm: fold(str(d.summary)), weight: WEIGHT.summary },
   ];
   const items: Item[] = [];
@@ -149,6 +159,7 @@ function index(kind: TargetKind, d: Process | Standard, c: SearchInput["catalog"
     values: {
       type: [kind], rigour: RIGOURS.filter((r) => rigour[r]), category: [str(d.category) || NO_CATEGORY],
       practice: one(str(d.practice)), platform: one(str(d.platform)), owner: one(str(d.owner)),
+      path: pathIds(d.paths).length ? [...new Set(pathIds(d.paths))] : [NO_PATH],
     },
     flags: Object.fromEntries(Object.entries(flags).map(([k, f]) => [k, f.test(kind, d)])),
   };
@@ -240,6 +251,11 @@ export function search(input: SearchInput): SearchOutput {
     if (extra.has(NO_CATEGORY)) all.push({ value: NO_CATEGORY, label: NO_CATEGORY_LABEL });
     return all.map((o) => ({ ...o, count: n.get(o.value) ?? 0, chosen: chosen.includes(o.value) }));
   };
+  // the paths in the order of their list, then what names none; nothing at all without paths
+  const pathOptions = () => {
+    const all = optionsFor("path", [...(c.paths ?? []).map((x) => ({ value: x.id, label: x.name })), { value: NO_PATH, label: NO_PATH_LABEL }]);
+    return all.some((o) => o.value !== NO_PATH) ? all : [];
+  };
   const named = (l?: { id: string; name: string }[]) =>
     [...(l ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((x) => ({ value: x.id, label: x.name }));
 
@@ -252,12 +268,13 @@ export function search(input: SearchInput): SearchOutput {
       practice: optionsFor("practice", named(c.practices)),
       platform: optionsFor("platform", named(c.platforms)),
       owner: optionsFor("owner", named(c.teams)),
+      path: pathOptions(),
     },
     flags: Object.fromEntries(Object.keys(flags).map((k) => [k, found.filter(({ d }) => d.flags[k] && passes(d, filters, flags, k)).length])),
   };
 }
 
-// ---------- "My application": tier, environment, language
+// ---------- "My application": tier, path, environment, language
 
 /**
  * "My application" narrows the lists to what applies to one application: one tier, one
@@ -265,13 +282,14 @@ export function search(input: SearchInput): SearchOutput {
  * same choice to hide what does not apply).
  */
 export type ProfileKey = keyof Profile;
-export const PROFILE_KEYS: ProfileKey[] = ["tier", "environment", "language"];
-export const PROFILE_LABEL: Record<ProfileKey, string> = { tier: "Tier", environment: "Environment", language: "Language" };
-const PROFILE_ANY: Record<ProfileKey, string> = { tier: "Any tier", environment: "Any environment", language: "Any language" };
-const PROFILE_LIST: Record<ProfileKey, "tiers" | "environments" | "languages"> = { tier: "tiers", environment: "environments", language: "languages" };
+export const PROFILE_KEYS: ProfileKey[] = ["tier", "path", "environment", "language"];
+export const PROFILE_LABEL: Record<ProfileKey, string> = { tier: "Tier", path: "Path", environment: "Environment", language: "Language" };
+const PROFILE_ANY: Record<ProfileKey, string> = { tier: "Any tier", path: "Any path", environment: "Any environment", language: "Any language" };
+const PROFILE_LIST: Record<ProfileKey, "tiers" | "paths" | "environments" | "languages"> = { tier: "tiers", path: "paths", environment: "environments", language: "languages" };
 /** What the dropdowns of "My application" say about themselves. */
 export const PROFILE_HINT: Record<ProfileKey, string> = {
   tier: "Shows only what applies to an application of this tier.",
+  path: "Shows only what applies to an application on this path: what is for another path only is hidden.",
   environment: "Shows only what applies to an application in this environment.",
   language: "Shows only what applies to an application written in this language.",
 };
@@ -321,6 +339,7 @@ export function emptyFilterText(key: FilterKey | ProfileKey, subject: Subject, t
     case "platform": return `${who} belongs to a platform.`;
     case "practice": return `${who} belongs to a practice.`;
     case "owner": return `${who} names the team that maintains it.`;
+    case "path": return `${who} names a path.`;
     case "type": return "There is nothing here to choose between.";
     default: return `${who} is limited to particular ${PROFILE_LIST[key]}: everything applies.`;
   }
@@ -361,6 +380,7 @@ export function knownFilters(f: Filters, catalog: SearchInput["catalog"], docs: 
     type: new Set(KINDS), rigour: new Set(RIGOURS),
     category: new Set([NO_CATEGORY, ...ids(catalog.categories), ...used("category")]),
     platform: new Set([...ids(catalog.platforms), ...used("platform")]),
+    path: new Set([NO_PATH, ...ids(catalog.paths), ...docs.flatMap((d) => pathIds(d.paths))]),
     practice: new Set([...ids(catalog.practices), ...used("practice")]),
     owner: new Set([...ids(catalog.teams), ...used("owner")]),
   };
@@ -468,7 +488,7 @@ export function withTypeTab(f: Filters, tab: TypeTab): Filters {
   return out;
 }
 
-/** What "My application" says when folded: the chosen tier, environment and language, or that none is chosen. */
+/** What "My application" says when folded: the chosen tier, path, environment and language, or that none is chosen. */
 export function appSummary(options: Partial<Record<ProfileKey, Option[]>>): string {
   const on = PROFILE_KEYS.flatMap((k) => (options[k] ?? []).filter((o) => o.chosen && o.value !== "").map((o) => o.label));
   return on.length ? on.join(" · ") : "Not chosen";

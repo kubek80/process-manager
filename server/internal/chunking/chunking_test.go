@@ -270,7 +270,8 @@ Helps to meet the standards: infrastructure-as-code
 Tags: gcp, cloud, terraform
 Category: Cloud
 Platform: Google Cloud
-Owned by: Cloud Platform team`},
+Owned by: Cloud Platform team
+Meant for the paths: Greenfield (also called green field), Paved path (also called golden path, paved road)`},
 		{docs.Process, "processes/request-gcp-project.json", Step, "add-project-config", `Process: Request a GCP project
 Step 7: Add your project to the project factory
 Done by: You

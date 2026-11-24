@@ -80,6 +80,8 @@ type api struct {
 	// Admin › Code map: the checkout named by PM_SOURCE_DIR, and a brake on reading it
 	sourceFiles *sourceTree
 	sourceReads *brake
+	// an admin viewing the portal as somebody else, per session (viewas.go); nil without SignOuts
+	viewAs *auth.ViewAs
 }
 
 type ctxKey struct{}
@@ -87,12 +89,20 @@ type ctxKey struct{}
 type session struct {
 	auth.User
 	rbac.Perms
+	// id names the session of the cookie (auth.Session.ID)
+	id string
+	// viewer is set while an admin views the portal as this person: the admin, who signed in.
+	// User and Perms are then the person's, on every route; nothing can be changed (guard).
+	viewer *viewingAdmin
 }
 
 // New builds the handler.
 func New(d Deps) http.Handler {
 	a := &api{Deps: d, searches: newBrake(searchesPerMinute, time.Minute), uploads: newBrake(iconUploadsPerHour, time.Hour),
 		sourceFiles: &sourceTree{dir: d.Cfg.SourceDir}, sourceReads: newBrake(sourceReadsPerMinute, time.Minute)}
+	if d.SignOuts != nil {
+		a.viewAs = &auth.ViewAs{Pool: d.SignOuts.Pool}
+	}
 	mux := http.NewServeMux()
 
 	// healthz: the process is alive. readyz: it can also reach the database, so it may get traffic.
@@ -215,6 +225,9 @@ func New(d Deps) http.Handler {
 	mux.Handle("GET /api/admin/statistics.csv", admin(a.statisticsCSV))
 	// one source file of the portal for Admin › Code map, where PM_SOURCE_DIR is set (source.go)
 	mux.Handle("GET /api/admin/source", admin(a.source))
+	// view the portal as somebody else (viewas.go): judged by the admin's own roles, so not admin()
+	mux.Handle("POST /api/admin/view-as", user(a.startViewAs))
+	mux.Handle("DELETE /api/admin/view-as", user(a.stopViewAs))
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) { writeError(w, 404, "no such API endpoint") })
 	if d.Cfg.StaticDir != "" {
@@ -305,6 +318,15 @@ func (a *api) guard(next http.Handler) http.Handler {
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 		}
+		// While an admin views the portal as somebody else, nothing can be changed: every
+		// request but GET and HEAD is refused here, for every route, apart from stopping and
+		// signing out (viewas.go).
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			var refused bool
+			if r, refused = a.refuseWhileViewing(w, r); refused {
+				return
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -321,10 +343,11 @@ func (a *api) current(r *http.Request) (session, bool) {
 // errUnavailable: the database did not say whether it was ended - which is neither "signed in"
 // nor "signed out", and must not be shown to the person as either.
 func (a *api) signedIn(r *http.Request) (session, error) {
-	u, issued, ok := a.Sessions.ReadIssued(r)
+	ses, ok := a.Sessions.ReadSession(r)
 	if !ok {
 		return session{}, errNoSession
 	}
+	u, issued := ses.User, ses.Issued
 	if a.SignOuts != nil {
 		ended, err := a.SignOuts.Ended(r.Context(), u.Email, issued)
 		if err != nil {
@@ -344,7 +367,9 @@ func (a *api) signedIn(r *http.Request) (session, error) {
 		a.Log.Error("roles could not be read: treating the user as a consumer", "error", err)
 		perms = rbac.PermsFrom(nil, false)
 	}
-	return session{User: u, Perms: perms}, nil
+	// the one place where the person of a request is decided: an admin viewing the portal as
+	// somebody else is that person from here on (viewas.go)
+	return a.viewedAs(r.Context(), session{User: u, Perms: perms, id: ses.ID}, err != nil)
 }
 
 var errNoSession = errors.New("not signed in")
@@ -366,6 +391,11 @@ func (a *api) issue(w http.ResponseWriter, r *http.Request, u auth.User) error {
 
 func (a *api) requireUser(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// a change was already resolved, once, by guard: the same person all the way
+		if _, ok := r.Context().Value(ctxKey{}).(session); ok {
+			next(w, r)
+			return
+		}
 		s, err := a.signedIn(r)
 		if errors.Is(err, errUnavailable) {
 			writeError(w, 503, "The server cannot reach its database right now. Try again in a moment.")
@@ -414,6 +444,9 @@ func (a *api) me(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		out["user"] = s.User
 		out["perms"] = s.Perms
+		if s.viewer != nil {
+			out["viewedBy"] = s.viewer.info()
+		}
 	}
 	if a.Cfg.Auth == config.AuthDev {
 		out["devUsers"] = auth.DevUsers
@@ -472,7 +505,10 @@ func (a *api) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil && a.SignOuts != nil {
-		if _, err := a.SignOuts.Mark(r.Context(), s.Email, a.Sessions.Now()); err != nil {
+		// the person who signed in signs out, not the one whose view they were looking at
+		me := s.self()
+		a.endAllViewing(r.Context(), me)
+		if _, err := a.SignOuts.Mark(r.Context(), me.Email, a.Sessions.Now()); err != nil {
 			a.fail(w, r, err)
 			return
 		}

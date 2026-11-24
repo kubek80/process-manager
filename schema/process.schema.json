@@ -62,6 +62,14 @@
       ],
       "description": "How binding the process is. \"mandatory\" = the only allowed way to get this done. \"recommended\" = the expected way; another way needs a good reason. \"optional\" = a help that may be used. Leave out when it is not stated."
     },
+    "paths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/slug"
+      },
+      "description": "Ids of the paths (from the paths list) this process is for, e.g. [\"greenfield\", \"paved-path\"]: greenfield = something new is built, brownfield = something that already exists is changed or moved, paved path = the ready-made, supported way (also called the golden path). Leave out when it applies whatever the path."
+    },
     "tiers": {
       "type": "array",
       "uniqueItems": true,

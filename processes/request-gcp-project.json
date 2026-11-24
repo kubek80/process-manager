@@ -8,6 +8,10 @@
   "category": "cloud",
   "platform": "google-cloud",
   "rigour": "mandatory",
+  "paths": [
+    "greenfield",
+    "paved-path"
+  ],
   "estimatedDuration": "3-5 working days",
   "tags": [
     "gcp",

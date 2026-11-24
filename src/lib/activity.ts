@@ -25,6 +25,8 @@ export const ACTION: Record<string, string> = {
   "theme.change": "changed the look of the portal",
   "request.create": "asked for something new:", "request.state": "changed the state of the request", "request.delete": "removed the request",
   "content.import": "imported", "content.convert": "brought the stored content up to date for this version",
+  // an admin viewing the portal as somebody else (who is the target); an end by itself says why in the detail
+  "viewas.start": "started viewing the portal as", "viewas.stop": "stopped viewing the portal as", "viewas.end": "stopped viewing the portal as",
 };
 
 /** Who made a change: the portal itself for imports and upgrades, otherwise the person's name. */

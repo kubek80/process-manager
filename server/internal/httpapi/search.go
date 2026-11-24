@@ -38,7 +38,7 @@ func (a *api) search(w http.ResponseWriter, r *http.Request) {
 	}
 	page := retrieval.Page{Results: []retrieval.Result{}}
 	if !blank(q) {
-		if !a.searches.allow(who(r).Email, time.Now()) {
+		if !a.searches.allow(who(r).countsFor(), time.Now()) {
 			w.Header().Set("Retry-After", "60")
 			writeError(w, 429, "You have searched very often in the last minute. Wait a moment, then try again.")
 			return

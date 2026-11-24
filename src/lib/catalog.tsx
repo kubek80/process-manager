@@ -2,14 +2,14 @@ import { createContext, useContext } from "react";
 import type { Catalog } from "../types";
 import type { GroupKind } from "./members";
 
-export const EMPTY_CATALOG: Catalog = { tiers: [], environments: [], languages: [], teams: [], practices: [], platforms: [], categories: [], tools: [] };
+export const EMPTY_CATALOG: Catalog = { tiers: [], environments: [], languages: [], teams: [], practices: [], platforms: [], categories: [], tools: [], paths: [] };
 
 /** The lists with every list present: one that is missing (an older file, an older server) is empty. */
 export const completeCatalog = (c: Partial<Catalog> | null | undefined): Catalog => ({
   ...c,
   tiers: c?.tiers ?? [], environments: c?.environments ?? [], languages: c?.languages ?? [],
   teams: c?.teams ?? [], practices: c?.practices ?? [], platforms: c?.platforms ?? [], categories: c?.categories ?? [],
-  tools: c?.tools ?? [],
+  tools: c?.tools ?? [], paths: c?.paths ?? [],
 });
 
 export interface CatalogApi {
@@ -53,6 +53,9 @@ export const environmentLabel = (c: Catalog, envs?: string[]) =>
   !envs?.length ? "All environments" : envs.map((e) => nameOf(c.environments, e)).join(", ");
 export const tierLabel = (c: Catalog, tiers?: string[]) =>
   !tiers?.length ? "All tiers" : tiers.map((t) => nameOf(c.tiers, t)).join(", ");
+/** The paths a process or standard is for, in words: "Greenfield, Paved path", or "Any path" when it names none. */
+export const pathLabel = (c: Pick<Catalog, "paths">, paths?: string[]) =>
+  !paths?.length ? "Any path" : paths.map((p) => nameOf(c.paths ?? [], p)).join(", ");
 
 /** "1 process", "2 processes and 1 standard", "3 standards"; "" for none. */
 export function docCount(processes: number, standards: number): string {

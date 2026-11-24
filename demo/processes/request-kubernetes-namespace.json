@@ -8,6 +8,10 @@
   "category": "cloud",
   "platform": "kubernetes",
   "rigour": "mandatory",
+  "paths": [
+    "greenfield",
+    "paved-path"
+  ],
   "estimatedDuration": "2-3 working days",
   "tags": [
     "kubernetes",

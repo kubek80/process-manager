@@ -4,6 +4,7 @@ import type { Role } from "../types";
 import { useCatalog } from "../lib/catalog";
 import { groupKindOf } from "../lib/members";
 import { useMe } from "../lib/session";
+import { changeBlocked } from "../lib/rights";
 import { deleteUser, loadUsers, saveUserRoles } from "../lib/store";
 import {
   BOOTSTRAP_PLACE, BOOTSTRAP_SETTING, choicesOf, deleteBlocked, normalRoles, ROLE_ORDER, ROLES, roleLine, roleProblems, rolesDiff, rolesOf, shownRoles, userMatches,
@@ -11,6 +12,7 @@ import {
 } from "../lib/users";
 import { possessive } from "../lib/editing";
 import { confirmDialog, Field, LoadError, Loading, Modal, notify } from "./ui";
+import { ViewAsButton } from "./ViewAsBand";
 import "../users.css";
 
 const initial = (u: AdminUser) => (u.name || u.email).slice(0, 1).toUpperCase();
@@ -22,7 +24,10 @@ const initial = (u: AdminUser) => (u.name || u.email).slice(0, 1).toUpperCase();
  */
 export function UsersSection() {
   const { catalog } = useCatalog();
-  const me = useMe().user?.email ?? "";
+  const who = useMe();
+  const me = who.user?.email ?? "";
+  // while viewing the portal as somebody else, nothing here can be changed: the buttons say why
+  const blocked = changeBlocked(who);
   const groups = useMemo<Groups>(() => ({ team: catalog.teams, platform: catalog.platforms ?? [], practice: catalog.practices ?? [] }), [catalog]);
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [error, setError] = useState("");
@@ -59,13 +64,13 @@ export function UsersSection() {
         <div className="users-bar">
           <h2>People with roles {users && <span>{users.length}</span>}</h2>
           <div className="search"><Search size={15} aria-hidden="true" /><input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, email or role" aria-label="Search people" /></div>
-          <button className="btn primary" onClick={() => setEditing({})}><UserPlus size={16} aria-hidden="true" />Add person</button>
+          <button className="btn primary" disabled={!!blocked} title={blocked || undefined} onClick={() => setEditing({})}><UserPlus size={16} aria-hidden="true" />Add person</button>
         </div>
         {!users && !error && <Loading />}
         {users && (
           <ul className="people users-list">
             {shown.map((u) => {
-              const blocked = deleteBlocked(u, users, me);
+              const noDelete = blocked || deleteBlocked(u, users, me);
               return (
                 <li key={u.email} className="user-row">
                   <span className="avatar" aria-hidden="true">{initial(u)}</span>
@@ -79,10 +84,11 @@ export function UsersSection() {
                     ))}
                   </ul>
                   <span className="user-actions">
-                    <button className="btn small" onClick={() => setEditing({ user: u })} aria-label={`Edit ${u.name || u.email}`}><Pencil size={14} aria-hidden="true" />Edit</button>
-                    <button className="btn small ghost user-del" disabled={!!blocked} title={blocked || undefined} aria-label={`Delete ${u.name || u.email}`} onClick={() => remove(u)}><Trash2 size={14} aria-hidden="true" />Delete</button>
+                    <ViewAsButton email={u.email} name={u.name} />
+                    <button className="btn small" disabled={!!blocked} title={blocked || undefined} onClick={() => setEditing({ user: u })} aria-label={`Edit ${u.name || u.email}`}><Pencil size={14} aria-hidden="true" />Edit</button>
+                    <button className="btn small ghost user-del" disabled={!!noDelete} title={noDelete || undefined} aria-label={`Delete ${u.name || u.email}`} onClick={() => remove(u)}><Trash2 size={14} aria-hidden="true" />Delete</button>
                   </span>
-                  {blocked && <span className="user-note muted small">{blocked}</span>}
+                  {noDelete && !blocked && <span className="user-note muted small">{noDelete}</span>}
                 </li>
               );
             })}

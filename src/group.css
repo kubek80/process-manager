@@ -4,11 +4,11 @@
 
 /* ---------- the mark: what the person signed in is in a group ---------- */
 .rank-mark { display: inline-flex; align-items: center; gap: 5px; flex: none; height: 22px; padding: 0 9px 0 7px; border-radius: 999px;
-  font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; color: var(--accent); background: var(--accent-soft);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+  font-size: var(--fs-sm); font-weight: var(--fw-medium); line-height: 1; white-space: nowrap; color: var(--accent); background: var(--accent-soft);
+  border: 1px solid var(--ocean-35); }
 .rank-mark svg { flex: none; }
 /* a member: the same shape, quieter - outlined, not filled */
-.rank-mark.member { background: var(--surface); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.rank-mark.member { background: var(--surface); border-color: var(--ocean-35); }
 
 /* ---------- a name that leads to its page ---------- */
 a.group-link { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px; }
@@ -18,15 +18,15 @@ a.group-link:hover { color: var(--accent); text-decoration-color: currentColor; 
 .group-page .back { margin-bottom: 18px; }
 .group-head { display: grid; gap: 8px; }
 .group-kicker { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
-.group-kind { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.group-kind { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
 .group-title-row { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 10px 20px; }
-.group-title-row h1 { flex: 1 1 320px; max-width: 900px; min-width: 0; font-size: 30px; letter-spacing: -.02em; line-height: 1.15; overflow-wrap: anywhere; }
+.group-title-row h1 { flex: 1 1 320px; max-width: 900px; min-width: 0; font-size: var(--fs-h1); letter-spacing: -.02em; line-height: var(--lh-h1); overflow-wrap: anywhere; }
 .group-lead { margin: 0; max-width: 72ch; white-space: pre-line; overflow-wrap: anywhere; }
-p.muted.group-lead { font-size: 15px; }
+p.muted.group-lead { font-size: var(--fs-lg); line-height: var(--lh-lg); }
 
 /* ---------- the body: what belongs to it on the left; how to reach them and the people on the right ---------- */
 .group-body { display: grid; gap: 28px; margin-top: 28px; }
-.group-h, .group-people .cat-members h2 { font-size: 12px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.group-h, .group-people .cat-members h2 { font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
 @media (min-width: 1000px) {
   .group-body { grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); grid-template-rows: auto 1fr; grid-template-areas: "docs reach" "docs people"; gap: 24px 40px; align-items: start; }
   .group-docs { grid-area: docs; }
@@ -38,7 +38,7 @@ p.muted.group-lead { font-size: 15px; }
 .group-people > .cat-members:first-child { padding-top: 0; border-top: 0; }
 .group-people > .cat-members + .cat-members { margin-top: 18px; }
 .group-people .cat-members h2 { display: flex; align-items: baseline; gap: 8px; }
-.group-people .cat-members h2 span { font-weight: 600; font-variant-numeric: tabular-nums; }
+.group-people .cat-members h2 span { font-weight: var(--fw-medium); font-variant-numeric: tabular-nums; }
 
 /* ---------- how to reach them ---------- */
 .contact-view { display: grid; gap: 14px; }
@@ -46,17 +46,17 @@ p.muted.group-lead { font-size: 15px; }
 .contact-form { white-space: normal; text-align: left; height: auto; min-height: 36px; padding-block: 7px; }
 .contact-list { margin: 0; display: grid; gap: 10px; }
 .contact-row { display: grid; gap: 2px; min-width: 0; }
-.contact-row dt { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.contact-row dt { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-medium); color: var(--text-2); }
 .contact-row dt svg { flex: none; color: var(--text-3); }
-.contact-row dd { margin: 0 0 0 20px; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.contact-row dd { margin: 0 0 0 20px; font-size: var(--fs-md); line-height: var(--lh-md); min-width: 0; overflow-wrap: anywhere; }
 .contact-row dd:has(> .contact-link) { overflow: hidden; }
 .contact-row[data-contact="other"] dd { margin-left: 0; color: var(--text-2); }
-.contact-row dd a { font-weight: 550; }
+.contact-row dd a { font-weight: var(--fw-medium); }
 /* a link and its "opens in a new tab" icon stay on one line; a long address is cut, the whole link is the tooltip */
 .contact-link { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; vertical-align: top; }
 .contact-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .contact-out { flex: none; color: var(--text-3); }
-.contact-none { margin: 0; font-size: 14px; }
+.contact-none { margin: 0; font-size: var(--fs-md); line-height: var(--lh-md); }
 /* an email or a name wraps (break anywhere): it is the information; the mark stays with its last letter */
 .contact-row.wraps .contact-link { display: inline; }
 .contact-row.wraps .contact-text { white-space: normal; overflow: visible; }
@@ -64,13 +64,13 @@ p.muted.group-lead { font-size: 15px; }
 .contact-tail { white-space: nowrap; }
 /* the request form: the one main button, and what it is for under it */
 .contact-form-box { display: grid; gap: 4px; justify-items: start; }
-.contact-form-hint { font-size: 12.5px; color: var(--text-3); }
+.contact-form-hint { font-size: var(--fs-sm); line-height: var(--lh-sm); color: var(--text-3); }
 .contact-form-print { display: none; margin: 0; overflow-wrap: anywhere; }
 
 /* ---------- what belongs to it ---------- */
 .group-docs { min-width: 0; display: grid; gap: 14px; align-content: start; }
 .group-docs-head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; }
-.group-count { margin: 4px 0 0; font-size: 17px; font-weight: 650; color: var(--text); font-variant-numeric: tabular-nums; }
+.group-count { margin: 4px 0 0; font-size: var(--fs-h4); line-height: var(--lh-h4); font-weight: var(--fw-strong); color: var(--text); font-variant-numeric: tabular-nums; }
 .group-docs-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .group-docs .cards { margin: 0; }
 .group-more { justify-self: start; }
@@ -89,21 +89,21 @@ p.muted.group-lead { font-size: 15px; }
 
 /* ---------- adding somebody ---------- */
 .member-add .member-problem, .member-add .member-note { flex-basis: 100%; margin: 0; }
-.member-note { display: flex; align-items: flex-start; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+.member-note { display: flex; align-items: flex-start; gap: 6px; font-size: var(--fs-sm); line-height: var(--lh-sm); color: var(--text-2); }
 .member-note svg { flex: none; margin-top: 2px; color: var(--text-3); }
 
 /* ---------- a person's name is a mail link, drawn as the other links of the page ---------- */
-.cat-members .person a.person-link { color: var(--accent); font-weight: 600; overflow-wrap: anywhere; }
+.cat-members .person a.person-link { color: var(--accent); font-weight: var(--fw-medium); overflow-wrap: anywhere; }
 .cat-members .person a.person-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .cat-members.none { gap: 0; }
 
 /* ---------- Teams & tools: how many entries of a list are yours, beside its count ---------- */
-.tab .tab-yours { font-size: 12px; font-weight: 550; color: var(--text-3); white-space: nowrap; }
+.tab .tab-yours { font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-medium); color: var(--text-3); white-space: nowrap; }
 .tab.on .tab-yours { color: var(--accent); }
 
 /* ---------- a phone ---------- */
 @media (max-width: 599px) {
-  .group-title-row h1 { font-size: 24px; }
+  .group-title-row h1 { font-size: var(--fs-h2); line-height: var(--lh-h2); }
   .group-reach, .group-people { padding: 16px; }
   .group-docs-head { align-items: flex-start; }
 }
@@ -115,19 +115,19 @@ p.muted.group-lead { font-size: 15px; }
   .contact-form-print { display: block !important; }
   .contact-text { white-space: normal; overflow: visible; }
   .contact-out { display: none; }
-  .contact-row:is([data-contact="slack"], [data-contact="chat"]) dd a::after { content: " (" attr(title) ")"; font-weight: 400; color: var(--text-3); }
+  .contact-row:is([data-contact="slack"], [data-contact="chat"]) dd a::after { content: " (" attr(title) ")"; font-weight: var(--fw-regular); color: var(--text-3); }
 }
 
 /* ---------- Teams & tools and Admin › Lists: a team, platform or practice ---------- */
 /* a row: the name and, at the right of the same line, the mark (rows keep one height) */
 .cat-item-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .cat-item-line strong { flex: 0 1 auto; min-width: 0; }
-.cat-item-text .rank-mark { flex: none; margin-left: auto; height: 18px; padding: 0 6px 0 5px; font-size: 11px; gap: 4px; }
+.cat-item-text .rank-mark { flex: none; margin-left: auto; height: 18px; padding: 0 6px 0 5px; font-size: var(--fs-sm); line-height: var(--lh-sm); gap: 4px; }
 .cat-item-text .rank-mark svg { width: 12px; height: 12px; }
 .cat-detail-head .cat-rank { margin-top: 6px; }
 .cat-detail-head h2 a.group-link { text-decoration-color: color-mix(in srgb, currentColor 25%, transparent); }
 .cat-group-facts { display: grid; gap: 14px; }
-.cat-group-description { margin: 0; font-size: 15px; color: var(--text); white-space: pre-line; overflow-wrap: anywhere; }
+.cat-group-description { margin: 0; font-size: var(--fs-lg); line-height: var(--lh-lg); color: var(--text); white-space: pre-line; overflow-wrap: anywhere; }
 .cat-open-page { justify-self: start; }
 .cat-people { display: grid; gap: 18px; }
 .cat-people > .cat-members + .cat-members { padding-top: 16px; }

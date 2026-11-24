@@ -43,6 +43,7 @@ export function tidy(p: Process): Process {
   const out = strip({
     ...p,
     tags: Array.isArray(p.tags) ? (p.tags.filter(Boolean).length ? p.tags.filter(Boolean) : undefined) : p.tags,
+    paths: Array.isArray(p.paths) && !p.paths.length ? undefined : p.paths,
     tiers: p.tiers?.length ? p.tiers : undefined,
     languages: p.languages?.length ? p.languages : undefined,
     environments: p.environments?.length ? p.environments : undefined,
@@ -516,6 +517,7 @@ export function tidyStandard(s: Standard): Standard {
   return strip({
     ...s,
     tags: list(s.tags),
+    paths: Array.isArray(s.paths) && !s.paths.length ? undefined : s.paths,
     tiers: ids(s.tiers), languages: ids(s.languages), environments: ids(s.environments),
     replacedBy: s.status === "deprecated" ? s.replacedBy : undefined,
     resources: cleanResources(s.resources),
@@ -625,9 +627,9 @@ export function prerequisiteKeys(list: { title: string }[]): string[] {
   });
 }
 
-/** Does something limited to these tiers / languages / environments apply to this application? */
-export interface Profile { tier?: string; language?: string; environment?: string }
-export function appliesTo(holder: { tiers?: string[]; languages?: string[]; environments?: string[] }, p: Profile): boolean {
+/** Does something limited to these tiers / paths / languages / environments apply to this application? */
+export interface Profile { tier?: string; path?: string; language?: string; environment?: string }
+export function appliesTo(holder: { tiers?: string[]; paths?: string[]; languages?: string[]; environments?: string[] }, p: Profile): boolean {
   const ok = (ids: string[] | undefined, want?: string) => !want || !ids?.length || ids.includes(want);
-  return ok(holder.tiers, p.tier) && ok(holder.languages, p.language) && ok(holder.environments, p.environment);
+  return ok(holder.tiers, p.tier) && ok(holder.paths, p.path) && ok(holder.languages, p.language) && ok(holder.environments, p.environment);
 }

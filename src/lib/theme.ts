@@ -1,6 +1,8 @@
-// The look of the portal (Admin > Theming): its name, logo, brand colour, the colours of the two
-// kinds, of the buttons and of the states (success, warning, information, problem), the font and
-// the appearance for people who have not chosen light or dark themselves.
+// The look of the portal (Admin > Theming): its name, logo, brand colour, second colour, ink (the
+// text and the dark surfaces), the colours of the two kinds, of the buttons and of the states
+// (success, warning, information, problem), the highlight, the quiet surface, the font and the
+// appearance for people who have not chosen light or dark themselves. The default look is the
+// designer's palette (DESIGNER): Ocean, Sky, Snow, Midnight, Sun, Earth, Grain, Land and Berry.
 //
 // The server keeps only what the admin chose. Everything else is worked out here, for light and
 // for dark: the readable variant of each colour on the surfaces of that theme (text at least
@@ -19,6 +21,10 @@ export interface Look {
   /** An uploaded icon (its id): the logo. */
   logo?: string;
   brand?: string;
+  /** The second primary colour (default Sky): the light page ground and the Sky tints. */
+  secondary?: string;
+  /** The ink (default Midnight): text, the editing bar and the ground of the dark look. */
+  ink?: string;
   process?: string;
   standard?: string;
   /** The one main button of a view (default: the brand colour). */
@@ -29,39 +35,99 @@ export interface Look {
   warning?: string;
   info?: string;
   problem?: string;
+  /** Highlights (default Sun): the words a search found. */
+  highlight?: string;
+  /** A quiet, warm surface (default Grain): notes and asides. */
+  quiet?: string;
   appearance?: Appearance;
-  /** The font (default: Inter, the portal's own). */
+  /** The font (default: Roboto, the designer's). */
   font?: Font;
 }
-export type Font = "roboto";
-export const FONTS: Font[] = ["roboto"];
+/** The fonts a look may choose; left out, Roboto. "roboto" is kept as a choice that older looks stored. */
+export type Font = "roboto" | "inter";
+export const FONTS: Font[] = ["roboto", "inter"];
 /** What the font custom property is set to for each font: the chosen family, then the fallbacks of styles.css follow. */
-export const FONT_FAMILY: Record<Font, string> = { roboto: '"Roboto Variable", Roboto' };
+export const FONT_FAMILY: Record<Font, string> = { roboto: '"Roboto Variable", Roboto', inter: '"Inter Variable", Inter' };
+export const DEFAULT_FONT: Font = "roboto";
 export type StatePart = "success" | "warning" | "info" | "problem";
 export type ButtonPart = "mainButton" | "otherButtons";
-export type ColorPart = "brand" | "process" | "standard" | ButtonPart | StatePart;
+export type ColorPart = "brand" | "secondary" | "ink" | "process" | "standard" | ButtonPart | StatePart | "highlight" | "quiet";
 /** Every colour of a look, in the order the section shows them. */
-export const COLOR_PARTS: ColorPart[] = ["brand", "process", "standard", "mainButton", "otherButtons", "success", "warning", "info", "problem"];
+export const COLOR_PARTS: ColorPart[] = ["brand", "secondary", "ink", "process", "standard", "mainButton", "otherButtons", "success", "warning", "info", "problem", "highlight", "quiet"];
 export const STATE_PARTS: StatePart[] = ["success", "warning", "info", "problem"];
 
 export const DEFAULT_NAME = "Process Manager";
 export const MAX_NAME = 40;
+/** The designer's palette: primary Ocean, Sky, Snow and Midnight; secondary Sun, Earth, Grain, Land and Berry. */
+export const DESIGNER = {
+  ocean: "#1971ed", sky: "#66c5ff", snow: "#ffffff", midnight: "#0e0d26",
+  sun: "#f3ea5d", earth: "#ff6720", grain: "#e6cda8", land: "#00b35f", berry: "#913199",
+} as const;
+/** The designer gave no red: problems keep a red of their own, far from Earth (warnings) and Berry (standards). */
+export const PROBLEM_RED = "#be123c";
+/**
+ * Processes keep a teal of their own: Ocean and Berry differ almost only in hue, and people who
+ * cannot tell red from green would hardly tell processes from standards (seenWithout); this teal
+ * stays apart from Berry for them, from Land (success) and from the brand.
+ */
+export const PROCESS_TEAL = "#0f766e";
 /** The colours of the default look, as the colour pickers show them. */
 export const DEFAULT_COLOR: Record<ColorPart, string> = {
-  brand: "#4f46e5", process: "#0f766e", standard: "#6d28d9", mainButton: "#4f46e5", otherButtons: "#171a26",
-  success: "#15803d", warning: "#b45309", info: "#4f46e5", problem: "#be123c",
+  brand: DESIGNER.ocean, secondary: DESIGNER.sky, ink: DESIGNER.midnight, process: PROCESS_TEAL, standard: DESIGNER.berry,
+  mainButton: DESIGNER.ocean, otherButtons: DESIGNER.midnight,
+  success: DESIGNER.land, warning: DESIGNER.earth, info: DESIGNER.ocean, problem: PROBLEM_RED,
+  highlight: DESIGNER.sun, quiet: DESIGNER.grain,
 };
+/**
+ * The default look as if every colour were chosen, except those that follow another (main buttons
+ * and information follow the brand, other buttons the text): the token blocks of styles.css hold
+ * exactly what `derive` works out for it (a unit test keeps them equal).
+ */
+export const DEFAULT_LOOK: Look = {
+  brand: DEFAULT_COLOR.brand, secondary: DEFAULT_COLOR.secondary, ink: DEFAULT_COLOR.ink, process: DEFAULT_COLOR.process, standard: DEFAULT_COLOR.standard,
+  success: DEFAULT_COLOR.success, warning: DEFAULT_COLOR.warning, problem: DEFAULT_COLOR.problem, highlight: DEFAULT_COLOR.highlight, quiet: DEFAULT_COLOR.quiet,
+};
+/** The name of a colour of the designer's palette ("Ocean"), or undefined. */
+export function paletteName(hex: string | undefined): string | undefined {
+  if (!hex) return undefined;
+  const h = hex.toLowerCase();
+  const hit = (Object.keys(DESIGNER) as (keyof typeof DESIGNER)[]).find((k) => DESIGNER[k] === h);
+  return hit ? hit[0].toUpperCase() + hit.slice(1) : undefined;
+}
 export const DEFAULT_APPEARANCE: Appearance = "device";
 const HEX = /^#[0-9a-f]{6}$/i;
 const ICON_ID = /^[a-f0-9]{64}$/;
+const SNOW = DESIGNER.snow;
 
-/** The surfaces of each theme (styles.css): a colour must be readable on all of them. */
-export const SURFACES = {
-  light: { bg: "#f4f5f9", surface: "#ffffff", surface2: "#f8f9fc" },
-  dark: { bg: "#0f1118", surface: "#181b25", surface2: "#1e222e" },
-} as const;
-/** The editing bar, dark in both themes (edit.css): the colours of buttons and states must also read on it. */
-export const BAR = ["#1c1d22", "#24262d"] as const;
+/** The tints of the designer's rule: backgrounds use only these parts of Ocean (the brand) and Sky (the second colour). */
+export const TINT_STEPS = [10, 35, 75, 100] as const;
+/** The surfaces of one theme: a colour must be readable on all of them. */
+export interface Surfaces { bg: string; surface: string; surface2: string }
+export interface Ground { light: Surfaces; dark: Surfaces; bar: readonly [string, string] }
+/**
+ * The ground of a look. Light: Snow surfaces on a page ground of Sky at 10 %. Dark: the ink
+ * (Midnight) is the ground, its surfaces are the ink lifted with a little Snow; an ink too light to
+ * carry light text is deepened first. The editing bar is the ink in both themes.
+ */
+export function groundOf(look: Pick<Look, "secondary" | "ink"> = {}): Ground {
+  // (isHex is defined further down: this runs while the module loads)
+  const sec = typeof look.secondary === "string" && HEX.test(look.secondary) ? look.secondary.toLowerCase() : DEFAULT_COLOR.secondary;
+  const deep = darkGround(look.ink);
+  const tint = mix(sec, SNOW, 0.1);
+  return {
+    light: { bg: tint, surface: SNOW, surface2: tint },
+    dark: { bg: deep, surface: mix(SNOW, deep, 0.05), surface2: mix(SNOW, deep, 0.08) },
+    bar: [deep, mix(SNOW, deep, 0.08)],
+  };
+}
+/** The ground of the dark look: the ink, deepened until light text reads on it at 15:1. */
+function darkGround(ink: string | undefined): string {
+  return readable(typeof ink === "string" && HEX.test(ink) ? ink.toLowerCase() : DEFAULT_COLOR.ink, [SNOW], 15);
+}
+/** The surfaces of the default look (styles.css): a colour must be readable on all of them. */
+export const SURFACES: Record<Mode, Surfaces> = { light: groundOf().light, dark: groundOf().dark };
+/** The editing bar of the default look, dark in both themes (edit.css): the colours of buttons and states must also read on it. */
+export const BAR = groundOf().bar;
 /** The two inks a filled colour can carry. */
 const INK = { white: "#ffffff", black: "#11121c" } as const;
 
@@ -168,18 +234,10 @@ export const ALIKE = 25;
 /** A change smaller than this (CIELAB distance) cannot be seen: it is not reported as an adjustment. */
 export const VISIBLE = 4;
 
-/** The default colours of the states (styles.css), as text in each theme: what a colour must not be mistaken for. */
-export const SEMANTIC = {
-  bad: { light: "#be123c", dark: "#fb7185" },
-  warn: { light: "#b45309", dark: "#fbbf24" },
-  good: { light: "#15803d", dark: "#4ade80" },
-} as const;
-export type Semantic = keyof typeof SEMANTIC;
+export type Semantic = "bad" | "warn" | "good";
 /** The token (styles.css) of each state: success is --good, warning --warn, problem --bad, information --info. */
 export const STATE_TOKEN: Record<StatePart, Semantic | "info"> = { success: "good", warning: "warn", info: "info", problem: "bad" };
 const SEMANTIC_PART: Record<Semantic, StatePart> = { good: "success", warn: "warning", bad: "problem" };
-/** The default colours of the kinds in each theme (styles.css): what an unchosen kind looks like. */
-const KIND_DEFAULT = { process: { light: "#0f766e", dark: "#5eead4" }, standard: { light: "#6d28d9", dark: "#c4b5fd" } } as const;
 
 // ---------- the derived tokens
 
@@ -187,7 +245,7 @@ export type Mode = "light" | "dark";
 export interface ColorUse {
   part: ColorPart;
   chosen: string;
-  /** The colour text, links and marks use in each theme. */
+  /** The colour text, links and marks use in each theme (for the ink: the text, and the ground of the dark look). */
   used: Record<Mode, string>;
   /** The colour filled surfaces use in each theme (buttons, checked boxes, selected pills), with `ink` on top. */
   fill: Record<Mode, string>;
@@ -204,25 +262,40 @@ export interface ColorUse {
   warnings: string[];
 }
 export interface Derived {
-  /** Custom properties for each theme, without the `--theme-<mode>-` prefix: only for chosen colours. */
+  /** Custom properties for each theme, without the `--theme-<mode>-` prefix: only for chosen colours (all of them once the ground is chosen). */
   tokens: Record<Mode, Record<string, string>>;
   colors: ColorUse[];
   /** Processes and standards look alike in these themes. */
   kindsAlike: Mode[];
+  /** People who cannot tell red from green will mistake processes for standards in these themes. */
+  kindsAlikeToColourBlind: Mode[];
 }
 
-/** How much of the colour goes into its soft tint and into its line, per theme. */
-const TINT = { accent: { light: 0.1, dark: 0.18 }, kind: { light: 0.12, dark: 0.16 }, state: { light: 0.1, dark: 0.16 }, line: { light: 0.4, dark: 0.32 } };
+/**
+ * How much of the colour goes into its soft tint and into its line, per theme. Light: the 10 %
+ * step of the designer's tints. Dark (tints over Midnight): a dark ground swallows a weak tint, so
+ * the brand's soft surfaces take the 35 % step; the kinds and states keep a quieter tint.
+ */
+const TINT = { accent: { light: 0.1, dark: 0.35 }, kind: { light: 0.1, dark: 0.16 }, state: { light: 0.1, dark: 0.16 }, line: { light: 0.4, dark: 0.32 } };
 const stateTokens = (t: string) => [t, `${t}-bg`, `${t}-fill`, `${t}-ink`];
+const tintTokens = (name: string) => TINT_STEPS.map((n) => `${name}-${n}`);
+/** The surfaces and text of a theme, worked out from the ink and the second colour. */
+const GROUND_TOKENS = ["bg", "surface", "surface-2", "line", "line-strong", "text", "text-2", "text-3", "bar", "bar-2", "bar-line", "bar-text", "bar-muted"];
 /** Which custom properties a colour part sets. */
 export const TOKENS: Record<ColorPart, string[]> = {
-  brand: ["accent", "accent-fill", "accent-ink", "accent-soft"],
+  brand: ["accent", "accent-fill", "accent-ink", "accent-soft", ...tintTokens("ocean")],
+  secondary: tintTokens("sky"),
+  ink: GROUND_TOKENS,
   process: ["kind-process", "kind-process-fill", "kind-process-ink", "kind-process-bg", "kind-process-line"],
   standard: ["kind-standard", "kind-standard-fill", "kind-standard-ink", "kind-standard-bg", "kind-standard-line"],
   mainButton: ["action-fill", "action-ink"],
   otherButtons: ["action-other", "action-other-line", "action-other-soft"],
   success: stateTokens("good"), warning: stateTokens("warn"), info: stateTokens("info"), problem: stateTokens("bad"),
+  highlight: ["highlight", "highlight-ink", "search-mark"],
+  quiet: ["quiet", "quiet-line"],
 };
+/** Parts that follow another while not chosen (the brand, or the neutral text): the CSS says so, nothing is worked out for them. */
+const FOLLOWS: ColorPart[] = ["mainButton", "otherButtons", "info"];
 
 /**
  * One colour in one theme: the readable variant for text, the fill for filled surfaces with the
@@ -230,63 +303,138 @@ export const TOKENS: Record<ColorPart, string[]> = {
  * black ink) unless it would vanish into the surface (a navy button on the dark surface), then it
  * is the readable variant.
  */
-export function deriveColor(chosen: string, mode: Mode, tint: number, also: readonly string[] = []): { text: string; fill: string; ink: string; soft: string; line: string } {
-  const s = SURFACES[mode];
+export function deriveColor(chosen: string, mode: Mode, tint: number, also: readonly string[] = [], surfaces: Surfaces = SURFACES[mode]): { text: string; fill: string; ink: string; soft: string; line: string } {
+  const s = surfaces;
   const base = [s.bg, s.surface, s.surface2, ...also];
   let text = readable(chosen, base);
-  // the tint of the light theme comes from the chosen colour itself (a yellow stays a pale yellow);
-  // in the dark theme from the readable one, since a dark colour would vanish in a dark surface
-  let soft = mix(mode === "light" ? chosen : text, s.surface, tint);
-  // text in that colour also stands on its own tint (a soft button, a tag)
-  for (let i = 0; i < 3 && contrast(text, soft) < 4.5; i++) {
-    text = readable(text, [...base, soft]);
-    if (mode === "dark") soft = mix(text, s.surface, tint);
-  }
   const fill = [s.surface, ...also].every((b) => contrast(chosen, b) >= FILL_MIN) ? chosen.toLowerCase() : text;
+  // the tint of the light theme comes from the chosen colour itself (a yellow stays a pale yellow);
+  // in the dark theme from the fill, since a dark colour would vanish in a dark surface
+  const soft = mix(mode === "light" ? chosen : fill, s.surface, tint);
+  // text in that colour also stands on its own tint (a soft button, a tag)
+  for (let i = 0; i < 3 && contrast(text, soft) < 4.5; i++) text = readable(text, [...base, soft]);
   return { text, fill, ink: inkOn(fill), soft, line: mix(text, s.surface, TINT.line[mode]) };
 }
 /** A fill must stand this far from the surface (contrast ratio) to be kept as chosen. */
 export const FILL_MIN = 1.4;
 
+/** The largest of `steps` of `color` over `ground` on which `text` still reads (4.5:1); the smallest step otherwise. */
+function tintUnder(color: string, ground: string, text: string, steps: number[]): string {
+  for (const t of steps) { const m = mix(color, ground, t); if (contrast(text, m) >= 4.5) return m; }
+  return mix(color, ground, steps[steps.length - 1]);
+}
+
+/** The surfaces, text and editing bar of a look in both themes (the GROUND_TOKENS). */
+function groundTokens(look: Look): Record<Mode, Record<string, string>> {
+  const g = groundOf(look);
+  const ink = isHex(look.ink) ? look.ink.toLowerCase() : DEFAULT_COLOR.ink;
+  const deep = g.dark.bg;
+  const L = [g.light.bg, g.light.surface, g.light.surface2], D = [g.dark.bg, g.dark.surface, g.dark.surface2];
+  const bar = { bar: g.bar[0], "bar-2": g.bar[1], "bar-line": mix(SNOW, deep, 0.18), "bar-text": mix(SNOW, deep, 0.96), "bar-muted": readable(mix(SNOW, deep, 0.7), g.bar, 4.5) };
+  return {
+    light: {
+      bg: g.light.bg, surface: g.light.surface, "surface-2": g.light.surface2, line: mix(ink, SNOW, 0.12), "line-strong": mix(ink, SNOW, 0.22),
+      text: readable(ink, L, 12), "text-2": readable(mix(ink, SNOW, 0.8), L, 7), "text-3": readable(mix(ink, SNOW, 0.64), L, 4.5), ...bar,
+    },
+    dark: {
+      bg: g.dark.bg, surface: g.dark.surface, "surface-2": g.dark.surface2, line: mix(SNOW, deep, 0.13), "line-strong": mix(SNOW, deep, 0.22),
+      text: mix(SNOW, deep, 0.95), "text-2": readable(mix(SNOW, deep, 0.75), D, 7), "text-3": readable(mix(SNOW, deep, 0.58), D, 4.5), ...bar,
+    },
+  };
+}
+/** The designer's tints (10, 35, 75 and 100 %) of a colour: over Snow in the light look, over the dark ground in the dark one. */
+function tints(name: string, color: string, ground: Ground): Record<Mode, Record<string, string>> {
+  const of = (over: string) => Object.fromEntries(TINT_STEPS.map((n) => [`${name}-${n}`, mix(color, over, n / 100)]));
+  return { light: of(SNOW), dark: of(ground.dark.bg) };
+}
+/** The highlight: the colour itself as a mark, its ink, and the search mark that text in the ordinary colour still reads on. */
+function highlightTokens(color: string, ground: Ground, text: Record<Mode, string>): Record<Mode, Record<string, string>> {
+  const ink = inkOn(color);
+  return {
+    light: { highlight: color, "highlight-ink": ink, "search-mark": tintUnder(color, SNOW, text.light, [1, 0.75, 0.35, 0.1]) },
+    dark: { highlight: color, "highlight-ink": ink, "search-mark": tintUnder(color, ground.dark.bg, text.dark, [0.35, 0.25, 0.15, 0.1]) },
+  };
+}
+/** The quiet surface: a tint the quietest text (--text-3) still reads on, and its line. */
+function quietTokens(color: string, ground: Ground, text3: Record<Mode, string>): Record<Mode, Record<string, string>> {
+  return {
+    light: { quiet: tintUnder(color, SNOW, text3.light, [0.35, 0.2, 0.1]), "quiet-line": mix(color, SNOW, 0.75) },
+    dark: { quiet: tintUnder(color, ground.dark.bg, text3.dark, [0.16, 0.1, 0.06]), "quiet-line": mix(color, ground.dark.bg, 0.35) },
+  };
+}
+
+/** A colour as it is used in each theme: as text and as a fill. */
+interface InUse { text: Record<Mode, string>; fill: Record<Mode, string> }
+
 /** Works out every colour of a look for light and for dark. */
 export function derive(look: Look): Derived {
   const tokens: Derived["tokens"] = { light: {}, dark: {} };
   const colors: ColorUse[] = [];
+  const ground = groundOf(look);
+  // a chosen ink or second colour changes the surfaces every colour is measured on: then every colour is worked out
+  const groundChosen = isHex(look.ink) || isHex(look.secondary);
+  const gt = groundTokens(look);
+  const put = (part: ColorPart, t: Record<Mode, Record<string, string>>) => { void part; Object.assign(tokens.light, t.light); Object.assign(tokens.dark, t.dark); };
+  if (groundChosen) put("ink", gt);
+  const use = {} as Record<ColorPart, InUse>;
+  const add = (part: ColorPart, c: string, used: Record<Mode, string>, fill: Record<Mode, string>) => {
+    use[part] = { text: used, fill };
+    if (!isHex(look[part])) return;
+    const adjusted = { light: distance(used.light, c) >= VISIBLE, dark: distance(used.dark, c) >= VISIBLE };
+    colors.push({ part, chosen: c, used, fill, adjusted, like: [], grey: !["otherButtons", "ink", "secondary", "highlight", "quiet"].includes(part) && chroma(c) < GREY, warnings: [] });
+  };
   for (const part of COLOR_PARTS) {
     const chosen = look[part];
-    if (!isHex(chosen)) continue;
-    const c = chosen.toLowerCase();
-    const used = {} as Record<Mode, string>, fill = {} as Record<Mode, string>, adjusted = {} as Record<Mode, boolean>;
+    const own = isHex(chosen);
+    const c = (own ? chosen : DEFAULT_COLOR[part]).toLowerCase();
+    if (part === "ink") { add(part, c, { light: gt.light.text, dark: gt.dark.bg }, { light: gt.light.text, dark: gt.dark.bg }); continue; }
+    if (part === "secondary") {
+      if (own || groundChosen) put(part, tints("sky", c, ground));
+      add(part, c, { light: c, dark: c }, { light: c, dark: c });
+      continue;
+    }
+    if (part === "highlight" || part === "quiet") {
+      if (own || groundChosen) put(part, part === "highlight" ? highlightTokens(c, ground, { light: gt.light.text, dark: gt.dark.text }) : quietTokens(c, ground, { light: gt.light["text-3"], dark: gt.dark["text-3"] }));
+      add(part, c, { light: c, dark: c }, { light: c, dark: c });
+      continue;
+    }
+    // a part that follows another and has no colour of its own: what it follows says how it looks (below)
+    if (!own && FOLLOWS.includes(part)) continue;
+    const emit = own || groundChosen;
+    const used = {} as Record<Mode, string>, fill = {} as Record<Mode, string>;
     for (const mode of ["light", "dark"] as const) {
       // buttons and states also stand on the dark editing bar
-      const also = mode === "dark" && !["brand", "process", "standard"].includes(part) ? BAR : [];
+      const also = mode === "dark" && !["brand", "process", "standard"].includes(part) ? ground.bar : [];
       const tint = part === "brand" || part === "otherButtons" || part === "mainButton" ? TINT.accent[mode] : part === "process" || part === "standard" ? TINT.kind[mode] : TINT.state[mode];
-      const d = deriveColor(c, mode, tint, also);
+      const d = deriveColor(c, mode, tint, also, ground[mode]);
       // a main button is a fill: what it shows is the fill, not a text colour
       used[mode] = part === "mainButton" ? d.fill : d.text;
       fill[mode] = d.fill;
-      adjusted[mode] = distance(used[mode], c) >= VISIBLE;
+      if (!emit) continue;
       const t = tokens[mode];
       if (part === "brand") Object.assign(t, { accent: d.text, "accent-fill": d.fill, "accent-ink": d.ink, "accent-soft": d.soft });
       else if (part === "process" || part === "standard") Object.assign(t, { [`kind-${part}`]: d.text, [`kind-${part}-fill`]: d.fill, [`kind-${part}-ink`]: d.ink, [`kind-${part}-bg`]: d.soft, [`kind-${part}-line`]: d.line });
       else if (part === "mainButton") Object.assign(t, { "action-fill": d.fill, "action-ink": d.ink });
       else if (part === "otherButtons") Object.assign(t, { "action-other": d.text, "action-other-line": d.line, "action-other-soft": d.soft });
       else {
-        const k = STATE_TOKEN[part];
+        const k = STATE_TOKEN[part as StatePart];
         Object.assign(t, { [k]: d.text, [`${k}-bg`]: d.soft, [`${k}-fill`]: d.fill, [`${k}-ink`]: d.ink });
       }
     }
-    colors.push({ part, chosen: c, used, fill, adjusted, like: [], grey: part !== "otherButtons" && chroma(c) < GREY, warnings: [] });
+    if (part === "brand" && emit) put(part, tints("ocean", c, ground));
+    add(part, c, used, fill);
   }
-  // what each part looks like in use, chosen or not
-  const eff = effective(look, colors);
+  // what each part looks like in use, chosen or not: a main button without its own colour is in the brand colour, information too
+  const eff: Record<ColorPart, InUse> = {
+    ...use,
+    mainButton: use.mainButton ?? { text: use.brand.fill, fill: use.brand.fill },
+    info: use.info ?? use.brand,
+    otherButtons: use.otherButtons ?? { text: { light: gt.light.text, dark: gt.dark.text }, fill: { light: gt.light.text, dark: gt.dark.text } },
+  };
   const byPart = (p: ColorPart) => colors.find((c) => c.part === p);
   for (const c of colors) {
     if (c.part === "brand" || c.part === "process" || c.part === "standard") {
-      c.like = (Object.keys(SEMANTIC) as Semantic[]).filter((k) => {
-        const state = SEMANTIC_PART[k];
-        return (!look[state] && distance(c.chosen, SEMANTIC[k].light) < ALIKE) || alike(eff[c.part], eff[state]);
-      });
+      c.like = (Object.keys(SEMANTIC_PART) as Semantic[]).filter((k) => alike(eff[c.part], eff[SEMANTIC_PART[k]]));
     }
   }
   // pairs that will be confused: the warning stands with the later of the two chosen parts. Main buttons
@@ -310,6 +458,8 @@ export function derive(look: Look): Derived {
   pair("info", "success", "Notices that only inform will look like confirmations.");
   pair("info", "warning", "Notices that only inform will look like warnings.");
   pair("info", "problem", "Notices that only inform will look like problems.");
+  pair("highlight", "warning", "Highlights will look like warnings: a word found by the search and “Review due” will have nearly the same colour.");
+  pair("highlight", "problem", "Highlights will look like problems: a word found by the search will look like something to fix.");
   // a chosen state close to the brand or a kind left at its default (a chosen brand or kind says it itself)
   for (const state of ["success", "warning", "problem"] as const) {
     const c = byPart(state);
@@ -320,30 +470,29 @@ export function derive(look: Look): Derived {
       if (!look[kind] && alike(eff[kind], eff[state])) c.warnings.push(`This looks like the colour of ${kind === "process" ? "processes" : "standards"}: ${KIND_EFFECT[kind][k]}`);
     }
   }
+  const ink = byPart("ink");
+  if (ink && (ink.adjusted.light || ink.adjusted.dark)) ink.warnings.push(INK_TEXT);
   for (const c of colors) if (c.grey) c.warnings.push(GREY_TEXT[c.part]);
-  const kindsAlike = (["light", "dark"] as const).filter((m) => distance(eff.process.text[m], eff.standard.text[m]) < ALIKE);
-  return { tokens, colors, kindsAlike };
+  const kindsAlike = MODES.filter((m) => distance(eff.process.text[m], eff.standard.text[m]) < ALIKE);
+  const kindsAlikeToColourBlind = MODES.filter((m) => !kindsAlike.includes(m) && (["deuteranopia", "protanopia"] as const).some((k) => distance(seenWithout(eff.process.text[m], k), seenWithout(eff.standard.text[m], k)) < ALIKE));
+  return { tokens, colors, kindsAlike, kindsAlikeToColourBlind };
 }
+/** An ink too light for text, or for the ground of the dark look. */
+export const INK_TEXT = "This colour is too light to be the colour of text as it is: text is made darker in the light look, and the dark look's ground darker, so that everything stays readable.";
 
-/** A colour as it is used in each theme: as text and as a fill. */
-interface InUse { text: Record<Mode, string>; fill: Record<Mode, string> }
-const both = (light: string, dark: string): InUse => ({ text: { light, dark }, fill: { light, dark } });
-/** The defaults of the look (styles.css) where nothing was chosen. */
-const DEFAULT_USE: Record<"brand" | "process" | "standard" | Semantic, InUse> = {
-  brand: both("#4f46e5", "#8b8cf8"), process: both(KIND_DEFAULT.process.light, KIND_DEFAULT.process.dark), standard: both(KIND_DEFAULT.standard.light, KIND_DEFAULT.standard.dark),
-  good: both(SEMANTIC.good.light, SEMANTIC.good.dark), warn: both(SEMANTIC.warn.light, SEMANTIC.warn.dark), bad: both(SEMANTIC.bad.light, SEMANTIC.bad.dark),
+/** What the default look's colours are in use (styles.css), worked out once. */
+let defaults: ReturnType<typeof derive> | null = null;
+const defaultUse = (part: ColorPart, mode: Mode, as: "used" | "fill" = "used") => {
+  defaults ??= derive(DEFAULT_LOOK);
+  return defaults.colors.find((c) => c.part === part)![as][mode];
 };
-function effective(look: Look, colors: ColorUse[]): Record<ColorPart, InUse> {
-  const of = (p: ColorPart): InUse | undefined => { const c = colors.find((x) => x.part === p); return c && { text: c.used, fill: c.fill }; };
-  const brand = of("brand") ?? DEFAULT_USE.brand;
-  return {
-    brand, process: of("process") ?? DEFAULT_USE.process, standard: of("standard") ?? DEFAULT_USE.standard,
-    // a main button without its own colour is in the brand colour; information too
-    mainButton: of("mainButton") ?? { text: brand.fill, fill: brand.fill }, info: of("info") ?? brand,
-    otherButtons: of("otherButtons") ?? both("#171a26", "#eceef5"),
-    success: of("success") ?? DEFAULT_USE.good, warning: of("warning") ?? DEFAULT_USE.warn, problem: of("problem") ?? DEFAULT_USE.bad,
-  };
-}
+/** The default colours of the states, as text in each theme: what a colour must not be mistaken for. */
+export const SEMANTIC: Record<Semantic, Record<Mode, string>> = {
+  get bad() { return { light: defaultUse("problem", "light"), dark: defaultUse("problem", "dark") }; },
+  get warn() { return { light: defaultUse("warning", "light"), dark: defaultUse("warning", "dark") }; },
+  get good() { return { light: defaultUse("success", "light"), dark: defaultUse("success", "dark") }; },
+};
+
 const MODES = ["light", "dark"] as const;
 /** Two colours that will be mistaken for each other in either theme, as text or as a fill. */
 function alike(a: InUse, b: InUse): boolean {
@@ -381,6 +530,7 @@ const KIND_EFFECT: Record<"process" | "standard", Record<Semantic, string>> = {
 };
 const GREY_TEXT: Record<ColorPart, string> = {
   brand: "This colour is nearly grey: buttons and what is selected hardly stand out, so links are underlined to tell them from text.",
+  secondary: "", ink: "", highlight: "", quiet: "",
   process: "This colour is nearly grey: the mark of processes hardly stands out from ordinary text.",
   standard: "This colour is nearly grey: the mark of standards hardly stands out from ordinary text.",
   mainButton: "This colour is nearly grey: the main button of a view hardly stands out from the other buttons.",
@@ -406,12 +556,17 @@ export function confusion(part: "brand" | "process" | "standard", like: Semantic
 }
 /** How many warnings a look gets: what each colour will be mistaken for, and two kinds that look alike. */
 export function warningCount(d: Derived): number {
-  return d.colors.reduce((n, c) => n + c.warnings.length + (c.part === "brand" || c.part === "process" || c.part === "standard" ? c.like.length : 0), 0) + (d.kindsAlike.length ? 1 : 0);
+  return d.colors.reduce((n, c) => n + c.warnings.length + (c.part === "brand" || c.part === "process" || c.part === "standard" ? c.like.length : 0), 0) + (d.kindsAlike.length ? 1 : 0) + (d.kindsAlikeToColourBlind.length ? 1 : 0);
 }
 /** "1 warning", "7 warnings". */
 export const warningsText = (n: number) => `${n} warning${n === 1 ? "" : "s"}`;
 
 /** The sentence for processes and standards that look alike. */
+/** The sentence for processes and standards that people who cannot tell red from green will mistake for each other. */
+export function kindsAlikeToColourBlindText(modes: Mode[]): string {
+  const where = modes.length === 2 ? "" : modes[0] === "light" ? " in the light look" : " in the dark look";
+  return `People who cannot tell red from green will hardly tell processes from standards${where}: their colours differ almost only in hue. The round and square marks still tell them apart; making one clearly lighter or darker helps more.`;
+}
 export function kindsAlikeText(modes: Mode[]): string {
   const where = modes.length === 2 ? "" : modes[0] === "light" ? " in the light look" : " in the dark look";
   return `Processes and standards will be hard to tell apart${where}: their marks and tags have nearly the same colour. Choose colours further apart.`;
@@ -467,8 +622,9 @@ export function tidyLook(l: Look): Look {
 
 /** Each colour in a sentence, as the server says it. */
 export const COLOR_WHAT: Record<ColorPart, string> = {
-  brand: "The brand colour", process: "The colour of processes", standard: "The colour of standards", mainButton: "The colour of main buttons", otherButtons: "The colour of other buttons",
+  brand: "The brand colour", secondary: "The second colour", ink: "The ink", process: "The colour of processes", standard: "The colour of standards", mainButton: "The colour of main buttons", otherButtons: "The colour of other buttons",
   success: "The colour of success", warning: "The colour of warnings", info: "The colour of information", problem: "The colour of problems",
+  highlight: "The highlight", quiet: "The quiet surface",
 };
 
 /** What is wrong with a look before it is saved, one plain sentence per problem (the server checks again). */
@@ -482,7 +638,7 @@ export function lookProblems(l: Look): string[] {
   for (const p of COLOR_PARTS) {
     if (l[p] !== undefined && !isHex(l[p])) out.push(`${COLOR_WHAT[p]} must be written as # and six digits or letters a-f, e.g. #4f46e5.`);
   }
-  if (l.font !== undefined && !FONTS.includes(l.font)) out.push("The font must be Roboto, or the default font.");
+  if (l.font !== undefined && !FONTS.includes(l.font)) out.push("The font must be Inter, or the default font (Roboto).");
   return out;
 }
 
@@ -500,10 +656,14 @@ export function normalizeHex(typed: string): string | null {
 /** The portal's name as a look gives it. */
 export const nameOf = (l: Look) => l.name?.trim() || DEFAULT_NAME;
 
-/** Ready-made sets of colours to start from. The first is the default look. */
+/**
+ * Ready-made sets of colours to start from: they set the brand and the two kinds only. The first is
+ * the default look, the designer's (Ocean, with Berry for standards); the others are named so that
+ * none can be taken for one of the designer's colours.
+ */
 export const PALETTES: { name: string; colors: Partial<Record<ColorPart, string>> }[] = [
   { name: "Default", colors: {} },
-  { name: "Ocean", colors: { brand: "#0369a1", process: "#0f766e", standard: "#7e22ce" } },
+  { name: "Lagoon", colors: { brand: "#0369a1", process: "#0f766e", standard: "#7e22ce" } },
   { name: "Evergreen", colors: { brand: "#0f766e", process: "#1d4ed8", standard: "#a21caf" } },
   { name: "Steel", colors: { brand: "#2b4c7e", process: "#0e7490", standard: "#6d28d9" } },
   { name: "Plum", colors: { brand: "#7e22ce", process: "#0f766e", standard: "#1d4ed8" } },

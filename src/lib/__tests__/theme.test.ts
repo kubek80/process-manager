@@ -54,19 +54,20 @@ describe("the readable variant of a colour", () => {
 
 describe("the derived tokens", () => {
   it("leave every part that was not chosen to the default look in CSS", () => {
-    expect(derive({})).toEqual({ tokens: { light: {}, dark: {} }, colors: [], kindsAlike: [] });
+    expect(derive({})).toEqual({ tokens: { light: {}, dark: {} }, colors: [], kindsAlike: [], kindsAlikeToColourBlind: [] });
     expect(derive({ name: "Acme", brand: "nope" }).colors).toEqual([]);
   });
   it("give the brand colour a readable accent, its ink and a soft tint in both themes", () => {
     const d = derive({ brand: "#facc15" });
     for (const mode of ["light", "dark"] as const) {
       const t = d.tokens[mode], s = SURFACES[mode];
-      expect(Object.keys(t).sort()).toEqual(["accent", "accent-fill", "accent-ink", "accent-soft"]);
+      expect(Object.keys(t).sort()).toEqual([...TOKENS.brand].sort());
       expect(min(t.accent, [s.bg, s.surface, s.surface2, t["accent-soft"]])).toBeGreaterThanOrEqual(4.5);
       expect(contrast(t["accent-ink"], t["accent-fill"])).toBeGreaterThanOrEqual(4.5);
     }
     const [c] = d.colors;
-    expect(c).toMatchObject({ part: "brand", chosen: "#facc15", adjusted: { light: true, dark: false }, like: ["warn"] });
+    // a yellow is far from Earth, the orange of warnings: nothing to be confused with
+    expect(c).toMatchObject({ part: "brand", chosen: "#facc15", adjusted: { light: true, dark: false }, like: [] });
     expect(c.used.dark).toBe("#facc15");
     // the light tint stays a pale yellow, not a pale brown
     expect(d.tokens.light["accent-soft"]).toBe(mix("#facc15", "#ffffff", 0.1));
@@ -99,9 +100,10 @@ describe("the derived tokens", () => {
     expect(p["--theme-light-accent"]).toBe("#0369a1");
     expect(p["--theme-dark-accent"]).toMatch(/^#[0-9a-f]{6}$/);
     expect(p["--theme-light-kind-process"]).toBe("initial");
-    expect(ALL_PROPERTIES).toHaveLength(71);
+    expect(ALL_PROPERTIES).toHaveLength(2 * Object.values(TOKENS).flat().length + 1);
+    for (const t of ["--theme-light-ocean-35", "--theme-dark-sky-10", "--theme-light-text", "--theme-dark-bar", "--theme-light-search-mark", "--theme-dark-quiet"]) expect(ALL_PROPERTIES).toContain(t);
     expect(p[FONT_PROPERTY]).toBe("initial");
-    expect(lookProperties({ font: "roboto" })[FONT_PROPERTY]).toBe(FONT_FAMILY.roboto);
+    expect(lookProperties({ font: "inter" })[FONT_PROPERTY]).toBe(FONT_FAMILY.inter);
   });
   it("the ready-made palettes start with the default look, and none of them looks like the red of problems", () => {
     expect(PALETTES[0].colors).toEqual({});
@@ -121,7 +123,9 @@ describe("fills, warnings and adjustments people can see", () => {
     expect(d.tokens.light.accent).not.toBe("#facc15"); // ...while yellow text would be unreadable
     const navy = derive({ brand: "#0b1f3a" });
     expect(navy.tokens.light["accent-fill"]).toBe("#0b1f3a");
-    expect(navy.tokens.dark["accent-fill"]).toBe(navy.tokens.dark.accent); // navy would vanish on the dark surface
+    // navy would vanish on the dark surface: the fill is its readable variant
+    expect(navy.tokens.dark["accent-fill"]).not.toBe("#0b1f3a");
+    expect(contrast(navy.tokens.dark["accent-fill"], SURFACES.dark.surface)).toBeGreaterThanOrEqual(4.5);
     for (const c of ["#facc15", "#0b1f3a", "#808080", "#ffffff", "#000000", "#0369a1", "#dc2626"]) {
       for (const mode of ["light", "dark"] as const) {
         const t = derive({ brand: c, process: c }).tokens[mode];
@@ -140,7 +144,7 @@ describe("fills, warnings and adjustments people can see", () => {
     expect(derive({ process: "#166534" }).colors[0].like).toEqual(["good"]);
     expect(confusion("brand", "bad")).toContain("Buttons that save or approve will look like buttons that delete");
     expect(confusion("standard", "warn")).toContain("Every standard will look as if its review were due.");
-    expect(derive({ process: "#6d28d9" }).kindsAlike).toContain("light");
+    expect(derive({ process: "#913199" }).kindsAlike).toContain("light");
     expect(derive({ process: "#0369a1", standard: "#0284c7" }).kindsAlike.length).toBeGreaterThan(0);
     expect(derive({}).kindsAlike).toEqual([]);
     expect(kindsAlikeText(["dark"])).toBe("Processes and standards will be hard to tell apart in the dark look: their marks and tags have nearly the same colour. Choose colours further apart.");
@@ -214,7 +218,7 @@ describe("buttons and states", () => {
   });
   it("work out every token of a button or a state, readable in both themes and on the dark editing bar", () => {
     for (const c of ["#facc15", "#0b1f3a", "#808080", "#ffffff", "#000000", "#0369a1", "#dc2626", "#16a34a"]) {
-      const look = Object.fromEntries(COLOR_PARTS.filter((p) => p !== "brand" && p !== "process" && p !== "standard").map((p) => [p, c]));
+      const look = Object.fromEntries(COLOR_PARTS.filter((p) => p === "mainButton" || p === "otherButtons" || (STATE_PARTS as string[]).includes(p)).map((p) => [p, c]));
       const d = derive(look);
       for (const mode of ["light", "dark"] as const) {
         const t = d.tokens[mode], s = SURFACES[mode];
@@ -242,7 +246,7 @@ describe("buttons and states", () => {
   it("say when main buttons look like buttons that delete", () => {
     expect(words({ mainButton: "#dc2626" }, "mainButton")).toContain("Main buttons will look like buttons that delete: “Publish” and “Delete” will have nearly the same colour.");
     // said once, with the later of the two parts
-    expect(words({ mainButton: "#dc2626", problem: "#e11d48" }, "mainButton")).toEqual([]);
+    expect(words({ mainButton: "#dc2626", problem: "#e11d48" }, "mainButton").filter((w) => w.includes("delete"))).toEqual([]);
     expect(words({ mainButton: "#dc2626", problem: "#e11d48" }, "problem")).toContain("Main buttons will look like buttons that delete: “Publish” and “Delete” will have nearly the same colour.");
     expect(words({ mainButton: "#15803d" }, "mainButton")).toContain("Main buttons will look like good news: “Publish…” and “Nothing to fix” will have nearly the same colour.");
     expect(words({ mainButton: "#0369a1" }, "mainButton")).toEqual([]);
@@ -265,15 +269,15 @@ describe("buttons and states", () => {
     expect(distance(seenWithout("#15803d", "deuteranopia"), seenWithout("#be123c", "deuteranopia"))).toBeLessThan(ALIKE);
     expect(words({ success: "#16a34a" }, "success").join(" ")).toContain("People who cannot tell red from green");
     // a clearly lighter or bluer success colour is seen as different
-    expect(words({ success: "#0369a1" }, "success")).toEqual([]);
+    expect(words({ success: "#0369a1" }, "success").filter((w) => w.includes("cannot tell red from green"))).toEqual([]);
   });
   it("say when a state looks like the brand or a kind left at its default, and when it is grey", () => {
-    expect(words({ success: "#4f46e5" }, "success")).toContain("This looks like the brand colour: confirmations will look like buttons and links, and will no longer stand out.");
+    expect(words({ success: "#1971ed" }, "success")).toContain("This looks like the brand colour: confirmations will look like buttons and links, and will no longer stand out.");
     expect(words({ warning: "#0f766e" }, "warning")).toContain("This looks like the colour of processes: every process will look as if its review were due.");
     expect(words({ problem: "#6b6b70" }, "problem")).toContain("This colour is nearly grey: problems hardly stand out from ordinary text.");
     // a brand colour is compared with the states as chosen: a blue brand next to a blue warning is said with the brand
     expect(derive({ brand: "#2563eb", warning: "#1d4ed8" }).colors[0].like).toEqual(["warn"]);
-    expect(derive({ brand: "#dc2626", problem: "#7c3aed" }).colors[0].like).toEqual([]);
+    expect(derive({ brand: "#dc2626", problem: "#7c3aed" }).colors[0].like).not.toContain("bad");
   });
 });
 
@@ -287,14 +291,16 @@ describe("reading and checking buttons, states and the font", () => {
       "The colour of main buttons must be written as # and six digits or letters a-f, e.g. #4f46e5.",
       "The colour of problems must be written as # and six digits or letters a-f, e.g. #4f46e5.",
     ]);
-    expect(lookProblems({ font: "comic" as never })).toEqual(["The font must be Roboto, or the default font."]);
+    expect(lookProblems({ font: "comic" as never })).toEqual(["The font must be Inter, or the default font (Roboto)."]);
+    expect(cleanLook({ font: "inter" })).toEqual({ font: "inter" });
   });
 });
 
 describe("how many warnings a look has", () => {
   it("counts every warning once, the two kinds alike included", () => {
     expect(warningCount(derive({}))).toBe(0);
-    expect(warningCount(derive({ brand: "#dc2626" }))).toBe(1);
+    // a red brand looks like problems, and like warnings in Earth, the orange of the default look
+    expect(warningCount(derive({ brand: "#dc2626" }))).toBe(2);
     expect(warningCount(derive({ process: "#0369a1", standard: "#0284c7" }))).toBe(1);
     const careless = derive({ mainButton: "#be123c", otherButtons: "#e11d48", success: "#ca8a04", warning: "#d97706", problem: "#dc2626", info: "#b45309" });
     expect(warningCount(careless)).toBe(careless.colors.reduce((n, c) => n + c.warnings.length, 0));

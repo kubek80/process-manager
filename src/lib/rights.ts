@@ -226,3 +226,31 @@ export function roleLabel(p: Perms): string {
   if ((p.owns ?? []).length) parts.push("Owner");
   return parts.join(" · ") || "Reader";
 }
+
+/**
+ * Viewing the portal as somebody else (an admin, from Admin › Access): the person signed in sees
+ * what `viewedAs` sees, and nothing can be changed. The server answers every change with
+ * {@link viewingRefusal}; the app says the same where a control would change something.
+ */
+export interface ViewingState { user?: { email: string; name: string }; perms?: Perms; viewedBy?: { email: string; name: string; until?: string } }
+
+/** Whether an admin is viewing the portal as somebody else (`viewedBy` from `GET /api/me`). */
+export const isViewingAs = (me: ViewingState) => !!me.viewedBy;
+
+/** The one sentence that says why nothing can be changed, the same as the server's: `label` names the person whose view it is (`personLabel`). */
+export const viewingRefusal = (label: string) => `You are viewing the portal as ${label}, so nothing can be changed. Stop viewing first.`;
+
+/** Why a change is not available right now, in that sentence; "" when it is. */
+export const changeBlocked = (me: ViewingState) =>
+  me.viewedBy && me.user ? viewingRefusal(me.user.name || me.user.email) : "";
+
+/** Whether a link opens a screen whose purpose is to change something (the editing screen): unavailable while viewing as somebody else. */
+export const opensChange = (hash: string) => /^#\/[ps]\/[^/]+\/edit(?:\/|$)/.test(hash);
+
+/**
+ * Whether the person signed in may start viewing the portal as `email`: an admin, by their own
+ * roles (not while viewing as somebody already: stop first), never as themselves. The server
+ * also requires that Admin › Access lists the person.
+ */
+export const mayViewAs = (me: ViewingState, email: string) =>
+  !!me.perms?.admin && !me.viewedBy && !!me.user && !!email && email.trim().toLowerCase() !== me.user.email.toLowerCase();

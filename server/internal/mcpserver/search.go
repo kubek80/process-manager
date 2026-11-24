@@ -27,6 +27,7 @@ type SearchInput struct {
 	Tier        string `json:"tier,omitempty" jsonschema:"id or name of the application tier the person's application has; only what applies to it is returned"`
 	Environment string `json:"environment,omitempty" jsonschema:"id or name of the environment, e.g. production; only what applies there is returned"`
 	Language    string `json:"language,omitempty" jsonschema:"id or name of the programming language; only what applies to it is returned"`
+	Path        string `json:"path,omitempty" jsonschema:"id or name of the path the work is on: greenfield (something new), brownfield (something that exists), paved path (also called golden path: the ready-made way), or another from get_catalog; only what is for that path or for any path is returned"`
 	Limit       int    `json:"limit,omitempty" jsonschema:"how many results at most, 1 to 50; default 10"`
 }
 
@@ -134,14 +135,35 @@ func resolveFilters(l docs.Lists, in SearchInput) (filters, error) {
 			return f, err
 		}
 	}
+	if f.profile.Path, err = resolvePath(l.Paths, in.Path); err != nil {
+		return f, err
+	}
 	f.rigour, err = rigourOf(in.Rigour)
 	return f, err
+}
+
+// resolvePath finds a path by id or name, or by what else it is called ("golden path" is the
+// paved path: docs.PathAlso), ignoring case and accents.
+func resolvePath(list []docs.Named, value string) (string, error) {
+	id, err := resolve(list, value, "path", "paths")
+	if err == nil {
+		return id, nil
+	}
+	want := fold(strings.TrimSpace(value))
+	for _, n := range list {
+		for _, also := range docs.PathAlso[n.Symbol] {
+			if fold(also) == want {
+				return n.ID, nil
+			}
+		}
+	}
+	return "", err
 }
 
 func (f filters) shown() map[string]string {
 	out := map[string]string{}
 	for k, v := range map[string]string{"category": f.category, "practice": f.practice, "platform": f.platform, "owner": f.owner, "rigour": f.rigour,
-		"tier": f.profile.Tier, "environment": f.profile.Environment, "language": f.profile.Language} {
+		"tier": f.profile.Tier, "environment": f.profile.Environment, "language": f.profile.Language, "path": f.profile.Path} {
 		if v != "" {
 			out[k] = v
 		}
@@ -160,7 +182,7 @@ func (f filters) passes(e *entry) (bool, []rawRequirement) {
 		(f.platform != "" && c.Platform != f.platform) || (f.owner != "" && c.Owner != f.owner) {
 		return false, nil
 	}
-	if !f.profile.applies(c.Tiers, c.Environments, c.Languages) {
+	if !f.profile.applies(c.Tiers, c.Environments, c.Languages) || !f.profile.onPath(c.Paths) {
 		return false, nil
 	}
 	if e.kind == docs.Process {
@@ -271,7 +293,8 @@ func partsOf(e *entry, l docs.Lists) []part {
 
 func fieldsOf(e *entry, l docs.Lists) []field {
 	c := e.c
-	names := strings.Join([]string{name(l.Categories, c.Category), name(l.Practices, c.Practice), name(l.Platforms, c.Platform), name(l.Teams, c.Owner)}, " ")
+	// the paths with what else they are called: "golden path" finds what is on the paved path
+	names := strings.Join([]string{name(l.Categories, c.Category), name(l.Practices, c.Practice), name(l.Platforms, c.Platform), name(l.Teams, c.Owner), docs.PathNames(l.Paths, c.Paths)}, " ")
 	return []field{
 		{fold(c.Title), weightTitle},
 		{fold(e.doc.ID), weightID},

@@ -76,6 +76,16 @@ function checkBelongs(doc: { category?: string; practice?: string; platform?: st
 }
 
 /**
+ * The paths a process or standard is for must be in the list of paths, like a tier. The server
+ * refuses a save that names one that is not.
+ */
+function checkPaths(doc: { paths?: string[] }, cat: Catalog, err: (path: string, message: string) => void) {
+  (doc.paths ?? []).forEach((id, i) => {
+    if (!(cat.paths ?? []).some((x) => x.id === id)) err(`paths[${i}]`, `“${id}” is not one of the paths. Remove it under “Which path it is for”.`);
+  });
+}
+
+/**
  * Full check of a process: JSON schema first, then the rules a schema cannot express
  * (references, uniqueness, reachability). The context enables checks against other processes
  * and against the catalog (tiers, teams, tools).
@@ -102,6 +112,7 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
     if (p.owner && !cat.teams.some((t) => t.id === p.owner))
       warn("owner", `The owning team “${p.owner}” is not in the list of teams. Choose one of the list.`);
     checkBelongs(p, cat, err);
+    checkPaths(p, cat, err);
     (p.tiers ?? []).forEach((tier, i) => {
       if (!cat.tiers.some((t) => t.id === tier)) err(`tiers[${i}]`, `“${tier}” is not one of the application tiers. Remove it under “Where it applies”.`);
     });
@@ -201,7 +212,7 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
 
 /** The lists in the order the lists document has them, each with what one entry and several are called. */
 export const LIST_WORDS = {
-  tiers: { one: "tier", many: "tiers" }, environments: { one: "environment", many: "environments" }, languages: { one: "language", many: "languages" },
+  tiers: { one: "tier", many: "tiers" }, paths: { one: "path", many: "paths" }, environments: { one: "environment", many: "environments" }, languages: { one: "language", many: "languages" },
   teams: { one: "team", many: "teams" }, practices: { one: "practice", many: "practices" }, platforms: { one: "platform", many: "platforms" },
   categories: { one: "category", many: "categories" }, tools: { one: "tool", many: "tools" },
 } as const;
@@ -319,6 +330,7 @@ export function validateStandard(data: unknown, ctx: CheckContext = {}): Issue[]
   if (cat) {
     if (!cat.teams.some((t) => t.id === s.owner)) warn("owner", `The team that issues it (“${s.owner}”) is not in the list of teams. Choose one of the list.`);
     checkBelongs(s, cat, err);
+    checkPaths(s, cat, err);
   }
   if (s.replacedBy) {
     if (s.replacedBy === s.id) err("replacedBy", "A standard cannot replace itself: choose another one under “Use instead”.");
@@ -361,7 +373,7 @@ export function isDrawableProcess(data: unknown): boolean {
   const { actors, steps, prerequisites } = data;
   if (!Array.isArray(actors) || !actors.length || !actors.every((a) => isObj(a) && isStr(a.id) && isStr(a.name))) return false;
   if (!Array.isArray(prerequisites) || !prerequisites.every((q) => isObj(q) && isStr(q.title))) return false;
-  if (!strings(data.tiers) || !strings(data.languages) || !strings(data.environments) || !strings(data.standards) || !strings(data.tags)) return false;
+  if (!strings(data.paths) || !strings(data.tiers) || !strings(data.languages) || !strings(data.environments) || !strings(data.standards) || !strings(data.tags)) return false;
   return Array.isArray(steps) && steps.length > 0 && steps.every((s) =>
     isObj(s) && isStr(s.id) && isStr(s.title) && isStr(s.actor) && isStr(s.type) && STEP_KINDS.has(s.type) && strings(s.instructions) &&
     Array.isArray(s.next) && s.next.every((n) => isObj(n) && isStr(n.to)) &&
@@ -371,7 +383,7 @@ export function isDrawableProcess(data: unknown): boolean {
 /** The same for a standard and its requirements. */
 export function isDrawableStandard(data: unknown): boolean {
   if (!isObj(data) || !isStr(data.id) || !isStr(data.title) || !isStr(data.summary) || !isStr(data.owner)) return false;
-  if (!strings(data.tiers) || !strings(data.languages) || !strings(data.environments) || !strings(data.tags)) return false;
+  if (!strings(data.paths) || !strings(data.tiers) || !strings(data.languages) || !strings(data.environments) || !strings(data.tags)) return false;
   const reqs = data.requirements;
   return Array.isArray(reqs) && reqs.length > 0 && reqs.every((r) =>
     isObj(r) && isStr(r.id) && isStr(r.title) && isStr(r.statement) && ["must", "should", "may"].includes(r.level as string) &&

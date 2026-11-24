@@ -349,7 +349,7 @@ const LIST_NOUN: Record<string, { one: string; many: string }> = LIST_WORDS;
 const LIST_FIELD: Record<string, string> = {
   name: "name", id: "id", description: "description", url: "link", icon: "icon", contact: "other ways to reach them", contacts: "contact details",
   email: "group email", slack: "Slack channel", slackUrl: "link to the Slack channel", chat: "Google Chat space", chatUrl: "link to the Chat space",
-  confluence: "Confluence page", page: "page link", form: "request form",
+  confluence: "Confluence page", page: "page link", form: "request form", symbol: "picture",
 };
 
 /** Which list, entry and field a problem of the lists is about: "teams[3].contacts.slackUrl". */
@@ -407,6 +407,7 @@ function listIssueText(path: string, message: string, doc: unknown): string {
   if (key === "id" && (missing || /kebab-case|^is empty$|^is too long/.test(message)))
     return `${Entry} has ${missing || !value.trim() ? "no id" : `an id the portal cannot use (“${value}”)`}: remove it and add it again under the same name.`;
   if (key === "icon") return `The icon of ${entry} is not an image the portal knows: choose the image again, or remove the icon.`;
+  if (key === "symbol") return `The picture of ${entry} is not one the portal knows: choose one of the pictures, or none.`;
   if (missing) return `Fill in the ${words} of ${entry}.`;
   if (/^is empty$|^is too short/.test(message)) return `Fill in the ${words} of ${entry}, or leave it out.`;
   const long = message.match(/^is too long \(maximum (\d+)/);
@@ -552,7 +553,7 @@ const keyFor = (label: string, context: FieldContext | undefined, ...objects: un
 export function valueByName(key: string, v: unknown, catalog?: Catalog, actors: { id: string; name: string }[] = []): unknown {
   const LISTS: Record<string, keyof Catalog> = {
     owner: "teams", teamId: "teams", tool: "tools", category: "categories", practice: "practices", platform: "platforms",
-    tiers: "tiers", environments: "environments", languages: "languages",
+    tiers: "tiers", environments: "environments", languages: "languages", paths: "paths",
   };
   const name = (id: unknown): unknown => {
     if (typeof id !== "string" || !id) return id;

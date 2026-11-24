@@ -3,10 +3,12 @@ package auth
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -33,8 +35,24 @@ func NewSessions(secret []byte, secure bool) *Sessions {
 
 type sessionPayload struct {
 	User
-	Exp int64 `json:"exp"`
-	Iat int64 `json:"iat"` // issued at, in milliseconds
+	Exp int64  `json:"exp"`
+	Iat int64  `json:"iat"`           // issued at, in milliseconds
+	Sid string `json:"sid,omitempty"` // a random name for this one session (absent from older cookies)
+}
+
+// Session is one sign-in as the cookie carries it.
+type Session struct {
+	User
+	Issued time.Time
+	// ID names this one session, also among several sessions of the same person: what the
+	// server keeps for a session (viewing the portal as somebody else) is kept under it.
+	ID string
+}
+
+func newSessionID() string {
+	b := make([]byte, 18)
+	_, _ = rand.Read(b) // never fails (crypto/rand panics rather than return an error)
+	return base64.RawURLEncoding.EncodeToString(b)
 }
 
 // Sign returns payload plus an HMAC, safe to put in a cookie.
@@ -81,7 +99,7 @@ func (s *Sessions) IssueNotBefore(w http.ResponseWriter, u User, earliest time.T
 	if earliest.After(issued) {
 		issued = earliest
 	}
-	payload, _ := json.Marshal(sessionPayload{User: u, Exp: now.Add(s.TTL).Unix(), Iat: issued.UnixMilli()})
+	payload, _ := json.Marshal(sessionPayload{User: u, Exp: now.Add(s.TTL).Unix(), Iat: issued.UnixMilli(), Sid: newSessionID()})
 	http.SetCookie(w, s.cookie(sessionCookie, s.Sign(payload), int(s.TTL.Seconds())))
 }
 
@@ -98,17 +116,28 @@ func (s *Sessions) Read(r *http.Request) (User, bool) {
 
 // ReadIssued is Read plus the moment the session was issued, which is what SignOuts compares.
 func (s *Sessions) ReadIssued(r *http.Request) (User, time.Time, bool) {
+	ses, ok := s.ReadSession(r)
+	return ses.User, ses.Issued, ok
+}
+
+// ReadSession returns the session of the request: who, since when, and its ID. A cookie from
+// before sessions had an ID is named by the moment it was issued.
+func (s *Sessions) ReadSession(r *http.Request) (Session, bool) {
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
-		return User{}, time.Time{}, false
+		return Session{}, false
 	}
 	payload, ok := s.Verify(c.Value)
 	if !ok {
-		return User{}, time.Time{}, false
+		return Session{}, false
 	}
 	var p sessionPayload
 	if json.Unmarshal(payload, &p) != nil || p.Email == "" || s.Now().Unix() >= p.Exp {
-		return User{}, time.Time{}, false
+		return Session{}, false
 	}
-	return p.User, time.UnixMilli(p.Iat), true
+	id := p.Sid
+	if id == "" {
+		id = "issued:" + strconv.FormatInt(p.Iat, 10)
+	}
+	return Session{User: p.User, Issued: time.UnixMilli(p.Iat), ID: id}, true
 }

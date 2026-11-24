@@ -47,7 +47,11 @@ const (
 //     one can be put back;
 //   - a standards editor limited to a unit becomes the owner of the platform or practice made
 //     from that unit; one limited to anything else loses the role, and the log says so;
-//   - the lists always have the three new lists, empty if need be.
+//   - the lists always have the three new lists, empty if need be;
+//   - lists stored before there were paths get the list of paths with its three entries
+//     (Greenfield, Brownfield, Paved path), once: lists that have the key "paths" are never
+//     given them again, also when an admin removed every entry (the app always saves the key).
+//     Documents without paths are valid as they are and are not rewritten.
 //
 // Everything is one transaction, saved as new versions by By with Note, and recorded in the
 // activity log. A document the save refuses is skipped with a warning; one that names a
@@ -82,6 +86,7 @@ type Report struct {
 	Practices      int  // entries added to the lists
 	Platforms      int
 	Categories     int
+	Paths          int // entries of the list of paths, added because the lists had none
 	RolesConverted int
 	RolesRemoved   int
 }
@@ -95,8 +100,12 @@ func (r Report) String() string {
 	if r.Lists {
 		lists = "the lists were updated"
 	}
-	return fmt.Sprintf("%d documents moved to the new lists (%d older versions adjusted); added %d practices, %d platforms, %d categories; %d roles converted, %d removed; %s",
-		r.Documents, r.Versions, r.Practices, r.Platforms, r.Categories, r.RolesConverted, r.RolesRemoved, lists)
+	paths := ""
+	if r.Paths > 0 {
+		paths = fmt.Sprintf("; added the list of paths with %d entries", r.Paths)
+	}
+	return fmt.Sprintf("%d documents moved to the new lists (%d older versions adjusted); added %d practices, %d platforms, %d categories; %d roles converted, %d removed%s; %s",
+		r.Documents, r.Versions, r.Practices, r.Platforms, r.Categories, r.RolesConverted, r.RolesRemoved, paths, lists)
 }
 
 // a team as the earlier version knew it
@@ -206,6 +215,9 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) (Report, error) {
 	cat, err := parse(catBody)
 	if err != nil {
 		return Report{}, fmt.Errorf("the lists: %w", err)
+	}
+	if noCatalog {
+		cat = cat.without("paths") // lists made here for older content get the paths below
 	}
 	// Before this version the lists had no categories: the categories of processes were free
 	// text. Only then are they turned into entries; later, an unknown one is only reported.
@@ -406,6 +418,15 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) (Report, error) {
 		}
 	}
 
+	// ----- the paths: lists from before there were paths get the list with its three entries
+	movedLists := catChanged
+	pathsAdded := 0
+	if _, had := cat.get("paths"); !had {
+		cat = cat.after("paths", DefaultPaths, "tiers")
+		catChanged = true
+		pathsAdded = defaultPathCount
+	}
+
 	// ----- roles: a standards editor of one unit becomes the owner of its platform or practice
 	type role struct{ email, scope, by string }
 	var scoped []role
@@ -519,8 +540,14 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) (Report, error) {
 		}
 	}
 
+	// adding the paths alone is said as such in the history of the lists and in the activity log
+	onlyPaths := pathsAdded > 0 && !movedLists && len(changes) == 0 && len(scoped) == 0
 	if catChanged {
-		if _, _, err := docs.SaveIn(ctx, tx, docs.Change{Kind: docs.Catalog, ID: docs.CatalogID, Body: cat.bytes(), By: By, Note: Note}); err != nil {
+		note := Note
+		if onlyPaths {
+			note = PathsNote
+		}
+		if _, _, err := docs.SaveIn(ctx, tx, docs.Change{Kind: docs.Catalog, ID: docs.CatalogID, Body: cat.bytes(), By: By, Note: note}); err != nil {
 			return Report{}, fmt.Errorf("the lists: %w", err)
 		}
 	}
@@ -583,10 +610,18 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) (Report, error) {
 	}
 	summary := fmt.Sprintf("%d documents moved to the new lists (%d older versions and %d working drafts adjusted); added %d practices, %d platforms, %d categories; %d roles converted, %d removed",
 		saved, versions, workingDrafts, len(practices.added), len(platforms.added), len(categories.added), converted, dropped)
+	if pathsAdded > 0 {
+		log.Info("the list of paths added", "entries", pathsAdded)
+		if onlyPaths {
+			summary = PathsSummary
+		} else {
+			summary += "; " + PathsSummary
+		}
+	}
 	log.Info("database converted to practices, platforms and categories", "documents", saved, "versions", versions, "workingDrafts", workingDrafts, "practices", len(practices.added),
 		"platforms", len(platforms.added), "categories", len(categories.added), "rolesConverted", converted, "rolesRemoved", dropped)
 	report := Report{Converted: true, Lists: catChanged, Documents: saved, Versions: versions, Practices: len(practices.added),
-		Platforms: len(platforms.added), Categories: len(categories.added), RolesConverted: converted, RolesRemoved: dropped}
+		Platforms: len(platforms.added), Categories: len(categories.added), Paths: pathsAdded, RolesConverted: converted, RolesRemoved: dropped}
 	return report, audit.AddIn(ctx, tx, By, Name, "content.convert", "lists", summary)
 }
 

@@ -327,7 +327,7 @@ func (a *api) sourceShown(ctx context.Context) bool {
 
 // source answers GET /api/admin/source?path=… (admins only; reading is not written to Activity).
 func (a *api) source(w http.ResponseWriter, r *http.Request) {
-	email := who(r).Email
+	email := who(r).countsFor() // the admin who reads, also while viewing as somebody else
 	if !a.sourceReads.allow(email, time.Now()) {
 		secs := int(math.Ceil(a.sourceReads.wait(email, time.Now()).Seconds()))
 		w.Header().Set("Retry-After", strconv.Itoa(max(secs, 1)))

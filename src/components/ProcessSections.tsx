@@ -6,7 +6,8 @@ import { RIGOUR_LABEL } from "../lib/search";
 import { useCatalog } from "../lib/catalog";
 import { Field } from "./ui";
 import { ResourceEditor } from "./Resources";
-import { BelongsEditor, DimsEditor, DimTags, ReviewEditor } from "./Governance";
+import { BelongsEditor, DimsEditor, DimTags, PathsEditor, ReviewEditor } from "./Governance";
+import { PathMarks } from "./marks";
 import { EditSection } from "./EditFrame";
 
 /**
@@ -40,6 +41,10 @@ export function GovernedSections<T extends Process | Standard>({ kind, doc, save
       <EditSection title="What it belongs to" hint="How readers find it, and who besides the editors may change it." folded={!has("category", "platform", "practice", "rigour")}
         summary={belongs.length ? belongs.join(" · ") : none("Nothing chosen yet")}>
         <BelongsEditor kind={kind} doc={doc} saved={saved} onChange={set as (p: Partial<Process | Standard>) => void} />
+      </EditSection>
+      <EditSection title="Which path it is for" hint="Greenfield, brownfield, the paved path… Nothing selected means it applies whatever the path." folded={!has("paths")}
+        summary={doc.paths?.length ? <PathMarks ids={doc.paths} catalog={catalog} named /> : none("Any path")}>
+        <PathsEditor value={doc.paths} onChange={(paths) => set({ paths } as Partial<T>)} />
       </EditSection>
       {kind === "process" && <WhereSection kind={kind} doc={doc} set={set} issues={issues} />}
       <EditSection title="Review" folded={!has("review", "replacedBy")}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Profile } from "./edit";
 
 /**
- * "My application": the tier, environment and language somebody chose to see only what applies
+ * "My application": the tier, path, environment and language somebody chose to see only what applies
  * to them. Chosen once, it stays - on every list and every standard, and the next time the
  * portal is opened in this browser.
  */
@@ -12,7 +12,7 @@ const CHANGED = "pm:profile-changed";
 function read(): Profile {
   try {
     const p = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Profile;
-    return { ...(p.tier ? { tier: String(p.tier) } : {}), ...(p.language ? { language: String(p.language) } : {}), ...(p.environment ? { environment: String(p.environment) } : {}) };
+    return { ...(p.tier ? { tier: String(p.tier) } : {}), ...(p.path ? { path: String(p.path) } : {}), ...(p.language ? { language: String(p.language) } : {}), ...(p.environment ? { environment: String(p.environment) } : {}) };
   } catch { return {}; }
 }
 
