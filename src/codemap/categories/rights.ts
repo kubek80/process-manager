@@ -13,7 +13,8 @@ export const rights: CodeCategory = {
     "There are nine roles; five of them are limited to one team, platform or practice. The app's `src/lib/rights.ts` follows the same rules only to hide controls.",
   requirements: [
     "Every right is checked in the server (`server/internal/httpapi`, with `server/internal/rbac`); the app only hides controls and is never trusted.",
-    "Every `/api/admin/…` route is wrapped in `admin(…)`: a signed-in person who is not an admin gets 403 \"Only admins can do that.\"",
+    "Every `/api/admin/…` route is wrapped in `admin(…)`: a signed-in person who is not an admin gets 403 \"Only admins can do that.\" The two exceptions are starting and stopping viewing as somebody else (`POST` / `DELETE /api/admin/view-as`, `user(…)`): starting checks the admin's own roles itself, because while viewing `who(r)` is the viewed person.",
+    "While an admin views the portal as somebody else, every route sees that person's rights and nothing more (`signedIn` → `viewedAs`, see Signing in); no rule here needs to know about it.",
     "When the roles cannot be read from the database, the person is treated as a reader (`rbac.PermsFrom(nil, false)`), never given more.",
     "An admin has every right: `PermsFrom` sets the lists, every process and every standard for an admin; an admin named in `PM_ADMINS` is an admin without any stored role and cannot be removed in the portal.",
     "A save that stays a never-published draft needs `CanDraft` (editors of the kind, owners and members of its platform or practice); anything readers would see - a save of a published document, publishing, retiring, unpublishing, bringing back, deleting - needs `CanEdit`; a member gets 403 naming who can.",

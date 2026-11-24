@@ -183,15 +183,24 @@ export const saving: CodeCategory = {
       tests: ["server/internal/httpapi/review_test.go"],
     },
     {
+      path: "server/internal/upgrade/paths.go",
+      role: "The three paths that lists stored before there were paths are given, and the words the history and Activity say about it.",
+      requirements: [
+        { text: "The same entries as the sample lists (`catalog/catalog.json`): an upgraded installation and a new one start alike. Test: `DefaultPaths` compared with the sample.", at: "var DefaultPaths = json.RawMessage(" },
+      ],
+      tests: ["server/internal/upgrade/paths_test.go"],
+    },
+    {
       path: "server/internal/upgrade/lists.go",
-      role: "Converts a database of an earlier version to the lists of practices, platforms and categories, once, at start and by `-migrate`.",
+      role: "Converts a database of an earlier version to the lists of practices, platforms and categories, and gives lists without paths the three paths, once, at start and by `-migrate`.",
       requirements: [
         { text: "The transaction first locks `documents` against saves of a server that is still running the old version: nothing can be saved between reading the documents and writing them back.", at: "lock table documents in share row exclusive mode" },
         { text: "An empty database is left alone: it is filled with content of this version.", at: "return Report{}, nil // an empty database is filled with content of this version" },
         { text: "Free-text categories are turned into entries only on a database without categories in its lists: a second run, or a newer database, finds nothing to convert.", at: "old := noCatalog || !hasCategories" },
         { text: "Older versions are adjusted in place, without new versions, so that putting one back neither fails on its category nor takes it off its platform.", at: "update document_versions set body = $4 where kind = $1 and id = $2 and version = $3" },
         { text: "Working drafts get the same changes in place; their revision stays, so an editor's open tab can still save.", at: "update working_drafts set body = $3 where kind = $1 and id = $2" },
-        { text: "The account `-migrate` prints (`Report.String`) counts documents and older versions; the working drafts adjusted are counted only in the activity entry `content.convert` and in the log.", at: "func (r Report) String() string {" },
+        { text: "The account `-migrate` prints (`Report.String`) says only what happened (documents and older versions, entries added, roles, the paths); the working drafts adjusted are counted only in the activity entry `content.convert` and in the log.", at: "func (r Report) String() string {" },
+        { text: "Lists stored before there were paths get the three entries once. \"Never again\" rests on the key `paths` being present: lists that have it, also empty after an admin removed every path, are never touched. Two ways round it: lists saved without the key (a client that leaves it out, `PUT /api/catalog`, while no document names a path) and `db:import` of files made before paths. Tests: `TestRemovedPathsDoNotComeBack`, a second run that changes nothing.", at: "if _, had := cat.get(\"paths\"); !had {" },
       ],
       tests: ["server/internal/upgrade/lists_test.go"],
     },

@@ -297,12 +297,13 @@ export async function openApplication(page: Page) {
 
 /**
  * Choose (or un-choose) a value in a dropdown of the filter panel on the left of a list
- * ("Category", "Platform", "Owner", and the single-choice "Tier", "Environment", "Language")
- * and close the dropdown again.
+ * ("Category", "Platform", "Path", "Owner", and the single-choice "Tier", "Path", "Environment",
+ * "Language" of My application) and close the dropdown again. "Path" is both: a filter, and a
+ * choice of My application (`where: "application"`).
  */
-export async function pickFilter(page: Page, filter: string, option: string | RegExp) {
+export async function pickFilter(page: Page, filter: string, option: string | RegExp, where: "filters" | "application" = ["Tier", "Environment", "Language"].includes(filter) ? "application" : "filters") {
   const panel = page.getByRole("complementary", { name: "Filters" });
-  const button = panel.getByRole("button", { name: new RegExp(`^${filter}:`) });
+  const button = panel.locator(where === "application" ? ".filter-app" : ".filter-dds").getByRole("button", { name: new RegExp(`^${filter}:`) });
   await openApplication(page);
   if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
   const name = typeof option === "string" ? new RegExp(`^${esc(option)}, \\d+ results?$`) : option;

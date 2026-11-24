@@ -229,8 +229,9 @@ export const reading: CodeCategory = {
       role: "Lays a process out as swim lanes: one row per participant, time from left to right, loops found and drawn back.",
       requirements: [
         { text: "Loops are found first (a depth-first search marks back edges), so a step that leads back does not push the columns to the right forever.", at: "if (state[j] === 1) back.add(`${i}>${j}`);" },
+        { text: "A block's height is added up from what it holds at the type scale (kicker, two title lines of 20 px, the meta line, padding and border): change the type in `styles.css` and this together, or titles run into the line under them. Test: `blockFit.test.ts`, which also compares these measures with the CSS.", at: "export const BLOCK_MIN_H =" },
       ],
-      tests: ["src/lib/__tests__/layout.test.ts"],
+      tests: ["src/lib/__tests__/layout.test.ts", "src/lib/__tests__/blockFit.test.ts"],
     },
     {
       path: "src/components/ListView.tsx",
@@ -307,7 +308,7 @@ export const reading: CodeCategory = {
       role: "Views, bookmarks and upvotes in the app: loaded once, changed optimistically, the only way pages read them.",
       requirements: [
         { text: "A change made here is laid over every load until a load that started after the server confirmed it comes back; without it, an answer that set off before a click would undo the click.", at: "const keep = changes.filter((c) => c.settled === null || load <= c.settled);" },
-        { text: "A view is sent once per page load and document; tabs, re-renders and coming back do not send it again.", at: "if (seen.current.has(k)) return;" },
+        { text: "A view is sent once per page load and document; tabs, re-renders and coming back do not send it again. None is sent while an admin views the portal as somebody else: a view would be written in that person's name (the server refuses it anyway, as a `POST`).", at: "if (viewing.current || seen.current.has(k)) return;" },
         { text: "A refused bookmark is taken back on screen and the person is told; the screen never shows a bookmark the server does not have.", at: "undo(key, (d) => withBookmark(d, kind, id, !on));" },
       ],
       tests: ["src/lib/__tests__/engagement.test.ts", "e2e/engage.spec.ts"],

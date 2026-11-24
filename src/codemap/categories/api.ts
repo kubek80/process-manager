@@ -125,7 +125,7 @@ export const api: CodeCategory = {
       role: "Route: `GET /api/search` (search by meaning), and the per-person brake shared with icon uploads and source reads.",
       requirements: [
         { text: "404 while search by meaning is off; whether it is on is also in `/api/me` (`search.meaning`), so the app knows before it asks. Test: `TestSearchByMeaningIsOffByDefault`.", at: "if !a.Index.Enabled() {" },
-        { text: "60 searches a person a minute (429 with `Retry-After`): each may call an outside provider. Test: `TestOnePersonCannotSearchWithoutEnd`.", at: "if !a.searches.allow(who(r).Email, time.Now()) {" },
+        { text: "60 searches a person a minute (429 with `Retry-After`): each may call an outside provider. Charged to who signed in (`countsFor`): an admin viewing the portal as somebody else spends their own allowance, never the viewed person's. Tests: `TestOnePersonCannotSearchWithoutEnd`, `TestTheBrakesChargeTheAdminWhileViewing`.", at: "if !a.searches.allow(who(r).countsFor(), time.Now()) {" },
         { text: "The brake is in memory, per instance; finished windows are forgotten once it holds more than 10000 people, so it cannot grow without end.", at: "if len(b.counts) > 10000 {" },
       ],
       tests: ["server/internal/httpapi/search_test.go"],

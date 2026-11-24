@@ -60,7 +60,7 @@ export const admin: CodeCategory = {
     },
     {
       path: "src/components/CatalogPage.tsx",
-      role: "The lists (teams, practices, platforms, categories, tools, tiers, environments, languages): a directory for everyone under Teams & tools, and their editor in Admin › Lists.",
+      role: "The nine lists (teams, practices, platforms, categories, tools, tiers, paths, environments, languages): a directory for everyone under Teams & tools, and their editor in Admin › Lists (a path with its picture and other names).",
       requirements: [
         { text: "The lists are edited as one document through `useDraft`, as a process is: Undo, Redo, a conflict when somebody else saved first, a question before leaving with unsaved changes.", at: "const d = useDraft<Catalog>(" },
         { text: "`usesOf` sees only the processes and standards the person sees, so it can miss a draft; the server's `stillUsed` counts those too and refuses the save.", at: "function usesOf(key: Key, id: string" },

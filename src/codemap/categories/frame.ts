@@ -97,7 +97,7 @@ export const frame: CodeCategory = {
       path: "src/lib/store.ts",
       role: "Every call to the server, the routes with their parsing and writing, the guard for unsaved changes, and small browser helpers (copy, download, the checklist ticks).",
       requirements: [
-        { text: "Every change carries `X-Requested-With`; a call made around `request()` (a plain `fetch`) would be refused by the server's CSRF guard. `uploadIcon`, the one other `fetch` that changes something, sets it too.", at: "headers: method === \"GET\" ? undefined : { \"Content-Type\": \"application/json\", \"X-Requested-With\": \"process-manager\" }," },
+        { text: "Every change carries the headers of `changeHeaders`: `X-Requested-With`, without which the server's CSRF guard refuses it, and `X-Acting-As`, the address `/api/me` gave this page, so that a page left open while viewing as somebody else started or stopped in another tab is refused (409) instead of acting as the other person. A call made around `request()` (a plain `fetch`) would lack both; `uploadIcon`, the one other `fetch` that changes something, uses `changeHeaders` too.", at: "headers: method === \"GET\" ? undefined : changeHeaders()," },
         { text: "`/api/me` is excluded so that the sign-in page can ask who is signed in without opening the \"You are signed out\" dialog.", at: "if (res.status === 401 && path !== \"/api/me\") {" },
         { text: "Only a 409 that carries `conflict` becomes a conflict; the editing screen and Theming read `conflict.updatedBy` to say who saved first.", at: "if (res.status === 409 && data?.conflict) err.conflict = data.conflict as Conflict;" },
         { text: "Every save names `base` (the version the changes were made from), which is how the server refuses a save from an outdated version; `draft` is added only when replacing a never-published document's working draft.", at: "const saveQuery = (base: number, note = \"\", draft?: number) =>" },
@@ -113,7 +113,7 @@ export const frame: CodeCategory = {
       path: "src/main.tsx",
       role: "The entry point: imports the fonts and the two global stylesheets and mounts `App`.",
       requirements: [
-        { text: "Both fonts come from the app's own bundle (`@fontsource-variable/*`); importing Roboto only declares it, its files are fetched when a look chooses it. Nothing is loaded from another host.", at: "import \"@fontsource-variable/roboto\";" },
+        { text: "Both fonts come from the app's own bundle (`@fontsource-variable/*`); Roboto is the default; importing Inter only declares it, its files are fetched when a look chooses it. Nothing is loaded from another host.", at: "import \"@fontsource-variable/roboto\";" },
       ],
     },
     {

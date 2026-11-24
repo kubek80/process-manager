@@ -8,7 +8,8 @@ export const signin: CodeCategory = {
   summary:
     "Signs people in with Entra ID or Google (or a local picker of built-in users) and guards every request the server answers. " +
     "The server keeps no session table: it sets a signed, HTTP-only cookie for 12 hours and remembers only when each person last signed out (`signed_out`), which ends every copy of their cookie. " +
-    "One guard (`guard` in `api.go`) wraps every request: the security headers, the content security policy, a time limit, the request log, the body limit and the `X-Requested-With` header on every change.",
+    "One guard (`guard` in `api.go`) wraps every request: the security headers, the content security policy, a time limit, the request log, the body limit, the `X-Requested-With` header on every change, and the refusal of every change while an admin views the portal as somebody else. " +
+    "Viewing as somebody else (`viewas.go`): an admin chooses a person, and that one session of the admin is answered as that person on every route, with nothing that can be changed; the state is a row of `viewing_as` under the session's id, never anything the browser holds.",
   requirements: [
     "Every request that is not `GET`, `HEAD` or `OPTIONS` needs `X-Requested-With: process-manager`, or it is refused with 403 before any handler runs: a form on another site cannot set that header, so it cannot change anything for a signed-in person.",
     "Every answer carries the content security policy (`script-src 'self'`, no `eval`, `frame-ancestors 'none'`; an icon a stricter one of its own), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: same-origin`; `Strict-Transport-Security` when `PM_BASE_URL` is https.",
@@ -20,6 +21,13 @@ export const signin: CodeCategory = {
     "A failed sign-in puts only a plain sentence in the address bar (`?signin_error=`); the provider's answer goes to the log.",
     "`PM_AUTH=dev` lets anybody be any built-in user, so the server refuses to start with it on an address reachable from the network, unless `PM_DEV_AUTH_ON_NETWORK=i-understand`.",
     "With Entra ID or Google the server does not start without `PM_ADMINS`, a random `PM_SESSION_SECRET` of at least 32 characters and an https `PM_BASE_URL` (http only for localhost).",
+    "The person of a request is decided in one place, `signedIn` → `viewedAs`: while an admin views the portal as P, every route gets P's identity and P's rights (an admin route answers 403, a draft P may not see 404, exactly as for P), and the admin is kept only in `session.viewer`. A route never works out the person itself; a change reuses the person `guard` resolved (`requireUser`), so it cannot be judged as one person and done as another.",
+    "While viewing, every request but `GET` and `HEAD` is refused in `guard` with 403 \"You are viewing the portal as {name or address}, so nothing can be changed. Stop viewing first.\", on every route, including routes added later; the only exceptions, by exact path and method, are `DELETE /api/admin/view-as` (stop) and `POST /auth/logout`. Starting again while viewing is 409.",
+    "Nothing is ever written in the viewed person's name: a view is not sent and would be refused, a skill download is not counted (`mayCount`), the brakes on searching and on reading the code count the admin (`countsFor`), and Activity records only the admin's `viewas.start`, `viewas.stop` and `viewas.end`. The viewed person is not told.",
+    "Only an admin starts viewing, judged by their own roles at that moment (not wrapped in `admin()`), never as themselves, never nested or switched without stopping; any valid address may be viewed (one with no roles is exactly a reader; `reader@no-roles.invalid` is the built-in reader with no rights whatever is stored, and no role can be given to that address).",
+    "Viewing ends when the admin stops or signs out (all their sessions), when the session ends, after one hour (`auth.ViewAsFor`), and on the first request after the admin stopped being an admin. A change that finds its viewing ended in that very request is refused with 409, never done as the admin.",
+    "Every change from the app carries `X-Acting-As` (the address `/api/me` gave the page); a change whose header names somebody else than the request resolves to is refused with 409 \"This page is out of date: …\", so a tab left open while viewing started or stopped in another tab never acts as the other person. Without the header (other clients) nothing is compared.",
+    "The MCP server never reads sessions or `viewing_as`: nothing can be reached there \"as\" somebody else.",
   ],
   charts: [
     {
@@ -39,7 +47,7 @@ export const signin: CodeCategory = {
     },
     {
       caption: "What happens to every request before a route sees it (`guard` in `api.go`). Only `/api/` and `/auth/` get the 30-second limit and the request log.",
-      process: flow("code-signin-guard", "The guard of every request", "Headers, the header against forged requests, and the body limit.",
+      process: flow("code-signin-guard", "The guard of every request", "Headers, the header against forged requests, the body limit, and no change while viewing as somebody else.",
         [["browser", "Browser"], ["server", "Server"]],
         [
           s("send", "Send a request", "browser", "task", ["headers"]),
@@ -47,7 +55,8 @@ export const signin: CodeCategory = {
           s("change", "Does it change something?", "server", "decision", [["csrf", "POST, PUT, …"], ["route", "GET, HEAD, OPTIONS"]]),
           s("csrf", "X-Requested-With present?", "server", "verify", [["limit", "Yes"], ["r403", "No"]]),
           s("r403", "Answer 403", "server", "communication", []),
-          s("limit", "Limit the body to 1 MB", "server", "automation", ["route"]),
+          s("limit", "Limit the body to 1 MB", "server", "automation", ["viewing"]),
+          s("viewing", "Viewing as somebody else?", "server", "decision", [["route", "No"], ["r403", "Yes"]], "refuseWhileViewing"),
           s("route", "Hand it to its route", "server", "automation", []),
         ]),
     },
@@ -60,7 +69,9 @@ export const signin: CodeCategory = {
           s("r401", "Answer 401 Please sign in", "server", "communication", []),
           s("ended", "Ended by a later sign-out?", "pg", "decision", [["roles", "No"], ["r401", "Yes"], ["r503", "Cannot tell"]]),
           s("r503", "Answer 503", "server", "communication", []),
-          s("roles", "Read the person's roles", "pg", "task", ["handler"], "a reader on failure"),
+          s("roles", "Read the person's roles", "pg", "task", ["viewing"], "a reader on failure"),
+          s("viewing", "Session viewing as somebody?", "pg", "decision", [["handler", "No"], ["asthem", "Yes"]], "viewing_as, viewedAs"),
+          s("asthem", "Answer as that person, read only", "server", "automation", ["handler"], "their roles; changes 403"),
           s("handler", "Run the handler", "server", "automation", [], "30 s limit"),
         ]),
     },
@@ -91,8 +102,8 @@ export const signin: CodeCategory = {
         {
           label: "The payload",
           where: "server/internal/auth/session.go",
-          shape: `{"email": "sam@example.com", "name": "Sam Consumer", "exp": 1795377600, "iat": 1795334400000}`,
-          note: "`exp` in seconds (12 hours on), `iat` in milliseconds: when it was issued, compared with `signed_out.at`.",
+          shape: `{"email": "sam@example.com", "name": "Sam Consumer", "exp": 1795377600, "iat": 1795334400000, "sid": "q3Vb8x2LkP0aZr7mN4tY_wQe"}`,
+          note: "`exp` in seconds (12 hours on), `iat` in milliseconds: when it was issued, compared with `signed_out.at`. `sid`: 18 random bytes naming this one session; what the server keeps for a session (`viewing_as`) is kept under it. A cookie from before `sid` is named `issued:<iat>`.",
         },
         {
           label: "The cookie",
@@ -121,6 +132,7 @@ select email, role, scope, granted_by, granted_at from role_assignments where em
         { text: "Twelve hours is the longest a stolen copy of a cookie works when nobody signs out; there is no server-side session to revoke besides `signed_out`.", at: "return &Sessions{Secret: secret, TTL: 12 * time.Hour, Secure: secure, Now: time.Now}" },
         { text: "`iat` is never earlier than the last sign-out: without this a sign-in in the same millisecond as a sign-out would be ended at once. Test: `TestSigningInRightAfterSigningOutEvenInTheSameMoment`.", at: "if earliest.After(issued) {" },
         { text: "Expiry is checked by the server from `exp` in the signed payload, not left to the browser's `Max-Age`.", at: "if json.Unmarshal(payload, &p) != nil || p.Email == \"\" || s.Now().Unix() >= p.Exp {" },
+        { text: "Every new session gets a random id (`sid`, 18 bytes), inside the signed payload: two sessions of one person are told apart, so viewing as somebody else in one browser never touches the admin's other sessions, and a guessed id is useless without the secret.", at: "Iat: issued.UnixMilli(), Sid: newSessionID()})" },
       ],
       tests: ["server/internal/auth/auth_test.go"],
     },
@@ -177,8 +189,52 @@ select email, role, scope, granted_by, granted_at from role_assignments where em
         { text: "Only a built-in user can be chosen, never an address the browser makes up.", at: "u, ok := auth.DevUserByEmail(in.Email)" },
         { text: "Only a session that still counts marks the sign-out, so an ended copy of a cookie cannot throw the person out again and again. Test: `TestAnEndedSessionCannotSignThePersonOutAgain`.", at: "if err == nil && a.SignOuts != nil {" },
         { text: "The built-in users are listed only with `PM_AUTH=dev`; with a real provider `/api/me` gives nothing about other people.", at: "out[\"devUsers\"] = auth.DevUsers" },
+        { text: "The one place where the person of a request is decided: after the cookie, the sign-out and the roles, `viewedAs` turns an admin's session that views somebody into that person's. Deciding it anywhere else would let one route answer as the admin while viewing. Test: `TestViewingAsSomebodySeesExactlyWhatTheySee`.", at: "return a.viewedAs(r.Context(), session{User: u, Perms: perms, id: ses.ID}, err != nil)" },
+        { text: "Every request but GET and HEAD goes through `refuseWhileViewing` here, before any route, so a new route cannot forget it. Test: `TestViewingAsSomebodyChangesNothingOnAnyRoute`.", at: "if r, refused = a.refuseWhileViewing(w, r); refused {" },
+        { text: "A change uses the person `guard` already resolved: resolving again could find the viewing ended in between and act as the admin. Test: `TestAChangeKeepsThePersonGuardFound`.", at: "if _, ok := r.Context().Value(ctxKey{}).(session); ok {" },
+        { text: "`viewedBy` (the admin, and `until`) is added only while viewing; the viewed person's identity and rights are as always.", at: "out[\"viewedBy\"] = s.viewer.info()" },
+        { text: "Signing out while viewing signs out the admin (all their sessions, and ends every viewing of theirs), never the person they were looking at. Test: `TestSigningOutWhileViewingSignsOutTheAdminNotThePerson`.", at: "me := s.self()" },
       ],
       tests: ["server/internal/httpapi/api_test.go", "server/internal/httpapi/hardening_test.go", "server/internal/httpapi/review2_test.go"],
+    },
+    {
+      path: "server/internal/httpapi/viewas.go",
+      role: "Viewing the portal as somebody else: who the request is for while viewing, the refusal of every change, starting and stopping, and the list of people an admin can choose from.",
+      requirements: [
+        { text: "The only changes allowed while viewing, by exact path and method: stopping and signing out. A prefix match would let `DELETE /api/admin/view-as/x` or any future route under it through. Test: `TestViewingAsSomebodyChangesNothingOnAnyRoute`.", at: "return (path == \"/api/admin/view-as\" && method == http.MethodDelete) || (path == \"/auth/logout\" && method == http.MethodPost)" },
+        { text: "When the database cannot say whether the session views somebody, a change is refused with 503: nothing is let through on a guess.", at: "// whether the session views as somebody is not known: nothing is let through on a guess" },
+        { text: "Every change while viewing is refused with the one sentence (403); starting again is 409. Whatever the route would have done, nothing happens.", at: "writeError(w, 403, viewingRefusal(s))" },
+        { text: "A change that finds its viewing ended in this very request (the hour, the admin role gone) was meant as the other person: refused with 409, not done as the admin. Test: `TestAChangeThatEndsTheViewingIsNotDoneAsTheAdmin`.", at: "if s.viewEnded != \"\" {" },
+        { text: "`X-Acting-As` names whom the page believes it acts as; a mismatch (or a broken encoding) is 409, so a stale tab never acts as the other person. Without the header nothing is compared. Test: `TestAPageThatActsAsSomebodyElseIsRefused`.", at: "if claimed := r.Header.Get(ActingAsHeader); claimed != \"\" {" },
+        { text: "A database error reading the viewing gives 503, never the admin's own rights instead of the person's.", at: "return session{}, errUnavailable // never the admin's own rights instead" },
+        { text: "Checked on every request: the admin role gone, the hour passed, or the target the admin themself ends the viewing, once, written to Activity with why. A person who loses their roles is simply a reader from then on. Tests: `TestViewingEndsWhenTheAdminIsNoLongerAnAdmin`, `TestViewingEndsAfterAnHour`, `TestViewingFollowsThePersonWhoLosesTheirRoles`.", at: "case !s.Admin:" },
+        { text: "The built-in reader gets no rights whatever is stored for its address. Test: `TestTheReaderWithNoRolesNeverHasRights`.", at: "perms := rbac.PermsFrom(nil, false) // the reader with no roles has none, whatever is stored" },
+        { text: "Whose allowance a brake charges: the person who signed in, so an admin's searches and code reading while viewing never use up the viewed person's. Test: `TestTheBrakesChargeTheAdminWhileViewing`.", at: "func (s session) countsFor() string { return s.self().Email }" },
+        { text: "Nothing is counted for the person while somebody views as them (a skill download). Test: `TestViewingAsSomebodyCountsNothing`.", at: "func (s session) mayCount() bool { return s.viewer == nil }" },
+        { text: "Started by an admin's own roles: the route is `user(…)`, not `admin(…)`, because `who(r)` is already the viewed person while viewing (and guard refuses that case first). Test: `TestOnlyAnAdminStartsViewingAndNeverAsThemselves`.", at: "if !s.Admin {" },
+        { text: "Never as oneself, in any case of letters.", at: "if email == strings.ToLower(strings.TrimSpace(s.Email)) {" },
+        { text: "At most 254 characters, a valid address without control or invisible characters: nothing else is written to `viewing_as` or Activity. Nothing is stored in the viewed person's name. Test: `TestTheAddressIsCappedAndTheReaderAddressGetsNoRole`.", at: "if len(email) > maxAddress {" },
+        { text: "The people an admin can pick from are only those already shown as actors: with a role, in Activity, as the author of feedback or of a request (plus `PM_ADMINS` and, in development, the built-in users). Never somebody known only from a view, a download, a bookmark, an upvote, a vote or a sign-out: nobody is ever shown who read or downloaded what. Test: `TestAdminsListThePeopleThePortalKnows`.", at: "const peopleQuery = `select email, bool_or(has_role) from (" },
+      ],
+      tests: ["server/internal/httpapi/viewas_test.go"],
+    },
+    {
+      path: "server/internal/auth/viewas.go",
+      role: "Keeps, per session of an admin, whose view of the portal the admin is looking at (table `viewing_as`), and for how long.",
+      requirements: [
+        { text: "One hour, then the viewing ends by itself at the next request.", at: "const ViewAsFor = time.Hour" },
+        { text: "One row per admin and session: a second start is `ErrAlreadyViewing` (409), never a switch or a nesting. Test: `TestStartingWhileViewingIsRefusedByTheRouteToo`.", at: "values ($1, $2, $3, $4, $5, $6) on conflict (email, session) do nothing returning" },
+        { text: "Stop reports whether something was stopped, so an end is written to Activity once even when two requests end it together.", at: "func (s *ViewAs) Stop(ctx context.Context, admin, session string) (Viewing, bool, error) {" },
+        { text: "Signing out ends every viewing of the admin, in every session.", at: "func (s *ViewAs) StopAll(ctx context.Context, admin string) ([]Viewing, error) {" },
+      ],
+      tests: ["server/internal/auth/viewas_test.go", "server/internal/httpapi/viewas_test.go"],
+    },
+    {
+      path: "server/internal/db/migrations/013_viewing_as.sql",
+      role: "Creates `viewing_as`.",
+      requirements: [
+        { text: "Keyed by the admin and the session: the state of viewing lives on the server, under the session's id, never in the cookie's value or the page.", at: "primary key (email, session)" },
+      ],
     },
     {
       path: "server/internal/config/config.go",
@@ -194,9 +250,10 @@ select email, role, scope, granted_by, granted_at from role_assignments where em
     },
     {
       path: "server/internal/rbac/rbac.go",
-      role: "Where the admins named in the server settings come in.",
+      role: "Where the admins named in the server settings come in, and the reserved address of the reader with no roles.",
       requirements: [
         { text: "An address in `PM_ADMINS` is an admin with no stored role, so it cannot be removed in the portal and there is always a way back in.", at: "func (s *Store) IsBootstrap(email string) bool {" },
+        { text: "`reader@no-roles.invalid` stands for the reader with no roles that admins view the portal as; `Check`, which every way of giving a role goes through, refuses it, so a real sign-in under that address (a lax provider) could never carry a role either. Test: `TestTheAddressIsCappedAndTheReaderAddressGetsNoRole`.", at: "if strings.EqualFold(strings.TrimSpace(a.Email), NoRolesReader) {" },
       ],
       tests: ["server/internal/rbac/rbac_test.go"],
     },

@@ -291,7 +291,7 @@ insert into document_counts (kind, id, views, people) values ('process', 'reques
       path: "src/lib/activity.ts",
       role: "Admin › Activity in words: what each action the server writes means.",
       requirements: [
-        { text: "Every action the server writes needs words here and in the list of its unit test (`process.*`, `standard.*`, `lists.save`, `access.*`, `feedback.*`, `skill.guidance`, `icon.upload`, `theme.change`, `request.*`, `content.import`, `content.convert`); a missing one shows as its raw code. Written in `server/internal/httpapi` and `server/internal/upgrade`; here only worded.", at: "export const ACTION: Record<string, string> = {" },
+        { text: "Every action the server writes needs words here and in the list of its unit test (`process.*`, `standard.*`, `lists.save`, `access.*`, `feedback.*`, `skill.guidance`, `icon.upload`, `theme.change`, `request.*`, `content.import`, `content.convert`, `viewas.start`, `viewas.stop`, `viewas.end`); a missing one shows as its raw code. Written in `server/internal/httpapi` and `server/internal/upgrade`; here only worded.", at: "export const ACTION: Record<string, string> = {" },
       ],
       tests: ["src/lib/__tests__/activity.test.ts"],
     },

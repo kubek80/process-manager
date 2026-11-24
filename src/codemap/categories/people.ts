@@ -15,6 +15,7 @@ export const people: CodeCategory = {
     "My responsibilities lists only what is the person's through a team they own or a platform or practice they own or are a member of; a member is asked for nothing but drafts, and only overdue reviews, open feedback and what waits for them to publish count in the number on the top bar (`urgent`).",
     "Requests are visible to everyone signed in, anyone may ask and vote. Planning, marking done, declining and reopening appear only where the server's `canManage` says so (`canManageRequest` in `server/internal/httpapi/requests.go`, which also refuses the call); withdrawing only for the person who asked while it is open; removing only for an admin.",
     "The requests' filter (state and kind) lives in the address (`#/requests?state=…&kind=…`), not in browser storage.",
+    "Viewing the portal as somebody else (admins, Admin › Access and the owners and members of a group): while `/api/me` carries `viewedBy`, everything the person sees stays as they see it, every control that would change something is disabled (never hidden) with the server's own sentence (`changeBlocked`, `useChangeBlocked`), the editing screen is never the page (`pageWhileViewing`), and the band (`ViewAsBand`) names whose view it is, says nothing can be changed and when it ends, on every page, unprintable. The server refuses every change anyway; the app only spares the person a save that fails late.",
   ],
   charts: [
     {
@@ -71,8 +72,12 @@ export const people: CodeCategory = {
         { text: "A never-published document, or one whose platform or practice changes, needs an owner of every place involved (`all: true`); a published one that stays where it is needs an owner of any one of its places. The server's rule is the same.", at: "if (published && !moved.length) return { all: false, places: placesIn(was) };" },
         { text: "Mirrors `rbac.Perms.Misplaced` / `MisplacedDraft`: somebody who works only through their platforms and practices may move a document only between theirs (or none); the server refuses such a save (`server/internal/httpapi/content.go`, `drafts.go`).", at: "return (!!was && !placesValue(p, field, was)) || (!!is && !placesValue(p, field, is));" },
         { text: "The one wording of who sees a draft; the server decides who does (`rbac.Perms.CanSeeDraft`, `canSee` in `server/internal/httpapi/content.go`).", at: "export const draftAudience = (" },
+        { text: "The sentence a greyed control gives while viewing as somebody else: word for word the server's refusal (`viewingRefusal` in `server/internal/httpapi/viewas.go`; `viewas.test.ts` compares them).", at: "export const viewingRefusal = (label: string) =>" },
+        { text: "Whether an address opens the editing screen is asked of the router itself (`parseRoute`), so every address it opens the editing screen for (`/json`, `/editor`, `/edit?x` …) counts, now and later. A pattern of its own once missed some, and work typed there was lost at Save.", at: "export const opensChange = (hash: string) => isEditing(parseRoute(hash));" },
+        { text: "The one guard where the route becomes a page (`App.tsx`): while viewing, the editing screen is replaced by its reader's page, so it can never mount.", at: "export const pageWhileViewing = (r: Route, me: ViewingState): Route => {" },
+        { text: "Only an admin, by their own roles, not while already viewing, never as themselves; the server decides the same (`startViewAs`).", at: "export const mayViewAs = (me: ViewingState, email: string) =>" },
       ],
-      tests: ["src/lib/__tests__/rights.test.ts", "e2e/platforms.spec.ts", "e2e/members.spec.ts"],
+      tests: ["src/lib/__tests__/rights.test.ts", "src/lib/__tests__/viewas.test.ts", "e2e/platforms.spec.ts", "e2e/members.spec.ts"],
     },
     {
       path: "src/lib/members.ts",
@@ -139,8 +144,10 @@ export const people: CodeCategory = {
         { text: "An admin cannot take their own admin role here, although the server would allow it while another admin exists: they would lose this page.", at: "else if (c.user.email.toLowerCase() === c.me.toLowerCase()) out.push(" },
         { text: "Nobody deletes themselves (the server refuses it too, `409`) or an admin named in `PM_ADMINS` (who would keep the role anyway).", at: "if (user.email.toLowerCase() === me.toLowerCase()) return" },
         { text: "An admin named in `PM_ADMINS` never counts as the last admin: that role cannot be lost.", at: "return !user.bootstrap && user.roles.some" },
+        { text: "\"Stop viewing\" returns only to a place of the portal (`#/…`), never to the editing screen and never to an address from elsewhere; else to Admin › Access.", at: "export function returnPlace(saved: string | null | undefined): string {" },
+        { text: "A tab reloads when the portal now answers it as somebody else than the page was opened for (viewing started or stopped in another tab, another person signed in), so it never shows one person while acting as another.", at: "export function personChanged(shown: SeenAs, now: SeenAs): boolean {" },
       ],
-      tests: ["src/lib/__tests__/users.test.ts", "e2e/users.spec.ts"],
+      tests: ["src/lib/__tests__/users.test.ts", "src/lib/__tests__/viewas.test.ts", "e2e/users.spec.ts"],
     },
     {
       path: "src/components/UsersSection.tsx",
@@ -150,6 +157,24 @@ export const people: CodeCategory = {
         { text: "The admin role given by `PM_ADMINS` cannot be switched off here: the server keeps it whatever is sent.", at: 'const fixed = role === "admin" && !!user?.bootstrap;' },
       ],
       tests: ["e2e/users.spec.ts"],
+    },
+    {
+      path: "src/components/ViewAsBand.tsx",
+      role: "Viewing the portal as somebody else in the app: the band, the \"View as\" button of a person, the picker in Admin › Access (with \"A reader with no roles\"), and the watch that reloads a tab whose person changed.",
+      requirements: [
+        { text: "A link to the editing screen says why it does not open (and an address typed in goes to the reader's page) instead of opening a screen whose work could not be saved.", at: "if (!link || !opensChange(link.getAttribute(\"href\") ?? \"\")) return;" },
+        { text: "When the hour is up the page opens afresh, as the admin: the server has ended the viewing by then, and a page that still showed the band would mislead.", at: "const t = window.setTimeout(() => window.location.reload(), Math.min(ms, 2 ** 31 - 1));" },
+        { text: "Starting and stopping reload the page, so nothing the admin's own view loaded stays on the other person's page, or back.", at: "function reopenAt(hash: string) {" },
+        { text: "On focus or visibility, `/api/me` is read only to look (`loadMe(false)`, which does not change the page's `X-Acting-As`), and the page reloads when its person changed.", at: "loadMe(false).then((now) => { if (personChanged(me, now)) window.location.reload(); }" },
+      ],
+      tests: ["src/lib/__tests__/viewas.test.ts"],
+    },
+    {
+      path: "src/viewas.css",
+      role: "The band of viewing as somebody else: fixed to the bottom of the window, in the warning fill, room kept for it (`--viewas-h`), never printed; the greyed links to the editing screen.",
+      requirements: [
+        { text: "Colours only through tokens (`--warn-fill` / `--warn-ink`), sizes through the type scale; the band cannot be scrolled away.", at: ".viewas-band {" },
+      ],
     },
     {
       path: "src/users.css",

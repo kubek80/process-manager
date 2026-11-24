@@ -273,8 +273,8 @@ export const pageWhileViewing = (r: Route, me: ViewingState): Route => {
 
 /**
  * Whether the person signed in may start viewing the portal as `email`: an admin, by their own
- * roles (not while viewing as somebody already: stop first), never as themselves. The server
- * also requires that Admin › Access lists the person.
+ * roles (not while viewing as somebody already: stop first), never as themselves. Any address
+ * can be viewed: one with no roles is seen exactly as a reader with no roles.
  */
 export const mayViewAs = (me: ViewingState, email: string) =>
   !!me.perms?.admin && !me.viewedBy && !!me.user && !!email && email.trim().toLowerCase() !== me.user.email.toLowerCase();

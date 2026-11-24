@@ -17,7 +17,7 @@ export const formats: CodeCategory = {
     "Every object of a format refuses unknown fields (`additionalProperties: false`); ids are kebab-case slugs, requirement ids upper case with dashes.",
     "Links people type are http(s) only, in the schema (`$defs`), the server (`docs.ValidLink`) and the app.",
     "An icon is stored under the SHA-256 of its bytes, at most 64 KB; what it really is is decided from the bytes, never from what the sender says; an SVG may contain only the elements and settings of the allow-list in `svg.go`, nothing that repeats parts of a drawing (`<use>`, `<symbol>`, `<pattern>`, `href`) and nothing that runs or loads.",
-    "The look of the portal stores only what the admin chose (`portal_settings`); colours are `#rrggbb`, the font is the default or Roboto, and a change is made from a revision (409 when somebody saved since).",
+    "The look of the portal stores only what the admin chose (`portal_settings`); colours are `#rrggbb` (brand, second colour, ink, the kinds, the buttons, the states, highlight and quiet surface), the font is the default (Roboto) or Inter (a stored `roboto` still means the default), and a change is made from a revision (409 when somebody saved since).",
     "The sample content is checked by `npm run validate` and by the server's schema tests; the demo set by `npm run validate demo`, over the sample.",
   ],
   charts: [
@@ -139,10 +139,12 @@ export const formats: CodeCategory = {
     },
     {
       path: "schema/catalog.schema.json",
-      role: "The format of the lists: tiers, environments, languages, teams, practices, platforms, categories and tools.",
+      role: "The format of the lists: tiers, paths, environments, languages, teams, practices, platforms, categories and tools.",
       requirements: [
         { text: "An icon id has exactly the shape of a SHA-256 (`icons.ValidID` checks the same); whether that icon is stored is checked by the server (`knownIcons`), not by the schema.", at: "\"pattern\": \"^[a-f0-9]{64}$\"," },
         { text: "`contacts` may not be empty (`minProperties: 1`): no contacts means leaving the object out, which `groups.go` does for an empty set.", at: "\"minProperties\": 1," },
+        { text: "`paths` is not required, so lists stored before there were paths stay valid; the upgrade adds them once (`upgrade/lists.go`).", at: "\"description\": \"Paths a process or standard can be for: greenfield" },
+        { text: "A path's picture is one of the built-in set (`PATH_SYMBOLS` in `marks.tsx` draws exactly these); a picture the app cannot draw is refused, not shown as a broken mark.", at: "\"symbol\": {" },
       ],
       tests: ["server/internal/schema/schema_test.go", "server/internal/docs/check_test.go"],
     },
@@ -170,9 +172,20 @@ export const formats: CodeCategory = {
       requirements: [
         { text: "Must stay in step with the errors of `src/lib/validate.ts`: a rule only here refuses saves the app thought fine; a rule only there is not enforced.", at: "// The format of a document is checked against the JSON schema. This file checks what a schema" },
         { text: "A category, practice or platform that is not in the lists is refused: `stillUsed` and the rights by platform and practice depend on every id being an entry. An unknown owning team is not checked here.", at: "if id != \"\" && !has(list, id) {" },
+        { text: "Every path a process or standard names must be in the list of paths (the app's `checkPaths` says the same in its words): otherwise `stillUsed` could not protect it and the filters would offer a path that does not exist. Test: `docs/paths_test.go`.", at: "add(\"paths[%d]: %q is not a known path. Known paths: %s\", i, id, ids(l.Paths))" },
+        { text: "The paths a document names count as uses of the list, so `stillUsed` refuses to remove a path that a process or standard (also a draft) still names. Working drafts are not counted: one that names a removed path is refused at publish until it names another. Test: `httpapi/paths_test.go`.", at: "list(\"paths\", p.Paths...)" },
         { text: "`Removed` gives the entries a new version of the lists drops, as `<list>/<id>`; `stillUsed` refuses them while a document or a role still names them.", at: "func Removed(old, new Lists) []string {" },
       ],
       tests: ["server/internal/docs/check_test.go", "server/internal/httpapi/versions_test.go"],
+    },
+    {
+      path: "server/internal/docs/paths.go",
+      role: "The paths' names as the skills, the chunk text and the MCP server write them (with their other names), and the check that an other name belongs to one path only.",
+      requirements: [
+        { text: "One wording for every machine reader: \"Paved path (also called golden path, paved road)\", so a search for \"golden path\" finds what is on the paved path in the index too. The app's `pathWords` (`src/lib/paths.ts`) gives the word search the same names.", at: "func PathNames(list []Named, ids []string) string {" },
+        { text: "An other name belongs to one path and is no other path's name, whatever its case; otherwise a search or an agent's `path=` could not tell which path is meant. Same sentences as the app's `otherNameClashes`.", at: "func otherNameClashes(paths []Named) []string {" },
+      ],
+      tests: ["server/internal/docs/paths_test.go"],
     },
     {
       path: "server/internal/docs/contacts.go",
@@ -273,6 +286,7 @@ export const formats: CodeCategory = {
       role: "The look of the portal as the admin chose it: checked, described for Activity, stored with a revision.",
       requirements: [
         { text: "Colours only as `#rrggbb`: they go into style tokens in every page, so anything else could inject CSS. Test: `TestALookThatDoesNotFitIsRefusedWithAReasonPerProblem` (in `httpapi`).", at: "if v, ok := values[f.key]; ok && colorFields[f.key] && !hexColor.MatchString(v) {" },
+        { text: "The font is the default (Roboto, nothing stored) or `inter`; `roboto`, saved while Roboto was a choice of its own, stays valid and means the default, so no stored look is rewritten.", at: "if v, ok := values[\"font\"]; ok && v != \"roboto\" && v != \"inter\" {" },
         { text: "The revision is compared under `for update`, so two admins saving at once cannot both win; the loser gets 409 with what is stored. Test: `TestSavesAreRefusedFromAnOutdatedRevision`.", at: "if cur.Revision != base {" },
       ],
       tests: ["server/internal/theme/theme_test.go", "server/internal/httpapi/theme_test.go"],
@@ -290,6 +304,7 @@ export const formats: CodeCategory = {
       role: "The sample lists; its icons are in `catalog/icons/<id>.<ext>`.",
       requirements: [
         { text: "Imported before the processes and standards, which pick from it; its icons are imported before it, so it never names one that is missing.", at: "\"teams\": [" },
+        { text: "The three paths (Greenfield, Brownfield, Paved path) are the same entries as `upgrade.DefaultPaths` (a test compares them). A sample document names a path only when it is meant only for that kind of work.", at: "\"paths\": [" },
       ],
       tests: ["server/internal/icons/store_test.go"],
     },

@@ -147,7 +147,7 @@ export function ViewAsPicker() {
     <section className="admin-card viewas-picker" aria-labelledby="viewas-picker-title">
       <h2 id="viewas-picker-title"><Eye size={17} aria-hidden="true" />See the portal as somebody else</h2>
       <p className="muted small">See exactly what a person sees: what they can read, their responsibilities, their bookmarks and requests, and which buttons they get. Choose anybody, also somebody without a role or an address the portal has not seen yet. You cannot change anything while you do, and it ends after an hour.</p>
-      <form className="viewas-pick" onSubmit={(e) => { e.preventDefault(); go(); }}>
+      <form className="viewas-pick" noValidate onSubmit={(e) => { e.preventDefault(); go(); }}>
         <input type="email" list="viewas-people" value={typed} placeholder="Email address, e.g. name@company.com" aria-label="Email of the person whose view you want to see"
           aria-invalid={tried && !!problem} aria-describedby={tried && problem ? "viewas-pick-problem" : undefined}
           onChange={(e) => { setTyped(e.target.value); setTried(false); }} />

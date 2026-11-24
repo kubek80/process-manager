@@ -12,7 +12,7 @@ export const tables: CodeCategory = {
   title: "The tables",
   summary:
     "Postgres holds every process, standard and list with all their versions, the drafts, roles, the activity log, skills, use and the search index. " +
-    "Twelve migration files create and change the tables on every start, forward only; the three tables of the search index are created by the index itself (`retrieval.Index.Ensure`), so the migrations never need pgvector. " +
+    "Thirteen migration files create and change the tables on every start, forward only; the three tables of the search index are created by the index itself (`retrieval.Index.Ensure`), so the migrations never need pgvector. " +
     "A process or standard is known everywhere by `(kind, id)`: only `working_drafts` refers to `documents` with a foreign key; everything else that counts or follows a document keeps the id as text and is removed, marked or left behind on purpose when the document is deleted.",
   requirements: [
     "Every file in `server/internal/db/migrations` runs once, in the order of its number, in a transaction of its own together with its row in `schema_migrations`; a start applies the missing ones under the advisory lock 7461001, so several servers starting at once (also on an empty database) do the work once.",
@@ -288,6 +288,26 @@ export const tables: CodeCategory = {
       ],
       createdIn: M + "003_version_notes_sessions.sql",
       writtenBy: ["server/internal/auth/signout.go"],
+    },
+    {
+      name: "viewing_as",
+      purpose: "An admin viewing the portal as somebody else: one row per session of the admin, named by the session's id in the cookie (`sid`).",
+      columns: [
+        { name: "email", type: "text not null", note: "the admin" },
+        { name: "session", type: "text not null", note: "which session of the admin (`auth.Session.ID`)" },
+        { name: "target", type: "text not null", note: "the person whose view it is (or `reader@no-roles.invalid`)" },
+        { name: "target_name", type: "text not null default ''" },
+        { name: "started_at", type: "timestamptz not null" },
+        { name: "until", type: "timestamptz not null", note: "started_at + one hour (`auth.ViewAsFor`)" },
+      ],
+      keys: ["primary key (email, session): one viewing per session, never nested"],
+      createdIn: M + "013_viewing_as.sql",
+      writtenBy: ["server/internal/auth/viewas.go"],
+      readBy: ["server/internal/httpapi/viewas.go"],
+      rules: [
+        "A row only ever takes rights away: while it is there, that session reads as the target and changes nothing.",
+        "Deleted when the admin stops or signs out (every session of theirs), when a request finds it past `until` or the admin no longer an admin; rows a day past `until` are dropped at the next start of a viewing.",
+      ],
     },
     // ---------- what people say: feedback and requests
     {
@@ -667,6 +687,11 @@ select count(*) from working_drafts;   → 0`,
       path: M + "012_version_changes_by.sql",
       role: "Adds `document_versions.changes_by` and `changes_by_name`. Undo: drop the columns. The only migration written with `if not exists`.",
       requirements: [{ text: "Empty for every version that did not publish somebody else's changes, also for the ones stored before: the history then names only `saved_by`.", at: "alter table document_versions add column if not exists changes_by text not null default '';" }],
+    },
+    {
+      path: M + "013_viewing_as.sql",
+      role: "Creates `viewing_as` (an admin viewing the portal as somebody else, per session). Undo: drop it; every viewing in progress then simply ends.",
+      requirements: [{ text: "Keyed by the admin and the session, so the state lives on the server with that one session, never in anything the browser could alter; `if not exists`, so it is safe to run twice.", at: "create table if not exists viewing_as (" }],
     },
     {
       path: "server/internal/retrieval/retrieval.go",
