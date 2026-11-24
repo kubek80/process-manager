@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, MousePointerClick, CalendarCheck, Check, ChevronDown, ChevronRight, Flag, Clock3, ListChecks, Pencil, TriangleAlert, UserCheck, Users, Workflow, Bot, ShieldCheck } from "lucide-react";
+import { Alert } from "./Alert";
+import { ArrowUpRight, MousePointerClick, CalendarCheck, Check, ChevronDown, ChevronRight, Flag, Clock3, ListChecks, Pencil, UserCheck, Users, Workflow, Bot, ShieldCheck } from "lucide-react";
 import type { DocMeta, Feedback, Process } from "../types";
 import { prerequisiteKeys } from "../lib/edit";
 import { isDrawableProcess, validateProcess } from "../lib/validate";
@@ -119,11 +120,12 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
         </>}
         notice={(status === "deprecated" || ((editor || manages) && review.state === "overdue")) && <>
           {status === "deprecated" && (
-            <div className="check warn banner"><TriangleAlert size={16} /><span><b>This process is retired.</b>{" "}
-              {replacement ? <>Use <a className="kind-link process" href={`#/p/${replacement.id}/flow`}>{replacement.title}</a> instead.</> : "It is kept for reference only."}</span></div>
+            <Alert tone="warning" className="banner" title="This process is retired">
+              {replacement ? <>Use <a className="kind-link process" href={`#/p/${replacement.id}/flow`}>{replacement.title}</a> instead.</> : "It is kept for reference only."}
+            </Alert>
           )}
           {(editor || manages) && review.state === "overdue" && (
-            <div className="check bad banner"><CalendarCheck size={16} /><span><b>{review.label}.</b> Read it through{editor ? ", correct what changed on the editing screen," : ""} then press “Mark as reviewed”.</span></div>
+            <Alert tone="problem" className="banner" title={review.label}>Read it through{editor ? ", correct what changed on the editing screen," : ""} then press “Mark as reviewed”.</Alert>
           )}
         </>}
         actions={<>

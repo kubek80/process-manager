@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { CircleAlert, CircleCheck, Download, Sparkles, TriangleAlert, Wrench } from "lucide-react";
+import { Alert } from "./Alert";
+import { CircleAlert, Download, Sparkles, TriangleAlert, Wrench } from "lucide-react";
 import type { Issue } from "../types";
 import { fixPrompt } from "../lib/prompt";
 import { extractJson, hasErrors } from "../lib/validate";
@@ -89,16 +90,15 @@ export function AiDialog<T extends { id: string; title: string }>({ spec, onImpo
             <p className="muted small">Paste the whole answer: the {noun} is picked out of it and checked automatically.</p>
             <textarea rows={7} className="mono" value={answer} aria-label="The answer of the AI chat" onChange={(e) => setAnswer(e.target.value)} placeholder="Paste the whole answer from the chat here." />
             {parsed?.error && (
-              <div className="check bad"><CircleAlert size={16} /><span>{parsed.error}</span></div>
+              <Alert tone="problem">{parsed.error}</Alert>
             )}
             {parsed?.value != null && (
               <>
-                <div className={`check ${ok ? "good" : "bad"}`}>
-                  {ok ? <CircleCheck size={16} /> : <CircleAlert size={16} />}
-                  <span>{ok
+                <Alert tone={ok ? "success" : "problem"}>
+                  {ok
                     ? <>Valid: <b>{result!.title}</b> - {spec.describe(result!)}{issues.length ? `, ${issues.length} ${issues.length === 1 ? "suggestion" : "suggestions"}` : ""}.</>
-                    : <>{issues.filter((i) => i.level === "error").length} to fix. Send the fix request to the same chat and paste the new answer.</>}</span>
-                </div>
+                    : <>{issues.filter((i) => i.level === "error").length} to fix. Send the fix request to the same chat and paste the new answer.</>}
+                </Alert>
                 {ok && current && (
                   <div className="ai-changes">
                     <h4>What changes in your draft{changes.length ? ` (${changes.length})` : ""}</h4>
@@ -107,7 +107,7 @@ export function AiDialog<T extends { id: string; title: string }>({ spec, onImpo
                       : <p className="muted small">Nothing that readers see changes.</p>}
                   </div>
                 )}
-                {idChanged && <div className="check warn"><TriangleAlert size={16} /><span>The answer changed the address of the {noun}. Its own (“{current!.id}”) is kept.</span></div>}
+                {idChanged && <Alert tone="warning">The answer changed the address of the {noun}. Its own (“{current!.id}”) is kept.</Alert>}
                 {issues.length > 0 && (
                   <ul className="issues ai-issues">
                     {issues.map((i, k) => (

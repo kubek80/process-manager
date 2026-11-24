@@ -182,7 +182,7 @@ export const frame: CodeCategory = {
     },
     {
       path: "src/components/ui.tsx",
-      role: "Shared parts of the frame: layers (focus, Escape, Tab), dialogs, notices, loading and load errors, the error boundary, fields.",
+      role: "Shared parts of the frame: layers (focus, Escape, Tab), dialogs, the floating messages (`notify`, of the alert's family), loading and load errors (an alert), the error boundary, fields.",
       requirements: [
         { text: "Only the topmost layer reacts to keys: one Escape closes a dialog, not the side panel under it as well.", at: "if (layers[layers.length - 1] !== token) return;" },
         { text: "Focus goes back to the opener only when it was inside the closed layer, so it is never taken from where the person went meanwhile.", at: "if (active && active !== document.body && !(node && node.contains(active))) return;" },

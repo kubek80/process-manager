@@ -261,6 +261,7 @@ export const tests: CodeCategory = {
     spec("meaning.spec.ts", "Search by meaning: the Words / Meaning / Both switch, what it says about the provider, the address, ranking, and the limit of 60 searches a minute."),
     spec("members.spec.ts", "Members of a platform or practice draft there and an owner publishes; Admin › Access gives and takes the member roles; contact fields."),
     spec("mine.spec.ts", "My responsibilities: what is an owner's and what needs them, a refused review after a change, owners of a team set by admins only."),
+    spec("alert.spec.ts", "The designer's alert: the measured instance (335 wide, 100 high, every position, radius, type and colour), each state in light and dark, a real notice of each kind on its page, an alert on a phone."),
     spec("pages.spec.ts", "The reader's page of a process and a standard: the head, levels as neutral marks, the first review counted from the first publication."),
     spec("paging.spec.ts", "Pages of a list and of the search results: 12 a page, the address, Back and reload, the phone layout, search by meaning in pages."),
     spec("paths.spec.ts", "The path of a process or standard: the ninth list with its pictures and other names, the editing screen's choice, the road on the reader's page, plates on cards and rows, the Path filter and My application, a draft's paths kept hidden."),

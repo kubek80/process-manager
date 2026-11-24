@@ -25,7 +25,7 @@ test("create a process from text with any chat assistant", async ({ page }) => {
   // 3: whatever comes back is checked
   const create = modal.getByRole("button", { name: "Create process" });
   await answer.fill("Sorry, I cannot do that.");
-  await expect(modal.locator(".check.bad")).toContainText("No JSON object found");
+  await expect(modal.locator(".alert.alert-problem")).toContainText("No JSON object found");
   await expect(create).toBeDisabled();
 
   const wrong = JSON.parse(JSON.stringify(draft));
@@ -34,7 +34,7 @@ test("create a process from text with any chat assistant", async ({ page }) => {
   await expect(modal.locator(".issues")).toContainText("Step 2 “Approve the access” Who does it is not one of the participants: choose who does it.");
   await expect(create).toBeDisabled();
   // counted in the words of the checker; no "JSON schema" said to the person
-  await expect(modal.locator(".check.bad")).toContainText("1 to fix. Send the fix request to the same chat and paste the new answer.");
+  await expect(modal.locator(".alert.alert-problem")).toContainText("1 to fix. Send the fix request to the same chat and paste the new answer.");
   await expect(modal).not.toContainText(/JSON schema/i);
   await modal.getByRole("button", { name: "Copy fix request" }).click();
   const fix = await page.evaluate(() => navigator.clipboard.readText());
@@ -42,7 +42,7 @@ test("create a process from text with any chat assistant", async ({ page }) => {
   expect(fix).toContain('steps[1].actor (value now: "the-boss"): Who does it is not one of the participants');
 
   await answer.fill("```json\n" + JSON.stringify(draft, null, 2) + "\n```");
-  await expect(modal.locator(".check.good")).toContainText("Valid: Request VPN access - 6 steps, 3 participants, 1 prerequisites");
+  await expect(modal.locator(".alert.alert-success")).toContainText("Valid: Request VPN access - 6 steps, 3 participants, 1 prerequisites");
   await create.click();
 
   // saved, opened on the editing screen, and still a draft
@@ -91,7 +91,7 @@ test("change an existing process with AI, then delete it", async ({ page }) => {
   changed.steps.at(-1).title = "Connect and test the VPN";
   changed.id = "get-vpn";
   await modal.locator("textarea").nth(1).fill(JSON.stringify(changed));
-  await expect(modal.locator(".check.warn")).toContainText("The answer changed the address of the process. Its own (“request-vpn-access”) is kept.");
+  await expect(modal.locator(".alert.alert-warning")).toContainText("The answer changed the address of the process. Its own (“request-vpn-access”) is kept.");
   // what applying it changes, in the words of the Publish list
   const changes = modal.locator(".ai-changes");
   await expect(changes.locator("h4")).toHaveText(/^What changes in your draft \(\d+\)$/);

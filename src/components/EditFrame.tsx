@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Alert } from "./Alert";
 import {
   ArrowLeft, BookOpen, ChevronDown, ChevronUp, Lightbulb, ChevronRight, CircleAlert, CircleCheck, Crosshair, Flag, GripVertical, Info, Link2, ListChecks, ListTree, MoreHorizontal,
   PanelLeftClose, PanelLeftOpen, PanelRight, Plus, Redo2, Send, ShieldCheck, Trash2, TriangleAlert, Undo2, Users, Workflow, X, type LucideIcon,
@@ -227,10 +228,9 @@ export function ItemIssues({ issues }: { issues: Issue[] }) {
   return (
     <>
       {groups.filter((g) => g.list.length).map((g) => (
-        <div key={g.title} className={`item-issues ${g.tone}`} role="status">
-          <strong>{g.tone === "bad" ? <CircleAlert size={15} /> : g.tone === "warn" ? <TriangleAlert size={15} /> : <Lightbulb size={15} />}{g.title}</strong>
+        <Alert key={g.title} tone={g.tone === "bad" ? "problem" : g.tone === "warn" ? "warning" : "info"} className={`item-issues ${g.tone}`} role="status" title={g.title}>
           <ul>{g.list.map((i, k) => <li key={k} className={i.level}>{issueText(i, kind)}</li>)}</ul>
-        </div>
+        </Alert>
       ))}
     </>
   );
@@ -566,7 +566,7 @@ function CheckerPop({ issues, place, reason, onClose, onPick, kind, fixBefore }:
   );
   return (
     <div ref={ref} id="edit-checker" className="checker-pop" role="dialog" aria-label="What is to fix" tabIndex={-1}>
-      {reason && <p className={`checker-reason ${reason.tone}`} role="alert"><CircleAlert size={16} /><span>{reason.text}</span></p>}
+      {reason && <Alert tone={reason.tone === "warn" ? "warning" : "problem"} className={`checker-reason ${reason.tone}`} role="alert">{reason.text}</Alert>}
       {fix.length > 0 && <>
         {/* a draft is always saved: what is to fix stops publishing (only bringing back a document
             somebody deleted needs it fixed first) */}
@@ -891,7 +891,7 @@ export function PublishDialog({ noun, first, changes, version, blocked, onPublis
             onKeyDown={(e) => { if (e.key === "Enter") go(); }} />
         </label>
         {blocked
-          ? <div className="check bad" role="alert"><CircleAlert size={16} /><span>{blocked}</span></div>
+          ? <Alert tone="problem" role="alert">{blocked}</Alert>
           : <p className="publish-sentence"><Send size={14} />Readers see it as soon as you publish.</p>}
       </div>
     </Modal>

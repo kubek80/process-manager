@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash2, TriangleAlert, Undo2, UserCheck } from "lucide-react";
+import { Alert } from "./Alert";
+import { ArrowLeft, Archive, Braces, EyeOff, History, RotateCcw, Sparkles, Trash2, Undo2 } from "lucide-react";
 import type { DocMeta, Issue, Membership, Process, Standard, TargetKind } from "../types";
 import { conflictOf, useDraft, type Conflict, type Draft } from "../lib/draft";
 import { author, baseBehindSentence, clock, draftKindOf, draftMovedOn, draftRevisionToSend, draftSaveBase, saveCallOf, statusChangedSentence, editState, exampleIssues, isExampleIssue, issueText, statusChangeBlocked, steppedMessage, movedItem, movedMessage, moveOf, publishList, savedByText, partsText, whoPublishesParts, whoPublishesShort, lastSavedByOther, type DraftKind } from "../lib/editing";
@@ -596,20 +597,17 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
     <>
       {unpublished && <BehindBanner d={d} meta={o.meta} noun={`this ${noun}`} />}
       {(unpublished ? draftMoved : d.behind && d.dirty) && !d.conflict && working && (
-        <div className="check warn banner">
-          <TriangleAlert size={16} /><span><b>{author(working, me).name} saved {unpublished ? "newer changes to the draft" : "the unpublished changes"}</b> {savedWhen(working.updatedAt)} while you were editing. Your changes are still here.</span>
-          <span className="spacer" />
-          <button className="btn small" onClick={() => d.raiseConflict({ exists: true, version: working.revision, updatedBy: working.updatedBy, updatedByName: working.updatedByName, updatedAt: working.updatedAt })}>Compare and decide</button>
-        </div>
+        <Alert tone="warning" className="banner" title={`${author(working, me).name} saved ${unpublished ? "newer changes to the draft" : "the unpublished changes"} ${savedWhen(working.updatedAt)}`.trim()}
+          actions={<button className="btn small" onClick={() => d.raiseConflict({ exists: true, version: working.revision, updatedBy: working.updatedBy, updatedByName: working.updatedByName, updatedAt: working.updatedAt })}>Compare and decide</button>}>
+          That was while you were editing. Your changes are still here.
+        </Alert>
       )}
       {!unpublished && !isGone && !saidMeanwhile && working && !rebaseTo.current && baseBehindSentence(working.base, version) && (
-        <div className="check info banner">
-          <History size={16} /><span>{baseBehindSentence(working.base, version)}</span>
-        </div>
+        <Alert tone="info" className="banner">{baseBehindSentence(working.base, version)}</Alert>
       )}
-      {saidMeanwhile && <div className="check warn banner" role="status"><TriangleAlert size={16} /><span>{saidMeanwhile}</span></div>}
-      {losing && <div className="check warn banner" role="alert"><TriangleAlert size={16} /><span>{losing}</span></div>}
-      {publishRight && !losing && !refused && <div className="check info banner publish-right"><UserCheck size={16} /><span><SentenceParts parts={publishRightParts} /></span></div>}
+      {saidMeanwhile && <Alert tone="warning" className="banner" role="status">{saidMeanwhile}</Alert>}
+      {losing && <Alert tone="warning" className="banner" role="alert">{losing}</Alert>}
+      {publishRight && !losing && !refused && <Alert tone="info" className="banner publish-right"><SentenceParts parts={publishRightParts} /></Alert>}
     </>
   );
   const hasBanners = !!saidMeanwhile || (unpublished && d.behind && d.dirty && !d.conflict) || (unpublished ? draftMoved : d.behind && d.dirty) && !!working || (!isGone && !!working && !rebaseTo.current && !!baseBehindSentence(working.base, version)) || !!losing || !!publishRight;
@@ -663,7 +661,7 @@ function SessionInner<T extends Doc>({ o, draftKind, initial, meanwhile, setMean
   const jsonView = json ? (
     <Suspense fallback={<Loading />}>
       {!drawable
-        ? <div className="check warn banner" role="alert"><TriangleAlert size={16} /><span>This {noun} cannot be shown until the problems in its JSON are fixed.</span></div>
+        ? <Alert tone="warning" className="banner" role="alert">This {noun} cannot be shown until the problems in its JSON are fixed.</Alert>
         : <div className="json-head"><button className="btn small" onClick={() => void leaveJson()}><ArrowLeft size={14} />Back to the editor</button><span className="muted small">The text of the whole {noun}. Changes that pass the checks go into the draft as you type.</span></div>}
       <JsonView doc={d.clean} noun={noun} validate={o.json.validate} schema={o.json.schema} schemaFile={o.json.schemaFile} onChange={(doc) => d.change(doc)} onPending={setJsonPending} />
     </Suspense>

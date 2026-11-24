@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert } from "./Alert";
 import { Lock, Pencil, Plus, Search, Trash2, UserPlus, X } from "lucide-react";
 import type { Role } from "../types";
 import { useCatalog } from "../lib/catalog";
@@ -205,9 +206,9 @@ function RolesDialog({ user, users, groups, me, onClose, onSaved }: {
         {user && !user.bootstrap && after.length === 0 && problems.length === 0 && <p className="muted small">With no roles, {who} can still sign in and read like every colleague.</p>}
         <div ref={said}>
           {tried && problems.length > 0 && (
-            <div className="check bad roles-problems" role="alert">
+            <Alert tone="problem" className="roles-problems" role="alert">
               <ul>{problems.map((p) => <li key={p}>{p}</li>)}</ul>
-            </div>
+            </Alert>
           )}
           {refused && <LoadError what="The roles were not saved." error={refused} />}
         </div>

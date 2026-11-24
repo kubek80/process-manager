@@ -263,7 +263,7 @@ test("create a standard from a policy text with AI; it is a draft without skills
   await expect(modal.getByRole("button", { name: "Create standard" })).toBeDisabled();
 
   await modal.locator("textarea").nth(1).fill("```json\n" + JSON.stringify(example, null, 2) + "\n```");
-  await expect(modal.locator(".check.good")).toContainText("Valid: Dependency updates - 3 requirements (2 must)");
+  await expect(modal.locator(".alert.alert-success")).toContainText("Valid: Dependency updates - 3 requirements (2 must)");
   await modal.getByRole("button", { name: "Create standard" }).click();
 
   await expect(page).toHaveURL(/#\/s\/dependency-updates\/edit/);
@@ -302,7 +302,7 @@ test("create a standard from a policy text with AI; it is a draft without skills
   await page.getByRole("dialog", { name: "Retire this standard?" }).getByRole("button", { name: "Retire" }).click();
   await expect(editState(page)).toHaveAttribute("aria-label", /^Retired\./);
   await page.locator(".edit-bar").getByRole("button", { name: "Back to reading" }).click();
-  await expect(page.locator(".banner", { hasText: "This standard is retired." }).getByRole("link", { name: "Secure logging" })).toBeVisible();
+  await expect(page.locator(".banner", { hasText: "This standard is retired" }).getByRole("link", { name: "Secure logging" })).toBeVisible();
   expect((await readSkill(page, "standard-dependency-updates")).skill.active).toBe(false);
 
   await page.getByRole("link", { name: "Edit", exact: true }).click();
@@ -335,7 +335,7 @@ test("mark a standard as reviewed, look at its history, edit its JSON", async ({
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.insertText(original.replace('"id": "SEC-LOG-02"', '"id": "SEC-LOG-01"'));
   await expect(page.locator(".json-side .issues")).toContainText("Two requirements have the id SEC-LOG-01: give this one another id.");
-  await expect(page.locator(".json-side .check.bad")).toContainText("Not applied to the draft");
+  await expect(page.locator(".json-side .alert.alert-problem")).toContainText("Not applied to the draft");
   await expect(page.locator(".edit-bar").getByRole("button", { name: "Publish…" })).toHaveClass(/\bunavailable\b/);
   expect(await readWorkingDraft(page, "standard", LOGGING)).toBeUndefined(); // nothing was saved
 });

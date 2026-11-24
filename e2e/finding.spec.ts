@@ -474,7 +474,7 @@ test("a filter in an old link that no longer exists is left out, the address cor
   ] as const) {
     await open(page, path);
     await expect(page, path).toHaveURL(kept);
-    const notice = page.locator("p.list-notice");
+    const notice = page.locator(".alert.alert-info.list-notice");
     await expect(notice).toHaveRole("status");
     await expect(notice).toHaveText("A filter in this link no longer exists and was left out.");
     // the address was replaced, not added to: Back leaves the list
@@ -482,12 +482,12 @@ test("a filter in an old link that no longer exists is left out, the address cor
   }
   // a filter chosen afterwards: the notice goes
   await pickFilter(page, "Category", "Cloud");
-  await expect(page.locator("p.list-notice")).toHaveCount(0);
+  await expect(page.locator(".alert.alert-info.list-notice")).toHaveCount(0);
   // an address with filters that exist says nothing
   await open(page, "/processes?platform=google-cloud");
   await expect(page.locator("ol.cards > li").first()).toBeVisible();
   await expect(page).toHaveURL(/#\/processes\?platform=google-cloud$/);
-  await expect(page.locator("p.list-notice")).toHaveCount(0);
+  await expect(page.locator(".alert.alert-info.list-notice")).toHaveCount(0);
 });
 
 test("a process that states no rigour says “Rigour not stated” with three empty bars, on its card and in its row", async ({ page, request }) => {

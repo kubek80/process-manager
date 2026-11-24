@@ -141,7 +141,7 @@
 .pv-body .seg, .theme-group > .seg { justify-self: start; }
 /* the states as the app draws them: notices, status pills, a count, and the dark editing bar */
 .pv-states { display: grid; gap: 6px; }
-.pv-states .check { margin: 0; padding: 7px 10px; font-size: var(--fs-sm); line-height: var(--lh-sm); }
+.pv-states .alert { margin: 0; }
 .pv-marks { gap: 6px; }
 .pv-marks .status { height: 26px; padding: 0 9px; font-size: var(--fs-sm); line-height: var(--lh-sm); }
 .pv-count { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-medium); color: var(--text-2); }

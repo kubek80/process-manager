@@ -206,7 +206,7 @@ func Describe(old, new Look) string {
 	text("colour of other buttons", old.OtherButtons, new.OtherButtons, "neutral")
 	text("colour of success", old.Success, new.Success, "Land")
 	text("colour of warnings", old.Warning, new.Warning, "Earth")
-	text("colour of information", old.Info, new.Info, "the brand colour")
+	text("colour of information", old.Info, new.Info, "Sky, the second colour")
 	text("colour of problems", old.Problem, new.Problem, "red")
 	text("highlight", old.Highlight, new.Highlight, "Sun")
 	text("quiet surface", old.Quiet, new.Quiet, "Grain")

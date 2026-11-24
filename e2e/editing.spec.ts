@@ -318,7 +318,7 @@ test("Retire… with a replacement, Bring back into use…, Unpublish… and Del
   await expect(editState(page)).toHaveAttribute("aria-label", "Retired. Readers see version 2, marked as retired. Saved.");
   await expect(bar(page).locator(".state-pill.retired")).toHaveText("Retired");
   await readerSees();
-  await expect(r.locator(".banner", { hasText: "This process is retired." }).getByRole("link", { name: "Request a GCP project" })).toBeVisible();
+  await expect(r.locator(".banner", { hasText: "This process is retired" }).getByRole("link", { name: "Request a GCP project" })).toBeVisible();
 
   await more(page, "Bring back into use…");
   await answer(page, "Bring it back into use?", "Bring back into use");
@@ -687,7 +687,7 @@ test.describe("more of the editing screen", () => {
     await editor.click();
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.insertText("{ not json");
-    await expect(page.locator(".json-side .check.bad")).toBeVisible();
+    await expect(page.locator(".json-side .alert.alert-problem")).toBeVisible();
     await expect(editState(page)).toHaveAttribute("aria-label", /\. Not saved yet\.$/);
     await page.getByRole("button", { name: "Back to the editor" }).first().click();
     await answer(page, "Leave the JSON without its changes?", "Stay");

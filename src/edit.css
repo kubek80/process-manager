@@ -81,9 +81,7 @@
 .checker-pop, .menu-pop { position: absolute; z-index: 40; top: calc(100% + 8px); right: 0; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-3); }
 .checker-pop { width: min(440px, 92vw); max-height: 60vh; overflow: auto; padding: 12px; }
 .checker-pop ul { list-style: none; margin: 4px 0 8px; padding: 0; display: grid; gap: 2px; }
-.checker-reason { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; padding: 10px 12px; border-radius: 10px; font-size: var(--fs-md); line-height: var(--lh-md); font-weight: var(--fw-medium); color: var(--text); background: var(--bad-bg); }
-.checker-reason > svg { flex: none; margin-top: 1px; color: var(--bad); }
-.checker-reason.warn { background: var(--warn-bg); } .checker-reason.warn > svg { color: var(--warn); }
+.checker-pop .checker-reason { margin: 0 0 10px; }
 .checker-head { display: flex; align-items: baseline; gap: 8px; margin-top: 4px; font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); letter-spacing: .05em; text-transform: uppercase; color: var(--text-2); }
 .checker-head span { font-weight: var(--fw-medium); letter-spacing: 0; text-transform: none; color: var(--text-3); }
 .checker-pop li button { display: flex; align-items: flex-start; gap: 9px; width: 100%; padding: 8px; border-radius: 8px; font-size: var(--fs-md); line-height: var(--lh-md); }
@@ -107,8 +105,7 @@
 .menu-item[aria-disabled] em { color: var(--warn); }
 
 .edit-banners { padding: 8px 16px 0; }
-.edit-banners .banner { margin: 0 0 8px; }
-.check.info { background: var(--info-bg); color: var(--info); }
+.edit-banners .alert { margin: 0 0 8px; }
 
 /* the three columns: outline | fields | what readers will see (the order of the page too, so Tab
    and screen readers meet them in the same order) */
@@ -407,12 +404,9 @@
 .actor-edit, .prereq-edit { display: grid; gap: 6px; width: 100%; padding-bottom: 10px; border-bottom: 1px dashed var(--line); }
 .row.indent { padding-left: 30px; }
 .row.indent > * { flex: 1; }
-.item-issues { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; font-size: var(--fs-md); line-height: var(--lh-md); }
-.item-issues.bad { background: var(--bad-bg); } .item-issues.warn { background: var(--warn-bg); }
-.item-issues strong { display: flex; align-items: center; gap: 6px; font-size: var(--fs-md); line-height: var(--lh-md); }
-.item-issues.bad strong { color: var(--bad); } .item-issues.warn strong { color: var(--warn); }
-.item-issues.hint { background: var(--surface-2); } .item-issues.hint strong { color: var(--text-2); }
-.item-issues ul { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 2px; color: var(--text); }
+/* what is to fix of the item: an alert (Alert.tsx) with its list */
+.item-issues { margin: 10px 0 0; }
+.item-issues ul { margin: 0; padding-left: 20px; display: grid; gap: 2px; }
 .item-feedback { margin-top: 10px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--bad) 30%, var(--line)); }
 .item-feedback-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border-radius: 10px; font-size: var(--fs-md); line-height: var(--lh-md); text-align: left; color: var(--text-2); }
 .item-feedback-head:hover { background: var(--surface-2); }

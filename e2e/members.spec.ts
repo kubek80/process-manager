@@ -8,7 +8,7 @@ import { ALEX, CSRF, DANA, JORDAN, MORGAN, RILEY, SAM, discardWorkingDraft, edit
 const BASE = "http://127.0.0.1:8090";
 const GCP = "request-gcp-project"; // published, platform Google Cloud
 const bar = (page: Page) => page.locator(".edit-bar");
-const banner = (page: Page) => page.locator(".check.info.banner.publish-right");
+const banner = (page: Page) => page.locator(".alert.alert-info.banner.publish-right");
 
 async function person(browser: Browser, email: string) {
   const ctx = await browser.newContext({ baseURL: BASE, viewport: { width: 1500, height: 950 } });

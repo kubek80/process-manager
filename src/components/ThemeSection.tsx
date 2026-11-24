@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Alert } from "./Alert";
 import { CircleAlert, CircleCheck, Eye, ImageUp, Info, LayoutGrid, Loader2, Moon, Redo2, RotateCcw, Save, Search, Sun, TriangleAlert, Trash2, Undo2 } from "lucide-react";
 import type { Process, Standard } from "../types";
 import { useCatalog } from "../lib/catalog";
@@ -42,20 +43,20 @@ const COLOR_TEXT: Record<ColorPart, { label: string; hint: string }> = {
   otherButtons: { label: "Other buttons", hint: "The outlined buttons beside it, such as Cancel, Discard or Give feedback. Quiet buttons without an outline stay grey" },
   success: { label: "Success", hint: "Published, saved, nothing to fix, done" },
   warning: { label: "Warning", hint: "Review due, drafts, unsaved changes, a step that loops back" },
-  info: { label: "Information", hint: "Notices that only tell something, such as what readers still see" },
+  info: { label: "Information", hint: "Information alerts and notices that only tell something, such as what readers still see" },
   problem: { label: "Problem", hint: "Review overdue, what is to fix, errors, buttons that delete. The designer's palette has no red: this one is the portal's own" },
   highlight: { label: "Highlight", hint: "Words found by a search, in the results and on the page" },
   quiet: { label: "Quiet surface", hint: "A warm, calm ground for notes and asides" },
 };
 /** What each colour of the designer's palette does in the default look (Snow has no setting: the surfaces stay white so that every colour is measured against them). */
 const DESIGNER_JOBS: { name: keyof typeof DESIGNER; job: string }[] = [
-  { name: "ocean", job: "Brand, links, main buttons" }, { name: "sky", job: "Second colour: page ground and tints" },
+  { name: "ocean", job: "Brand, links, main buttons" }, { name: "sky", job: "Second colour: page ground, tints, information" },
   { name: "snow", job: "Surfaces" }, { name: "midnight", job: "Ink: text, editing bar, dark look" },
   { name: "land", job: "Success" }, { name: "earth", job: "Warnings" }, { name: "berry", job: "Standards" },
   { name: "sun", job: "Highlights" }, { name: "grain", job: "Quiet surface" },
 ];
 /** What a colour left at its default does, where that is not simply the default colour. */
-const DEFAULT_TEXT: Partial<Record<ColorPart, string>> = { mainButton: "Follows the brand", info: "Follows the brand", otherButtons: "Neutral" };
+const DEFAULT_TEXT: Partial<Record<ColorPart, string>> = { mainButton: "Follows the brand", info: "Default: Sky, follows the second colour", otherButtons: "Neutral" };
 const FONT_CHOICES: { id: Font | undefined; label: string; family: string }[] = [
   { id: undefined, label: "Default (Roboto)", family: '"Roboto Variable", Roboto, Helvetica, Arial, sans-serif' },
   { id: "inter", label: "Inter", family: '"Inter Variable", Inter, system-ui, sans-serif' },
@@ -167,7 +168,7 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
           <section className="theme-group" aria-labelledby="theme-ground">
             <h3 id="theme-ground">Brand, second colour and ink</h3>
             {(["brand", "secondary", "ink"] as const).map((part) => (
-              <ColorField key={part} part={part} value={look[part]} use={derived.colors.find((c) => c.part === part)} onChange={(v) => set({ [part]: v })} infoChosen={!!look.info} />
+              <ColorField key={part} part={part} value={look[part]} use={derived.colors.find((c) => c.part === part)} onChange={(v) => set({ [part]: v })} />
             ))}
           </section>
 
@@ -217,7 +218,7 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
             <h3 id="theme-states">States</h3>
             <p className="muted small">The same colour always means the same: choose colours that stay far apart. Icons beside them say the same for people who see colours differently.</p>
             {STATE_PARTS.map((part) => (
-              <ColorField key={part} part={part} value={look[part]} fallback={part === "info" ? look.brand : undefined} use={derived.colors.find((c) => c.part === part)} onChange={(v) => set({ [part]: v })} />
+              <ColorField key={part} part={part} value={look[part]} fallback={part === "info" ? look.secondary : undefined} use={derived.colors.find((c) => c.part === part)} onChange={(v) => set({ [part]: v })} />
             ))}
           </section>
 
@@ -368,7 +369,7 @@ function LogoField({ look, onChange }: { look: Look; onChange: (logo: string | u
   );
 }
 
-function ColorField({ part, value, fallback, use, onChange, infoChosen = false }: { part: ColorPart; value?: string; fallback?: string; use?: ColorUse; onChange: (v: string | undefined) => void; infoChosen?: boolean }) {
+function ColorField({ part, value, fallback, use, onChange }: { part: ColorPart; value?: string; fallback?: string; use?: ColorUse; onChange: (v: string | undefined) => void }) {
   const id = useId();
   // a part that follows another (the brand) shows that colour while it has none of its own
   const shown = value ?? fallback ?? DEFAULT_COLOR[part];
@@ -408,7 +409,7 @@ function ColorField({ part, value, fallback, use, onChange, infoChosen = false }
       )}
       {adjusted && part !== "ink" && <p className="color-note"><Info size={14} aria-hidden="true" /><span>{adjustedText(use!)}</span></p>}
       {use && (part === "brand" || part === "process" || part === "standard") && use.like.map((k) => (
-        <p key={k} className="color-note warn" tabIndex={-1}><TriangleAlert size={14} aria-hidden="true" /><span>{confusion(part, k, !infoChosen)}</span></p>
+        <p key={k} className="color-note warn" tabIndex={-1}><TriangleAlert size={14} aria-hidden="true" /><span>{confusion(part, k)}</span></p>
       ))}
       {use?.warnings.map((w) => (
         <p key={w} className="color-note warn" tabIndex={-1}><TriangleAlert size={14} aria-hidden="true" /><span>{w}</span></p>
@@ -495,10 +496,10 @@ function LookPreview({ look, processes, standards }: { look: Look; processes: Pr
                 <span className="pv-link">A link</span>
               </div>
               <div className="pv-states">
-                <div className="check good"><CircleCheck size={15} /><span><b>Success:</b> published, everything is saved.</span></div>
-                <div className="check warn"><TriangleAlert size={15} /><span><b>Warning:</b> review due in 5 days.</span></div>
-                <div className="check info"><Info size={15} /><span><b>Information:</b> readers still see version 3.</span></div>
-                <div className="check bad"><CircleAlert size={15} /><span><b>Problem:</b> review overdue.</span></div>
+                <Alert tone="info" title="Information">Readers still see version 3.</Alert>
+                <Alert tone="success" title="Success">Published: everything is saved.</Alert>
+                <Alert tone="warning" title="Warning">Review due in 5 days.</Alert>
+                <Alert tone="problem" title="Problem">Review overdue.</Alert>
               </div>
               <div className="pv-row pv-marks">
                 <span className="status good"><CircleCheck size={14} />Nothing to fix</span>

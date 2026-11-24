@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, Boxes, CalendarCheck, Check, CircleCheck, Compass, Flag, PencilLine, Send, Users } from "lucide-react";
+import { Alert } from "./Alert";
+import { ArrowUpRight, Boxes, CalendarCheck, Check, Compass, Flag, PencilLine, Send, Users } from "lucide-react";
 import type { DocMeta, FeedbackByTarget, Process, Standard, TargetKind } from "../types";
 import { groupName, useCatalog } from "../lib/catalog";
 import { STATUS_LABEL } from "../lib/lifecycle";
@@ -132,9 +133,11 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
       </div>
 
       {tasks.length === 0 && owned.length > 0 && (
-        <div className="check good banner"><CircleCheck size={16} /><span>{onlyMember
-          ? <><b>No draft is waiting for an owner.</b> Create one with “New process” or “New standard”, or suggest a change with “Edit” on what belongs to your platforms and practices.</>
-          : <><b>Nothing needs you right now.</b> Every review is up to date, no feedback is waiting and nothing waits for you to publish.</>}</span></div>
+        <Alert tone="success" className="banner" title={onlyMember ? "No draft is waiting for an owner" : "Nothing needs you right now"}>
+          {onlyMember
+            ? "Create one with “New process” or “New standard”, or suggest a change with “Edit” on what belongs to your platforms and practices."
+            : "Every review is up to date, no feedback is waiting and nothing waits for you to publish."}
+        </Alert>
       )}
 
       {(overdue.length > 0 || soon.length > 0) && (

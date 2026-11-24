@@ -34,7 +34,7 @@
 .head-actions .btn.quiet:hover:not(:disabled) { color: var(--text); }
 /* retired, review overdue: directly under the title, before the facts */
 .doc-notices { display: grid; gap: 8px; margin: 12px 0 2px; max-width: 920px; }
-.doc-notices .banner { margin: 0; }
+.doc-notices .alert { margin: 0; }
 
 /* "Before you start", the same compact panel on the map and the checklist: what is needed in one
    row of small items, then the faster ways and the standards in one line of chips */
@@ -146,12 +146,8 @@ kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-st
 .fb-new h2 { font-size: var(--fs-h4); line-height: var(--lh-h4); }
 
 /* the reader's page: the calm line about drafts */
-.draft-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin: 10px 0 0; padding: 6px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--text-2); font-size: var(--fs-md); line-height: var(--lh-md); }
-.draft-line svg { flex: none; color: var(--accent); }
-.draft-line span { flex: 1 1 260px; }
-.draft-line a { font-weight: var(--fw-medium); }
-.draft-line.never { background: var(--warn-bg); }
-.draft-line.never svg { color: var(--warn); }
+/* a draft and unpublished changes, on the reader's page: an alert (Editing.tsx: DraftLine) */
+.alert.draft-line { margin: 10px 0 0; }
 
 /* where more of the flow is out of view, the map fades out on that edge (the lane names stay readable on the left) */
 .flow-viewport { position: relative; }

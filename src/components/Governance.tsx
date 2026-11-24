@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { ArrowLeft, CalendarCheck, Code2, Compass, Layers, Rows3, Server, TriangleAlert } from "lucide-react";
+import { Alert } from "./Alert";
+import { ArrowLeft, CalendarCheck, Code2, Compass, Layers, Rows3, Server } from "lucide-react";
 import type { DocMeta, Governed, Rigour, TargetKind } from "../types";
 import { environmentLabel, languageLabel, ownedBy, platformName, practiceName, tierLabel, useCatalog } from "../lib/catalog";
 import { belongsChoice, belongsRefused, placesOf, wouldLoseEdit, type Belongs, type BelongsField } from "../lib/rights";
@@ -320,7 +321,7 @@ export function BelongsEditor({ kind, doc, saved, onChange }: {
         {belongs("platform", "Platform", catalog.platforms)}
         {belongs("practice", "Practice", catalog.practices)}
       </div>
-      {lose && <div className="check warn" role="alert"><TriangleAlert size={16} /><span>{lose}</span></div>}
+      {lose && <Alert tone="warning" role="alert">{lose}</Alert>}
       {kind === "process" && (
         <div className="field">
           <span className="field-label">Rigour<em>how binding it is: {doc.rigour ? RIGOUR[doc.rigour]?.hint : "readers are not told whether they must use it."}</em></span>

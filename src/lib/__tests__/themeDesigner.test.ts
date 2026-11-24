@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
 import {
-  confusion, contrast, DEFAULT_COLOR, fullTokens, MAP_TOKENS, readingPairs, TEXT_MIN, DEFAULT_LOOK, derive, DESIGNER, distance, groundOf, INK_TEXT, kindsAlikeToColourBlindText, lookProperties, mix, paletteName, PALETTES,
+  ALERT, ALERT_TEXT, confusion, contrast, DEFAULT_COLOR, fullTokens, MAP_TOKENS, readingPairs, TEXT_MIN, DEFAULT_LOOK, derive, DESIGNER, distance, groundOf, INK_TEXT, kindsAlikeToColourBlindText, lookProperties, mix, paletteName, PALETTES,
   PROBLEM_RED, PROCESS_TEAL, seenWithout, SURFACES, TINT_STEPS, TOKENS, warningCount,
 } from "../theme";
 
@@ -13,7 +13,7 @@ const read = (f: string) => readFileSync(join(SRC, f), "utf8").replace(/\/\*[\s\
 describe("the designer's look is the default", () => {
   it("gives every job its colour of the palette; problems and processes keep colours of their own", () => {
     expect(DEFAULT_COLOR).toMatchObject({
-      brand: DESIGNER.ocean, mainButton: DESIGNER.ocean, info: DESIGNER.ocean, secondary: DESIGNER.sky, ink: DESIGNER.midnight, otherButtons: DESIGNER.midnight,
+      brand: DESIGNER.ocean, mainButton: DESIGNER.ocean, info: DESIGNER.sky, secondary: DESIGNER.sky, ink: DESIGNER.midnight, otherButtons: DESIGNER.midnight,
       standard: DESIGNER.berry, success: DESIGNER.land, warning: DESIGNER.earth, highlight: DESIGNER.sun, quiet: DESIGNER.grain, problem: PROBLEM_RED, process: PROCESS_TEAL,
     });
     expect(DESIGNER).toEqual({ ocean: "#1971ed", sky: "#66c5ff", snow: "#ffffff", midnight: "#0e0d26", sun: "#f3ea5d", earth: "#ff6720", grain: "#e6cda8", land: "#00b35f", berry: "#913199" });
@@ -213,10 +213,72 @@ describe("the map joins the look", () => {
 });
 
 describe("the warnings cover what a look cannot keep", () => {
-  it("a second colour like the highlight, and a red brand that Information follows", () => {
+  it("a second colour like the highlight; information follows the second colour, no longer the brand", () => {
     expect(derive({ secondary: "#f3ea5d" }).colors[0].warnings).toContain("The second colour looks like the highlight: the page ground and what is selected will look like words found by a search.");
-    expect(confusion("brand", "bad", true)).toContain("Notices that only inform are in the brand colour too: they will look like problem notices");
-    expect(confusion("brand", "bad", false)).not.toContain("Notices");
+    // a red brand still says it looks like problems, but notices no longer follow it
     expect(derive({ brand: "#d6336c" }).colors[0].like).toContain("bad");
+    expect(confusion("brand", "bad")).not.toContain("Notices");
+    expect(derive({ brand: "#d6336c" }).colors.flatMap((c) => c.warnings).join(" ")).not.toContain("Notices that only inform");
+    // a red second colour, which information follows, says so; a red information colour of its own says it too
+    expect(derive({ secondary: "#d6336c" }).colors[0].warnings).toContain("Notices that only inform, and information alerts, are in the second colour: they will look like problem notices. Give Information a colour of its own under States.");
+    expect(derive({ info: "#d6336c" }).colors.find((c) => c.part === "info")!.warnings).toContain("Notices that only inform will look like problems.");
+    expect(derive({ secondary: "#d6336c", info: "#1971ed" }).colors.find((c) => c.part === "secondary")!.warnings.join(" ")).not.toContain("Notices");
+  });
+});
+
+describe("the designer's alerts", () => {
+  it("are the one exception to the tint steps: their grounds are the designer's own (information: Sky at 13 %), and only alerts use them", () => {
+    const wrong: string[] = [];
+    for (const f of sheets) {
+      for (const m of read(f).matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+        if (/var\(--alert-(info|success|warn|bad)-(bg|icon)\)/.test(m[2]) && !/\.alert|\.toast/.test(m[1])) wrong.push(`${f}: ${m[1].trim()}`);
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+  const light = fullTokens({}, "light"), dark = fullTokens({}, "dark");
+  it("are the designer's values in the default look, light", () => {
+    expect([light["alert-info-bg"], light["alert-success-bg"], light["alert-warn-bg"], light["alert-bad-bg"]]).toEqual(["#ebf7ff", "#f4ffdb", "#fffae0", "#ffebeb"]);
+    expect(light["alert-info-icon"]).toBe("#0074bc");
+    expect(light["alert-text"]).toBe("#13130c");
+    expect(ALERT_TEXT).toBe("#13130c");
+    // the information ground is Sky at 13 % over Snow, the designer's own strength for alerts
+    expect(mix(DESIGNER.sky, DESIGNER.snow, 0.13)).toBe("#ebf7ff");
+    // the icons the portal chose for the other three: a dark green, a dark mustard, a red
+    expect([light["alert-success-icon"], light["alert-warn-icon"], light["alert-bad-icon"]]).toEqual([ALERT.success.icon, ALERT.warning.icon, ALERT.problem.icon]);
+  });
+  it("read: one text on every ground, each icon at least 4.5:1 on its own (3:1 in the dark look), the mark in it too", () => {
+    for (const a of ["info", "success", "warn", "bad"]) {
+      expect(contrast(light["alert-text"], light[`alert-${a}-bg`]), a).toBeGreaterThanOrEqual(12);
+      expect(contrast(light[`alert-${a}-icon`], light[`alert-${a}-bg`]), a).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(light[`alert-${a}-icon`], light.surface), `${a}: the white mark in its icon`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(dark["alert-text"], dark[`alert-${a}-bg`]), `${a} dark`).toBeGreaterThanOrEqual(TEXT_MIN);
+      expect(contrast(dark[`alert-${a}-icon`], dark[`alert-${a}-bg`]), `${a} dark`).toBeGreaterThanOrEqual(3);
+      expect(contrast(dark[`alert-${a}-icon`], dark.bg), `${a} dark: the dark mark in its icon`).toBeGreaterThanOrEqual(3);
+    }
+  });
+  it("keep their four hues in the dark look, apart from each other and from the ground", () => {
+    const bgs = ["info", "success", "warn", "bad"].map((a) => dark[`alert-${a}-bg`]);
+    for (let i = 0; i < bgs.length; i++) {
+      expect(contrast(bgs[i], dark.bg), "stands off the dark ground").toBeGreaterThan(1.1);
+      for (let j = i + 1; j < bgs.length; j++) expect(distance(bgs[i], bgs[j])).toBeGreaterThan(5);
+    }
+  });
+  it("follow a changed state colour: a ground of its hue at the designer's lightness, an icon that reads on it", () => {
+    const hsl = (hex: string) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255); const max = Math.max(r, g, b), min = Math.min(r, g, b); return (max + min) / 2; };
+    for (const [part, token, chosen] of [["success", "alert-success", "#0d9488"], ["warning", "alert-warn", "#7c3aed"], ["problem", "alert-bad", "#9333ea"], ["info", "alert-info", "#16a34a"]] as const) {
+      const t = derive({ [part]: chosen }).tokens.light;
+      expect(t[`${token}-bg`], part).not.toBe(ALERT[part].bg);
+      expect(Math.abs(hsl(t[`${token}-bg`]) - hsl(ALERT[part].bg)), `${part}: same lightness`).toBeLessThan(0.01);
+      expect(contrast(t[`${token}-icon`], t[`${token}-bg`]), part).toBeGreaterThanOrEqual(4.5);
+    }
+    // information without a colour of its own follows the second colour
+    const second = derive({ secondary: "#f59e0b" }).tokens.light;
+    expect(second["alert-info-bg"]).not.toBe("#ebf7ff");
+    expect(second.info).not.toBe(fullTokens({}, "light").info);
+    // an admin's stored information colour keeps working, and wins over the second colour
+    expect(derive({ info: "#4f46e5", secondary: "#f59e0b" }).tokens.light.info).toBe(derive({ info: "#4f46e5" }).tokens.light.info);
+    // a changed ink is the alerts' text too; the default ink keeps the designer's
+    expect(derive({ ink: "#1f2937" }).tokens.light["alert-text"]).toBe(derive({ ink: "#1f2937" }).tokens.light.text);
   });
 });

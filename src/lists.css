@@ -101,8 +101,8 @@
 .filter-chip-key { color: var(--text-2); font-weight: var(--fw-medium); }
 .filter-clear { flex: none; min-height: 30px; padding: 0 8px; border-radius: 8px; color: var(--accent); font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-medium); white-space: nowrap; }
 .filter-clear:hover { text-decoration: underline; text-underline-offset: 3px; }
-/* an old link named a filter that no longer exists: said once, quietly, above the chosen filters */
-.list-notice { margin: 0 0 10px; padding: 7px 12px; width: fit-content; max-width: 100%; font-size: var(--fs-md); line-height: var(--lh-md); color: var(--text-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; }
+/* an old link named a filter that no longer exists: said once, as an information alert, above the chosen filters */
+.alert.list-notice { margin: 0 0 10px; }
 
 .list-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 28px 28px 24px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); color: var(--text-2); }
 .list-empty .btn { margin-top: 12px; }

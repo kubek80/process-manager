@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Alert } from "./Alert";
 import { Bot, Check, Download, FileText, Pencil, Sparkles } from "lucide-react";
 import type { Skill, SkillDetail, TargetKind } from "../types";
 import { loadSkill, loadSkills, loadSkillVersion, putSkillExtra } from "../lib/store";
@@ -74,7 +75,7 @@ export function SkillPanel({ id, onChanged }: { id: string; onChanged?: () => vo
         <summary>Where to put it</summary>
         <p>Download the file and save it in the repository you work in, as <code>{skill.path}</code>. The AI coding assistant finds it there by itself; to update it, download it again.</p>
       </details>
-      {!skill.active && <div className="check warn"><span>Withdrawn: its source is a draft, retired or deleted. The last version is kept for reference.</span></div>}
+      {!skill.active && <Alert tone="warning" title="Withdrawn">Its source is a draft, retired or deleted. The last version is kept for reference.</Alert>}
 
       <div className="skill-bar">
         <label className="skill-version">Version

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { CircleAlert, LogIn } from "lucide-react";
+import { Alert } from "./Alert";
+import { LogIn } from "lucide-react";
 import type { Me } from "../types";
 import { devLogin } from "../lib/store";
 import { useLook } from "../lib/theme";
@@ -20,7 +21,7 @@ export function Login({ me, onSignedIn }: { me: Me; onSignedIn: () => void }) {
         <BrandLogo look={look} big />
         <h1 className={name.length > 24 ? "long" : undefined}>{name}</h1>
         <p className="lead">How to get things done on the platform, step by step.</p>
-        {error && <div className="check bad"><CircleAlert size={16} /><span>Sign-in did not work: {error}</span></div>}
+        {error && <Alert tone="problem" title="Sign-in did not work">{error}</Alert>}
 
         {me.provider === "dev" ? (
           <>

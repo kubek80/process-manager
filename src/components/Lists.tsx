@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Alert } from "./Alert";
 import { AppWindow, ChevronDown, ChevronLeft, ChevronRight, LayoutGrid, Lightbulb, Rows3, Search, ShieldCheck, SlidersHorizontal, Workflow, X } from "lucide-react";
 import type { Process, Rigour, Standard, TargetKind } from "../types";
 import { href } from "../lib/store";
@@ -42,7 +43,7 @@ export function useLinkFilters(filters: Filters, docs: (Process | Standard)[], c
   const shown = noticeFor !== null && noticeFor === now;
   return {
     filters: ready ? checked.filters : filters,
-    notice: shown ? <p className="list-notice" role="status">{DROPPED_FILTER_TEXT}</p> : null,
+    notice: shown ? <Alert tone="info" className="list-notice" role="status">{DROPPED_FILTER_TEXT}</Alert> : null,
   };
 }
 

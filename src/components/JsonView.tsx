@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlignLeft, CircleAlert, CircleCheck, Download, FoldVertical, Search, UnfoldVertical } from "lucide-react";
+import { Alert } from "./Alert";
+import { AlignLeft, CircleAlert, Download, FoldVertical, Search, UnfoldVertical } from "lucide-react";
 import type { Issue } from "../types";
 import { hasErrors } from "../lib/validate";
 import { download } from "../lib/store";
@@ -63,13 +64,12 @@ export function JsonView<T extends { id: string }>({ doc, noun, validate, schema
       </div>
 
       <div className="json-side">
-        <div className={`check ${ok ? "good" : "bad"}`}>
-          {ok ? <CircleCheck size={16} /> : <CircleAlert size={16} />}
-          <span>{parsed.error
+        <Alert tone={ok ? "success" : "problem"}>
+          {parsed.error
             ? <>Not valid JSON yet. The red marker in the margin shows where: {parsed.error}</>
             : ok ? "Valid against the schema. Edits are applied to the draft as you type."
-              : "Not applied to the draft until the problems below are fixed."}</span>
-        </div>
+              : "Not applied to the draft until the problems below are fixed."}
+        </Alert>
         {parsed.error && <button className="btn small" onClick={() => editor.current?.nextProblem()}><CircleAlert size={14} />Go to the problem</button>}
         {issues.length > 0 && (
           <IssueList issues={issues} label="What the checker found" pickTitle="Show in the editor" onPick={(i) => editor.current?.reveal(i.path)}

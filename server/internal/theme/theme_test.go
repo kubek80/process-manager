@@ -97,6 +97,8 @@ func TestDescribeSaysWhatChanged(t *testing.T) {
 		{theme.Look{Success: "#166534", Font: "inter"}, theme.Look{MainButton: "#15803d", OtherButtons: "#0369a1", Warning: "#ea580c", Info: "#2563eb", Problem: "#b91c1c"},
 			"colour of main buttons #15803d; colour of other buttons #0369a1; colour of success back to the default (Land); colour of warnings #ea580c; colour of information #2563eb; colour of problems #b91c1c; font back to the default (Roboto)"},
 		{theme.Look{}, theme.Look{Font: "inter"}, "font Inter"},
+		// information follows the second colour, no longer the brand
+		{theme.Look{Info: "#2563eb", Name: "A"}, theme.Look{Name: "A"}, "colour of information back to the default (Sky, the second colour)"},
 		// "roboto" is the default font now: storing it or dropping it changes nothing people see
 		{theme.Look{Brand: "#0055aa"}, theme.Look{Brand: "#0055aa", Font: "roboto"}, "nothing changed"},
 		{theme.Look{Secondary: "#123456", Highlight: "#ffff00"}, theme.Look{Ink: "#111111", Quiet: "#eeddcc"},

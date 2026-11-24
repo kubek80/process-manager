@@ -75,17 +75,17 @@ export const PROCESS_TEAL = "#0a8276";
 export const DEFAULT_COLOR: Record<ColorPart, string> = {
   brand: DESIGNER.ocean, secondary: DESIGNER.sky, ink: DESIGNER.midnight, process: PROCESS_TEAL, standard: DESIGNER.berry,
   mainButton: DESIGNER.ocean, otherButtons: DESIGNER.midnight,
-  success: DESIGNER.land, warning: DESIGNER.earth, info: DESIGNER.ocean, problem: PROBLEM_RED,
+  success: DESIGNER.land, warning: DESIGNER.earth, info: DESIGNER.sky, problem: PROBLEM_RED,
   highlight: DESIGNER.sun, quiet: DESIGNER.grain,
 };
 /**
  * The default look as if every colour were chosen, except those that follow another (main buttons
- * and information follow the brand, other buttons the text): the token blocks of styles.css hold
+ * follow the brand, other buttons the text; information is Sky, the second colour): the token blocks of styles.css hold
  * exactly what `derive` works out for it (a unit test keeps them equal).
  */
 export const DEFAULT_LOOK: Look = {
   brand: DEFAULT_COLOR.brand, secondary: DEFAULT_COLOR.secondary, ink: DEFAULT_COLOR.ink, process: DEFAULT_COLOR.process, standard: DEFAULT_COLOR.standard,
-  success: DEFAULT_COLOR.success, warning: DEFAULT_COLOR.warning, problem: DEFAULT_COLOR.problem, highlight: DEFAULT_COLOR.highlight, quiet: DEFAULT_COLOR.quiet,
+  success: DEFAULT_COLOR.success, info: DEFAULT_COLOR.info, warning: DEFAULT_COLOR.warning, problem: DEFAULT_COLOR.problem, highlight: DEFAULT_COLOR.highlight, quiet: DEFAULT_COLOR.quiet,
 };
 /** The name of a colour of the designer's palette ("Ocean"), or undefined. */
 export function paletteName(hex: string | undefined): string | undefined {
@@ -283,7 +283,7 @@ const TINT = { accent: { light: 0.1, dark: 0.35 }, kind: { light: 0.1, dark: 0.1
 const stateTokens = (t: string) => [t, `${t}-bg`, `${t}-fill`, `${t}-ink`];
 const tintTokens = (name: string) => TINT_STEPS.map((n) => `${name}-${n}`);
 /** The surfaces and text of a theme, worked out from the ink and the second colour. */
-const GROUND_TOKENS = ["bg", "surface", "surface-2", "seg-on", "line", "line-strong", "control-line", "text", "text-2", "text-3", "bar", "bar-2", "bar-line", "bar-text", "bar-muted", "mark-green", "mark-green-bg"];
+const GROUND_TOKENS = ["alert-text", "bg", "surface", "surface-2", "seg-on", "line", "line-strong", "control-line", "text", "text-2", "text-3", "bar", "bar-2", "bar-line", "bar-text", "bar-muted", "mark-green", "mark-green-bg"];
 /** Which custom properties a colour part sets. */
 export const TOKENS: Record<ColorPart, string[]> = {
   brand: ["accent", "accent-fill", "accent-ink", "accent-soft", ...tintTokens("ocean")],
@@ -293,12 +293,13 @@ export const TOKENS: Record<ColorPart, string[]> = {
   standard: ["kind-standard", "kind-standard-fill", "kind-standard-ink", "kind-standard-bg", "kind-standard-line"],
   mainButton: ["action-fill", "action-ink"],
   otherButtons: ["action-other", "action-other-line", "action-other-soft"],
-  success: stateTokens("good"), warning: stateTokens("warn"), info: stateTokens("info"), problem: stateTokens("bad"),
+  success: [...stateTokens("good"), "alert-success-bg", "alert-success-icon"], warning: [...stateTokens("warn"), "alert-warn-bg", "alert-warn-icon"],
+  info: [...stateTokens("info"), "alert-info-bg", "alert-info-icon"], problem: [...stateTokens("bad"), "alert-bad-bg", "alert-bad-icon"],
   highlight: ["highlight", "highlight-ink", "search-mark"],
   quiet: ["quiet", "quiet-line", "mark-brown", "mark-brown-bg"],
 };
 /** Parts that follow another while not chosen (the brand, or the neutral text): the CSS says so, nothing is worked out for them. */
-const FOLLOWS: ColorPart[] = ["mainButton", "otherButtons", "info"];
+const FOLLOWS: ColorPart[] = ["mainButton", "otherButtons"];
 
 /**
  * One colour in one theme: the readable variant for text, the fill for filled surfaces with the
@@ -391,6 +392,46 @@ function markTokens(name: string, color: string, ground: Ground): Record<Mode, R
   return { light: of("light"), dark: of("dark") };
 }
 
+/**
+ * The designer's alerts in the default look, light: the ground and the filled icon of each state,
+ * and one text colour for all four. Information is the second colour's (Sky's) family; the
+ * designer's "Alert" (yellow, a triangle) is the portal's warning, the designer's "Warning" (pink,
+ * a red circle) its problem. The icons of success, warning and problem are the portal's own choice
+ * (the designer gave none): each at least 4.5:1 on its ground.
+ */
+export const ALERT: Record<StatePart, { bg: string; icon: string }> = {
+  info: { bg: "#ebf7ff", icon: "#0074bc" }, success: { bg: "#f4ffdb", icon: "#1f6b2a" },
+  warning: { bg: "#fffae0", icon: "#8c6d00" }, problem: { bg: "#ffebeb", icon: "#c4182b" },
+};
+export const ALERT_TEXT = "#13130c";
+/** The token names of an alert per state (styles.css). */
+export const ALERT_TOKEN: Record<StatePart, string> = { info: "alert-info", success: "alert-success", warning: "alert-warn", problem: "alert-bad" };
+/** What an alert's icon must reach on its ground (an icon, but with a margin: it is the alert's only colour). */
+export const ALERT_ICON_MIN = 4.5;
+/**
+ * One state's alert in both looks. The default (`seed` undefined): the designer's ground and icon.
+ * A colour of the admin's own: a ground of its hue at the lightness and saturation of the
+ * designer's ground of that state, and an icon of its hue, darkened until it reads on that ground.
+ * Dark, over Midnight: the icon lightened until it reads on the dark surfaces (4.5:1), its ground
+ * a tint of it over the dark ground, 22 % or less so that the light text keeps TEXT_MIN on it and
+ * the icon 3:1.
+ */
+function alertTokens(state: StatePart, seed: string | undefined, ground: Ground): Record<Mode, Record<string, string>> {
+  const d = ALERT[state], name = ALERT_TOKEN[state];
+  let bg = d.bg, icon = d.icon;
+  // the designer's own colour for the state gives the designer's alert exactly
+  if (seed && seed !== DEFAULT_COLOR[state]) {
+    const [h, sat] = toHsl(hexToRgb(seed)), [, sBg, lBg] = toHsl(hexToRgb(d.bg));
+    bg = rgbToHex(fromHsl(h, sat > 0.02 ? sBg : 0, lBg));
+    icon = readable(seed, [bg, SNOW], ALERT_ICON_MIN);
+  }
+  const deep = ground.dark.bg, darkText = mix(SNOW, deep, 0.95);
+  const iconDark = readable(icon, [deep, ground.dark.surface, ground.dark.surface2], ALERT_ICON_MIN);
+  let t = 0.22, bgDark = mix(iconDark, deep, t);
+  while (t > 0.04 && (contrast(darkText, bgDark) < TEXT_MIN || contrast(iconDark, bgDark) < 3)) { t -= 0.02; bgDark = mix(iconDark, deep, t); }
+  return { light: { [`${name}-bg`]: bg, [`${name}-icon`]: icon }, dark: { [`${name}-bg`]: bgDark, [`${name}-icon`]: iconDark } };
+}
+
 /** A colour as it is used in each theme: as text and as a fill. */
 interface InUse { text: Record<Mode, string>; fill: Record<Mode, string> }
 
@@ -414,7 +455,8 @@ export function derive(look: Look): Derived {
   for (const part of COLOR_PARTS) {
     const chosen = look[part];
     const own = isHex(chosen);
-    const c = (own ? chosen : DEFAULT_COLOR[part]).toLowerCase();
+    // information without a colour of its own is the second colour's (Sky's) family
+    const c = (own ? chosen : part === "info" && isHex(look.secondary) ? look.secondary : DEFAULT_COLOR[part]).toLowerCase();
     if (part === "ink") { add(part, c, { light: gt.light.text, dark: gt.dark.bg }, { light: gt.light.text, dark: gt.dark.bg }); continue; }
     if (part === "secondary") {
       if (own || groundChosen) { put(part, tints("sky", c, ground)); put(part, markTokens("sky", c, ground)); }
@@ -453,11 +495,18 @@ export function derive(look: Look): Derived {
     if (part === "brand" && emit) put(part, tints("ocean", c, ground));
     add(part, c, used, fill);
   }
-  // what each part looks like in use, chosen or not: a main button without its own colour is in the brand colour, information too
+  // the alerts (Alert.tsx): the designer's grounds and icons, or worked out from a state colour of the admin's own
+  for (const state of STATE_PARTS) {
+    const seed = isHex(look[state]) ? look[state]!.toLowerCase() : state === "info" && isHex(look.secondary) ? look.secondary!.toLowerCase() : undefined;
+    // information without a colour of its own, with a second colour of the admin's own: that colour's family, against Sky's alert
+    // (seed is compared with the state's default; for information the default is Sky, so the second colour Sky gives the designer's alert)
+    if (seed || groundChosen) put(state, alertTokens(state, seed, ground));
+  }
+  if (groundChosen || isHex(look.ink)) put("ink", { light: { "alert-text": isHex(look.ink) && look.ink!.toLowerCase() !== DEFAULT_COLOR.ink ? gt.light.text : ALERT_TEXT }, dark: { "alert-text": gt.dark.text } });
+  // what each part looks like in use, chosen or not: a main button without its own colour is in the brand colour
   const eff: Record<ColorPart, InUse> = {
     ...use,
     mainButton: use.mainButton ?? { text: use.brand.fill, fill: use.brand.fill },
-    info: use.info ?? use.brand,
     otherButtons: use.otherButtons ?? { text: { light: gt.light.text, dark: gt.dark.text }, fill: { light: gt.light.text, dark: gt.dark.text } },
   };
   const byPart = (p: ColorPart) => colors.find((c) => c.part === p);
@@ -487,6 +536,13 @@ export function derive(look: Look): Derived {
   pair("info", "success", "Notices that only inform will look like confirmations.");
   pair("info", "warning", "Notices that only inform will look like warnings.");
   pair("info", "problem", "Notices that only inform will look like problems.");
+  // information without a colour of its own follows the second colour: a second colour like a state says so
+  const second = byPart("secondary");
+  if (second && !look.info) {
+    for (const [state, words] of [["problem", "problem notices"], ["warning", "warnings"], ["success", "confirmations"]] as const) {
+      if (alike(eff.info, eff[state])) second.warnings.push(`Notices that only inform, and information alerts, are in the second colour: they will look like ${words}. Give Information a colour of its own under States.`);
+    }
+  }
   pair("secondary", "highlight", "The second colour looks like the highlight: the page ground and what is selected will look like words found by a search.");
   pair("highlight", "warning", "Highlights will look like warnings: a word found by the search and “Review due” will have nearly the same colour.");
   pair("highlight", "problem", "Highlights will look like problems: a word found by the search will look like something to fix.");
@@ -540,6 +596,8 @@ export function readingPairs(t: Record<string, string>): (ReadingPair & { worked
   for (const k of ["good", "warn", "bad"]) add(k, ["bg", "surface", "surface-2", `${k}-bg`]);
   for (const k of ["mark-green", "mark-brown", "mark-sky"]) add(k, ["surface", "surface-2", `${k}-bg`]);
   add("bar-text", ["bar", "bar-2"]); add("bar-muted", ["bar", "bar-2"]);
+  // the alerts: one text colour on every ground, each filled icon on its own ground
+  for (const a of ["alert-info", "alert-success", "alert-warn", "alert-bad"]) { add("alert-text", [`${a}-bg`]); add(`${a}-icon`, [`${a}-bg`], 3, false); }
   // the designer's own fills keep their colour: their ink is checked at 4.5
   for (const [ink, fill] of [["accent-ink", "accent-fill"], ["kind-process-ink", "kind-process-fill"], ["kind-standard-ink", "kind-standard-fill"], ["good-ink", "good-fill"], ["warn-ink", "warn-fill"], ["bad-ink", "bad-fill"], ["highlight-ink", "highlight"]]) add(ink, [fill], 4.5, false);
   // the map: a kind of step's or a lane's icon and letters on its tile, and on the surface
@@ -616,7 +674,7 @@ const GREY_TEXT: Record<ColorPart, string> = {
 
 const SEMANTIC_NAME: Record<Semantic, string> = { bad: "the colour that marks problems", warn: "the colour of warnings such as “Review due”", good: "the colour of good news such as “Published”" };
 /** What a brand or kind colour that looks like a state will be confused with, in plain words. */
-export function confusion(part: "brand" | "process" | "standard", like: Semantic, infoFollowsBrand = false): string {
+export function confusion(part: "brand" | "process" | "standard", like: Semantic): string {
   const what = part === "brand" ? "the brand colour" : `the colour of ${part === "process" ? "processes" : "standards"}`;
   const effect = part === "brand"
     ? {
@@ -625,11 +683,7 @@ export function confusion(part: "brand" | "process" | "standard", like: Semantic
       good: "Buttons and links will look like confirmations, and “all is well” will no longer stand out.",
     }[like]
     : KIND_EFFECT[part][like].replace(/^./, (x) => x.toUpperCase());
-  // information has no colour of its own: its notices are in the brand colour too
-  const notices = part === "brand" && infoFollowsBrand
-    ? ` Notices that only inform are in the brand colour too: they will look like ${({ bad: "problem notices", warn: "warnings", good: "confirmations" } as const)[like]}; give Information a colour of its own under States.`
-    : "";
-  return `This looks like ${SEMANTIC_NAME[like]}: ${effect}${notices} You can still use ${what}.`;
+  return `This looks like ${SEMANTIC_NAME[like]}: ${effect} You can still use ${what}.`;
 }
 /** How many warnings a look gets: what each colour will be mistaken for, and two kinds that look alike. */
 export function warningCount(d: Derived): number {

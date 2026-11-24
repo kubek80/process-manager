@@ -178,7 +178,7 @@ test("About: restrict to tiers, an environment and a language; retire with a rep
   await expect(page.locator("header.doc-head")).toContainText("Tier 0, Tier 1");
   await expect(page.locator("header.doc-head")).toContainText("Python");
   await expect(page.locator("header.doc-head")).toContainText("Production");
-  await expect(page.locator(".banner", { hasText: "This process is retired." }).getByRole("link", { name: "Request a GCP project" })).toBeVisible();
+  await expect(page.locator(".banner", { hasText: "This process is retired" }).getByRole("link", { name: "Request a GCP project" })).toBeVisible();
 
   // put it back in use for the tests that follow
   await page.getByRole("link", { name: "Edit", exact: true }).click();
@@ -230,7 +230,7 @@ test("the JSON editor marks problems on the line and applies valid edits", async
   await expect(finding.locator(".issue-place")).toHaveText("Step 3 “Review the request at the governance board”");
   await expect(finding.locator(".issue-detail")).toHaveText("steps[2].actor");
   await expect(finding.getByRole("button")).toHaveAttribute("title", "Show in the editor");
-  await expect(page.locator(".json-side .check.bad")).toContainText("Not applied to the draft");
+  await expect(page.locator(".json-side .alert.alert-problem")).toContainText("Not applied to the draft");
   await finding.getByRole("button").click();
   await expect(page.locator(".cm-lintRange-error")).toHaveText('"nobody"');
   expect(await page.evaluate(() => getSelection()?.toString())).toBe('"nobody"');
@@ -238,10 +238,10 @@ test("the JSON editor marks problems on the line and applies valid edits", async
   await expect(page.locator(".edit-bar").getByRole("button", { name: "Publish…" })).toHaveClass(/\bunavailable\b/);
 
   await replaceAll(original.replace('"title": "Request an Azure landing zone",', '"title": "Request an Azure landing zone"'));
-  await expect(page.locator(".json-side .check.bad")).toContainText("Not valid JSON yet");
+  await expect(page.locator(".json-side .alert.alert-problem")).toContainText("Not valid JSON yet");
 
   await replaceAll(original.replace('"estimatedDuration": "2-3 weeks"', '"estimatedDuration": "about a month"'));
-  await expect(page.locator(".json-side .check.good")).toBeVisible();
+  await expect(page.locator(".json-side .alert.alert-success")).toBeVisible();
   await publish(page);
   expect((await readProcess(page, AZURE))!.estimatedDuration).toBe("about a month");
   await expect(page.locator(".edit-preview .block").first()).toBeVisible(); // after publishing, the screen starts afresh on the map

@@ -1,5 +1,6 @@
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Check, GitCompare, History, PencilLine, Redo2, RotateCcw, Save, TriangleAlert, Undo2, Wrench } from "lucide-react";
+import { Alert } from "./Alert";
+import { ArrowLeft, Check, GitCompare, History, Redo2, RotateCcw, Save, TriangleAlert, Undo2, Wrench } from "lucide-react";
 import type { DocMeta, DocVersion, Status, TargetKind } from "../types";
 import type { Draft } from "../lib/draft";
 import { compare, describeChange, summarize, type Change } from "../lib/diff";
@@ -48,22 +49,19 @@ export function DraftLine({ meta, status, editHref, noun, publisher }: {
   const myEmail = useMe().user?.email;
   if (status === "draft") {
     return (
-      <p className="draft-line never" role="note">
-        <PencilLine size={16} aria-hidden="true" />
-        <span><b>Draft</b> · Readers do not see this {noun} yet. Only {draftAudience(noun === "standard" ? "standard" : "process")} can open it.
-          {/* changes that still have something to fix are kept on the editing screen, not shown here */}
-          {meta?.draft && editHref ? ` ${newerChangesLine(meta.draft, myEmail)}` : ""}</span>
-        {editHref && <a href={editHref}>Continue editing</a>}
-      </p>
+      <Alert tone="warning" className="draft-line never" role="note" title="Draft"
+        actions={editHref && <a className="btn small" href={editHref}>Continue editing</a>}>
+        Readers do not see this {noun} yet. Only {draftAudience(noun === "standard" ? "standard" : "process")} can open it.
+        {/* changes that still have something to fix are kept on the editing screen, not shown here */}
+        {meta?.draft && editHref ? ` ${newerChangesLine(meta.draft, myEmail)}` : ""}
+      </Alert>
     );
   }
   if (!meta?.draft || !editHref) return null;
   return (
-    <p className="draft-line" role="note">
-      <PencilLine size={16} aria-hidden="true" />
-      <span>{unpublishedLine(meta.draft, myEmail, publisher)}</span>
-      <a href={editHref}>Continue editing</a>
-    </p>
+    <Alert tone="info" className="draft-line" role="note" actions={<a className="btn small" href={editHref}>Continue editing</a>}>
+      {unpublishedLine(meta.draft, myEmail, publisher)}
+    </Alert>
   );
 }
 
@@ -73,11 +71,10 @@ export function NotShown({ kind, title, editHref, back, problems }: { kind: Targ
     <div className="page">
       <button className="back" onClick={back}><ArrowLeft size={16} />All {kind === "process" ? "processes" : "standards"}</button>
       <h1>{title}</h1>
-      <div className="check warn banner" role="alert">
-        <TriangleAlert size={16} />
-        <span>This {kind} cannot be shown: what is stored has {problems || "some"} problem{problems === 1 ? "" : "s"}. {editHref ? "Repair it on the editing screen." : "Its owners have been told through the health check."}</span>
-        {editHref && <a className="btn small" href={editHref}><Wrench size={14} />Repair it</a>}
-      </div>
+      <Alert tone="warning" className="banner" role="alert" title={`This ${kind} cannot be shown`}
+        actions={editHref && <a className="btn small" href={editHref}><Wrench size={14} />Repair it</a>}>
+        What is stored has {problems || "some"} problem{problems === 1 ? "" : "s"}. {editHref ? "Repair it on the editing screen." : "Its owners have been told through the health check."}
+      </Alert>
     </div>
   );
 }
@@ -128,13 +125,11 @@ export function SaveBar<T>({ d, editor, blocked }: { d: Draft<T>; editor: boolea
 export function BehindBanner<T>({ d, meta, noun }: { d: Draft<T>; meta?: DocMeta; noun: string }) {
   if (!d.behind || !d.dirty || d.conflict) return null;
   return (
-    <div className="check warn banner">
-      <TriangleAlert size={16} />
-      <span><b>{meta?.updatedByName || meta?.updatedBy || "Somebody else"} saved a newer version of {noun}</b>{meta?.version ? ` (version ${meta.version})` : ""} while you were editing. Your changes are still here.</span>
-      <span className="spacer" />
-      {/* opens the comparison without trying to save: a save could be refused for another reason first */}
-      <button className="btn small" onClick={() => d.raiseConflict({ exists: true, version: meta?.version, updatedBy: meta?.updatedBy || undefined, updatedByName: meta?.updatedByName, updatedAt: meta?.updatedAt || undefined })}>Compare and decide</button>
-    </div>
+    <Alert tone="warning" className="banner" title={`${meta?.updatedByName || meta?.updatedBy || "Somebody else"} saved a newer version of ${noun}${meta?.version ? ` (version ${meta.version})` : ""}`}
+      // opens the comparison without trying to save: a save could be refused for another reason first
+      actions={<button className="btn small" onClick={() => d.raiseConflict({ exists: true, version: meta?.version, updatedBy: meta?.updatedBy || undefined, updatedByName: meta?.updatedByName, updatedAt: meta?.updatedAt || undefined })}>Compare and decide</button>}>
+      That was while you were editing. Your changes are still here.
+    </Alert>
   );
 }
 
@@ -216,7 +211,7 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
         <h3 className="mini-title"><GitCompare size={14} />What their draft has that you started without</h3>
         {theirs === "failed" ? <LoadError what="Their draft could not be loaded." onRetry={() => setAttempt(attempt + 1)} />
           : theirs ? <ChangeList changes={theirs} /> : <p className="muted">Looking…</p>}
-        {blocked && <div className="check warn">{blocked} Until then you can only continue from their draft.</div>}
+        {blocked && <Alert tone="warning">{blocked} Until then you can only continue from their draft.</Alert>}
         <p className="muted small">“Use their draft” continues from what they saved. Undo then puts your whole version back as it was, also where theirs is newer: nothing is merged. “Save mine over theirs” replaces their draft with yours.</p>
       </Modal>
     );
@@ -248,7 +243,7 @@ export function ConflictDialog<T>({ d, kind, id, noun, blocked, theirs: loadThei
           : theirs ? <ChangeList changes={theirs} /> : <p className="muted">Looking…</p>}
       </>}
       {kind === "catalog" && <p className="muted">Open the lists in another tab to see what they changed.</p>}
-      {blocked && <div className="check warn">{blocked} Until then you can only continue from their version.</div>}
+      {blocked && <Alert tone="warning">{blocked} Until then you can only continue from their version.</Alert>}
       <p className="muted small">“Use their version” continues from what they saved. Undo then puts your whole version back as it was, also where theirs is newer: nothing is merged.
         “Save mine over theirs” makes your version the newest; theirs stays in the list of versions and can be restored.</p>
     </Modal>
@@ -306,8 +301,8 @@ export class EditingBoundary extends Component<{
             {onSave && saved !== "saved" && <button className="btn" disabled={saved === "saving"} onClick={save}><Save size={15} />{saved === "saving" ? "Saving…" : "Save draft"}</button>}
             <button className="btn ghost" onClick={onBack}><ArrowLeft size={15} />Back to reading this {noun}</button>
           </div>
-          {!onSave && <p className="check good"><Check size={15} />Everything is saved: nothing on this screen is lost.</p>}
-          {saved === "failed" && <p className="check warn"><TriangleAlert size={15} />The draft could not be saved yet. Undo the last change or try again, then save.</p>}
+          {!onSave && <Alert tone="success">Everything is saved: nothing on this screen is lost.</Alert>}
+          {saved === "failed" && <Alert tone="warning">The draft could not be saved yet. Undo the last change or try again, then save.</Alert>}
           <details className="edit-failed-detail"><summary>What went wrong, for the people who run the portal</summary><code>{error.message}</code></details>
         </div>
       </div>
@@ -368,7 +363,7 @@ export function HistoryDialog<T>({ kind, id, title, onRestore, onClose, draftKep
         ? `${draftKept ? "Every published version is listed here; your saved draft is not." : "Every save is a version."} Restoring one puts it into your draft on this screen: nothing is kept until you save the draft, and readers see nothing until you publish.`
         : "Every save is stored as a version: who stored it, when, and what they said about it."}
       onClose={onClose} footer={<><span className="spacer" /><button className="btn" onClick={onClose}>Close</button></>}>
-      {error && (versions ? <div className="check bad">{error}</div> : <LoadError what="The versions could not be loaded." error={error} onRetry={load} />)}
+      {error && (versions ? <Alert tone="problem">{error}</Alert> : <LoadError what="The versions could not be loaded." error={error} onRetry={load} />)}
       {!versions && !error && <p className="muted">Loading…</p>}
       <ul className="history">
         {versions?.map((v, i) => (

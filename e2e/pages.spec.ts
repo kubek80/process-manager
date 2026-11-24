@@ -263,12 +263,14 @@ test("the head: Edit is the one primary button, Mark as reviewed quiet unless du
   await expect(head.getByRole("button", { name: "Mark as reviewed" })).toHaveClass(/\breview-due\b/);
   const notices = head.locator(".doc-notices");
   await expect(notices.locator(".banner")).toHaveCount(1);
-  await expect(notices.locator(".banner")).toContainText("Review overdue");
+  await expect(notices.locator(".alert.alert-problem.banner .alert-title")).toHaveText(/^Review overdue since \d{4}-\d\d-\d\d$/);
   // retired: its banner in the same place
   const retired = await request.put(`/api/processes/${OLD}?base=1`, { data: { ...data, status: "deprecated" }, headers: CSRF });
   expect(retired.ok(), await retired.text()).toBeTruthy();
   await page.reload();
-  await expect(notices.locator(".banner").first()).toContainText("This process is retired.");
+  // an alert: the lead as its title, the rest as its description
+  await expect(notices.locator(".alert.banner").first().locator(".alert-title")).toHaveText("This process is retired");
+  await expect(notices.locator(".alert.banner").first().locator(".alert-desc")).toHaveText("It is kept for reference only.");
   const order = await head.evaluate((h) => [...h.querySelectorAll("h1, .lead, .doc-notices, .doc-facts")].map((e) => e.tagName === "H1" ? "h1" : e.className.split(" ")[0]));
   expect(order).toEqual(["h1", "lead", "doc-notices", "doc-facts"]);
   const [notice, facts] = [(await notices.boundingBox())!, (await head.locator(".doc-facts").boundingBox())!];

@@ -75,7 +75,8 @@ test("two people on a never-published draft: the newer draft is told about, kept
   // Alex comes back: told, his changes still there
   await comeBackLater(page);
   const banner = page.locator(".banner", { hasText: "saved newer changes to the draft" });
-  await expect(banner).toContainText(/^Dana Admin saved newer changes to the draft .* while you were editing\. Your changes are still here\./);
+  await expect(banner.locator(".alert-title")).toHaveText(/^Dana Admin saved newer changes to the draft at \d{4}-\d\d-\d\d \d\d:\d\d$/);
+  await expect(banner.locator(".alert-desc")).toHaveText("That was while you were editing. Your changes are still here.");
   await expect(firstBlock(page)).toContainText("Alex's careful wording");
   await expect(banner.getByRole("button", { name: "Compare and decide" })).toBeVisible();
 

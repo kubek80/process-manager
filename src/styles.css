@@ -42,8 +42,14 @@
   /* the main button of a view (the brand unless chosen) and the other buttons (neutral unless chosen) */
   --action-fill: var(--theme-light-action-fill, var(--accent-fill)); --action-ink: var(--theme-light-action-ink, var(--accent-ink));
   --action-other: var(--theme-light-action-other); --action-other-line: var(--theme-light-action-other-line); --action-other-soft: var(--theme-light-action-other-soft);
-  /* information follows the brand unless chosen */
-  --info: var(--theme-light-info, var(--accent)); --info-bg: var(--theme-light-info-bg, var(--accent-soft)); --info-fill: var(--theme-light-info-fill, var(--accent-fill)); --info-ink: var(--theme-light-info-ink, var(--accent-ink));
+  /* information: the second colour's (Sky's) family unless chosen */
+  --info: var(--theme-light-info, #0073ba); --info-bg: var(--theme-light-info-bg, #f0f9ff); --info-fill: var(--theme-light-info-fill, #66c5ff); --info-ink: var(--theme-light-info-ink, #11121c);
+  /* the alerts (Alert.tsx): the designer's grounds and filled icons per state, one text colour for all */
+  --alert-text: var(--theme-light-alert-text, #13130c);
+  --alert-info-bg: var(--theme-light-alert-info-bg, #ebf7ff); --alert-info-icon: var(--theme-light-alert-info-icon, #0074bc);
+  --alert-success-bg: var(--theme-light-alert-success-bg, #f4ffdb); --alert-success-icon: var(--theme-light-alert-success-icon, #1f6b2a);
+  --alert-warn-bg: var(--theme-light-alert-warn-bg, #fffae0); --alert-warn-icon: var(--theme-light-alert-warn-icon, #8c6d00);
+  --alert-bad-bg: var(--theme-light-alert-bad-bg, #ffebeb); --alert-bad-icon: var(--theme-light-alert-bad-icon, #c4182b);
   /* Roboto, bundled with the app (@fontsource-variable/roboto), then the designer's fallbacks; Admin > Theming may choose Inter */
   --font-family: var(--theme-font, "Roboto Variable", Roboto), Helvetica, Arial, sans-serif;
   --shadow-1: 0 1px 2px rgb(14 13 38 / .06), 0 1px 1px rgb(14 13 38 / .04);
@@ -83,7 +89,13 @@
   --logo-plate: #eef0f5;
   --action-fill: var(--theme-dark-action-fill, var(--accent-fill)); --action-ink: var(--theme-dark-action-ink, var(--accent-ink));
   --action-other: var(--theme-dark-action-other); --action-other-line: var(--theme-dark-action-other-line); --action-other-soft: var(--theme-dark-action-other-soft);
-  --info: var(--theme-dark-info, var(--accent)); --info-bg: var(--theme-dark-info-bg, var(--accent-soft)); --info-fill: var(--theme-dark-info-fill, var(--accent-fill)); --info-ink: var(--theme-dark-info-ink, var(--accent-ink));
+  --info: var(--theme-dark-info, #66c5ff); --info-bg: var(--theme-dark-info-bg, #263552); --info-fill: var(--theme-dark-info-fill, #66c5ff); --info-ink: var(--theme-dark-info-ink, #11121c);
+  /* the alerts (Alert.tsx): the designer's grounds and filled icons per state, one text colour for all */
+  --alert-text: var(--theme-dark-alert-text, #f3f3f4);
+  --alert-info-bg: var(--theme-dark-alert-info-bg, #0b2950); --alert-info-icon: var(--theme-dark-alert-info-icon, #008ee5);
+  --alert-success-bg: var(--theme-dark-alert-success-bg, #152d2b); --alert-success-icon: var(--theme-dark-alert-success-icon, #2d9d3d);
+  --alert-warn-bg: var(--theme-dark-alert-warn-bg, #30271e); --alert-warn-icon: var(--theme-dark-alert-warn-icon, #a98400);
+  --alert-bad-bg: var(--theme-dark-alert-bad-bg, #3e1d34); --alert-bad-icon: var(--theme-dark-alert-bad-icon, #ea5565);
   --font-family: var(--theme-font, "Roboto Variable", Roboto), Helvetica, Arial, sans-serif;
   --shadow-1: 0 1px 2px rgb(0 0 0 / .4);
   --shadow-2: 0 8px 24px -8px rgb(0 0 0 / .6);
@@ -265,6 +277,7 @@ a.btn { color: var(--action-other, var(--accent)); }
 .status.good { color: var(--good); background: var(--good-bg); }
 .status.warn { color: var(--warn); background: var(--warn-bg); }
 .status.bad { color: var(--bad); background: var(--bad-bg); }
+.status.info { color: var(--info); background: var(--info-bg); }
 .saved { display: inline-flex; align-items: center; gap: 5px; color: var(--text-3); font-size: var(--fs-sm); line-height: var(--lh-sm); }
 .issues-panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; margin-bottom: 16px; }
 .issues { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
@@ -289,13 +302,31 @@ a.btn { color: var(--action-other, var(--accent)); }
 .cat-issues-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0 0 10px; font-size: var(--fs-lg); line-height: var(--lh-lg); font-weight: var(--fw-strong); color: var(--bad); }
 .cat-issues-head svg { align-self: center; flex: none; }
 .cat-issues-head span { font-size: var(--fs-md); line-height: var(--lh-md); font-weight: var(--fw-regular); color: var(--text-2); }
-.check { display: flex; gap: 9px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; font-size: var(--fs-md); line-height: var(--lh-md); margin: 10px 0; }
-.check svg { flex: none; margin-top: 2px; }
-.check.good { background: var(--good-bg); color: var(--good); }
-.check.bad { background: var(--bad-bg); color: var(--bad); }
-.check.warn { background: var(--warn-bg); color: var(--warn); }
-.check.info { background: var(--info-bg); color: var(--info); }
-.check span { color: var(--text); }
+/* ---------- the alert (Alert.tsx): the designer's, one for every notice about the page a person is on ----------
+   Padding 12 / 12 / 12 / 16, the icon's place 24 × 24 (its artwork 20 × 20), 12 between icon and text,
+   radius 8, no border or shadow; title 16/24 Medium, description 16/24 Regular, 4 apart; top aligned; it
+   fits its parent and grows with its text. A browser test measures the designer's instance (335 wide: 100 high). */
+.alert { display: flex; align-items: flex-start; gap: 12px; margin: 10px 0; padding: 12px 12px 12px 16px; border-radius: 8px; border: 0; box-shadow: none;
+  background: var(--alert-bg); color: var(--alert-text); font-size: var(--fs-lg); line-height: var(--lh-lg); font-weight: var(--fw-regular); letter-spacing: 0; text-align: left; }
+.alert-info { --alert-bg: var(--alert-info-bg); --alert-icon: var(--alert-info-icon); }
+.alert-success { --alert-bg: var(--alert-success-bg); --alert-icon: var(--alert-success-icon); }
+.alert-warning { --alert-bg: var(--alert-warn-bg); --alert-icon: var(--alert-warn-icon); }
+.alert-problem { --alert-bg: var(--alert-bad-bg); --alert-icon: var(--alert-bad-icon); }
+/* the mark inside the filled icon: the light surface in the light look, the dark ground in the dark one */
+.alert-icon { --alert-glyph: var(--surface); display: grid; place-items: center; flex: none; width: 24px; height: 24px; color: var(--alert-icon); }
+:root[data-theme="dark"] .alert-icon, .look-dark .alert-icon { --alert-glyph: var(--bg); }
+.look-light .alert-icon { --alert-glyph: var(--surface); }
+.alert-icon > svg { display: block; width: 20px; height: 20px; }
+.alert-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
+.alert-title, .alert-desc { margin: 0; font-size: var(--fs-lg); line-height: var(--lh-lg); }
+.alert-title { font-weight: var(--fw-medium); }
+.alert-desc > p { margin: 0; } .alert-desc > p + p, .alert-desc > ul { margin-top: 4px; }
+.alert-desc :is(b, strong) { font-weight: var(--fw-medium); }
+/* links in an alert are in its text colour, underlined: the brand colour is not measured on every alert ground */
+.alert a:not(.btn), .alert .link-btn { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+/* what a notice offers (Continue editing, Mark as reviewed, Reload): under its text, 8 from it */
+.alert-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.alert-actions .btn { flex: none; }
 
 /* prerequisites */
 .prereqs { margin-bottom: 18px; }
@@ -538,7 +569,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .issues.clickable button:hover { background: var(--surface-2); }
 .issues.clickable button svg { flex: none; margin-top: 2px; }
 .json-side { display: grid; gap: 12px; }
-.json-side .check { margin: 0; }
+.json-side .alert { margin: 0; }
 
 /* ---------- catalog, tiers ---------- */
 .tier-tag { display: inline-flex !important; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-medium); background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2); white-space: nowrap; }
@@ -749,7 +780,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .tier-tag.skill { background: var(--good-bg); border-color: transparent; color: var(--good); }
 .card.retired { opacity: .6; }
 .btn.review-due { border-color: var(--warn); color: var(--warn); background: var(--warn-bg); }
-.banner { margin: 0 0 14px; } .banner b { font-weight: var(--fw-strong); }
+.alert.banner { margin: 0 0 14px; }
 .resources { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
 .resources.compact { grid-template-columns: 1fr; gap: 6px; max-width: 520px; }
 .resources a { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); height: 100%; }
@@ -775,7 +806,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 /* a long portal name is set smaller, so that it takes two lines at most */
 .login-card h1.long { font-size: var(--fs-h2); line-height: var(--lh-h2); }
 .login-card h1 { overflow-wrap: anywhere; }
-.login-card .check { width: 100%; margin: 0; }
+.login-card .alert { width: 100%; margin: 0; }
 .login-btn { height: 42px; padding: 0 18px; }
 .login-dev { font-size: var(--fs-md); line-height: var(--lh-md); color: var(--text-2); padding-top: 12px; border-top: 1px solid var(--line); width: 100%; }
 .login-users { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; width: 100%; }
@@ -1035,12 +1066,14 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .confirm-body { font-size: var(--fs-md); line-height: var(--lh-md); color: var(--text-2); max-width: 60ch; }
 .modal:focus, .drawer:focus, .quick-add:focus { outline: none; }
 .toasts { position: fixed; z-index: 60; right: 16px; bottom: calc(16px + var(--bottom-bar, 0px)); display: grid; gap: 8px; width: min(400px, calc(100vw - 32px)); pointer-events: none; }
-.toast { pointer-events: auto; display: flex; align-items: flex-start; gap: 10px; padding: 12px 10px 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line-strong); border-left: 4px solid var(--good); box-shadow: var(--shadow-3); font-size: var(--fs-md); line-height: var(--lh-md); animation: pop .16s ease-out; }
-.toast.error { border-left-color: var(--bad); }
-.toast > svg { flex: none; margin-top: 2px; color: var(--good); }
-.toast.error > svg { color: var(--bad); }
-.toast p { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }
+/* a message that floats (notify): of the alert's family - its filled icon, gaps, padding and radius, a Medium title
+   over a Regular description - on the surface, with a line and a shadow, as it stands over the page; in the
+   middle size (14/20), so that a message beside the work stays short */
+.toast { pointer-events: auto; display: flex; align-items: flex-start; gap: 12px; padding: 12px 12px 12px 16px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line-strong); box-shadow: var(--shadow-3); font-size: var(--fs-md); line-height: var(--lh-md); animation: pop .16s ease-out; }
+.toast p { flex: 1; min-width: 0; margin: 2px 0 0; display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
+.toast p strong { font-weight: var(--fw-medium); }
 .toast p span { color: var(--text-2); }
+.toast .icon-btn, .toast .btn { flex: none; }
 .toast .icon-btn { width: 24px; height: 24px; margin: -2px 0; }
 .load-error { align-items: center; flex-wrap: wrap; }
 .load-error > span { flex: 1 1 220px; }
@@ -1063,7 +1096,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .icon-btn:disabled { opacity: .35; cursor: default; }
 .cat-save { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; margin-left: auto; }
 .cat-save-text { margin-right: auto; font-size: var(--fs-md); line-height: var(--lh-md); }
-.banner .btn { flex: none; }
 .change-list { list-style: none; margin: 6px 0 12px; padding: 0; display: grid; gap: 4px; font-size: var(--fs-md); line-height: var(--lh-md); }
 .change-list li { display: flex; align-items: baseline; gap: 8px; }
 .change-kind { flex: none; min-width: 62px; text-align: center; padding: 1px 7px; border-radius: 999px; font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); text-transform: uppercase; letter-spacing: .03em; }

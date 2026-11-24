@@ -247,8 +247,8 @@ test("warnings for colours that mislead, the name limit, and a logo that is refu
   // a red brand: a warning that says what will be confused, never a refusal
   await brand.getByRole("textbox", { name: /as a code/ }).fill("#dc2626");
   await expect(brand.locator(".color-note.warn", { hasText: "This looks like the colour that marks problems:" })).toContainText("Buttons that save or approve will look like buttons that delete, and links like error messages.");
-  // the information notices follow the brand, and are said to look like problem notices too
-  await expect(brand.locator(".color-note.warn", { hasText: "This looks like the colour that marks problems:" })).toContainText("Notices that only inform are in the brand colour too: they will look like problem notices; give Information a colour of its own under States.");
+  // information follows the second colour now, not the brand: no word of notices here
+  await expect(brand.locator(".color-note.warn", { hasText: "This looks like the colour that marks problems:" })).not.toContainText("Notices");
   // an orange brand looks like the warnings (the designer's Earth)
   await brand.getByRole("textbox", { name: /as a code/ }).fill("#ff6a1a");
   await expect(brand.locator(".color-note.warn")).toHaveCount(1);
@@ -377,7 +377,9 @@ async function stateBoxes(page: Page) {
   await page.evaluate(() => {
     const box = document.createElement("div");
     box.id = "probe-states";
-    box.innerHTML = '<div class="check good">Saved</div><div class="check warn">Review due</div><div class="check bad">1 to fix</div><div class="check info">Readers still see version 1</div>';
+    // the states as their pills say them, and as their alerts (Alert.tsx) show them
+    box.innerHTML = '<span class="status good">Saved</span><span class="status warn">Review due</span><span class="status bad">1 to fix</span><span class="status info">Readers still see version 1</span>'
+      + ["success", "warning", "problem", "info"].map((t) => `<div class="alert alert-${t}"><span class="alert-icon"></span><div class="alert-body"><div class="alert-desc">${t}</div></div></div>`).join("");
     document.querySelector(".page")!.appendChild(box);
   });
 }
@@ -397,10 +399,18 @@ test("the colours of buttons and states reach the app, in light and dark; “Bac
       main: [await style(main, "background-color"), await tokenColour(p, "background-color", "--action-fill")],
       otherText: [await style(other, "color"), await tokenColour(p, "color", "--action-other")],
       otherLine: [await style(other, "border-top-color"), await tokenColour(p, "color", "--action-other-line")],
-      success: [await style(p.locator("#probe-states .check.good"), "color"), await tokenColour(p, "color", "--good")],
-      warning: [await style(p.locator("#probe-states .check.warn"), "color"), await tokenColour(p, "color", "--warn")],
-      problem: [await style(p.locator("#probe-states .check.bad"), "color"), await tokenColour(p, "color", "--bad")],
-      info: [await style(p.locator("#probe-states .check.info"), "color"), await tokenColour(p, "color", "--info")],
+      success: [await style(p.locator("#probe-states .status.good"), "color"), await tokenColour(p, "color", "--good")],
+      warning: [await style(p.locator("#probe-states .status.warn"), "color"), await tokenColour(p, "color", "--warn")],
+      problem: [await style(p.locator("#probe-states .status.bad"), "color"), await tokenColour(p, "color", "--bad")],
+      info: [await style(p.locator("#probe-states .status.info"), "color"), await tokenColour(p, "color", "--info")],
+      successAlert: [await style(p.locator("#probe-states .alert-success"), "background-color"), await tokenColour(p, "background-color", "--alert-success-bg")],
+      warningAlert: [await style(p.locator("#probe-states .alert-warning"), "background-color"), await tokenColour(p, "background-color", "--alert-warn-bg")],
+      problemAlert: [await style(p.locator("#probe-states .alert-problem"), "background-color"), await tokenColour(p, "background-color", "--alert-bad-bg")],
+      infoAlert: [await style(p.locator("#probe-states .alert-info"), "background-color"), await tokenColour(p, "background-color", "--alert-info-bg")],
+      successIcon: [await style(p.locator("#probe-states .alert-success .alert-icon"), "color"), await tokenColour(p, "color", "--alert-success-icon")],
+      warningIcon: [await style(p.locator("#probe-states .alert-warning .alert-icon"), "color"), await tokenColour(p, "color", "--alert-warn-icon")],
+      problemIcon: [await style(p.locator("#probe-states .alert-problem .alert-icon"), "color"), await tokenColour(p, "color", "--alert-bad-icon")],
+      infoIcon: [await style(p.locator("#probe-states .alert-info .alert-icon"), "color"), await tokenColour(p, "color", "--alert-info-icon")],
     };
   };
   const looks: Record<string, Record<string, string[]>> = {};
@@ -417,7 +427,10 @@ test("the colours of buttons and states reach the app, in light and dark; “Bac
     const now = await measure(v.page);
     for (const [part, [element, token]] of Object.entries(now)) {
       expect(element, `${part} follows its token (${mode})`).toBe(token);
-      expect(element, `${part} changed from the default (${mode})`).not.toBe(looks[`default-${mode}`][part][0]);
+      // an alert's ground keeps the designer's lightness in the chosen colour's hue: the chosen red of problems has the
+      // hue of the designer's pink, so in the light look its ground stays that pink (its icon changes)
+      if (part === "problemAlert" && mode === "light") expect(element, "a red of the same hue keeps the designer's pink").toBe("rgb(255, 235, 235)");
+      else expect(element, `${part} changed from the default (${mode})`).not.toBe(looks[`default-${mode}`][part][0]);
     }
     // in the light look the chosen colours are used as they are where they are readable
     if (mode === "light") {

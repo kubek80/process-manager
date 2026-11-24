@@ -26,7 +26,13 @@
     --quiet: var(--theme-light-quiet, #f6eee1); --quiet-line: var(--theme-light-quiet-line, #ecdabe);
     --action-fill: var(--theme-light-action-fill, var(--accent-fill)); --action-ink: var(--theme-light-action-ink, var(--accent-ink));
     --action-other: var(--theme-light-action-other); --action-other-line: var(--theme-light-action-other-line); --action-other-soft: var(--theme-light-action-other-soft);
-    --info: var(--theme-light-info, var(--accent)); --info-bg: var(--theme-light-info-bg, var(--accent-soft)); --info-fill: var(--theme-light-info-fill, var(--accent-fill)); --info-ink: var(--theme-light-info-ink, var(--accent-ink));
+    --info: var(--theme-light-info, #0073ba); --info-bg: var(--theme-light-info-bg, #f0f9ff); --info-fill: var(--theme-light-info-fill, #66c5ff); --info-ink: var(--theme-light-info-ink, #11121c);
+  /* the alerts (Alert.tsx): the designer's grounds and filled icons per state, one text colour for all */
+  --alert-text: var(--theme-light-alert-text, #13130c);
+  --alert-info-bg: var(--theme-light-alert-info-bg, #ebf7ff); --alert-info-icon: var(--theme-light-alert-info-icon, #0074bc);
+  --alert-success-bg: var(--theme-light-alert-success-bg, #f4ffdb); --alert-success-icon: var(--theme-light-alert-success-icon, #1f6b2a);
+  --alert-warn-bg: var(--theme-light-alert-warn-bg, #fffae0); --alert-warn-icon: var(--theme-light-alert-warn-icon, #8c6d00);
+  --alert-bad-bg: var(--theme-light-alert-bad-bg, #ffebeb); --alert-bad-icon: var(--theme-light-alert-bad-icon, #c4182b);
     --shadow-1: none; --shadow-2: none; --shadow-3: none;
     --seg-on: var(--theme-light-seg-on, #ffffff); --seg-on-line: var(--line-strong); --control-line: var(--theme-light-control-line, #908e9a);
     --mark-green: var(--theme-light-mark-green, #00753e); --mark-green-bg: var(--theme-light-mark-green-bg, #ccf0df);

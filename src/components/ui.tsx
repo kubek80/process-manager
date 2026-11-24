@@ -1,8 +1,6 @@
 import { Component, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
-import {
-  ClipboardList, GitPullRequest, Stamp, Eye, Hourglass, Send, Users, Bot, FileText, ShieldCheck,
-  Split, Workflow, SquareCheck, X, Check, Copy, CircleAlert, CircleCheck, RotateCcw, TriangleAlert, type LucideIcon,
-} from "lucide-react";
+import { Alert, AlertIcon } from "./Alert";
+import { ClipboardList, GitPullRequest, Stamp, Eye, Hourglass, Send, Users, Bot, FileText, ShieldCheck, Split, Workflow, SquareCheck, X, Check, Copy, CircleAlert, RotateCcw, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { Issue, StepType } from "../types";
 import { STEP_META } from "../lib/stepMeta";
 import { copyText, isLoadFailure } from "../lib/store";
@@ -282,7 +280,7 @@ export function Notices() {
       <div className="toasts" aria-label="Messages">
         {state.notices.map((n) => (
           <div key={n.id} className={`toast ${n.kind}`} role={n.kind === "error" ? "alert" : "status"}>
-            {n.kind === "error" ? <CircleAlert size={16} /> : <CircleCheck size={16} />}
+            <span className={`alert-icon toast-icon alert-${n.kind === "error" ? "problem" : "success"}`} aria-hidden="true"><AlertIcon tone={n.kind === "error" ? "problem" : "success"} /></span>
             <p><strong>{n.title}</strong>{n.detail && <span>{n.detail}</span>}</p>
             {n.action && <button className="btn small" onClick={() => { n.action!.run(); dismiss(n.id); }}>{n.action.label}</button>}
             <button className="icon-btn" onClick={() => dismiss(n.id)} aria-label="Close this message"><X size={15} /></button>
@@ -303,11 +301,10 @@ export function Loading({ page, label = "Loading…" }: { page?: boolean; label?
 /** Something could not be loaded: say so, and offer to try again. Never looks like an empty list. */
 export function LoadError({ what, error, onRetry }: { what: string; error?: string; onRetry?: () => void }) {
   return (
-    <div className="check bad load-error" role="alert">
-      <CircleAlert size={16} />
-      <span><b>{what}</b>{error ? ` ${error}` : ""}</span>
-      {onRetry && <button className="btn small" onClick={onRetry}><RotateCcw size={14} />Try again</button>}
-    </div>
+    <Alert tone="problem" className="load-error" role="alert" title={what}
+      actions={onRetry && <button className="btn small" onClick={onRetry}><RotateCcw size={14} />Try again</button>}>
+      {error}
+    </Alert>
   );
 }
 

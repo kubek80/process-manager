@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert } from "./Alert";
 import { ArrowLeft, ArrowRight, Boxes, Compass, PencilLine, Plus, Users } from "lucide-react";
 import type { DocMeta, FeedbackByTarget, Membership, Process, Standard, TargetKind } from "../types";
 import { docCount, useCatalog } from "../lib/catalog";
@@ -202,8 +203,8 @@ function DetailsDialog({ kind, id, name, saved, onClose, onSaved }: {
     <Modal title={`Details of ${name}`} subtitle="What readers see on this page: what it is and how to reach them. Leave out what does not apply." onClose={close} wide
       footer={<><span className="spacer" /><button className="btn" onClick={close}>Cancel</button><button className="btn primary" disabled={busy} onClick={save}>Save</button></>}>
       <form className="form" onSubmit={(e) => { e.preventDefault(); void save(); }}>
-        {refused && <div className="check bad" role="alert">{refused}</div>}
-        {tried && !ok && <div className="check bad" role="alert">Fix the marked fields first.</div>}
+        {refused && <Alert tone="problem" role="alert">{refused}</Alert>}
+        {tried && !ok && <Alert tone="problem" role="alert">Fix the marked fields first.</Alert>}
         <ContactFields kind={kind} value={value} onChange={setValue} showAll={tried} idPrefix={`details-${kind}`} />
       </form>
     </Modal>

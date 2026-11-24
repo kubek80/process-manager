@@ -302,7 +302,7 @@ test("the app runs under a strict security policy", async ({ page }) => {
   await expect(fields(page).locator(".fields-head h2")).toBeVisible();
   await more(page, "JSON");
   await expect(page.locator(".cm-editor")).toBeVisible(); // the code editor and the checker both work under it
-  await expect(page.locator(".json-side .check.good")).toBeVisible();
+  await expect(page.locator(".json-side .alert.alert-success")).toBeVisible();
   // and of a standard, with its Publish dialog
   await open(page, "/s/secure-logging/edit/SEC-LOG-02");
   await expect(fields(page).locator(".fields-head h2")).toBeVisible();

@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, Bot, CalendarCheck, Flag, ListChecks, Pencil, TriangleAlert, Workflow, X } from "lucide-react";
+import { Alert } from "./Alert";
+import { ArrowUpRight, Bot, CalendarCheck, Flag, ListChecks, Pencil, Workflow, X } from "lucide-react";
 import type { DocMeta, Feedback, Level, Process, Requirement, Standard } from "../types";
 import { platformName, practiceName, teamName, useCatalog } from "../lib/catalog";
 import { ownerOfWords } from "../lib/editing";
@@ -146,11 +147,12 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
         </>}
         notice={(status === "deprecated" || ((editor || manages) && review.state === "overdue")) && <>
           {status === "deprecated" && (
-            <div className="check warn banner"><TriangleAlert size={16} /><span><b>This standard is retired.</b>{" "}
-              {replacement ? <>Use <a className="kind-link standard" href={href({ page: "standard", id: replacement.id, tab: "doc" })}>{replacement.title}</a> instead.</> : "It is kept for reference only."}</span></div>
+            <Alert tone="warning" className="banner" title="This standard is retired">
+              {replacement ? <>Use <a className="kind-link standard" href={href({ page: "standard", id: replacement.id, tab: "doc" })}>{replacement.title}</a> instead.</> : "It is kept for reference only."}
+            </Alert>
           )}
           {(editor || manages) && review.state === "overdue" && (
-            <div className="check bad banner"><CalendarCheck size={16} /><span><b>{review.label}.</b> Read it through{editor ? ", correct what changed on the editing screen," : ""} then press “Mark as reviewed”.</span></div>
+            <Alert tone="problem" className="banner" title={review.label}>Read it through{editor ? ", correct what changed on the editing screen," : ""} then press “Mark as reviewed”.</Alert>
           )}
         </>}
         actions={<>
