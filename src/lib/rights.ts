@@ -1,5 +1,6 @@
 import type { Perms, TargetKind } from "../types";
 import type { GroupKind, GroupRank } from "./members";
+import { href, parseRoute, type Route } from "./store";
 
 /**
  * What the signed-in person may do with a process or a standard, worked out in the browser from
@@ -244,8 +245,31 @@ export const viewingRefusal = (label: string) => `You are viewing the portal as 
 export const changeBlocked = (me: ViewingState) =>
   me.viewedBy && me.user ? viewingRefusal(me.user.name || me.user.email) : "";
 
-/** Whether a link opens a screen whose purpose is to change something (the editing screen): unavailable while viewing as somebody else. */
-export const opensChange = (hash: string) => /^#\/[ps]\/[^/]+\/edit(?:\/|$)/.test(hash);
+/** Whether a route is the editing screen (of a process or a standard, its JSON view included). */
+const isEditing = (r: Route): r is Extract<Route, { page: "edit-process" | "edit-standard" }> => r.page === "edit-process" || r.page === "edit-standard";
+
+/**
+ * Whether an address opens a screen whose purpose is to change something (the editing screen):
+ * unavailable while viewing as somebody else. Decided by the router itself (`parseRoute`), so
+ * that every address it opens the editing screen for counts, now and later.
+ */
+export const opensChange = (hash: string) => isEditing(parseRoute(hash));
+
+/** The reader's page of what an address of the editing screen opens; the address itself for anything else. */
+export const readerOf = (hash: string): string => {
+  const r = parseRoute(hash);
+  return isEditing(r) ? href(r.page === "edit-process" ? { page: "process", id: r.id, tab: "flow" } : { page: "standard", id: r.id, tab: "doc" }) : hash;
+};
+
+/**
+ * The page shown for a route: while viewing the portal as somebody else, the editing screen is
+ * never shown (its reader's page is), whatever address asked for it. The one guard where the
+ * route becomes a page (`App.tsx`).
+ */
+export const pageWhileViewing = (r: Route, me: ViewingState): Route => {
+  if (!me.viewedBy || !isEditing(r)) return r;
+  return r.page === "edit-process" ? { page: "process", id: r.id, tab: "flow" } : { page: "standard", id: r.id, tab: "doc" };
+};
 
 /**
  * Whether the person signed in may start viewing the portal as `email`: an admin, by their own

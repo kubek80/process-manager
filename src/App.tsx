@@ -10,7 +10,7 @@ import {
 import { CatalogContext, EMPTY_CATALOG, useCatalog } from "./lib/catalog";
 import { EngagementProvider } from "./lib/engagement";
 import { canOpenAdmin, FeedbackContext, MeContext, usePerms, type FeedbackActions } from "./lib/session";
-import { belongsRefused, canDraft, draftAudience, editsAll, newDocPlaces } from "./lib/rights";
+import { belongsRefused, canDraft, draftAudience, editsAll, newDocPlaces, pageWhileViewing } from "./lib/rights";
 import { blankProcess, blankStandard, slugify, tidy, tidyStandard, today, uniqueId, type BelongsTo } from "./lib/edit";
 import { CatalogPage } from "./components/CatalogPage";
 import { Library } from "./components/Library";
@@ -341,7 +341,8 @@ function SignedOutDialog({ me, onBack, onOther }: { me: Me; onBack: () => void; 
 }
 
 function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
-  const route = useRoute(mayLeave);
+  // while viewing the portal as somebody else, the editing screen is never the page (rights.ts)
+  const route = pageWhileViewing(useRoute(mayLeave), me);
   const perms = usePerms();
   const { look, name, dark } = useLook();
   const [processes, setProcesses] = useState<Process[] | null>(null);

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Eye, X } from "lucide-react";
 import type { Me } from "../types";
-import { changeBlocked, mayViewAs, opensChange } from "../lib/rights";
+import { changeBlocked, mayViewAs, opensChange, readerOf } from "../lib/rights";
 import { personLabel } from "../lib/members";
 import { useMe } from "../lib/session";
 import { loadPeople, startViewAs, stopViewAs } from "../lib/store";
@@ -25,8 +25,6 @@ function reopenAt(hash: string) {
   window.location.reload();
 }
 
-/** The reader's page of what an editing-screen address opens: `#/p/x/edit/…` becomes `#/p/x`. */
-const readerOf = (hash: string) => hash.replace(/^(#\/[ps]\/[^/]+)\/edit(?:\/.*)?$/, "$1");
 
 /**
  * The band shown while an admin views the portal as somebody else: on every page, the editing
