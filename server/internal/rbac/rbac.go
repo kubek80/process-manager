@@ -676,18 +676,3 @@ func (s *Store) Count(ctx context.Context) (int, error) {
 	err := s.Pool.QueryRow(ctx, `select count(*) from role_assignments`).Scan(&n)
 	return n, err
 }
-
-// Known reports whether the portal knows the person as Admin › Access lists them (Users): they
-// have a role, or are an admin named in the server settings.
-func (s *Store) Known(ctx context.Context, email string) (bool, error) {
-	email = norm(email)
-	if email == "" {
-		return false, nil
-	}
-	if s.IsBootstrap(email) {
-		return true, nil
-	}
-	var known bool
-	err := s.Pool.QueryRow(ctx, `select exists (select 1 from role_assignments where email = $1)`, email).Scan(&known)
-	return known, err
-}

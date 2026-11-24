@@ -60,6 +60,9 @@ describe("the designer's look is the default", () => {
       }
       expect(contrast(t.text, t["search-mark"])).toBeGreaterThanOrEqual(4.5);
       expect(contrast(t["text-3"], t.quiet)).toBeGreaterThanOrEqual(4.5);
+      // the quietest text also reads on the tints used for table heads, hovered rows and selected areas
+      for (const k of ["ocean-10", "sky-10"]) expect(contrast(t["text-3"], t[k]), `${m} text-3 on ${k}`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(t.accent, t["accent-soft"])).toBeGreaterThanOrEqual(4.5);
       expect(contrast(t["bar-text"], t.bar)).toBeGreaterThanOrEqual(4.5);
       expect(contrast(t["bar-muted"], t["bar-2"])).toBeGreaterThanOrEqual(4.5);
       expect(contrast(t["highlight-ink"], t.highlight)).toBeGreaterThanOrEqual(4.5);

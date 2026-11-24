@@ -107,7 +107,7 @@ func TestMigrateConvertsAnOlderDatabaseAndReportsIt(t *testing.T) {
 	out := runMigrate(t, pool)
 	want := "Database migration\n" +
 		"  Tables:  already up to date\n" +
-		"  Content: 2 documents moved to the new lists (3 older versions adjusted); added 0 practices, 1 platforms, 2 categories; 1 roles converted, 1 removed; the lists were updated\n" +
+		"  Content: 2 documents moved to the new lists (3 older versions adjusted); added 0 practices, 1 platforms, 2 categories; 1 roles converted, 1 removed; added the list of paths with 3 entries; the lists were updated\n" +
 		"  Skills:  2 regenerated\n" +
 		"Done.\n"
 	if out != want {

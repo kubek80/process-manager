@@ -228,6 +228,7 @@ func New(d Deps) http.Handler {
 	// view the portal as somebody else (viewas.go): judged by the admin's own roles, so not admin()
 	mux.Handle("POST /api/admin/view-as", user(a.startViewAs))
 	mux.Handle("DELETE /api/admin/view-as", user(a.stopViewAs))
+	mux.Handle("GET /api/admin/people", admin(a.listPeople))
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) { writeError(w, 404, "no such API endpoint") })
 	if d.Cfg.StaticDir != "" {

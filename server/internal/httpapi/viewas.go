@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/kubek80/process-manager/server/internal/auth"
+	"github.com/kubek80/process-manager/server/internal/config"
+	"github.com/kubek80/process-manager/server/internal/docs"
 	"github.com/kubek80/process-manager/server/internal/rbac"
 )
 
@@ -24,8 +27,16 @@ import (
 //     for the admin (countsFor, mayCount).
 //
 // It ends when the admin stops or signs out, when their session ends, after auth.ViewAsFor,
-// and when a request finds that the admin is no longer an admin or the person no longer has a
-// role. Starting and every end are written to Activity in the admin's name.
+// and when a request finds that the admin is no longer an admin. Starting and every end are
+// written to Activity in the admin's name.
+
+// NoRolesReader is the address of "a reader with no roles": the view of somebody who has no
+// role at all, also where nobody like that has signed in yet. Under .invalid, a name that can
+// never be anybody's address; it has no rights whatever roles are stored for it.
+const (
+	NoRolesReader     = "reader@no-roles.invalid"
+	NoRolesReaderName = "A reader with no roles"
+)
 
 // viewingAdmin is the admin who views the portal as somebody else.
 type viewingAdmin struct {
@@ -119,18 +130,14 @@ func (a *api) viewedAs(ctx context.Context, s session, permsFailed bool) (sessio
 	if permsFailed {
 		return session{}, errUnavailable
 	}
+	// A person who loses their roles is simply a reader from then on: the view follows, as it
+	// would for them.
 	why := ""
-	known, err := a.Roles.Known(ctx, v.Target)
 	switch {
-	case err != nil:
-		a.Log.Error("whether a person has a role could not be read", "error", err)
-		return session{}, errUnavailable
 	case !s.Admin:
 		why = "They are no longer an admin."
 	case !a.Sessions.Now().Before(v.Until):
 		why = "An hour had passed."
-	case !known:
-		why = "The person no longer has a role in the portal."
 	case strings.EqualFold(v.Target, s.Email):
 		why = "It was their own view."
 	}
@@ -138,10 +145,12 @@ func (a *api) viewedAs(ctx context.Context, s session, permsFailed bool) (sessio
 		a.endViewing(ctx, s, why)
 		return s, nil
 	}
-	perms, err := a.Roles.Perms(ctx, v.Target)
-	if err != nil {
-		a.Log.Error("roles could not be read", "error", err)
-		return session{}, errUnavailable
+	perms := rbac.PermsFrom(nil, false) // the reader with no roles has none, whatever is stored
+	if v.Target != NoRolesReader {
+		if perms, err = a.Roles.Perms(ctx, v.Target); err != nil {
+			a.Log.Error("roles could not be read", "error", err)
+			return session{}, errUnavailable
+		}
 	}
 	name := v.TargetName
 	if name == "" {
@@ -187,8 +196,8 @@ func (a *api) recordViewing(ctx context.Context, admin session, action, target, 
 }
 
 // startViewAs answers POST /api/admin/view-as {"email"}: admins only, by their own roles (who
-// is not yet anybody else here: guard refuses this while viewing). Not oneself; only a person
-// Admin › Access lists.
+// is not yet anybody else here: guard refuses this while viewing). Anybody but oneself, by
+// address (NoRolesReader: a reader with no roles).
 func (a *api) startViewAs(w http.ResponseWriter, r *http.Request) {
 	s := who(r)
 	if s.viewer != nil { // guard answers this first; kept so that the rule does not hang on it alone
@@ -219,21 +228,23 @@ func (a *api) startViewAs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "You cannot view the portal as yourself: this is already your view.")
 		return
 	}
-	known, err := a.Roles.Known(r.Context(), email)
-	if err != nil {
-		a.fail(w, r, err)
+	// anybody by address: a person with roles, somebody the portal has seen, or an address it
+	// has never seen, who is then exactly a signed-in person without roles. Nothing is stored
+	// in their name: nothing can be changed while viewing.
+	if !rbac.ValidEmail(email) || !docs.Storable(email) {
+		writeError(w, 400, "That is not an email address. Write one, such as name@company.com.")
 		return
 	}
-	if !known {
-		writeError(w, 404, "There is nobody with that address among the people with roles (Admin › Access).")
-		return
+	name := NoRolesReaderName
+	if email != NoRolesReader {
+		names, err := a.names(r.Context(), []string{email})
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		name = names[email]
 	}
-	names, err := a.names(r.Context(), []string{email})
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	v, err := a.viewAs.Start(r.Context(), s.Email, s.id, email, names[email], a.Sessions.Now())
+	v, err := a.viewAs.Start(r.Context(), s.Email, s.id, email, name, a.Sessions.Now())
 	if errors.Is(err, auth.ErrAlreadyViewing) {
 		writeError(w, 409, "You are already viewing the portal as somebody. Stop viewing first, then choose another person.")
 		return
@@ -261,4 +272,92 @@ func (a *api) stopViewAs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// maxPeople bounds the addresses GET /api/admin/people sends.
+const maxPeople = 2000
+
+// peopleQuery: every address the portal has seen: with a role, in the activity log, as the
+// author of feedback or of a request, a vote, a view, a bookmark, an upvote, a skill download,
+// a sign-out. Only the addresses: never what they did.
+const peopleQuery = `select email, bool_or(has_role) from (
+	select email, true as has_role from role_assignments
+	union all select actor_email, false from audit_log
+	union all select author_email, false from feedback
+	union all select email, false from feedback_also_hit
+	union all select requested_by_email, false from requests
+	union all select email, false from request_votes
+	union all select email, false from document_views
+	union all select email, false from bookmarks
+	union all select email, false from upvotes
+	union all select email, false from skill_downloads
+	union all select email, false from signed_out
+) p where email like '%@%' group by email order by email limit $1`
+
+// listPeople answers GET /api/admin/people (admins only): the people an admin can choose to view
+// the portal as, besides any address typed in. {"people": [{"email", "name", "roles"}]}.
+func (a *api) listPeople(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	rows, err := a.Roles.Pool.Query(ctx, peopleQuery, maxPeople)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	type person struct {
+		Email string `json:"email"`
+		Name  string `json:"name"`
+		Roles bool   `json:"roles"`
+	}
+	out := []person{}
+	seen := map[string]bool{}
+	for rows.Next() {
+		var p person
+		if err := rows.Scan(&p.Email, &p.Roles); err != nil {
+			rows.Close()
+			a.fail(w, r, err)
+			return
+		}
+		p.Email = strings.ToLower(strings.TrimSpace(p.Email))
+		if !seen[p.Email] && rbac.ValidEmail(p.Email) {
+			seen[p.Email] = true
+			out = append(out, p)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	// admins named in the server settings, and the built-in users of a development server
+	add := func(email string, roles bool) {
+		if email = strings.ToLower(strings.TrimSpace(email)); email != "" && !seen[email] && len(out) < maxPeople {
+			seen[email] = true
+			out = append(out, person{Email: email, Roles: roles})
+		}
+	}
+	for _, b := range a.Roles.Bootstrap {
+		add(b, true)
+	}
+	if a.Cfg.Auth == config.AuthDev {
+		for _, u := range auth.DevUsers {
+			add(u.Email, false)
+		}
+	}
+	emails := make([]string, len(out))
+	for i, p := range out {
+		emails[i] = p.Email
+	}
+	names, err := a.names(ctx, emails)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	for i := range out {
+		out[i].Name = names[out[i].Email]
+		if a.Roles.IsBootstrap(out[i].Email) {
+			out[i].Roles = true
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Email < out[j].Email })
+	writeJSON(w, 200, map[string]any{"people": out})
 }

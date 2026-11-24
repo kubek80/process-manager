@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http/httptest"
 	"net/url"
@@ -277,13 +279,12 @@ func TestOnlyAnAdminStartsViewingAndOnlyAsSomebodyElseTheyKnow(t *testing.T) {
 	wantError(t, status, body, 400, "You cannot view the portal as yourself: this is already your view.")
 	status, body = start(d, dana)
 	wantError(t, status, body, 400, "You cannot view the portal as yourself: this is already your view.")
-	status, body = start(d, "nobody@example.com")
-	wantError(t, status, body, 404, "There is nobody with that address among the people with roles (Admin › Access).")
-	// sam has no role: Admin › Access does not list him
-	status, body = start(d, sam)
-	wantError(t, status, body, 404, "")
+	for _, bad := range []string{"not an address", "sam@", "@example.com", "sam@example", "a b@example.com"} {
+		status, body = start(d, bad)
+		wantError(t, status, body, 400, "That is not an email address. Write one, such as name@company.com.")
+	}
 	status, body = start(d, "")
-	wantError(t, status, body, 400, "")
+	wantError(t, status, body, 400, "Say whose view of the portal you want to see: send their email address.")
 	// neither nested nor switched: stop first
 	d.viewAs(casey)
 	for _, other := range []string{jordan, casey, dana} {
@@ -341,17 +342,111 @@ func TestViewingEndsWhenTheAdminIsNoLongerAnAdmin(t *testing.T) {
 	}
 }
 
-func TestViewingEndsWhenThePersonNoLongerHasARole(t *testing.T) {
+// A person who loses every role is a reader from then on, and the view follows: it does not end.
+func TestViewingFollowsThePersonWhoLosesTheirRoles(t *testing.T) {
 	e := setup(t, nil)
 	d := e.as(dana)
 	d.viewAs(morgan)
 	_, err := e.deps.Roles.Replace(bg, morgan, []rbac.Role{}, "setup")
 	must(t, err)
-	if me := d.meOf(); emailOf(me) != dana {
-		t.Fatalf("still viewing as somebody without a role: %v", me)
+	me := d.meOf()
+	perms, _ := me["perms"].(map[string]any)
+	if emailOf(me) != morgan || me["viewedBy"] == nil || len(perms["memberPlatforms"].([]any)) != 0 {
+		t.Fatalf("after morgan lost the roles: %v", me)
 	}
-	if ends := e.audits("viewas.end"); len(ends) != 1 || ends[0]["detail"] != "The person no longer has a role in the portal." {
+	if fmt.Sprint(me["perms"]) != fmt.Sprint(e.as(morgan).meOf()["perms"]) {
+		t.Fatal("not morgan's rights")
+	}
+	if ends := e.audits("viewas.end"); len(ends) != 0 {
 		t.Fatalf("ends: %v", ends)
+	}
+}
+
+// Anybody by address: a reader with no role (sam), an address the portal has never seen, and
+// the built-in reader with no roles. Each is exactly a signed-in person without roles, and
+// nothing is stored in any table but the viewing itself and Activity.
+func TestViewingAsAReaderOrAnUnknownAddressCreatesNothing(t *testing.T) {
+	e := setup(t, nil)
+	reader := e.as(sam)
+	d := e.as(dana)
+	for _, who := range []string{sam, "never.seen@example.org", NoRolesReader} {
+		before := e.fingerprint()
+		body := d.viewAs(who)
+		if body["email"] != who {
+			t.Fatalf("started: %v", body)
+		}
+		for _, path := range []string{"/api/processes", "/api/standards", "/api/catalog", "/api/feedback", "/api/requests", "/api/skills", "/api/members",
+			"/api/admin/users", "/api/processes/" + gcp + "/draft", "/api/skills/process-" + gcp, "/api/history/process/" + gcp} {
+			s1, b1, _ := reader.raw("GET", path, nil, false)
+			s2, b2, _ := d.raw("GET", path, nil, false)
+			if s1 != s2 || string(b1) != string(b2) {
+				t.Fatalf("GET %s as %s: %d %.200s; sam: %d %.200s", path, who, s2, b2, s1, b1)
+			}
+		}
+		me, mine := d.meOf(), reader.meOf()
+		if emailOf(me) != who || fmt.Sprint(me["perms"]) != fmt.Sprint(mine["perms"]) {
+			t.Fatalf("me as %s: %v; a reader: %v", who, me, mine)
+		}
+		if who == NoRolesReader {
+			if u := me["user"].(map[string]any); u["name"] != "A reader with no roles" {
+				t.Fatalf("name: %v", u)
+			}
+		}
+		if status, body := d.do("PUT", "/api/bookmarks/process/"+gcp, nil); status != 403 {
+			t.Fatalf("a change as %s: %d %v", who, status, body)
+		}
+		d.do("DELETE", "/api/admin/view-as", nil)
+		if after := e.fingerprint(); fmt.Sprint(after) != fmt.Sprint(before) {
+			t.Fatalf("viewing as %s stored something", who)
+		}
+	}
+	if starts := e.audits("viewas.start"); len(starts) != 3 || starts[1]["target"] != "never.seen@example.org" || starts[2]["target"] != NoRolesReader {
+		t.Fatalf("starts: %v", starts)
+	}
+}
+
+// The built-in reader has no rights, even where somebody gave its address roles.
+func TestTheReaderWithNoRolesNeverHasRights(t *testing.T) {
+	e := setup(t, nil)
+	must(t, e.deps.Roles.Grant(bg, rbac.Assignment{Email: NoRolesReader, Role: rbac.ProcessEditor, GrantedBy: "setup"}))
+	d := e.as(dana)
+	d.viewAs(NoRolesReader)
+	if me := d.meOf(); fmt.Sprint(me["perms"]) != fmt.Sprint(e.as(sam).meOf()["perms"]) {
+		t.Fatalf("the reader with no roles has rights: %v", me["perms"])
+	}
+}
+
+func TestAdminsListThePeopleThePortalKnows(t *testing.T) {
+	e := setup(t, nil)
+	// people seen only through what they did: a view, feedback, a request
+	e.as(sam).do("POST", "/api/views/process/"+gcp, nil)
+	_, err := e.deps.Roles.Pool.Exec(bg, `insert into bookmarks (email, kind, id) values ('kim@example.com', 'process', $1)`, gcp)
+	must(t, err)
+	status, body := e.as(dana).do("GET", "/api/admin/people", nil)
+	wantStatus(t, status, 200, body)
+	got := map[string]map[string]any{}
+	for _, p := range body["people"].([]any) {
+		m := p.(map[string]any)
+		got[m["email"].(string)] = m
+	}
+	for email, roles := range map[string]bool{sam: false, "kim@example.com": false, casey: true, dana: true, morgan: true} {
+		if p, ok := got[email]; !ok || p["roles"] != roles {
+			t.Fatalf("%s: %v (all: %v)", email, p, got)
+		}
+	}
+	if got[casey]["name"] != "Casey Owner" {
+		t.Fatalf("names: %v", got[casey])
+	}
+	for _, other := range []string{sam, alex, casey} {
+		if status, _ := e.as(other).do("GET", "/api/admin/people", nil); status != 403 {
+			t.Fatalf("%s lists people: %d", other, status)
+		}
+	}
+	// while viewing as a reader, the admin route answers as for the reader
+	d := e.as(dana)
+	d.viewAs(sam)
+	if status, _ := d.do("GET", "/api/admin/people", nil); status != 403 {
+		t.Fatal("people listed while viewing as a reader")
 	}
 }
 
@@ -467,4 +562,71 @@ func TestStartingWhileViewingIsRefusedByTheRouteToo(t *testing.T) {
 	if rec.Code != 409 {
 		t.Fatalf("start while viewing: %d %s", rec.Code, rec.Body)
 	}
+}
+
+// A change is judged against the person guard resolved, also when viewing starts between guard
+// and the route: then it is the admin's own change, never one in the other person's name. The
+// clock is the hook: the second time anybody asks it, a viewing appears for the session.
+func TestAChangeKeepsThePersonGuardFound(t *testing.T) {
+	var mu sync.Mutex
+	armed, calls := false, 0
+	var hook func()
+	clock := func() time.Time {
+		mu.Lock()
+		run := false
+		if armed {
+			calls++
+			run = calls == 2
+		}
+		mu.Unlock()
+		if run {
+			hook()
+		}
+		return time.Now()
+	}
+	e := setup(t, func(d *Deps) { d.Sessions.Now = clock })
+	d := e.as(dana)
+	sid := sessionID(t, d)
+	hook = func() {
+		_, err := e.deps.Roles.Pool.Exec(bg, `insert into viewing_as (email, session, target, target_name, started_at, until)
+			values ($1, $2, $3, '', now(), now() + interval '1 hour')`, dana, sid, casey)
+		must(t, err)
+	}
+	mu.Lock()
+	armed = true
+	mu.Unlock()
+	if status, body := d.do("PUT", "/api/bookmarks/process/"+gcp, nil); status >= 300 {
+		t.Fatalf("bookmark: %d %v", status, body)
+	}
+	var mine, caseys int
+	must(t, e.deps.Roles.Pool.QueryRow(bg, `select count(*) filter (where email = $1), count(*) filter (where email = $2) from bookmarks`, dana, casey).Scan(&mine, &caseys))
+	if mine != 1 || caseys != 0 {
+		t.Fatalf("bookmarks: dana %d, casey %d", mine, caseys)
+	}
+	mu.Lock()
+	n := calls
+	mu.Unlock()
+	if n < 1 {
+		t.Fatal("the hook was never reached")
+	}
+}
+
+// sessionID reads the id of the client's session from its cookie (signed, not secret).
+func sessionID(t *testing.T, c *client) string {
+	t.Helper()
+	for _, ck := range c.http.Jar.Cookies(mustURL(t, c.e.srv.URL)) {
+		if ck.Name != "pm_session" {
+			continue
+		}
+		body, _, _ := strings.Cut(ck.Value, ".")
+		raw, err := base64.RawURLEncoding.DecodeString(body)
+		must(t, err)
+		var p struct {
+			Sid string `json:"sid"`
+		}
+		must(t, json.Unmarshal(raw, &p))
+		return p.Sid
+	}
+	t.Fatal("no session cookie")
+	return ""
 }
