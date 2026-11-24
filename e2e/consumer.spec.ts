@@ -153,7 +153,7 @@ test("the guide explains the app with flow charts that fit the page or show wher
   // the guide covers using, editing, AI assistants, administration and running it
   const toc = page.locator(".guide-toc");
   await expect(toc.locator(".eyebrow")).toHaveText(["Using it", "Editing", "For AI assistants", "Administration", "Running it"]);
-  for (const id of ["what", "find", "modes", "belong", "group", "read", "follow", "blocks", "standards", "feedback", "bookmarks", "requests", "mine", "editing", "publish", "edit", "editstandard", "versions", "ai", "lifecycle", "skills", "agents", "roadmap", "admin", "theming", "catalog", "codemap", "architecture", "local", "tests", "deploy", "files", "docs"])
+  for (const id of ["what", "find", "modes", "belong", "group", "read", "follow", "blocks", "standards", "feedback", "bookmarks", "requests", "mine", "editing", "publish", "edit", "editstandard", "versions", "ai", "lifecycle", "skills", "agents", "roadmap", "admin", "viewas", "theming", "catalog", "codemap", "architecture", "local", "tests", "deploy", "files", "docs"])
     await expect(page.locator(`#guide-${id} h2`)).toBeVisible();
   await expect(page.locator("#guide-modes .guide-table.roles tbody tr")).toHaveCount(9); // Owner, Platform owner, Practice owner, Platform member, Practice member, Process editor, Standards editor, Lists manager, Admin
   await expect(page.locator("#guide-architecture .arch-box")).toHaveCount(8);

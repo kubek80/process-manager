@@ -263,6 +263,7 @@ export const tests: CodeCategory = {
     spec("mine.spec.ts", "My responsibilities: what is an owner's and what needs them, a refused review after a change, owners of a team set by admins only."),
     spec("pages.spec.ts", "The reader's page of a process and a standard: the head, levels as neutral marks, the first review counted from the first publication."),
     spec("paging.spec.ts", "Pages of a list and of the search results: 12 a page, the address, Back and reload, the phone layout, search by meaning in pages."),
+    spec("paths.spec.ts", "The path of a process or standard: the ninth list with its pictures and other names, the editing screen's choice, the road on the reader's page, plates on cards and rows, the Path filter and My application, a draft's paths kept hidden."),
     spec("pictures.spec.ts", "The Guide's and the code map's flow charts as one picture: the opening rule, dragging, the zoom tools, Ctrl + scroll, Enlarge, the keyboard, printing, touch, jumps that still land."),
     spec("platforms.spec.ts", "A platform and practice owner edits what belongs to them and nothing else; the server is asked directly to prove each refusal."),
     spec("requests.spec.ts", "Requests for new processes and standards: asking, votes, who may plan, finish or decline them, withdrawing, the filters in the address."),
@@ -275,5 +276,6 @@ export const tests: CodeCategory = {
     spec("unnamed.spec.ts", "Items without a name never break the editing screen: Undo names them by their place, the checker lists them."),
     spec("users.spec.ts", "Admin › Access: people with their roles in words, one dialog for all of a person's roles, Delete, the protections kept by the server."),
     spec("versions.spec.ts", "Versions: every publish with a note and what changed, a conflict on a never-published draft, leaving with unsaved changes, Undo, links to a step."),
+    spec("viewas.spec.ts", "Viewing the portal as somebody else: from Admin › Access and the picker, the band, the person's view and refusals, greyed controls, the editing screen closed, changes refused, nothing counted, Activity, other tabs."),
   ],
 };

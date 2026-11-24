@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type APIResponse, type Page } from "@playwright/test";
 import { ALEX, CASEY, CSRF, DANA, JORDAN, MORGAN, RILEY, SAM, clearFeedback, navigate, open, putWorkingDraft, readProcess, readWorkingDraft, report, signIn } from "./helpers";
 
 // Viewing the portal as somebody else (admins): an admin sees what a person sees, their drafts
@@ -279,7 +279,7 @@ test("the editing screen does not open while viewing, by no address and no link"
 
 test("a change sent anyway is refused by the server with the sentence, and nothing changes", async ({ page }) => {
   await viewFromAccess(page, "Morgan Member");
-  const refused = async (what: string, res: Awaited<ReturnType<APIRequestContext["get"]>>) => {
+  const refused = async (what: string, res: APIResponse) => {
     expect(res.status(), what).toBe(403);
     expect((await res.json()).error, what).toBe(REFUSAL("Morgan Member"));
   };
