@@ -1,0 +1,238 @@
+{
+  "$schema": "../../schema/process.schema.json",
+  "schemaVersion": "1.0",
+  "id": "move-service-to-kubernetes",
+  "title": "Move an existing service to the shared Kubernetes clusters",
+  "summary": "Bring a service that already runs elsewhere (virtual machines, an old container host) onto the shared Kubernetes clusters without an outage: containerise it, deploy it next to the old hosting, switch traffic, then switch the old hosting off.",
+  "owner": "kubernetes-platform-team",
+  "category": "cloud",
+  "platform": "kubernetes",
+  "rigour": "recommended",
+  "paths": [
+    "brownfield"
+  ],
+  "estimatedDuration": "2-4 weeks",
+  "tags": [
+    "kubernetes",
+    "migration",
+    "containers",
+    "replatform"
+  ],
+  "updatedAt": "2026-11-24",
+  "status": "active",
+  "review": {
+    "intervalMonths": 6,
+    "lastReviewedAt": "2026-11-24",
+    "reviewedBy": "Process owner"
+  },
+  "resources": [
+    {
+      "title": "Kubernetes platform handbook",
+      "url": "https://wiki.example.com/platform/kubernetes",
+      "kind": "documentation"
+    }
+  ],
+  "standards": [
+    "kubernetes-workload-baseline"
+  ],
+  "prerequisites": [
+    {
+      "title": "Namespace on the shared clusters",
+      "processId": "request-kubernetes-namespace",
+      "description": "The service moves into a namespace of its own, with limits sized for its current load."
+    },
+    {
+      "title": "Service registered in the service catalogue",
+      "processId": "register-service-in-catalogue",
+      "description": "Existing services often are not: the namespace and dashboards are named after the service id."
+    }
+  ],
+  "actors": [
+    {
+      "id": "me",
+      "name": "You",
+      "description": "The engineer of the team that owns the service."
+    },
+    {
+      "id": "kubernetes-platform",
+      "name": "Kubernetes Platform team",
+      "description": "Slack #kubernetes",
+      "teamId": "kubernetes-platform-team"
+    },
+    {
+      "id": "argo-cd",
+      "name": "Argo CD",
+      "description": "Applies the manifests to the clusters."
+    }
+  ],
+  "steps": [
+    {
+      "id": "check-readiness",
+      "title": "Check that the service can run in a container",
+      "actor": "me",
+      "type": "task",
+      "description": "Most work in a move is here: what the old hosting gave the service for free must now come from the platform.",
+      "instructions": [
+        "List where the service writes files and move them to a bucket or a database.",
+        "Move its settings from files on the host to environment variables or Secret Manager.",
+        "Make sure it has a health endpoint that answers when it can take traffic."
+      ],
+      "duration": "2-5 days",
+      "outcome": "List of changes the service needs before it moves",
+      "next": [
+        {
+          "to": "containerise"
+        }
+      ]
+    },
+    {
+      "id": "containerise",
+      "title": "Build a container image of the service",
+      "actor": "me",
+      "type": "code",
+      "instructions": [
+        "Add a Dockerfile from the platform template to the repository.",
+        "Let the shared build pipeline push the image to the artifact registry.",
+        "Run the image locally with the production settings and check the health endpoint."
+      ],
+      "tool": "github",
+      "duration": "1-2 days",
+      "outcome": "Image in the artifact registry",
+      "next": [
+        {
+          "to": "add-manifests"
+        }
+      ]
+    },
+    {
+      "id": "add-manifests",
+      "title": "Add the deployment manifests",
+      "actor": "me",
+      "type": "code",
+      "instructions": [
+        "Copy the service chart from the platform template.",
+        "Set the CPU and memory requests from what the service uses today, plus 30%.",
+        "Add readiness and liveness probes on the health endpoint.",
+        "Open a pull request in the service repository."
+      ],
+      "tool": "github",
+      "duration": "1 day",
+      "outcome": "Open pull request with the manifests",
+      "next": [
+        {
+          "to": "review-manifests"
+        }
+      ]
+    },
+    {
+      "id": "review-manifests",
+      "title": "Review the manifests against the workload baseline",
+      "actor": "kubernetes-platform",
+      "type": "review",
+      "tool": "github",
+      "duration": "1-2 working days",
+      "next": [
+        {
+          "to": "manifests-ok"
+        }
+      ]
+    },
+    {
+      "id": "manifests-ok",
+      "title": "Ready for staging?",
+      "actor": "kubernetes-platform",
+      "type": "decision",
+      "next": [
+        {
+          "to": "deploy-staging",
+          "label": "Yes"
+        },
+        {
+          "to": "fix-manifests",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "fix-manifests",
+      "title": "Fix what the review found",
+      "actor": "me",
+      "type": "code",
+      "instructions": [
+        "Read the comments on the pull request.",
+        "Push the fixes to the same branch and ask for a new review."
+      ],
+      "tool": "github",
+      "next": [
+        {
+          "to": "review-manifests"
+        }
+      ]
+    },
+    {
+      "id": "deploy-staging",
+      "title": "Deploy to staging next to the old hosting",
+      "actor": "argo-cd",
+      "type": "automation",
+      "tool": "argo-cd",
+      "duration": "15 min",
+      "outcome": "Service running on the clusters in staging",
+      "next": [
+        {
+          "to": "compare-staging"
+        }
+      ]
+    },
+    {
+      "id": "compare-staging",
+      "title": "Compare the new deployment with the old one",
+      "actor": "me",
+      "type": "verify",
+      "instructions": [
+        "Run the service's smoke tests against both.",
+        "Compare response times and error rates for a day in Grafana.",
+        "Note anything that behaves differently and fix it before production."
+      ],
+      "tool": "grafana",
+      "duration": "1-2 days",
+      "outcome": "Both deployments behave the same",
+      "next": [
+        {
+          "to": "switch-traffic"
+        }
+      ]
+    },
+    {
+      "id": "switch-traffic",
+      "title": "Switch production traffic in a change window",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Deploy to production with Argo CD while the old hosting still takes the traffic.",
+        "Move the traffic over, first 10%, then all of it, watching the error rate.",
+        "Keep the old hosting running so you can switch back."
+      ],
+      "duration": "2 hours",
+      "outcome": "All traffic served by the clusters",
+      "next": [
+        {
+          "to": "switch-off-old"
+        }
+      ]
+    },
+    {
+      "id": "switch-off-old",
+      "title": "Switch the old hosting off after two quiet weeks",
+      "actor": "me",
+      "type": "task",
+      "instructions": [
+        "Check that nothing called the old hosting in the last two weeks.",
+        "Stop it, keep a backup of its data for 30 days, then delete it.",
+        "Update the service catalogue entry with the new hosting."
+      ],
+      "duration": "1 day",
+      "outcome": "Old hosting removed",
+      "next": []
+    }
+  ]
+}
