@@ -359,9 +359,19 @@ a.btn { color: var(--action-other, var(--accent)); }
 .block.done .block-num { background: var(--good-fill); color: var(--good-ink); }
 .block-add { position: absolute; right: -12px; top: 50%; margin-top: -12px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-fill, var(--accent)); color: var(--accent-ink); box-shadow: var(--shadow-2); opacity: 0; transform: scale(.7); transition: opacity .12s, transform .12s; z-index: 5; }
 .block:hover .block-add, .block-add:focus-visible { opacity: 1; transform: scale(1); }
-.flow-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface); }
-.map-tools { display: flex; align-items: center; gap: 12px; margin-left: auto; }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+/* The legend and the tools share one line. When it is short of room, the hint ("Drag to move · Ctrl + scroll
+   to zoom") gives way first, being help: its words go and its hand stays, with the words as its tooltip
+   (FlowView works out the room). Fit and the zoom never give way; only then does the legend wrap, and no
+   kind of step is ever left out. */
+.flow-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; gap: 8px 16px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.map-tools { display: flex; align-items: center; gap: 12px; margin-left: auto; flex: none; }
+.flow-head > .map-pan-hint { flex: none; margin-left: auto; }
+.flow-head > .map-pan-hint + .map-tools { margin-left: 0; }
+/* without room for its words (FlowView works it out), the hint is its hand alone, the words its tooltip */
+.flow-head > .map-pan-hint[data-cut] .map-pan-words { display: none; }
+.flow-head > .map-pan-hint[data-cut] > svg { margin-right: 0; }
+.flow-head > .legend { flex: 0 0.001 auto; min-width: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 12px; }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); line-height: var(--lh-sm); color: var(--text-2); }
 .zoom { display: flex; align-items: center; gap: 2px; flex: none; }
 .zoom-val { width: 46px; text-align: center; font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-medium); color: var(--text-2); font-variant-numeric: tabular-nums; }

@@ -18,6 +18,7 @@
 
 @media (max-width: 600px) {
   /* the legend wraps above the tools; the tools stay on one line */
+  .flow-wrap.picture .flow-head { flex-wrap: wrap; }
   .flow-wrap.picture .map-tools { margin-left: 0; }
 }
 

@@ -31,6 +31,8 @@ From both, the portal generates **skills for AI coding assistants** and, for sta
 
 ![Publishing a change](docs/publish.png)
 
+![A process that is for one path, with all paths of the list as lanes](docs/path.png)
+
 ## Run it locally
 
 You need Node 22, Go 1.26 and Docker.
@@ -137,6 +139,10 @@ The first admins are named in the server setting `PM_ADMINS`.
 ![Admin panel](docs/admin.png)
 
 ![The roles of one person](docs/roles.png)
+
+![An admin viewing the portal as another person: the band, and what would change something greyed](docs/view-as.png)
+
+![Admin › Lists: the paths, with their pictures and other names](docs/paths-list.png)
 
 ![Admin › Theming with its preview](docs/theming.png)
 

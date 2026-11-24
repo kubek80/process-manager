@@ -7,7 +7,7 @@ import { usePerms } from "../lib/session";
 import type { Profile } from "../lib/edit";
 import { quietReview, statusOf, type ReviewInfo } from "../lib/lifecycle";
 import { Field } from "./ui";
-import { Fact, KindTag, PathRoad, PathSymbolIcon } from "./marks";
+import { Fact, KindTag, PathMarks, PathRoad, PathSymbolIcon } from "./marks";
 import { VersionTag } from "./Editing";
 import { GroupLink, OwnedBy } from "./GroupParts";
 import { formatDate } from "../lib/dates";
@@ -186,7 +186,9 @@ export function PreviewFacts({ kind, doc, children }: { kind: TargetKind; doc: G
       {!doc.owner && <span className="preview-owner none">{kind === "process" ? "No owning team yet" : "Not issued by a team yet"}</span>}
       {children}
       <WhereFacts doc={doc} />
-      <PathRoad ids={doc.paths} paths={catalog.paths} kind={kind} />
+      {/* the compact road on the line of the facts; on a phone, where it would need a line of its own, the plates instead */}
+      <PathRoad ids={doc.paths} paths={catalog.paths} kind={kind} className="compact preview-road" />
+      <PathMarks ids={doc.paths} catalog={catalog} named={Array.isArray(doc.paths) && doc.paths.length === 1} className="preview-path-marks" />
     </span>
   );
 }
@@ -228,7 +230,7 @@ export function DocHead({ kind, doc, meta, review, facts, actions, notice, onBac
         {actions && <div className="head-actions">{actions}</div>}
       </div>
       {notice && <div className="doc-notices">{notice}</div>}
-      <div className="doc-facts">{facts}<WhereFacts doc={doc} links /><PathRoad ids={doc.paths} paths={catalog.paths} kind={kind} /></div>
+      <div className="doc-facts">{facts}<WhereFacts doc={doc} links /><PathRoad ids={doc.paths} paths={catalog.paths} kind={kind} className="compact" /></div>
       <div className="doc-foot">
         <p className="doc-when">
           {doc.updatedAt && <span className="doc-changed" title="When what it says last changed. Versions lists every time it was stored: saved, imported or confirmed in a review.">Content changed {formatDate(doc.updatedAt)}</span>}

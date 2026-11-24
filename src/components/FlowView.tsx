@@ -73,6 +73,34 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
   const [drag, setDrag] = useState<string | null>(null);
   const [dropLane, setDropLane] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  // The hint gives way first when the legend and the tools need its room: its words go (they stay its
+  // tooltip), the hand stays. Worked out from the room the line has, so that it does not flicker.
+  const hint = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const el = hint.current, head = el?.parentElement;
+    if (!el || !head || typeof ResizeObserver === "undefined") return;
+    const check = () => {
+      if (!el.hasAttribute("data-cut")) el.dataset.full = String(el.scrollWidth);
+      const cs = getComputedStyle(head);
+      const gap = parseFloat(cs.columnGap) || 0;
+      let others = 0, n = 0;
+      for (const c of Array.from(head.children) as HTMLElement[]) {
+        if (c === el) continue;
+        n++;
+        if (c.classList.contains("legend")) {
+          // the legend as it is on one line
+          const items = Array.from(c.children) as HTMLElement[], g = parseFloat(getComputedStyle(c).columnGap) || 0;
+          others += items.reduce((sum, i) => sum + i.getBoundingClientRect().width, 0) + g * Math.max(0, items.length - 1);
+        } else others += c.getBoundingClientRect().width;
+      }
+      const room = head.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0) - others - gap * n;
+      el.toggleAttribute("data-cut", room < Number(el.dataset.full || 0));
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(head);
+    return () => ro.disconnect();
+  });
   const [panning, setPanning] = useState(false);
   // Dragging the map with the mouse moves it around (a picture too). Touch screens scroll it
   // natively, in both directions; a picture is as high as its drawing, so a swipe up or down
@@ -341,8 +369,9 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
             <span className="kbd">+</span> on an arrow inserts a step{touch ? "" : " · drag a block to another lane"} · <span className="flow-tip-loop"><svg width="20" height="8" aria-hidden="true"><path d="M0,4 H20" className="edge back" /></svg>loop back</span>
           </p>
         </>)}
+        {/* the hint stands on its own between the legend and the tools, so that it can give way first (styles.css) */}
+        {picture !== "print" && legend && picture !== "inline" && <span ref={hint} className="map-pan-hint" title={touch ? `${panHint(true).move} · ${panHint(true).zoom}` : `Drag to move · ${zoomKey()} + scroll to zoom`}><Hand size={14} aria-hidden="true" /><span className="map-pan-words">{touch ? `${panHint(true).move} · ${panHint(true).zoom}` : <>Drag to move · <kbd className="key">{zoomKey()}</kbd> + scroll to zoom</>}</span></span>}
         {picture !== "print" && <div className="map-tools">
-          {legend && picture !== "inline" && <span className="map-pan-hint"><Hand size={14} aria-hidden="true" />{touch ? `${panHint(true).move} · ${panHint(true).zoom}` : <>Drag to move · <kbd className="key">{zoomKey()}</kbd> + scroll to zoom</>}</span>}
           <div className="zoom" role="group" aria-label="Zoom" title={picture === "inline" ? (touch ? `${panHint(true).move} · ${panHint(true).zoom}` : `Drag to move · ${zoomKey()} + scroll to zoom`) : undefined}>
             <button className="btn small ghost" onClick={() => fit()} title="Show the whole flow"><Maximize2 size={14} />Fit</button>
             <button className="icon-btn" onClick={() => step(-1)} aria-label="Zoom out"><Minus size={16} /></button>

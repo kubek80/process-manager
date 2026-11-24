@@ -92,7 +92,8 @@
 @media (max-width: 999px) { .map-hint { margin-left: 0; padding-top: 8px; white-space: normal; } }
 .map-hint > svg { color: var(--accent); flex: none; }
 .map-hint b { color: var(--text); font-weight: var(--fw-strong); }
-.map-pan-hint { display: inline-flex; align-items: center; gap: 6px; color: var(--text-3); font-size: var(--fs-sm); line-height: var(--lh-sm); white-space: nowrap; }
+.map-pan-hint { display: block; flex: none; overflow: hidden; color: var(--text-3); font-size: var(--fs-sm); line-height: var(--lh-sm); white-space: nowrap; }
+.map-pan-hint > svg { display: inline-block; vertical-align: -2px; margin-right: 6px; }
 kbd.key { display: inline-block; padding: 0 5px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; font-family: inherit; font-weight: var(--fw-medium); font-size: var(--fs-sm); line-height: var(--lh-sm); color: var(--text-2); background: var(--surface); }
 @media (max-width: 700px) { .map-pan-hint { display: none; } }
 .flow-scroll.pannable { cursor: grab; }

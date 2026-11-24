@@ -303,7 +303,7 @@ export async function openApplication(page: Page) {
  */
 export async function pickFilter(page: Page, filter: string, option: string | RegExp, where: "filters" | "application" = ["Tier", "Environment", "Language"].includes(filter) ? "application" : "filters") {
   const panel = page.getByRole("complementary", { name: "Filters" });
-  const button = panel.locator(where === "application" ? ".filter-app" : ".filter-dds").getByRole("button", { name: new RegExp(`^${filter}:`) });
+  const button = panel.locator(where === "application" ? ".filter-app" : ".filter-dds").getByRole("button", { name: new RegExp(`^(?:${where === "application" ? "My application" : "Narrow down"}, )?${filter}:`) });
   await openApplication(page);
   if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
   const name = typeof option === "string" ? new RegExp(`^${esc(option)}, \\d+ results?$`) : option;

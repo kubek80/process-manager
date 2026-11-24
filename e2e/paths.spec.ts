@@ -228,7 +228,7 @@ test("the Path filter: made for a path, or not tied to one; in the address, and 
   await signIn(page, SAM);
   await open(page, "/processes");
   const panel = page.getByRole("complementary", { name: "Filters" });
-  const button = panel.locator(".filter-dds").getByRole("button", { name: /^Path:/ });
+  const button = panel.locator(".filter-dds").getByRole("button", { name: /^(?:Narrow down, )?Path:/ });
   await button.click();
   const list = button.locator("xpath=..").locator(".filter-dd-list");
   await expect(list.locator(".filter-dd-hint")).toHaveText("Shows what is made for the path you choose; what is for any path is left out. To see everything that applies to your application's path, choose it under My application.");
@@ -250,12 +250,12 @@ test("the Path filter: made for a path, or not tied to one; in the address, and 
   await other.goto("/#/processes?path=paved-path");
   await expect(other.locator(".card .card-title")).toHaveCount(4);
   expect((await other.locator(".card .card-title").allInnerTexts()).sort()).toEqual(["Onboard an API to Apigee", "Request a GCP project", "Request a repository", "Request an Azure landing zone"]);
-  await expect(other.getByRole("complementary", { name: "Filters" }).locator(".filter-dds").getByRole("button", { name: /^Path:/ })).toHaveAccessibleName(/^Path: Made for Paved path/);
+  await expect(other.getByRole("complementary", { name: "Filters" }).locator(".filter-dds").getByRole("button", { name: /^Narrow down, Path:/ })).toHaveAccessibleName(/^Narrow down, Path: Made for Paved path/);
   // in the search, the same filter from the address
   await other.goto("/#/search?q=gcp&path=paved-path");
   await expect(other.locator(".card .card-title")).toHaveCount(2); // Infrastructure as code, found for "gcp" too, names no path
   expect((await other.locator(".card .card-title").allInnerTexts()).sort()).toEqual(["Onboard an API to Apigee", "Request a GCP project"]);
-  await expect(other.getByRole("complementary", { name: "Filters" }).locator(".filter-dds").getByRole("button", { name: /^Path:/ })).toHaveAccessibleName(/^Path: Made for Paved path/);
+  await expect(other.getByRole("complementary", { name: "Filters" }).locator(".filter-dds").getByRole("button", { name: /^Narrow down, Path:/ })).toHaveAccessibleName(/^Narrow down, Path: Made for Paved path/);
   await other.close();
 });
 
@@ -265,7 +265,7 @@ test("My application › Path hides what is made only for other paths and keeps 
   await expect(titles(page)).toHaveCount(7);
   await openApplication(page);
   const app = page.getByRole("complementary", { name: "Filters" }).locator(".filter-app");
-  const path = app.getByRole("button", { name: /^Path:/ });
+  const path = app.getByRole("button", { name: /^My application, Path:/ });
   await path.click();
   await expect(path.locator("xpath=..").locator(".filter-dd-hint")).toHaveText("Shows what applies to an application on this path: what is made for it and what is for any path. What is made only for other paths is hidden.");
   await path.click();

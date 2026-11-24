@@ -113,7 +113,7 @@ export const nothingToChoose = (options: Option[]) => options.length > 0 && opti
  * arrows move between the options; Escape closes it and returns to the button. When no option
  * would give anything, it says why (`empty`) instead of showing options that cannot be used.
  */
-export function FilterDropdown({ name, label, options, onToggle, atLeast, single, hint, empty }: {
+export function FilterDropdown({ name, label, options, onToggle, atLeast, single, hint, empty, within }: {
   name: string; label?: string; options: Option[]; onToggle: (value: string) => void; atLeast?: boolean;
   /** One choice of all (radio buttons), as "My application" is one application. */
   single?: boolean;
@@ -121,6 +121,8 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast, single
   hint?: string;
   /** Why there is nothing to choose, when no option would give anything. */
   empty?: string;
+  /** Where the list stands, said first in the button's name when the same list stands twice ("My application"). */
+  within?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [focusFirst, setFocusFirst] = useState(false);
@@ -154,7 +156,7 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast, single
   return (
     <div className={`filter-dd ${open ? "open" : ""} ${n ? "chosen" : ""} ${dead ? "nothing" : ""}`.trim()} data-filter={name}>
       <button ref={button} type="button" className="filter-dd-button" aria-expanded={open} aria-controls={`${id}-list`}
-        aria-label={`${title}: ${summary}`} onClick={() => setOpen(!open)} onKeyDown={onButtonKey}>
+        aria-label={`${within ? `${within}, ` : ""}${title}: ${summary}`} onClick={() => setOpen(!open)} onKeyDown={onButtonKey}>
         <span className="filter-dd-name">{title}</span>
         <span className="filter-dd-value">{summary}</span>
         {n > 1 && <span className="filter-dd-n" aria-hidden="true">{n}</span>}
@@ -259,7 +261,7 @@ export function FilterPanel({ id, open, keys, labels, options, onToggle, flags, 
           <div className="filter-rows">
             {shownKeys.map((k) => (
               <FilterDropdown key={k} name={k} label={labels?.[k] ?? (k === "rigour" ? rigourFilterName(subject) : undefined)} options={named(k)} onToggle={(v) => onToggle(k, v)} atLeast={atLeast} hint={FILTER_HINT[k]}
-                empty={emptyFilterText(k, subject, total)} />
+                empty={emptyFilterText(k, subject, total)} within={hasApp && (PROFILE_KEYS as readonly string[]).includes(k) ? "Narrow down" : undefined} />
             ))}
           </div>
         </div>
@@ -279,7 +281,7 @@ export function FilterPanel({ id, open, keys, labels, options, onToggle, flags, 
               <p className="filter-profile-note">Shows only what applies to your application, here and on every process and standard. Remembered in this browser.</p>
               <div className="filter-rows">
                 {PROFILE_KEYS.map((k) => (
-                  <FilterDropdown key={k} name={k} label={PROFILE_LABEL[k]} options={profileOptions[k] ?? []} single hint={PROFILE_HINT[k]}
+                  <FilterDropdown key={k} name={k} label={PROFILE_LABEL[k]} options={profileOptions[k] ?? []} single hint={PROFILE_HINT[k]} within={shownKeys.includes(k as never) ? "My application" : undefined}
                     onToggle={(v) => setProfile(k, v)} atLeast={atLeast} empty={emptyFilterText(k, subject, total)} />
                 ))}
               </div>

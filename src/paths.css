@@ -108,9 +108,29 @@
 /* a chip of the editing screen: the picture before the name, in its own tint, also when chosen */
 .chip .path-symbol { display: inline-block; vertical-align: -3px; margin-right: 5px; color: var(--path-c, currentColor); }
 
-/* the reader's page and the editing preview: the road on the line of facts, at its end when there is room */
-.doc-facts .path-road, .preview-facts .path-road { margin-left: auto; }
-.preview-facts .path-road { margin-left: 0; flex-basis: 100%; }
+/* ---------- the compact road: on the line of the facts, no taller than the facts beside it (20 px, --lh-md).
+   The lanes sit on the line's own height: a small picture without its plate, the name, the edge and the tick of
+   a marked lane kept. The plated form (above) stays for a place with a line of its own. */
+.path-road.compact { flex-wrap: nowrap; gap: 8px; }
+.path-road.compact .path-lanes { flex-wrap: nowrap; padding: 1px; border-radius: 7px; }
+.path-road.compact .path-lane { gap: 4px; height: 18px; padding: 0 7px 0 4px; border-radius: 6px; }
+.path-road.compact .path-lane .path-plate { width: 14px; height: 14px; border-radius: 4px; background: none; box-shadow: none; }
+.path-road.compact .path-lane .path-symbol { width: 14px; height: 14px; }
+.path-road.compact .path-lane + .path-lane::before { top: 3px; bottom: 3px; }
+.path-road.compact .path-check { width: 12px; height: 12px; margin-left: 0; }
+/* the reader's page: the road at the end of the line of facts when there is room; on a phone it may wrap its lanes, and keeps their names */
+.doc-facts .path-road { margin-left: auto; }
+@media (max-width: 599px) {
+  .doc-facts .path-road.compact, .doc-facts .path-road.compact .path-lanes { flex-wrap: wrap; }
+  .doc-facts .path-road.compact .path-lane { height: auto; min-height: 18px; }
+}
+/* the editing preview: the compact road on the line of facts; on a phone the plates of its paths (one named) instead */
+.preview-facts .path-road { margin-left: 0; }
+.preview-path-marks { display: none; }
+@media (max-width: 599px) {
+  .preview-facts figure.path-road { display: none; }
+  .preview-path-marks { display: inline-flex; }
+}
 
 /* the picker of a picture in Admin › Lists, with the name of the picture pointed at, focused or chosen under it */
 .symbol-picker { display: flex; flex-wrap: wrap; gap: 6px; }
