@@ -13,6 +13,7 @@ import {
 import { BrandLogo } from "./Brand";
 import { DocCard } from "./DocCard";
 import { confirmDialog, LoadError, Loading, Modal, useBottomBar } from "./ui";
+import { useChangeBlocked } from "../lib/session";
 import "../icons.css";
 import "../lists.css";
 import "../controls.css";
@@ -70,6 +71,7 @@ const when = formatDateTime;
 
 function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLook; onSaved: (s: SavedLook) => void; processes: Process[]; standards: Standard[] }) {
   const { own } = useLook();
+  const blocked = useChangeBlocked(); // viewing as somebody else: Save is unavailable, the changes stay
   const d = useDraft<Look>({
     docKey: "theme", saved: saved.look, version: saved.revision, tidy: tidyLook, what: "the look of the portal",
     save: async (look, base) => {
@@ -276,7 +278,7 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
           <span className="spacer" />
           {d.dirty && <button type="button" className="btn" onClick={() => { d.discard(); d.clearError(); }}>Discard</button>}
           {d.dirty && (
-            <button type="button" className="btn primary" disabled={d.saving || problems.length > 0} onClick={() => { void save(); }}>
+            <button type="button" className="btn primary" disabled={d.saving || problems.length > 0 || !!blocked} title={blocked || undefined} onClick={() => { void save(); }}>
               <Save size={16} aria-hidden="true" />{d.saving ? "Saving…" : "Save for everyone"}
             </button>
           )}
@@ -288,7 +290,7 @@ function ThemeEditor({ saved, onSaved, processes, standards }: { saved: SavedLoo
           footer={<>
             <span className="spacer" />
             <button className="btn" onClick={() => { void d.takeTheirs(); }}>Show theirs</button>
-            <button className="btn primary" onClick={() => { void d.keepMine(); }}>Save mine over theirs</button>
+            <button className="btn primary" disabled={!!blocked} title={blocked || undefined} onClick={() => { void d.keepMine(); }}>Save mine over theirs</button>
           </>}>
           <p>{d.conflict.updatedByName || d.conflict.updatedBy || "Another admin"} saved a look{d.conflict.updatedAt ? ` on ${when(d.conflict.updatedAt)}` : ""} while you were making yours. Your changes are still here and not saved.</p>
           <p className="muted small">“Show theirs” puts their look on screen; Undo, at the top of the settings, brings yours back.</p>

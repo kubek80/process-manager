@@ -4,6 +4,7 @@ import type { Skill, SkillDetail, TargetKind } from "../types";
 import { loadSkill, loadSkills, loadSkillVersion, putSkillExtra } from "../lib/store";
 import { CopyButton, LoadError, Loading, notify } from "./ui";
 import { formatDate } from "../lib/dates";
+import { useChangeBlocked } from "../lib/session";
 
 export const SKILL_KIND = { skill: { label: "Skill", icon: Sparkles }, "review-agent": { label: "Review agent", icon: Bot } } as const;
 
@@ -31,6 +32,7 @@ export function SkillPanel({ id, onChanged }: { id: string; onChanged?: () => vo
   const [content, setContent] = useState("");
   const [editing, setEditing] = useState(false);
   const [extra, setExtra] = useState("");
+  const blocked = useChangeBlocked(); // viewing as somebody else: what is typed stays, Save is unavailable
   const [error, setError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -99,7 +101,7 @@ export function SkillPanel({ id, onChanged }: { id: string; onChanged?: () => vo
             <textarea rows={5} value={extra} maxLength={8000} onChange={(e) => setExtra(e.target.value)} placeholder="e.g. Generated files under gen/ are exempt." aria-label="Extra guidance" />
             {saveError && <LoadError what="The guidance was not saved." error={`${saveError} What you typed is still here.`} />}
             <div className="btn-row">
-              <button className="btn primary" disabled={saving} onClick={saveExtra}><Check size={15} />Save and regenerate</button>
+              <button className="btn primary" disabled={saving || !!blocked} title={blocked || undefined} onClick={saveExtra}><Check size={15} />Save and regenerate</button>
               <button className="btn ghost" onClick={() => { setEditing(false); setExtra(skill.extra); setSaveError(""); }}>Cancel</button>
             </div>
           </>

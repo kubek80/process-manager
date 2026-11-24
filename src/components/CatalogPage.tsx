@@ -11,7 +11,7 @@ import { IconField } from "./IconField";
 import { hasMembers, membersOf, type GroupKind } from "../lib/members";
 import { ownFirst, summaryLine, tidyLists } from "../lib/groups";
 import { groupRank } from "../lib/rights";
-import { usePerms } from "../lib/session";
+import { useChangeBlocked, usePerms } from "../lib/session";
 import { slugify, uniqueId } from "../lib/edit";
 import { docCount, removeHint, useCatalog } from "../lib/catalog";
 import { useDraft } from "../lib/draft";
@@ -125,6 +125,7 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
   list?: CatalogList; id?: string;
 }) {
   const { catalog, version, save, reload } = useCatalog();
+  const viewOnly = useChangeBlocked(); // viewing as somebody else: Save is unavailable, the changes stay
   const docs = useMemo<(Process | Standard)[]>(() => [...processes, ...standards], [processes, standards]);
   const d = useDraft<Catalog>({ docKey: "catalog", saved: catalog, version, tidy: tidyCatalog, save, reload, what: "the lists", editable: editor });
   const { draft, clean, dirty } = d;
@@ -275,7 +276,7 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
         {editor && (
           <div className="cat-save">
             {dirty && <span className="cat-save-text" role="status"><b>Unsaved changes</b> to the lists</span>}
-            <SaveBar d={d} editor blocked={hasErrors(issues) ? "Fix the problems first" : undefined} />
+            <SaveBar d={d} editor blocked={viewOnly || (hasErrors(issues) ? "Fix the problems first" : undefined)} />
           </div>
         )}
       </div>
