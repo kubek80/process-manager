@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { useMe } from "../lib/session";
+import { useChangeBlocked, useMe } from "../lib/session";
 import { Bookmark, BookmarkCheck, CircleCheck, Download, Eye, Flag, MessageSquarePlus, Share2, ThumbsUp } from "lucide-react";
 import type { TargetKind } from "../types";
 import { useEngagement, type Counts } from "../lib/engagement";
@@ -35,12 +35,13 @@ const unknownHint = (failed: boolean) => (failed ? "Your bookmarks and upvotes c
 
 export function BookmarkButton({ kind, id, title = "", size = "card", className = "" }: Props) {
   const eng = useEngagement();
+  const blocked = useChangeBlocked();
   const on = eng.bookmarkState(kind, id);
   const Icon = on ? BookmarkCheck : Bookmark;
   return (
     <button type="button" className={`engage-btn bookmark-btn engage-${size} ${on ? "on" : ""} ${on === undefined ? "unknown" : ""} ${className}`.replace(/\s+/g, " ").trim()}
       aria-pressed={on} aria-label={bookmarkLabel(title || "this", on)}
-      title={on === undefined ? `${unknownHint(eng.failed)} Click to bookmark.` : on ? "Bookmarked: click to remove" : "Bookmark: find it again under Bookmarks"}
+      disabled={!!blocked} title={blocked || (on === undefined ? `${unknownHint(eng.failed)} Click to bookmark.` : on ? "Bookmarked: click to remove" : "Bookmark: find it again under Bookmarks")}
       onClick={(e) => { stop(e); void eng.toggleBookmark(kind, id); }}>
       <Icon size={15} aria-hidden="true" fill={on ? "currentColor" : "none"} />
       {size === "page" && <span className="engage-label">{on ? "Bookmarked" : "Bookmark"}</span>}
@@ -50,12 +51,13 @@ export function BookmarkButton({ kind, id, title = "", size = "card", className 
 
 export function UpvoteButton({ kind, id, title = "", size = "card", className = "" }: Props) {
   const eng = useEngagement();
+  const blocked = useChangeBlocked();
   const on = eng.upvoteState(kind, id);
   const count = eng.upvotesOf(kind, id);
   return (
     <button type="button" className={`engage-btn upvote-btn engage-${size} ${on ? "on" : ""} ${on === undefined ? "unknown" : ""} ${className}`.replace(/\s+/g, " ").trim()}
       aria-pressed={on} aria-label={upvoteLabel(title, on, count)}
-      title={on === undefined ? `${unknownHint(eng.failed)} Click to upvote.` : on ? "You found this useful: click to take it back" : "Upvote: this is useful"}
+      disabled={!!blocked} title={blocked || (on === undefined ? `${unknownHint(eng.failed)} Click to upvote.` : on ? "You found this useful: click to take it back" : "Upvote: this is useful")}
       onClick={(e) => { stop(e); void eng.toggleUpvote(kind, id); }}>
       <ThumbsUp size={15} aria-hidden="true" fill={on ? "currentColor" : "none"} />
       {count !== undefined && <span className="engage-count">{count}</span>}
@@ -128,9 +130,10 @@ export function DocActions({ kind, id, title, summary, onFeedback }: {
   kind: TargetKind; id: string; title: string; summary?: string; onFeedback: () => void;
 }) {
   const [sharing, setSharing] = useState(false);
+  const blocked = useChangeBlocked();
   return (
     <div className="engage-actions" role="group" aria-label={`What you can do with this ${kind}`}>
-      <button type="button" className="btn small give-feedback" onClick={onFeedback}><MessageSquarePlus size={15} />Give feedback</button>
+      <button type="button" className="btn small give-feedback" disabled={!!blocked} title={blocked || undefined} onClick={onFeedback}><MessageSquarePlus size={15} />Give feedback</button>
       <UpvoteButton kind={kind} id={id} title={title} size="page" />
       <BookmarkButton kind={kind} id={id} title={title} size="page" />
       <button type="button" className="btn small share-btn" onClick={() => setSharing(true)} aria-haspopup="dialog"><Share2 size={15} /><span className="engage-label">Share</span></button>

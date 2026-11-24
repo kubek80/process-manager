@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -34,7 +35,7 @@ import (
 // role at all, also where nobody like that has signed in yet. Under .invalid, a name that can
 // never be anybody's address; it has no rights whatever roles are stored for it.
 const (
-	NoRolesReader     = "reader@no-roles.invalid"
+	NoRolesReader     = rbac.NoRolesReader
 	NoRolesReaderName = "A reader with no roles"
 )
 
@@ -107,8 +108,28 @@ func (a *api) refuseWhileViewing(w http.ResponseWriter, r *http.Request) (*http.
 		writeError(w, 403, viewingRefusal(s))
 		return r, true
 	}
+	// the viewing ended in this very request (the hour, the admin role gone): what was sent was
+	// meant as the other person, so it is not done as the admin either
+	if s.viewEnded != "" {
+		writeError(w, 409, "Your view of the portal as "+s.viewEnded+" has ended, so this was not done. Reload the page to go on as yourself.")
+		return r, true
+	}
+	// a page that believes it acts as somebody else than the request does (left open while
+	// viewing started or stopped in another tab): refused, never done as the other one
+	if claimed := r.Header.Get(ActingAsHeader); claimed != "" {
+		who, err := url.PathUnescape(claimed)
+		if err != nil || !strings.EqualFold(strings.TrimSpace(who), strings.TrimSpace(s.Email)) {
+			writeError(w, 409, "This page is out of date: it was opened for somebody else than the portal now answers you as. Reload the page, then do it again.")
+			return r, true
+		}
+	}
 	return r.WithContext(context.WithValue(r.Context(), ctxKey{}, s)), false
 }
+
+// ActingAsHeader is sent by the app with every change: the address `/api/me` gave the page
+// (URL-encoded). A change whose header names somebody else than the request resolves to is
+// refused; without the header (other clients) nothing is compared.
+const ActingAsHeader = "X-Acting-As"
 
 // viewedAs turns the session of an admin who views the portal as somebody else into that
 // person's, or ends the viewing when it no longer counts. permsFailed: the admin's own roles
@@ -143,6 +164,7 @@ func (a *api) viewedAs(ctx context.Context, s session, permsFailed bool) (sessio
 	}
 	if why != "" {
 		a.endViewing(ctx, s, why)
+		s.viewEnded = personLabel(v.Target, v.TargetName)
 		return s, nil
 	}
 	perms := rbac.PermsFrom(nil, false) // the reader with no roles has none, whatever is stored
@@ -224,6 +246,10 @@ func (a *api) startViewAs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "Say whose view of the portal you want to see: send their email address.")
 		return
 	}
+	if len(email) > maxAddress {
+		writeError(w, 400, "That address is too long: an email address has at most 254 characters.")
+		return
+	}
 	if email == strings.ToLower(strings.TrimSpace(s.Email)) {
 		writeError(w, 400, "You cannot view the portal as yourself: this is already your view.")
 		return
@@ -274,28 +300,25 @@ func (a *api) stopViewAs(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// maxAddress is the longest an email address can be.
+const maxAddress = 254
+
 // maxPeople bounds the addresses GET /api/admin/people sends.
 const maxPeople = 2000
 
-// peopleQuery: every address the portal has seen: with a role, in the activity log, as the
-// author of feedback or of a request, a vote, a view, a bookmark, an upvote, a skill download,
-// a sign-out. Only the addresses: never what they did.
+// peopleQuery: the people already shown as actors somewhere in the portal: with a role, in
+// the activity log, as the author of feedback or of a request. Never somebody known only from
+// reading: a view, a download, a bookmark, an upvote, a vote, a sign-out (nobody is shown who
+// viewed or downloaded what). Any other address can still be typed.
 const peopleQuery = `select email, bool_or(has_role) from (
 	select email, true as has_role from role_assignments
 	union all select actor_email, false from audit_log
 	union all select author_email, false from feedback
-	union all select email, false from feedback_also_hit
 	union all select requested_by_email, false from requests
-	union all select email, false from request_votes
-	union all select email, false from document_views
-	union all select email, false from bookmarks
-	union all select email, false from upvotes
-	union all select email, false from skill_downloads
-	union all select email, false from signed_out
 ) p where email like '%@%' group by email order by email limit $1`
 
 // listPeople answers GET /api/admin/people (admins only): the people an admin can choose to view
-// the portal as, besides any address typed in. {"people": [{"email", "name", "roles"}]}.
+// the portal as, besides any address typed in (peopleQuery says who). {"people": [{"email", "name", "roles"}]}.
 func (a *api) listPeople(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	rows, err := a.Roles.Pool.Query(ctx, peopleQuery, maxPeople)

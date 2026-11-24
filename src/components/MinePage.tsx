@@ -4,7 +4,7 @@ import type { DocMeta, FeedbackByTarget, Process, Standard, TargetKind } from ".
 import { groupName, useCatalog } from "../lib/catalog";
 import { STATUS_LABEL } from "../lib/lifecycle";
 import { changedBy, groupKey, myGroups, responsibilities, reviewsDue, type Group, type Owned, type Task } from "../lib/responsibilities";
-import { useFeedbackActions, useMe, usePerms } from "../lib/session";
+import { useChangeBlocked, useFeedbackActions, useMe, usePerms } from "../lib/session";
 import { href, loadMembers, type MetaById } from "../lib/store";
 import { knownNames } from "../lib/members";
 import type { Membership } from "../types";
@@ -46,6 +46,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
   onReviewed: (kind: TargetKind, id: string) => Promise<boolean>;
 }) {
   const { catalog } = useCatalog();
+  const blocked = useChangeBlocked(); // viewing as somebody else: their buttons show, unavailable
   const perms = usePerms();
   const actions = useFeedbackActions();
   const groups = useMemo(() => myGroups(perms), [perms]);
@@ -147,7 +148,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
                 <span className="person"><a href={pageOf(o)}><strong>{o.doc.title}</strong></a><em>{via(o)}{o.doc.review?.lastReviewedAt ? ` · last reviewed ${o.doc.review.lastReviewedAt}${o.doc.review.reviewedBy ? ` by ${o.doc.review.reviewedBy}` : ""}` : o.review.first ? " · not reviewed since it was first published" : " · not reviewed yet"}</em></span>
                 <span className={`tier-tag review-${o.review.state}`}>{o.review.label}</span>
                 <a className="btn small" href={pageOf(o)}>Open<ArrowUpRight size={13} /></a>
-                <button className="btn small" disabled={busy === o.kind + o.doc.id} onClick={() => review(o)} title={`Records today and your name as the review of this ${noun(o.kind)}`}><Check size={14} />Still correct</button>
+                <button className="btn small" disabled={busy === o.kind + o.doc.id || !!blocked} onClick={() => review(o)} title={blocked || `Records today and your name as the review of this ${noun(o.kind)}`}><Check size={14} />Still correct</button>
               </li>
             ))}
           </ul>
@@ -170,7 +171,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
                 </span>
                 {f.stale && <span className="tier-tag review-soon" title="The step or requirement was changed after this was written">May already be fixed</span>}
                 <a className="btn small" href={pageOf(o, true)}>Open<ArrowUpRight size={13} /></a>
-                {f.canManage && <button className="btn small" onClick={() => actions.resolve(f, true)}><Check size={14} />Mark as fixed</button>}
+                {f.canManage && <button className="btn small" disabled={!!blocked} title={blocked || undefined} onClick={() => actions.resolve(f, true)}><Check size={14} />Mark as fixed</button>}
               </li>
             ))}
           </ul>

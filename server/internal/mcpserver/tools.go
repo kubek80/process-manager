@@ -223,7 +223,7 @@ func (s *Server) addTools(srv *mcp.Server) {
 	tool(s, srv, &mcp.Tool{
 		Name:        "get_catalog",
 		Annotations: readOnly("Read the lists"),
-		Description: "The lists processes and standards refer to: teams, practices and platforms (with contact and, when you present the shared secret, members), categories, tools (with link), application tiers, environments and programming languages. " +
+		Description: "The lists processes and standards refer to: teams, practices and platforms (with contact and, when you present the shared secret, members), categories, tools (with link), application tiers, paths (greenfield, brownfield, paved path and any the company added, with their other names), environments and programming languages. " +
 			"Use it to find the ids and names the search filters take.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (Catalog, string, error) {
 		out, err := s.catalog(ctx)

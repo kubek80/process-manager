@@ -8,9 +8,6 @@
   "category": "cloud",
   "platform": "kubernetes",
   "scope": "Every deployment, stateful set and job on the shared clusters. Clusters run by a team on its own are out of scope.",
-  "paths": [
-    "paved-path"
-  ],
   "tags": [
     "kubernetes",
     "containers",

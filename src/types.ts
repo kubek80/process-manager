@@ -100,7 +100,8 @@ export interface Tier { id: string; name: string; description?: string }
 /** The pictures an entry of the paths can carry (`PathMark` draws them); none: a neutral mark. */
 export type PathSymbol = "sprout" | "buildings" | "road" | "trail" | "bridge" | "flask" | "rocket" | "sunset";
 /** A path a process or standard can be for: greenfield, brownfield, paved path, or one an organisation adds. */
-export interface PathEntry { id: string; name: string; symbol?: PathSymbol; description?: string }
+/** `alsoCalled`: other names people use for it ("golden path"), found by the search. */
+export interface PathEntry { id: string; name: string; alsoCalled?: string[]; symbol?: PathSymbol; description?: string }
 export interface Environment { id: string; name: string; description?: string }
 /** `icon`: id of an uploaded square image (see `iconUrl` in the store). */
 export interface Language { id: string; name: string; icon?: string; description?: string }

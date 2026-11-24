@@ -35,7 +35,8 @@ func TestListsWithoutPathsGetThemOnce(t *testing.T) {
 	if !report.Converted || !report.Lists || report.Paths != 3 || report.Documents != 0 {
 		t.Fatalf("report: %+v", report)
 	}
-	if !strings.Contains(report.String(), "added the list of paths with 3 entries") {
+	// the report says only what happened
+	if report.String() != "added the list of paths with 3 entries; the lists were updated" {
 		t.Fatalf("report: %s", report)
 	}
 	l, err := f.docs.Lists(ctx)
@@ -116,6 +117,17 @@ func TestRemovedPathsDoNotComeBack(t *testing.T) {
 	l, _ := store.Lists(ctx)
 	if len(l.Paths) != 1 || l.Paths[0].ID != "lift-and-shift" {
 		t.Fatalf("paths: %+v", l.Paths)
+	}
+	// an installation that got the three paths before they had other names keeps what it has
+	before := strings.Replace(listsBeforePaths, `"environments"`, `"paths":[{"id":"paved-path","name":"Paved path","symbol":"road"}],"environments"`, 1)
+	if _, _, err := store.Put(ctx, docs.Catalog, docs.CatalogID, []byte(before), "system"); err != nil {
+		t.Fatal(err)
+	}
+	if report, err := upgrade.Convert(ctx, pool, quiet); err != nil || report.Converted {
+		t.Fatalf("%+v %v", report, err)
+	}
+	if l, _ := store.Lists(ctx); len(l.Paths) != 1 || l.Paths[0].AlsoCalled != nil {
+		t.Fatalf("rewritten: %+v", l.Paths)
 	}
 }
 

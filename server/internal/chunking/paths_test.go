@@ -12,9 +12,10 @@ import (
 // path that is no longer in the lists, are said as they are.
 func TestTheSummarySaysThePaths(t *testing.T) {
 	lists := docs.Lists{Paths: []docs.Named{
-		{ID: "greenfield", Name: "Greenfield", Symbol: "sprout"},
-		{ID: "paved-path", Name: "Paved path", Symbol: "road"},
-		{ID: "lift", Name: "Lift and shift", Symbol: "bridge"},
+		{ID: "greenfield", Name: "Greenfield", Symbol: "sprout", AlsoCalled: []string{"green field"}},
+		{ID: "paved-path", Name: "Paved path", Symbol: "road", AlsoCalled: []string{"golden path", " ", "paved road"}},
+		// the other names belong to the entry, not to its picture
+		{ID: "lift", Name: "Lift and shift", Symbol: "road"},
 	}}
 	summary := func(kind, body string) string {
 		t.Helper()

@@ -10,7 +10,7 @@ import { opensChange } from "./rights";
 /** The roles, what they allow in plain words, and for the five that are limited to a group: which list it is picked from. */
 export const ROLES: Record<Role, { label: string; can: string; scope: "none" | "required"; scopeLabel?: string; always?: string }> = {
   admin: { label: "Admin", can: "Everything, including who has access", scope: "none" },
-  "catalog-manager": { label: "Lists manager", can: "Teams, practices, platforms, categories, tools, tiers, environments, languages", scope: "none" },
+  "catalog-manager": { label: "Lists manager", can: "Teams, practices, platforms, categories, tools, tiers, paths, environments, languages", scope: "none" },
   "process-editor": { label: "Process editor", can: "Create and change every process; close its feedback", scope: "none" },
   "standards-editor": { label: "Standards editor", can: "Create and change every standard; close its feedback", scope: "none" },
   "platform-owner": { label: "Platform owner", can: "Create, change and publish the processes and standards that belong to a platform; confirm their reviews, close their feedback and add its members", scope: "required", scopeLabel: "For the platform", always: "Always for one platform" },
@@ -213,3 +213,23 @@ export function viewAsProblem(typed: string, me: string): string {
 
 /** The suggestions for the address field: name first where known, people with roles marked. */
 export const personOption = (p: KnownPerson) => `${p.name ? `${p.name} · ` : ""}${p.roles ? "has roles" : "no roles"}`;
+
+/** Who a page is for, as `/api/me` says: signed in or not, the person, and the admin viewing as them. */
+export interface SeenAs { authenticated: boolean; user?: { email: string }; viewedBy?: { email: string } }
+
+/**
+ * Whether the portal now answers this tab as somebody else than the page was opened for:
+ * viewing as somebody started or stopped in another tab, or another person signed in. Then the
+ * page reloads. Being signed out is not such a change: the sign-in prompt deals with it.
+ */
+export function personChanged(shown: SeenAs, now: SeenAs): boolean {
+  if (!shown.authenticated || !now.authenticated) return false;
+  const low = (s?: string) => (s ?? "").trim().toLowerCase();
+  return low(shown.user?.email) !== low(now.user?.email) || low(shown.viewedBy?.email) !== low(now.viewedBy?.email);
+}
+
+/** How long until viewing ends by itself, in milliseconds, with a second to spare; null when not known. */
+export function msUntilEnd(until: string | undefined, now: number = Date.now()): number | null {
+  const at = until ? Date.parse(until) : NaN;
+  return Number.isNaN(at) ? null : Math.max(0, at - now) + 1000;
+}

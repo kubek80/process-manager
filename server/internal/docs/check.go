@@ -277,6 +277,7 @@ func Check(kind string, body []byte, l Lists) error {
 				problems = append(problems, n.Contacts.Problems(EntryWords(g.noun, n))...)
 			}
 		}
+		problems = append(problems, otherNameClashes(c.Paths)...)
 		sort.Strings(problems) // the lists are visited in no fixed order
 	}
 	if len(problems) == 0 {

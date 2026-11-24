@@ -12,19 +12,20 @@ import (
 // any path; what names paths is found only for one of them. "golden path" is the paved path.
 func TestThePathFilter(t *testing.T) {
 	l := sampleLists(t)
-	gcp := sample(t, docs.Process, "request-gcp-project")       // greenfield, paved path
-	akamai := sample(t, docs.Process, "onboard-site-to-akamai") // brownfield
+	gcp := sample(t, docs.Process, "request-gcp-project")        // paved path
+	repo := sample(t, docs.Process, "request-github-repository") // greenfield, paved path
 	servicenow := sample(t, docs.Process, "raise-servicenow-request")
 	for _, c := range []struct {
 		path string
-		want []bool // gcp, akamai, servicenow
+		want []bool // gcp, repo, servicenow
 		id   string
 	}{
 		{"", []bool{true, true, true}, ""},
-		{"greenfield", []bool{true, false, true}, "greenfield"},
-		{"Brownfield", []bool{false, true, true}, "brownfield"},
-		{"paved path", []bool{true, false, true}, "paved-path"},
-		{"Golden Path", []bool{true, false, true}, "paved-path"},
+		{"greenfield", []bool{false, true, true}, "greenfield"},
+		{"Brownfield", []bool{false, false, true}, "brownfield"},
+		{"paved path", []bool{true, true, true}, "paved-path"},
+		{"Golden Path", []bool{true, true, true}, "paved-path"},
+		{"green field", []bool{false, true, true}, "greenfield"},
 	} {
 		f, err := resolveFilters(l, SearchInput{Path: c.path})
 		if err != nil {
@@ -34,7 +35,7 @@ func TestThePathFilter(t *testing.T) {
 			t.Errorf("%q resolved to %q", c.path, f.profile.Path)
 		}
 		var got []bool
-		for _, e := range []*entry{gcp, akamai, servicenow} {
+		for _, e := range []*entry{gcp, repo, servicenow} {
 			ok, _ := f.passes(e)
 			got = append(got, ok)
 		}
@@ -45,9 +46,22 @@ func TestThePathFilter(t *testing.T) {
 	if _, err := resolveFilters(l, SearchInput{Path: "dirt road"}); err == nil || !strings.Contains(err.Error(), "There is no path “dirt road”. Use get_catalog to see the paths.") {
 		t.Fatalf("unknown path: %v", err)
 	}
+	// the other names belong to the entry, not to its picture: another path with the road is not the golden path
+	l.Paths = append(l.Paths, docs.Named{ID: "toll-road", Name: "Toll road", Symbol: "road"})
+	if f, _ := resolveFilters(l, SearchInput{Path: "golden path"}); f.profile.Path != "paved-path" {
+		t.Fatalf("golden path: %q", f.profile.Path)
+	}
+	if _, err := resolveFilters(l, SearchInput{Path: "paved road"}); err != nil {
+		t.Fatal(err)
+	}
+	l.Paths[2].AlsoCalled = nil
+	if _, err := resolveFilters(l, SearchInput{Path: "golden path"}); err == nil {
+		t.Fatal("found by an other name the entry no longer has")
+	}
+	l = sampleLists(t)
 	// "golden path" is found by words in what is on the paved path, and only there
 	score := func(e *entry, q string) int { return wordScore(fieldsOf(e, l), partsOf(e, l), wordsOf(q)) }
-	if score(gcp, "golden path") == 0 || score(akamai, "golden path") != 0 || score(akamai, "brownfield") == 0 {
+	if score(gcp, "golden path") == 0 || score(servicenow, "golden path") != 0 || score(repo, "greenfield") == 0 {
 		t.Fatal("paths are not found by their words")
 	}
 }
@@ -77,15 +91,23 @@ func TestSearchAndReadByPath(t *testing.T) {
 	e := setup(t, "", nil)
 	cs := e.session(nil)
 	var out SearchOutput
+	// what is not tied to a path applies to every path: all active processes
 	mustCall(t, cs, "search_processes", map[string]any{"path": "golden path"}, &out)
-	if out.Filters["path"] != "paved-path" || out.Total == 0 {
+	if out.Filters["path"] != "paved-path" || out.Total != 7 {
 		t.Fatalf("%+v", out)
 	}
+	// greenfield: what is made for the paved path only is left out
+	mustCall(t, cs, "search_processes", map[string]any{"path": "greenfield"}, &out)
 	for _, r := range out.Results {
-		if r.ID == "onboard-site-to-akamai" || r.ID == "request-azure-landing-zone" {
-			t.Fatalf("%s is for another path only", r.ID)
+		if r.ID == "request-gcp-project" || r.ID == "request-azure-landing-zone" || r.ID == "onboard-api-to-apigee" {
+			t.Fatalf("%s is for the paved path only", r.ID)
 		}
-		if r.ID == "request-gcp-project" && (len(r.Paths) != 2 || r.Paths[1].Name != "Paved path" || r.Paths[1].AlsoCalled[0] != "golden path") {
+	}
+	if out.Total != 4 {
+		t.Fatalf("greenfield: %d", out.Total)
+	}
+	for _, r := range out.Results {
+		if r.ID == "request-github-repository" && (len(r.Paths) != 2 || r.Paths[1].Name != "Paved path" || r.Paths[1].AlsoCalled[0] != "golden path") {
 			t.Fatalf("paths: %+v", r.Paths)
 		}
 	}

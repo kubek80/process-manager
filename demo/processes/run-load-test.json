@@ -8,9 +8,6 @@
   "category": "testing",
   "practice": "quality",
   "rigour": "recommended",
-  "paths": [
-    "brownfield"
-  ],
   "tiers": [
     "tier-0",
     "tier-1"

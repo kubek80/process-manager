@@ -4,7 +4,7 @@ import type { Process, Rigour, Standard, TargetKind } from "../types";
 import { href } from "../lib/store";
 import type { Profile } from "../lib/edit";
 import { EMPTY_CATALOG, useCatalog } from "../lib/catalog";
-import { appSummary, countText, countWords, DROPPED_FILTER_TEXT, emptyFilterText, FILTER_LABEL, knownFilters, type Filters, PROFILE_HINT, PROFILE_KEYS, PROFILE_LABEL, RIGOURS, rigourFilterName, rigourOptionLabel, type FilterKey, type Option, type ProfileKey, type TypeTab } from "../lib/search";
+import { appSummary, countText, countWords, DROPPED_FILTER_TEXT, emptyFilterText, FILTER_HINT, FILTER_LABEL, knownFilters, type Filters, PROFILE_HINT, PROFILE_KEYS, PROFILE_LABEL, RIGOURS, rigourFilterName, rigourOptionLabel, type FilterKey, type Option, type ProfileKey, type TypeTab } from "../lib/search";
 import { useRemembered } from "../lib/profile";
 import { LevelBars, PathMark } from "./marks";
 import type { ListView } from "../lib/paging";
@@ -256,7 +256,7 @@ export function FilterPanel({ id, open, keys, labels, options, onToggle, flags, 
           <p className="filter-group-title" id={`${id}-narrow`}>Narrow down</p>
           <div className="filter-rows">
             {shownKeys.map((k) => (
-              <FilterDropdown key={k} name={k} label={labels?.[k] ?? (k === "rigour" ? rigourFilterName(subject) : undefined)} options={named(k)} onToggle={(v) => onToggle(k, v)} atLeast={atLeast}
+              <FilterDropdown key={k} name={k} label={labels?.[k] ?? (k === "rigour" ? rigourFilterName(subject) : undefined)} options={named(k)} onToggle={(v) => onToggle(k, v)} atLeast={atLeast} hint={FILTER_HINT[k]}
                 empty={emptyFilterText(k, subject, total)} />
             ))}
           </div>

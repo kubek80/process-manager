@@ -394,6 +394,11 @@ var covers = map[string]string{
 	StandardsEditor: "A standards editor always covers all standards",
 }
 
+// NoRolesReader is the address of "A reader with no roles", which admins view the portal as
+// (httpapi/viewas.go): under .invalid, never anybody's address. No role can be given to it
+// (Check), and viewing as it gives no rights whatever is stored.
+const NoRolesReader = "reader@no-roles.invalid"
+
 // ValidEmail reports whether an address may be given a role: it looks like an email address
 // and holds no control or invisible formatting characters (a zero-width space, a change of
 // reading direction), which could make one address look like another. Every way of giving a
@@ -416,6 +421,9 @@ func ValidEmail(email string) bool {
 func Check(a Assignment) error {
 	if !ValidEmail(a.Email) {
 		return fmt.Errorf("%w: %q is not an email address.", ErrInvalid, a.Email)
+	}
+	if strings.EqualFold(strings.TrimSpace(a.Email), NoRolesReader) {
+		return fmt.Errorf("%w: %s stands for “a reader with no roles” when an admin views the portal as somebody else. It cannot be given a role.", ErrInvalid, NoRolesReader)
 	}
 	switch a.Role {
 	case Admin, CatalogManager, ProcessEditor, StandardsEditor:

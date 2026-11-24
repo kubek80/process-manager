@@ -7,9 +7,6 @@
   "owner": "developer-experience-team",
   "platform": "service-catalogue",
   "scope": "Every service, job and library that runs or is published from a company repository.",
-  "paths": [
-    "greenfield"
-  ],
   "tags": [
     "catalogue",
     "ownership",

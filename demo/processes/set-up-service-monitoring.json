@@ -10,6 +10,7 @@
   "platform": "observability",
   "rigour": "recommended",
   "paths": [
+    "greenfield",
     "paved-path"
   ],
   "estimatedDuration": "1 working day",

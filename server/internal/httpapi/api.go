@@ -94,6 +94,8 @@ type session struct {
 	// viewer is set while an admin views the portal as this person: the admin, who signed in.
 	// User and Perms are then the person's, on every route; nothing can be changed (guard).
 	viewer *viewingAdmin
+	// viewEnded names the person whose view ended in this very request (viewas.go)
+	viewEnded string
 }
 
 // New builds the handler.

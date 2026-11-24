@@ -9,7 +9,7 @@ import { useProfile } from "../lib/profile";
 import { reviewOf, statusOf } from "../lib/lifecycle";
 import { createStandardPrompt, modifyStandardPrompt } from "../lib/prompt";
 import { canDraft, canEdit, canManage } from "../lib/rights";
-import { usePerms } from "../lib/session";
+import { useChangeBlocked, usePerms } from "../lib/session";
 import { go, href, type StandardTab } from "../lib/store";
 import { isDrawableStandard, validateStandard } from "../lib/validate";
 import type { AiSpec } from "./AiDialog";
@@ -87,6 +87,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
 }) {
   const { catalog } = useCatalog();
   const perms = usePerms();
+  const blocked = useChangeBlocked(); // viewing as somebody else: the controls show, unavailable
   // a standards editor may change every standard; a platform or practice owner what belongs to theirs
   const editor = canEdit(perms, "standard", standard);
   // "Edit" also for a member of its platform or practice: they save drafts there, an owner publishes
@@ -155,7 +156,7 @@ export function StandardPage({ standard, meta, all, processes, tab, item, feedba
         actions={<>
           {/* the review belongs to the team that issues the standard, and to whoever may edit it */}
           {(editor || manages) && review.state !== "none" && status !== "draft" && <button className={`btn ${review.state === "soon" || review.state === "overdue" ? "review-due" : "quiet"}`} onClick={() => onReviewed(meta?.version ?? 0)}
-            title="Confirm that this standard is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
+            disabled={!!blocked} title={blocked || "Confirm that this standard is still correct. Restarts the review interval."}><CalendarCheck size={16} />Mark as reviewed</button>}
           {drafts && <a className="btn primary" href={editHref}><Pencil size={16} />Edit</a>}
         </>}>
         {status !== "draft" && <DocEngagement kind="standard" id={standard.id} title={doc.title} summary={doc.summary} actions={!actionsOnTabs}

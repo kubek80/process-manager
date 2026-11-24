@@ -10,7 +10,7 @@ import { reviewOf, statusOf } from "../lib/lifecycle";
 import { RESOURCE_KINDS } from "./Resources";
 import { FeedbackForm, FeedbackTab, openCount, processTarget } from "./Feedback";
 import { DocActions, DocEngagement } from "./Engage";
-import { useMe, usePerms } from "../lib/session";
+import { useChangeBlocked, useMe, usePerms } from "../lib/session";
 import { href } from "../lib/store";
 import { FlowView } from "./FlowView";
 import { ListView } from "./ListView";
@@ -49,6 +49,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
   // arriving at the feedback tab (from a card's "Give feedback" or the button) puts the cursor in the form
   const [focusFeedback, setFocusFeedback] = useState(tab === "feedback");
   const perms = usePerms();
+  const blocked = useChangeBlocked(); // viewing as somebody else: the controls show, unavailable
   // a process editor may change every process; a platform or practice owner what belongs to theirs
   const editor = canEdit(perms, "process", process);
   // "Edit" also for a member of its platform or practice: they save drafts there, an owner publishes
@@ -128,7 +129,7 @@ export function ProcessPage({ process, meta, all, standards, tab, item, onReview
         actions={<>
           {/* the review belongs to the team that owns the process, and to whoever may edit it */}
           {(editor || manages) && review.state !== "none" && status !== "draft" && <button className={`btn ${review.state === "soon" || review.state === "overdue" ? "review-due" : "quiet"}`} onClick={() => onReviewed(meta?.version ?? 0)}
-            title="Confirm that this process is still correct. Restarts the review interval."><CalendarCheck size={16} />Mark as reviewed</button>}
+            disabled={!!blocked} title={blocked || "Confirm that this process is still correct. Restarts the review interval."}><CalendarCheck size={16} />Mark as reviewed</button>}
           {drafts && <a className="btn primary" href={editHref}><Pencil size={16} />Edit</a>}
         </>}>
         {status !== "draft" && <DocEngagement kind="process" id={process.id} title={doc.title} summary={doc.summary} actions={!actionsOnTabs}

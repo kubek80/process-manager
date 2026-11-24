@@ -8,9 +8,6 @@
   "category": "testing",
   "practice": "quality",
   "scope": "Applications and libraries built by company teams. Bought software is tested by its supplier and is out of scope.",
-  "paths": [
-    "brownfield"
-  ],
   "tags": [
     "testing",
     "release",

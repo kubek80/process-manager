@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowRight, ArrowUp, ArrowUpRight, Boxes, CircleAlert, Code2, Compass, Server, ExternalLink, Layers, Plus, Search, Signpost, Tag, Trash2, Users, Wrench } from "lucide-react";
 import type { Catalog, Contacts, Issue, Membership, PathSymbol, Process, Standard } from "../types";
 import { PATH_SYMBOLS, PathMark, PathSymbolIcon } from "./marks";
+import { otherNames } from "../lib/paths";
 import { GroupMembers } from "./TeamMembers";
 import { ContactFields } from "./ContactFields";
 import { ContactList, RankMark } from "./GroupParts";
@@ -22,7 +23,7 @@ import { focusWhenShown, useFieldMarks } from "../lib/fieldMarks";
 import { Field, IssueList, notify, useScrollFade } from "./ui";
 
 type Key = "teams" | "practices" | "platforms" | "categories" | "tools" | "tiers" | "paths" | "environments" | "languages";
-type Row = { id: string; name: string; contact?: string; contacts?: Contacts; url?: string; description?: string; icon?: string; symbol?: PathSymbol };
+type Row = { id: string; name: string; contact?: string; contacts?: Contacts; url?: string; description?: string; icon?: string; symbol?: PathSymbol; alsoCalled?: string[] };
 
 const KINDS: Record<Key, {
   title: string; noun: string; icon: typeof Users; blurb: string;
@@ -364,6 +365,12 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                 <div className="form">
                   <Field label="Name"><input data-field="name" value={current.name} maxLength={40} onChange={(e) => upd({ name: e.target.value })} /></Field>
                   {WITH_ICON.includes(key) && <IconField key={current.id} icon={current.icon} name={current.name} onChange={(icon) => upd({ icon })} />}
+                  {key === "paths" && (
+                    <Field label="Also called" hint="Other names people use for it, separated by commas, e.g. golden path. Searching for one finds what is for this path.">
+                      <input data-field="alsoCalled" value={(current.alsoCalled ?? []).join(", ")} placeholder="e.g. golden path"
+                        onChange={(e) => { const names = e.target.value.split(",").map((t) => t.trimStart()); upd({ alsoCalled: names.some((t) => t.trim()) ? names : undefined }); }} />
+                    </Field>
+                  )}
                   {key === "paths" && <SymbolField value={current.symbol} onChange={(symbol) => upd({ symbol })} />}
                   {group && <ContactFields key={`${key}/${current.id}`} kind={group} idPrefix={`lists-${group}`} value={{ description: current.description, contact: current.contact, contacts: current.contacts }}
                     onChange={(v) => upd({ description: v.description, contact: v.contact, contacts: v.contacts })} />}
@@ -387,6 +394,12 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                     <div>
                       <dt>How it is marked</dt>
                       <dd><PathMark entry={current} named size="md" /></dd>
+                    </div>
+                  )}
+                  {key === "paths" && otherNames(current).length > 0 && (
+                    <div>
+                      <dt>Also called</dt>
+                      <dd>{otherNames(current).join(", ")}</dd>
                     </div>
                   )}
                   {kind.fields.map((f) => current[f.field] && (

@@ -100,7 +100,7 @@ func storedEmail(raw string) (string, bool) {
 // userEmail reads the email in the address, as it is stored.
 func userEmail(w http.ResponseWriter, r *http.Request) (string, bool) {
 	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
-	if !docs.Storable(email) || rbac.Check(rbac.Assignment{Email: email, Role: rbac.Admin}) != nil {
+	if !docs.Storable(email) || !rbac.ValidEmail(email) {
 		writeError(w, 400, "That is not an email address.")
 		return "", false
 	}

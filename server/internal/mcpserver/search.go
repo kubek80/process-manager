@@ -27,7 +27,7 @@ type SearchInput struct {
 	Tier        string `json:"tier,omitempty" jsonschema:"id or name of the application tier the person's application has; only what applies to it is returned"`
 	Environment string `json:"environment,omitempty" jsonschema:"id or name of the environment, e.g. production; only what applies there is returned"`
 	Language    string `json:"language,omitempty" jsonschema:"id or name of the programming language; only what applies to it is returned"`
-	Path        string `json:"path,omitempty" jsonschema:"id or name of the path the work is on: greenfield (something new), brownfield (something that exists), paved path (also called golden path: the ready-made way), or another from get_catalog; only what is for that path or for any path is returned"`
+	Path        string `json:"path,omitempty" jsonschema:"id, name or other name of the path the work is on (greenfield: something new; brownfield: something that exists; paved path, also called golden path: the ready-made way; or another from get_catalog). Only what applies to that path is returned: what is made for it AND what is not tied to any path (most documents name no path, as they apply to everyone). This differs from the portal's Path filter, which keeps only what is made for the path"`
 	Limit       int    `json:"limit,omitempty" jsonschema:"how many results at most, 1 to 50; default 10"`
 }
 
@@ -142,8 +142,9 @@ func resolveFilters(l docs.Lists, in SearchInput) (filters, error) {
 	return f, err
 }
 
-// resolvePath finds a path by id or name, or by what else it is called ("golden path" is the
-// paved path: docs.PathAlso), ignoring case and accents.
+// resolvePath finds a path by id or name, or by one of its other names (the entry's
+// "alsoCalled": "golden path" for the paved path), ignoring case and accents. The lists'
+// check keeps an other name to one path.
 func resolvePath(list []docs.Named, value string) (string, error) {
 	id, err := resolve(list, value, "path", "paths")
 	if err == nil {
@@ -151,7 +152,7 @@ func resolvePath(list []docs.Named, value string) (string, error) {
 	}
 	want := fold(strings.TrimSpace(value))
 	for _, n := range list {
-		for _, also := range docs.PathAlso[n.Symbol] {
+		for _, also := range docs.OtherNames(n) {
 			if fold(also) == want {
 				return n.ID, nil
 			}

@@ -4,9 +4,9 @@ import type { Me } from "../types";
 import { changeBlocked, mayViewAs, opensChange, readerOf } from "../lib/rights";
 import { personLabel } from "../lib/members";
 import { useMe } from "../lib/session";
-import { loadPeople, startViewAs, stopViewAs } from "../lib/store";
+import { loadMe, loadPeople, startViewAs, stopViewAs } from "../lib/store";
 import {
-  NO_ROLES_READER, NO_ROLES_READER_NAME, personOption, returnPlace, VIEW_AS_BUTTON, viewAsHint, viewAsName, viewAsProblem, viewingEnds, type KnownPerson,
+  msUntilEnd, NO_ROLES_READER, NO_ROLES_READER_NAME, personChanged, personOption, returnPlace, VIEW_AS_BUTTON, viewAsHint, viewAsName, viewAsProblem, viewingEnds, type KnownPerson,
 } from "../lib/users";
 import { notify } from "./ui";
 import "../viewas.css";
@@ -70,6 +70,14 @@ export function ViewAsBand({ me }: { me: Me }) {
     document.addEventListener("click", click, true);
     return () => { window.removeEventListener("hashchange", away); document.removeEventListener("click", click, true); };
   }, [blocked]);
+
+  // when it ends by itself, the page opens afresh as the admin (the server has ended it by then)
+  useEffect(() => {
+    const ms = msUntilEnd(me.viewedBy?.until);
+    if (ms === null) return;
+    const t = window.setTimeout(() => window.location.reload(), Math.min(ms, 2 ** 31 - 1));
+    return () => window.clearTimeout(t);
+  }, [me.viewedBy?.until]);
 
   const stop = () => {
     setBusy(true);
@@ -153,4 +161,24 @@ export function ViewAsPicker() {
       {tried && problem && <p id="viewas-pick-problem" className="viewas-problem small" role="alert">{problem}</p>}
     </section>
   );
+}
+
+/**
+ * For every signed-in page: when the window comes back into view, asks the server who this tab
+ * is now; when viewing as somebody started or stopped in another tab (or another person signed
+ * in), the page opens afresh, so it never shows one person while acting as another.
+ */
+export function ViewingWatch({ me }: { me: Me }) {
+  useEffect(() => {
+    let asking = false;
+    const check = () => {
+      if (asking || document.visibilityState === "hidden") return;
+      asking = true;
+      loadMe(false).then((now) => { if (personChanged(me, now)) window.location.reload(); }, () => { /* asked again next time */ }).finally(() => { asking = false; });
+    };
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => { window.removeEventListener("focus", check); document.removeEventListener("visibilitychange", check); };
+  }, [me]);
+  return null;
 }

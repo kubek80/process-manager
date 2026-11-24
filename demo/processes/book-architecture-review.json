@@ -8,10 +8,6 @@
   "category": "architecture",
   "practice": "architecture",
   "rigour": "recommended",
-  "paths": [
-    "greenfield",
-    "brownfield"
-  ],
   "tiers": [
     "tier-0",
     "tier-1"

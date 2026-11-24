@@ -42,7 +42,7 @@ export function GovernedSections<T extends Process | Standard>({ kind, doc, save
         summary={belongs.length ? belongs.join(" · ") : none("Nothing chosen yet")}>
         <BelongsEditor kind={kind} doc={doc} saved={saved} onChange={set as (p: Partial<Process | Standard>) => void} />
       </EditSection>
-      <EditSection title="Which path it is for" hint="Greenfield, brownfield, the paved path… Nothing selected means it applies whatever the path." folded={!has("paths")}
+      <EditSection title="Which path it is for" hint="Choose a path only when this is meant only for that kind of work, such as setting up something new, or when it is itself the ready-made way. Something everyone follows names none: nothing selected means it applies whatever the path." folded={!has("paths")}
         summary={doc.paths?.length ? <PathMarks ids={doc.paths} catalog={catalog} named /> : none("Any path")}>
         <PathsEditor value={doc.paths} onChange={(paths) => set({ paths } as Partial<T>)} />
       </EditSection>

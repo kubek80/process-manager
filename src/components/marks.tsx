@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Check, ShieldCheck, Workflow, type LucideIcon } from "lucide-react";
 import type { Level, PathEntry, PathSymbol, Rigour, TargetKind } from "../types";
 import { levelWord, type AnyLevel } from "../lib/search";
-import { pathsOf, pathsSentence } from "../lib/paths";
+import { pathsOf, pathsSentence, pathTitle } from "../lib/paths";
 import "../controls.css";
 import "../paths.css";
 
@@ -218,9 +218,10 @@ export function PathSymbolIcon({ symbol, size = 16 }: { symbol?: string; size?: 
 }
 
 /** One path: its picture on a small plate, the name as the tooltip (read out), or written beside it with `named`. */
-export function PathMark({ entry, named, size = "sm", className = "" }: { entry: Pick<PathEntry, "id" | "name" | "symbol" | "description">; named?: boolean; size?: "sm" | "md"; className?: string }) {
+export function PathMark({ entry, named, size = "sm", className = "" }: { entry: Pick<PathEntry, "id" | "name" | "symbol" | "description" | "alsoCalled">; named?: boolean; size?: "sm" | "md"; className?: string }) {
   const symbol = known(entry.symbol);
-  const tip = entry.description ? `${entry.name}: ${entry.description}` : entry.name;
+  // "Paved path, also called golden path: the ready-made way…"
+  const tip = entry.description ? `${pathTitle(entry)}: ${entry.description}` : pathTitle(entry);
   return (
     <span className={`path-mark ${size} ${named ? "named" : ""} ${className}`.replace(/\s+/g, " ").trim()} data-symbol={symbol} data-path={entry.id} title={tip}>
       <span className="path-plate"><PathSymbolIcon symbol={symbol} size={size === "md" ? 16 : 14} /></span>
@@ -261,7 +262,7 @@ export function PathRoad({ ids, paths, kind, className = "" }: { ids?: unknown; 
       <ul className="path-lanes" aria-label={pathsSentence(kind, mine)}>
         {all.map((e) => (
           <li key={e.id} className={`path-lane ${on(e.id) ? "on" : "off"}`} data-symbol={known(e.symbol)} data-path={e.id}
-            title={`${e.name}${e.description ? `: ${e.description}` : ""}${any ? "" : on(e.id) ? " (this one)" : " (not this one)"}`}>
+            title={`${pathTitle(e)}${e.description ? `: ${e.description}` : ""}${any ? "" : on(e.id) ? " (this one)" : " (not this one)"}`}>
             <span className="path-plate"><PathSymbolIcon symbol={e.symbol} size={16} /></span>
             <span className="path-name">{e.name}</span>
             {!any && on(e.id) && <Check size={14} aria-hidden="true" className="path-check" />}

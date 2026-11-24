@@ -3,6 +3,7 @@ import schema from "../../schema/process.schema.json";
 import standardSchema from "../../schema/standard.schema.json";
 import type { Catalog, Issue, Process, Standard } from "../types";
 import { isDate } from "./lifecycle";
+import { otherNameClashes } from "./paths";
 // The checks for the three formats are generated from schema/*.schema.json by `npm run validators`.
 // They are not built in the browser: that needs eval, which the app's security policy forbids.
 import { validateCatalogDoc as validateCatalogSchema, validateProcessDoc as validateSchema, validateStandardDoc as validateStandardSchema } from "./validators.generated.js";
@@ -41,7 +42,10 @@ function describe(e: ErrorObject): string {
     case "additionalProperties": return `has a field "${e.params.additionalProperty}" that the schema does not allow - remove or rename it`;
     case "enum": return `must be one of: ${(e.params.allowedValues as string[]).join(", ")}`;
     case "const": return `must be exactly ${JSON.stringify(e.params.allowedValue)}`;
+    case "uniqueItems": return DUPLICATE_ITEMS;
     case "pattern":
+      // a text that must hold more than spaces (an other name of a path)
+      if (String(e.params.pattern) === "\\S") return "is empty";
       return String(e.params.pattern).startsWith("^[a-z0-9]+")
         ? "must be kebab-case: lowercase letters, digits and single dashes (e.g. \"raise-request\")"
         : String(e.params.pattern).startsWith("^[A-Z]")
@@ -242,6 +246,8 @@ export function validateCatalog(data: unknown): Issue[] {
       else first.set(x.id, x.name);
     });
   });
+  // an other name of a path belongs to one path only (the server says the same: docs.Check)
+  for (const clash of otherNameClashes(c.paths)) issues.push({ level: "error", path: `paths[${clash.index}].alsoCalled`, message: clash.message });
   return issues;
 }
 
@@ -282,8 +288,29 @@ export function refusalIssues(error: string): { issues: Issue[]; more: number } 
 }
 
 /** A message of the server's format check in the words of the app's own (`describe`). */
+/** What a list in a document or the lists holds twice: worded by `issueText`. */
+export const DUPLICATE_ITEMS = "names the same entry twice";
+
+/**
+ * The server's check of what a document names from the lists (docs.Check: `"x" is not a known
+ * tier. Known tiers: …`) in the app's own sentence (`validateProcess`, `validateStandard`): the
+ * list by its name for readers and where to fix it, never the ids of the list.
+ */
+const NOT_KNOWN: Record<string, (id: string) => string> = {
+  tier: (id) => `“${id}” is not one of the application tiers. Remove it under “Where it applies”.`,
+  language: (id) => `“${id}” is not one of the languages. Remove it under “Where it applies”.`,
+  environment: (id) => `“${id}” is not one of the environments. Remove it under “Where it applies”.`,
+  path: (id) => `“${id}” is not one of the paths. Remove it under “Which path it is for”.`,
+  category: (id) => `“${id}” is not one of the categories. Choose one of the list under “What it belongs to”.`,
+  practice: (id) => `“${id}” is not one of the practices. Choose one of the list under “What it belongs to”.`,
+  platform: (id) => `“${id}” is not one of the platforms. Choose one of the list under “What it belongs to”.`,
+};
+
 function serverMessage(m: string): string {
   let x: RegExpMatchArray | null;
+  if ((x = m.match(/^"(.*)" is not a known (tier|language|environment|path|category|practice|platform)\. Known /s)) && NOT_KNOWN[x[2]]) return NOT_KNOWN[x[2]](x[1]);
+  if (/^items at \d+ and \d+ are equal/.test(m)) return DUPLICATE_ITEMS;
+  if ((x = m.match(/^maxItems: got \d+, want (\d+)/))) return `has too many items (maximum ${x[1]})`;
   if ((x = m.match(/^minLength: got (\d+), want (\d+)/))) return x[1] === "0" ? "is empty" : `is too short (minimum ${x[2]} characters)`;
   if ((x = m.match(/^maxLength: got \d+, want (\d+)/))) return `is too long (maximum ${x[1]} characters)`;
   if ((x = m.match(/^missing propert(?:y|ies) '([^']+)'/))) return `is missing the required field "${x[1]}"`;

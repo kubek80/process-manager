@@ -9,7 +9,8 @@
   "platform": "github",
   "rigour": "mandatory",
   "paths": [
-    "greenfield"
+    "greenfield",
+    "paved-path"
   ],
   "estimatedDuration": "1 working day",
   "tags": [

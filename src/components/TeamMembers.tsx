@@ -6,7 +6,7 @@ import { addedNote, nameFromMembers } from "../lib/groups";
 import { PersonLink } from "./PersonLink";
 import { ViewAsButton } from "./ViewAsBand";
 import { canManageMembers, groupRank } from "../lib/rights";
-import { useMe, usePerms } from "../lib/session";
+import { useChangeBlocked, useMe, usePerms } from "../lib/session";
 import { addGroupMember, grantAccess, loadAccess, loadMembers, loadUsers, removeGroupMember, revokeAccess, type Access } from "../lib/store";
 import { confirmDialog, LoadError, Loading, notify } from "./ui";
 import { formatDate } from "../lib/dates";
@@ -74,6 +74,7 @@ function AddPerson({ label, button, busy, note, onAdd }: {
 }) {
   const [email, setEmail] = useState("");
   const [problem, setProblem] = useState("");
+  const blocked = useChangeBlocked(); // viewing as somebody else: what is typed stays, adding is unavailable
   const input = useRef<HTMLInputElement>(null);
   const id = useRef(`add-${Math.random().toString(36).slice(2, 8)}`).current;
   const submit = async () => {
@@ -89,7 +90,7 @@ function AddPerson({ label, button, busy, note, onAdd }: {
         aria-invalid={problem ? true : undefined} aria-describedby={problem ? `${id}-problem` : note ? `${id}-note` : undefined}
         onChange={(e) => { setEmail(e.target.value); if (problem && looksLikeEmail(e.target.value)) setProblem(""); }}
         onBlur={() => { if (email.trim() && !looksLikeEmail(email)) setProblem(NOT_AN_EMAIL); }} />
-      <button className="btn small" disabled={busy}><Plus size={14} />{button}</button>
+      <button className="btn small" disabled={busy || !!blocked} title={blocked || undefined}><Plus size={14} />{button}</button>
       {problem && <p className="field-error member-problem" id={`${id}-problem`}>{problem}</p>}
       {!problem && note && <p className="member-note" id={`${id}-note`} role="status"><Info size={14} aria-hidden="true" />{note}</p>}
     </form>
@@ -127,6 +128,7 @@ export function GroupMembers({ kind, id, name, rank = "owner", saved, manage, me
 }) {
   const perms = usePerms();
   const me = useMe();
+  const blocked = useChangeBlocked();
   const H = heading;
   const ownersByAdmin = rank === "owner" && manage && perms.admin;
   const membersByManager = rank === "member" && manage && kind !== "team" && canManageMembers(perms, kind, id);
@@ -214,7 +216,7 @@ export function GroupMembers({ kind, id, name, rank = "owner", saved, manage, me
           <ul className="people">
             {list.map((m) => (
               <Person key={m.email} email={m.email} name={nameOf(m.email)} you={isMe(m.email)}
-                action={<button className="icon-btn member-remove" aria-label={`Remove ${m.email} as ${roleName}`} title={`Remove from this ${noun}`} onClick={() => remove(m.email)}><Trash2 size={15} aria-hidden="true" /></button>} />
+                action={<button className="icon-btn member-remove" aria-label={`Remove ${m.email} as ${roleName}`} disabled={!!blocked} title={blocked || `Remove from this ${noun}`} onClick={() => remove(m.email)}><Trash2 size={15} aria-hidden="true" /></button>} />
             ))}
           </ul>
         )}
@@ -268,7 +270,7 @@ export function GroupMembers({ kind, id, name, rank = "owner", saved, manage, me
             {list.map((m) => (
               <Person key={m.email} email={m.email} name={nameOf(m.email)} you={isMe(m.email)}
                 sub={<>since {formatDate(m.grantedAt)}, added by <span title={m.grantedBy.includes("@") ? m.grantedBy : undefined}>{shown(m.grantedBy)}</span></>}
-                action={<button className="icon-btn member-remove" aria-label={`Remove ${m.email} as ${roleName}`} title={`Remove from this ${noun}`} onClick={() => remove(m.email)}><Trash2 size={15} aria-hidden="true" /></button>} />
+                action={<button className="icon-btn member-remove" aria-label={`Remove ${m.email} as ${roleName}`} disabled={!!blocked} title={blocked || `Remove from this ${noun}`} onClick={() => remove(m.email)}><Trash2 size={15} aria-hidden="true" /></button>} />
             ))}
           </ul>
           <AddPerson label="Email of the new owner" button="Add owner" busy={busy} note={note} onAdd={add} />

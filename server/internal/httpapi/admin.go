@@ -324,8 +324,9 @@ func (a *api) downloadSkill(w http.ResponseWriter, r *http.Request) {
 	// A failure to count never fails the download.
 	// At most once per person, skill and day: downloading again and again adds nothing.
 	// Never for a draft: counts must not show that it exists. Never while an admin views the
-	// portal as the person: nothing is written in their name.
-	if status == "draft" || !who(r).mayCount() {
+	// portal as the person: nothing is written in their name. Only a GET fetches the file: a
+	// HEAD (asking whether it is there) is no download.
+	if status == "draft" || !who(r).mayCount() || r.Method != http.MethodGet {
 		return
 	}
 	_, err = a.Engagement.CountDownload(context.WithoutCancel(r.Context()), sk.ID, sk.SourceKind, sk.SourceID, who(r).Email, engagement.ViaDownload, time.Now())

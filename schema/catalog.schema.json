@@ -124,6 +124,18 @@
           "minLength": 1,
           "maxLength": 40
         },
+        "alsoCalled": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "\\S"
+          },
+          "description": "Other names people use for this path, e.g. [\"golden path\"] for the paved path: searching for one of them finds what is for this path. At most 5, each written once."
+        },
         "symbol": {
           "enum": [
             "sprout",

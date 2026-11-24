@@ -74,7 +74,7 @@ export function AiDialog<T extends { id: string; title: string }>({ spec, onImpo
           <span className="ai-n">2</span>
           <div>
             <h4>Copy the prompt and paste it into your AI chat</h4>
-            <p className="muted small">The prompt contains the rules a {noun} follows, how it must be written down, your teams, tools, tiers and environments, an example{current ? `, the current ${noun}` : ""} and your text. Send it as one message.</p>
+            <p className="muted small">The prompt contains the rules a {noun} follows, how it must be written down, your teams, tools, tiers, paths and environments, an example{current ? `, the current ${noun}` : ""} and your text. Send it as one message.</p>
             <div className="btn-row">
               <CopyButton primary label="Copy prompt" text={() => spec.prompt(text)} />
               <button className="btn" onClick={() => download(`${noun}-prompt.md`, spec.prompt(text))}><Download size={16} />Download as file</button>

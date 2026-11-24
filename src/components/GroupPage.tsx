@@ -5,7 +5,7 @@ import { docCount, useCatalog } from "../lib/catalog";
 import { belongsHeading, contactsOk, groupEntry, groupFilter, KIND_WORD, LIST_OF, tidyContacts } from "../lib/groups";
 import { GROUP, hasMembers, type GroupKind } from "../lib/members";
 import { canChangeDetails, canCreate, canManageMembers, editsAll, groupRank, newDocPlaces } from "../lib/rights";
-import { canDraft, canManage, useMe, usePerms } from "../lib/session";
+import { canDraft, canManage, useChangeBlocked, useMe, usePerms } from "../lib/session";
 import { sortResults, type MetaByKind } from "../lib/sorting";
 import { useListView } from "../lib/paging";
 import { usePrinting } from "../lib/media";
@@ -39,6 +39,7 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta, onNe
 }) {
   const { catalog, reload } = useCatalog();
   const perms = usePerms();
+  const blocked = useChangeBlocked(); // viewing as somebody else: their buttons show, unavailable
   const me = useMe();
   const entry = groupEntry(catalog, kind, id)!;
   const Icon = ICON[kind];
@@ -82,7 +83,7 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta, onNe
         </div>
         <div className="group-title-row">
           <h1>{entry.name}</h1>
-          {mayDetails && <button className="btn" onClick={() => setEditing(true)}><PencilLine size={15} aria-hidden="true" />Edit details</button>}
+          {mayDetails && <button className="btn" disabled={!!blocked} title={blocked || undefined} onClick={() => setEditing(true)}><PencilLine size={15} aria-hidden="true" />Edit details</button>}
         </div>
         {entry.description?.trim()
           ? <p className="lead group-lead">{entry.description}</p>
@@ -114,7 +115,7 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta, onNe
                 {sorted.length > 0 && <ViewSwitch view={view} onView={setView} />}
                 {sorted.length > 0 && <a className="btn small" href={searchLink}>Open in the search<ArrowRight size={14} aria-hidden="true" /></a>}
                 {news.map((noun) => (
-                  <button key={noun} type="button" className="btn small" onClick={() => onNew!(noun, place)}><Plus size={14} aria-hidden="true" />New {noun}</button>
+                  <button key={noun} type="button" className="btn small" disabled={!!blocked} title={blocked || undefined} onClick={() => onNew!(noun, place)}><Plus size={14} aria-hidden="true" />New {noun}</button>
                 ))}
               </div>
             )}

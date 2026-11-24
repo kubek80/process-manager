@@ -68,7 +68,7 @@
       "items": {
         "$ref": "#/$defs/slug"
       },
-      "description": "Ids of the paths (from the paths list) this process is for, e.g. [\"greenfield\", \"paved-path\"]: greenfield = something new is built, brownfield = something that already exists is changed or moved, paved path = the ready-made, supported way (also called the golden path). Leave out when it applies whatever the path."
+      "description": "Ids of the paths (from the paths list) this process is for, e.g. [\"greenfield\", \"paved-path\"]: greenfield = something new is built, brownfield = something that already exists is changed or moved, paved path = the ready-made, supported way (also called the golden path). Name paths ONLY when the process is meant only for that kind of work (for example a process that sets up something new, or one that is itself the ready-made way); a rule or process that everyone follows names none. Leave out when it applies whatever the path, which is the usual case."
     },
     "tiers": {
       "type": "array",

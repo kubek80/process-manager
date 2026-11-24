@@ -1,10 +1,13 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -16,6 +19,7 @@ import (
 
 	"github.com/kubek80/process-manager/server/internal/auth"
 	"github.com/kubek80/process-manager/server/internal/docs"
+	"github.com/kubek80/process-manager/server/internal/embedding"
 	"github.com/kubek80/process-manager/server/internal/rbac"
 )
 
@@ -145,7 +149,8 @@ func TestViewingAsSomebodyChangesNothingOnAnyRoute(t *testing.T) {
 		}
 	}
 	// any other method on any path, and a path that is not quite one of the allowed two
-	for _, rt := range [][2]string{{"PATCH", "/api/processes/" + gcp}, {"OPTIONS", "/api/catalog"}, {"POST", "/api/admin/view-as/"}, {"DELETE", "/api/admin//view-as"}, {"PUT", "/auth/logout"}, {"POST", "/"}} {
+	for _, rt := range [][2]string{{"PATCH", "/api/processes/" + gcp}, {"OPTIONS", "/api/catalog"}, {"POST", "/api/admin/view-as/"}, {"DELETE", "/api/admin//view-as"}, {"PUT", "/auth/logout"}, {"POST", "/"},
+		{"DELETE", "/api/admin/view-as/"}, {"DELETE", "/api/admin/view-asx"}, {"DELETE", "/api/admin/view-as/x"}, {"POST", "/auth/logoutx"}, {"POST", "/auth/logout/"}} {
 		if status, body := d.do(rt[0], rt[1], nil); status != 403 || body["error"] != refusal {
 			t.Fatalf("%s %s while viewing: %d %v", rt[0], rt[1], status, body)
 		}
@@ -408,7 +413,9 @@ func TestViewingAsAReaderOrAnUnknownAddressCreatesNothing(t *testing.T) {
 // The built-in reader has no rights, even where somebody gave its address roles.
 func TestTheReaderWithNoRolesNeverHasRights(t *testing.T) {
 	e := setup(t, nil)
-	must(t, e.deps.Roles.Grant(bg, rbac.Assignment{Email: NoRolesReader, Role: rbac.ProcessEditor, GrantedBy: "setup"}))
+	// as an earlier version could have stored it: no way of giving roles accepts the address now
+	_, err := e.deps.Roles.Pool.Exec(bg, `insert into role_assignments (email, role, scope, granted_by) values ($1, 'process-editor', '', 'setup')`, NoRolesReader)
+	must(t, err)
 	d := e.as(dana)
 	d.viewAs(NoRolesReader)
 	if me := d.meOf(); fmt.Sprint(me["perms"]) != fmt.Sprint(e.as(sam).meOf()["perms"]) {
@@ -418,10 +425,24 @@ func TestTheReaderWithNoRolesNeverHasRights(t *testing.T) {
 
 func TestAdminsListThePeopleThePortalKnows(t *testing.T) {
 	e := setup(t, nil)
-	// people seen only through what they did: a view, feedback, a request
-	e.as(sam).do("POST", "/api/views/process/"+gcp, nil)
-	_, err := e.deps.Roles.Pool.Exec(bg, `insert into bookmarks (email, kind, id) values ('kim@example.com', 'process', $1)`, gcp)
+	// shown as actors: the author of feedback, of a request, somebody in the activity log
+	e.as(sam).report(docs.Process, gcp, "", "The first step is unclear")
+	must(t, e.deps.Audit.Add(bg, "lee@example.com", "Lee Actor", "process.save", gcp, ""))
+	_, err := e.deps.Roles.Pool.Exec(bg, `insert into requests (kind, title, description, requested_by_email, requested_by_name) values ('process', 'A thing', '', 'asker@example.com', 'Asker')`)
 	must(t, err)
+	// known ONLY from reading: never listed
+	readers := map[string]string{
+		"viewer@example.com":   `insert into document_views (kind, id, day, email) values ('process', '` + gcp + `', current_date, 'viewer@example.com')`,
+		"bookmark@example.com": `insert into bookmarks (email, kind, id) values ('bookmark@example.com', 'process', '` + gcp + `')`,
+		"upvote@example.com":   `insert into upvotes (email, kind, id) values ('upvote@example.com', 'process', '` + gcp + `')`,
+		"download@example.com": `insert into skill_downloads (skill_id, source_kind, source_id, email, via, day) values ('process-` + gcp + `', 'process', '` + gcp + `', 'download@example.com', 'download', current_date)`,
+		"signout@example.com":  `insert into signed_out (email, at) values ('signout@example.com', now())`,
+	}
+	for email, q := range readers {
+		if _, err := e.deps.Roles.Pool.Exec(bg, q); err != nil {
+			t.Fatalf("%s: %v", email, err)
+		}
+	}
 	status, body := e.as(dana).do("GET", "/api/admin/people", nil)
 	wantStatus(t, status, 200, body)
 	got := map[string]map[string]any{}
@@ -429,9 +450,17 @@ func TestAdminsListThePeopleThePortalKnows(t *testing.T) {
 		m := p.(map[string]any)
 		got[m["email"].(string)] = m
 	}
-	for email, roles := range map[string]bool{sam: false, "kim@example.com": false, casey: true, dana: true, morgan: true} {
+	for email, roles := range map[string]bool{sam: false, "lee@example.com": false, casey: true, dana: true, morgan: true} {
 		if p, ok := got[email]; !ok || p["roles"] != roles {
 			t.Fatalf("%s: %v (all: %v)", email, p, got)
+		}
+	}
+	if _, ok := got["asker@example.com"]; !ok {
+		t.Fatalf("the author of a request is missing: %v", got)
+	}
+	for email := range readers {
+		if _, ok := got[email]; ok {
+			t.Fatalf("%s is listed, known only from reading", email)
 		}
 	}
 	if got[casey]["name"] != "Casey Owner" {
@@ -442,7 +471,6 @@ func TestAdminsListThePeopleThePortalKnows(t *testing.T) {
 			t.Fatalf("%s lists people: %d", other, status)
 		}
 	}
-	// while viewing as a reader, the admin route answers as for the reader
 	d := e.as(dana)
 	d.viewAs(sam)
 	if status, _ := d.do("GET", "/api/admin/people", nil); status != 403 {
@@ -629,4 +657,200 @@ func sessionID(t *testing.T, c *client) string {
 	}
 	t.Fatal("no session cookie")
 	return ""
+}
+
+// do with extra headers.
+func (c *client) doWith(method, path string, body any, headers map[string]string) (int, map[string]any) {
+	c.e.t.Helper()
+	var reader io.Reader
+	if body != nil {
+		data, _ := json.Marshal(body)
+		reader = bytes.NewReader(data)
+	}
+	req, _ := http.NewRequest(method, c.e.srv.URL+path, reader)
+	req.Header.Set(CSRFHeader, CSRFValue)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	res, err := c.http.Do(req)
+	must(c.e.t, err)
+	defer res.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&out)
+	return res.StatusCode, out
+}
+
+func (e *env) bookmarksOf(email string) int {
+	e.t.Helper()
+	var n int
+	must(e.t, e.deps.Roles.Pool.QueryRow(bg, `select count(*) from bookmarks where email = $1`, email).Scan(&n))
+	return n
+}
+
+// A change that finds its viewing ended in that very request (the hour, the admin role gone) is
+// not done as the admin: it was meant as the other person. The next request is the admin's.
+func TestAChangeThatEndsTheViewingIsNotDoneAsTheAdmin(t *testing.T) {
+	var mu sync.Mutex
+	now := time.Now()
+	clock := func() time.Time { mu.Lock(); defer mu.Unlock(); return now }
+	e := setup(t, func(d *Deps) { d.Sessions.Now = clock })
+	d := e.as(dana)
+	d.viewAs(morgan)
+	mu.Lock()
+	now = now.Add(61 * time.Minute)
+	mu.Unlock()
+	status, body := d.do("PUT", "/api/bookmarks/process/"+gcp, nil)
+	wantError(t, status, body, 409, "Your view of the portal as Morgan Member has ended, so this was not done. Reload the page to go on as yourself.")
+	if e.bookmarksOf(dana)+e.bookmarksOf(morgan) != 0 {
+		t.Fatal("the change was done")
+	}
+	if ends := e.audits("viewas.end"); len(ends) != 1 || ends[0]["detail"] != "An hour had passed." {
+		t.Fatalf("ends: %v", ends)
+	}
+	if status, body := d.do("PUT", "/api/bookmarks/process/"+gcp, nil); status >= 300 || e.bookmarksOf(dana) != 1 {
+		t.Fatalf("the next change: %d %v", status, body)
+	}
+	// the admin role gone, the same
+	must(t, e.deps.Roles.Grant(bg, rbac.Assignment{Email: alex, Role: rbac.Admin, GrantedBy: "setup"}))
+	a := e.as(alex)
+	a.viewAs(casey)
+	must(t, e.deps.Roles.Revoke(bg, alex, rbac.Admin, ""))
+	status, body = a.do("PUT", "/api/bookmarks/process/"+gcp, nil)
+	wantError(t, status, body, 409, "Your view of the portal as Casey Owner has ended, so this was not done. Reload the page to go on as yourself.")
+	if e.bookmarksOf(alex)+e.bookmarksOf(casey) != 0 {
+		t.Fatal("the change was done")
+	}
+}
+
+// The app says with every change whom it believes it acts as; a page left open while viewing
+// started or stopped in another tab is refused, in either direction. Without the header (other
+// clients) nothing is compared.
+func TestAPageThatActsAsSomebodyElseIsRefused(t *testing.T) {
+	e := setup(t, nil)
+	d := e.as(dana)
+	stale := "This page is out of date: it was opened for somebody else than the portal now answers you as. Reload the page, then do it again."
+	// viewing stopped in another tab: this tab still believes it is casey
+	d.viewAs(casey)
+	d.do("DELETE", "/api/admin/view-as", nil)
+	status, body := d.doWith("PUT", "/api/bookmarks/process/"+gcp, nil, map[string]string{ActingAsHeader: casey})
+	wantError(t, status, body, 409, stale)
+	if e.bookmarksOf(dana)+e.bookmarksOf(casey) != 0 {
+		t.Fatal("done as somebody else")
+	}
+	status, body = d.doWith("PUT", "/api/bookmarks/process/"+gcp, nil, map[string]string{ActingAsHeader: "nonsense%zz"})
+	wantError(t, status, body, 409, stale)
+	// the right person, in any letter case and encoded as the app sends it
+	if status, body := d.doWith("PUT", "/api/bookmarks/process/"+gcp, nil, map[string]string{ActingAsHeader: "Dana%40Example.com"}); status >= 300 {
+		t.Fatalf("own change: %d %v", status, body)
+	}
+	if status, body := d.do("DELETE", "/api/bookmarks/process/"+gcp, nil); status >= 300 {
+		t.Fatalf("without the header: %d %v", status, body)
+	}
+	// viewing started in another tab: this tab still believes it is dana; refused as any change while viewing
+	d.viewAs(casey)
+	status, body = d.doWith("PUT", "/api/bookmarks/process/"+gcp, nil, map[string]string{ActingAsHeader: dana})
+	wantError(t, status, body, 403, "You are viewing the portal as Casey Owner, so nothing can be changed. Stop viewing first.")
+	// stopping and signing out are never refused for it
+	if status, _ := d.doWith("DELETE", "/api/admin/view-as", nil, map[string]string{ActingAsHeader: casey}); status != 204 {
+		t.Fatal("stop with a stale page")
+	}
+	if status, _ := d.doWith("POST", "/auth/logout", nil, map[string]string{ActingAsHeader: casey}); status != 200 {
+		t.Fatal("sign out with a stale page")
+	}
+}
+
+// The brakes on searching and on reading the code count the admin who does it, also while
+// viewing as somebody: through the real routes.
+func TestTheBrakesChargeTheAdminWhileViewing(t *testing.T) {
+	t.Run("search", func(t *testing.T) {
+		e := setup(t, withSearch(t, &flaky{Embedder: embedding.Builtin(768)}))
+		d, own := e.as(dana), e.as(casey)
+		d.viewAs(casey)
+		for i := 0; i < searchesPerMinute; i++ {
+			if status, body := d.do("GET", "/api/search?q=project", nil); status != 200 {
+				t.Fatalf("search %d: %d %v", i, status, body)
+			}
+		}
+		if status, _ := d.do("GET", "/api/search?q=project", nil); status != 429 {
+			t.Fatalf("over the limit: %d", status)
+		}
+		if status, body := own.do("GET", "/api/search?q=project", nil); status != 200 {
+			t.Fatalf("casey's own search was charged: %d %v", status, body)
+		}
+		if status, _ := e.as(dana).do("GET", "/api/search?q=project", nil); status != 429 {
+			t.Fatalf("dana's other session was not charged: %d", status)
+		}
+	})
+	t.Run("source", func(t *testing.T) {
+		root, _ := sourceCheckout(t)
+		e := setup(t, func(dp *Deps) { dp.Cfg.SourceDir = root })
+		must(t, e.deps.Roles.Grant(bg, rbac.Assignment{Email: alex, Role: rbac.Admin, GrantedBy: "setup"}))
+		d, own := e.as(dana), e.as(alex)
+		d.viewAs(alex)
+		for i := 0; i < sourceReadsPerMinute; i++ {
+			if status, raw, _ := d.raw("GET", sourceQuery("Dockerfile"), nil, false); status != 200 {
+				t.Fatalf("read %d: %d %s", i, status, raw)
+			}
+		}
+		if status, _, _ := d.raw("GET", sourceQuery("Dockerfile"), nil, false); status != 429 {
+			t.Fatalf("over the limit: %d", status)
+		}
+		if status, raw, _ := own.raw("GET", sourceQuery("Dockerfile"), nil, false); status != 200 {
+			t.Fatalf("alex's own reading was charged: %d %s", status, raw)
+		}
+		if status, _, _ := e.as(dana).raw("GET", sourceQuery("Dockerfile"), nil, false); status != 429 {
+			t.Fatalf("dana's other session was not charged: %d", status)
+		}
+	})
+}
+
+func TestTheAddressIsCappedAndTheReaderAddressGetsNoRole(t *testing.T) {
+	e := setup(t, nil)
+	d := e.as(dana)
+	long := strings.Repeat("a", 243) + "@example.com" // 255
+	status, body := d.do("POST", "/api/admin/view-as", map[string]string{"email": long})
+	wantError(t, status, body, 400, "That address is too long: an email address has at most 254 characters.")
+	if status, _ := d.do("POST", "/api/admin/view-as", map[string]string{"email": long[1:]}); status != 200 {
+		t.Fatal("254 characters refused")
+	}
+	d.do("DELETE", "/api/admin/view-as", nil)
+	refused := "reader@no-roles.invalid stands for “a reader with no roles” when an admin views the portal as somebody else. It cannot be given a role."
+	for _, c := range []struct {
+		method, path string
+		body         any
+	}{
+		{"PUT", "/api/admin/users/" + NoRolesReader, map[string]any{"roles": []map[string]string{{"role": "process-editor", "scope": ""}}}},
+		{"POST", "/api/admin/access", map[string]string{"email": "Reader@No-Roles.invalid", "role": "admin"}},
+		{"POST", "/api/groups/platforms/google-cloud/members", map[string]string{"email": NoRolesReader}},
+	} {
+		status, body := d.do(c.method, c.path, c.body)
+		if status != 400 || (body["error"] != refused && !strings.Contains(fmt.Sprint(body["error"]), "cannot be given a role")) {
+			t.Fatalf("%s %s: %d %v", c.method, c.path, status, body)
+		}
+	}
+	// jordan, an owner of google-cloud, adds members: the same
+	status, body = e.as(jordan).do("POST", "/api/groups/platforms/google-cloud/members", map[string]string{"email": NoRolesReader})
+	if status != 400 || !strings.Contains(fmt.Sprint(body["error"]), "cannot be given a role") {
+		t.Fatalf("owner adds the reader address: %d %v", status, body)
+	}
+	var n int
+	must(t, e.deps.Roles.Pool.QueryRow(bg, `select count(*) from role_assignments where email = $1`, NoRolesReader).Scan(&n))
+	if n != 0 {
+		t.Fatalf("%d roles stored for the reader address", n)
+	}
+}
+
+func TestAHeadOfADownloadCountsNothing(t *testing.T) {
+	e := setup(t, nil)
+	s := e.as(sam)
+	before := e.fingerprint()["skill_downloads"]
+	if status, _, _ := s.raw("HEAD", "/api/skills/process-"+gcp+"/download", nil, false); status != 200 {
+		t.Fatalf("HEAD: %d", status)
+	}
+	if e.fingerprint()["skill_downloads"] != before {
+		t.Fatal("a HEAD was counted as a download")
+	}
+	if status, _, _ := s.raw("GET", "/api/skills/process-"+gcp+"/download", nil, false); status != 200 || e.fingerprint()["skill_downloads"] == before {
+		t.Fatal("a GET was not counted")
+	}
 }

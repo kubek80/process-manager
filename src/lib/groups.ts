@@ -83,7 +83,11 @@ export function tidyContacts(c: Contacts | undefined): Contacts | undefined {
 export function tidyListEntry<T extends { id: string; name: string; contacts?: Contacts }>(r: T): T {
   const out = Object.fromEntries(Object.entries(r).filter(([k, v]) => k === "id" || k === "name" || (typeof v === "string" && v.trim() !== ""))) as T;
   const contacts = tidyContacts(r.contacts);
-  return contacts ? { ...out, contacts } : out;
+  // the other names of a path: trimmed, the empty ones left out, and the field when none is left
+  const also = (r as { alsoCalled?: unknown }).alsoCalled;
+  const names = Array.isArray(also) ? also.map((x) => (typeof x === "string" ? x.trim() : x)).filter((x) => x !== "") : undefined;
+  const withNames = names?.length ? { ...out, alsoCalled: names } : out;
+  return contacts ? { ...withNames, contacts } : withNames;
 }
 
 /** The lists without empty optional fields (`tidyListEntry`): what Admin › Lists compares with the saved lists, and saves. */

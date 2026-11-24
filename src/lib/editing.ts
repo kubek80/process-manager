@@ -3,7 +3,7 @@ import { cap, compare, describeChange, fieldName, itemWords, type Change, type F
 import { EXAMPLE } from "./edit";
 import { dayOf, formatDateTime, today } from "./dates";
 import { personLabel, type PersonRef } from "./members";
-import { LIST_WORDS, refusalIssues } from "./validate";
+import { DUPLICATE_ITEMS, LIST_WORDS, refusalIssues } from "./validate";
 
 /**
  * The editing screen, as plain functions: which kind of draft a document has, what its state is
@@ -309,6 +309,7 @@ export function issueText(issue: Issue, kind?: TargetKind | "lists", doc?: unkno
   if (/kebab-case/.test(message)) return say("Use only lowercase letters, digits and dashes here.");
   if (/pattern \^\\d\{4\}/.test(message)) return say("Write the date as year-month-day, e.g. 2026-11-20.");
   if (/^must be one of/.test(message)) return say(`Choose ${theField(field)} from the list.`);
+  if (message === DUPLICATE_ITEMS) return say(`Name each entry once in ${theField(field)}: remove the one named twice.`);
   const extra = message.match(/^has a field "([^"]+)"/);
   if (extra) return `“${extra[1]}” is not part of a ${kind ?? "document"}: remove it in the JSON (More › JSON).`;
   const few = message.match(/^needs at least (\d+)/);
@@ -349,7 +350,7 @@ const LIST_NOUN: Record<string, { one: string; many: string }> = LIST_WORDS;
 const LIST_FIELD: Record<string, string> = {
   name: "name", id: "id", description: "description", url: "link", icon: "icon", contact: "other ways to reach them", contacts: "contact details",
   email: "group email", slack: "Slack channel", slackUrl: "link to the Slack channel", chat: "Google Chat space", chatUrl: "link to the Chat space",
-  confluence: "Confluence page", page: "page link", form: "request form", symbol: "picture",
+  confluence: "Confluence page", page: "page link", form: "request form", symbol: "picture", alsoCalled: "other names",
 };
 
 /** Which list, entry and field a problem of the lists is about: "teams[3].contacts.slackUrl". */
@@ -407,6 +408,7 @@ function listIssueText(path: string, message: string, doc: unknown): string {
   if (key === "id" && (missing || /kebab-case|^is empty$|^is too long/.test(message)))
     return `${Entry} has ${missing || !value.trim() ? "no id" : `an id the portal cannot use (“${value}”)`}: remove it and add it again under the same name.`;
   if (key === "icon") return `The icon of ${entry} is not an image the portal knows: choose the image again, or remove the icon.`;
+  if (key === "alsoCalled") return `Check the other names of ${entry}: at most 5, each written once, none empty and none longer than 40 characters.`;
   if (key === "symbol") return `The picture of ${entry} is not one the portal knows: choose one of the pictures, or none.`;
   if (missing) return `Fill in the ${words} of ${entry}.`;
   if (/^is empty$|^is too short/.test(message)) return `Fill in the ${words} of ${entry}, or leave it out.`;
@@ -445,6 +447,8 @@ export function listIssueField(path: string): string[] {
     case "contact": return ['.contact-fields input[id$="-contact"]'];
     case "url": return ['[data-field="url"]'];
     case "icon": return [".icon-field button"];
+    case "alsoCalled": return ['[data-field="alsoCalled"]'];
+    case "symbol": return [".symbol-picker button"];
     default: return ['[data-field="name"]'];
   }
 }

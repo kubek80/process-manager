@@ -10,7 +10,6 @@
   "platform": "ci-cd",
   "rigour": "recommended",
   "paths": [
-    "greenfield",
     "paved-path"
   ],
   "estimatedDuration": "half a day",

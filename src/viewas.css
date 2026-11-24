@@ -28,7 +28,7 @@ html.viewing-as .edit-screen { height: calc(100dvh - var(--viewas-h, 48px)); }
 html.viewing-as .overlay { padding-bottom: calc(5vh + var(--viewas-h, 48px)); }
 
 /* what would open the editing screen is visibly not available (the band says why when it is pressed) */
-html.viewing-as :is(a[href^="#/p/"], a[href^="#/s/"]):is([href$="/edit"], [href*="/edit/"]):not([href="#/p/edit"], [href="#/s/edit"]) { opacity: .55; cursor: not-allowed; }
+html.viewing-as :is(a[href^="#/p/"], a[href^="#/s/"]):is([href*="/edit"], [href*="/json"]):not([href="#/p/edit"], [href="#/s/edit"], [href="#/p/json"], [href="#/s/json"]) { opacity: .55; cursor: not-allowed; }
 
 @media (max-width: 640px) {
   .viewas-band { align-items: flex-start; }

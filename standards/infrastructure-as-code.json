@@ -21,9 +21,6 @@
     "reviewedBy": "Practice lead"
   },
   "exceptionProcessId": "raise-servicenow-request",
-  "paths": [
-    "paved-path"
-  ],
   "resources": [
     {
       "title": "Terraform module catalogue",

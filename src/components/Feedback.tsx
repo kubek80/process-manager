@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, CircleCheck, Flag, History, RotateCcw, ThumbsUp, Trash2 } from "lucide-react";
 import type { Feedback, FeedbackKind, Process, Standard, TargetKind } from "../types";
-import { useFeedbackActions } from "../lib/session";
+import { useChangeBlocked, useFeedbackActions } from "../lib/session";
 import { confirmDialog } from "./ui";
 import { formatDate } from "../lib/dates";
 
@@ -39,6 +39,7 @@ export function FeedbackForm({ target, itemId, pickItem, onDone, autoFocus }: {
   autoFocus?: boolean;
 }) {
   const field = useRef<HTMLTextAreaElement>(null);
+  const blocked = useChangeBlocked(); // viewing as somebody else: what is typed stays, Send is unavailable
   useEffect(() => { if (autoFocus) field.current?.focus(); }, [autoFocus]);
   const actions = useFeedbackActions();
   const [kind, setKind] = useState<FeedbackKind>("broken");
@@ -74,7 +75,7 @@ export function FeedbackForm({ target, itemId, pickItem, onDone, autoFocus }: {
         placeholder={target.kind === "process" ? "What happened? e.g. “The catalogue item is now called ‘Cloud project (GCP)’.”" : "What is wrong or unclear? e.g. “Does this also apply to one-off migration scripts?”"}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send(); }} />
       <div className="fb-send">
-        <button className="btn primary" disabled={text.trim().length < 3 || busy} onClick={send}><Flag size={15} />Send feedback</button>
+        <button className="btn primary" disabled={text.trim().length < 3 || busy || !!blocked} title={blocked || undefined} onClick={send}><Flag size={15} />Send feedback</button>
         {sent && <p className="fb-thanks" role="status"><CircleCheck size={15} />Thanks - the owner has been told.</p>}
       </div>
     </div>
@@ -85,6 +86,7 @@ export function FeedbackItem({ item, target, onSelect, hideItem }: {
   item: Feedback; target: FeedbackTarget; onSelect?: (id: string) => void; hideItem?: boolean;
 }) {
   const actions = useFeedbackActions();
+  const blocked = useChangeBlocked();
   const part = item.itemId ? target.items.find((it) => it.id === item.itemId) : undefined;
   const remove = async () => {
     const yes = await confirmDialog({
@@ -110,18 +112,18 @@ export function FeedbackItem({ item, target, onSelect, hideItem }: {
       {item.resolved && <p className="fb-fixed"><Check size={13} />Marked as fixed{item.resolvedBy ? ` by ${item.resolvedBy}` : ""}{item.resolvedAt ? ` on ${formatDate(item.resolvedAt)}` : ""}</p>}
       <div className="fb-actions">
         {!item.mine && !item.resolved && (
-          <button className={`btn small ${item.alsoHitByMe ? "on" : "ghost"}`} aria-pressed={item.alsoHitByMe} onClick={() => actions.alsoHit(item, !item.alsoHitByMe)}>
+          <button className={`btn small ${item.alsoHitByMe ? "on" : "ghost"}`} aria-pressed={item.alsoHitByMe} disabled={!!blocked} title={blocked || undefined} onClick={() => actions.alsoHit(item, !item.alsoHitByMe)}>
             <ThumbsUp size={14} />{item.alsoHitByMe ? "You hit this too" : "I hit this too"}
           </button>
         )}
         {item.alsoHit > 0 && <span className="fb-count" title="People who hit the same problem">+{item.alsoHit} also hit this</span>}
         <span className="spacer" />
         {item.canManage && (
-          <button className="btn small ghost" onClick={() => actions.resolve(item, !item.resolved)}>
+          <button className="btn small ghost" disabled={!!blocked} title={blocked || undefined} onClick={() => actions.resolve(item, !item.resolved)}>
             {item.resolved ? <RotateCcw size={14} /> : <Check size={14} />}{item.resolved ? "Reopen" : "Mark as fixed"}
           </button>
         )}
-        {(item.canManage || item.mine) && <button className="icon-btn danger" onClick={remove} aria-label="Delete feedback"><Trash2 size={15} /></button>}
+        {(item.canManage || item.mine) && <button className="icon-btn danger" disabled={!!blocked} title={blocked || undefined} onClick={remove} aria-label="Delete feedback"><Trash2 size={15} /></button>}
       </div>
     </li>
   );

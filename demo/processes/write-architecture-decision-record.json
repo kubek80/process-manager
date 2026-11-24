@@ -7,9 +7,6 @@
   "owner": "architecture-board",
   "category": "architecture",
   "rigour": "optional",
-  "paths": [
-    "greenfield"
-  ],
   "estimatedDuration": "1-2 hours",
   "tags": [
     "adr",

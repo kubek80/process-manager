@@ -25,7 +25,7 @@ import { groupEntry } from "./lib/groups";
 import type { GroupKind } from "./lib/members";
 import { chooseDialog, confirmDialog, ErrorBoundary, Field, LoadError, Loading, Modal, Notices, notify, useLayer } from "./components/ui";
 import { BrandLogo } from "./components/Brand";
-import { ViewAsBand } from "./components/ViewAsBand";
+import { ViewAsBand, ViewingWatch } from "./components/ViewAsBand";
 import { chooseDark, refreshLook, startLook, useLook } from "./lib/theme";
 import "./theme.css";
 
@@ -78,7 +78,7 @@ export default function App() {
   if (error) body = <main className="login"><div className="login-card"><h1>{name}</h1><LoadError what="The portal could not be opened." error={error} onRetry={refresh} /></div></main>;
   else if (!me || !known) body = null;
   else if (!me.authenticated) body = <Login me={me} onSignedIn={refresh} />;
-  else body = <MeContext.Provider value={me}><EngagementProvider key={me.user!.email}><Shell key={me.user!.email} me={me} onSignedOut={refresh} /></EngagementProvider>{me.viewedBy && <ViewAsBand me={me} />}</MeContext.Provider>;
+  else body = <MeContext.Provider value={me}><EngagementProvider key={me.user!.email}><Shell key={me.user!.email} me={me} onSignedOut={refresh} /></EngagementProvider>{me.viewedBy && <ViewAsBand me={me} />}<ViewingWatch me={me} /></MeContext.Provider>;
   return <>{body}<Notices /></>;
 }
 

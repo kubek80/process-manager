@@ -306,6 +306,7 @@ You act for the person who needs the result. In the steps below they are **You**
 - Never perform a step of another participant, and never approve anything. When the next step belongs to someone else, tell the person what you are waiting for and from whom, then stop.
 - Before a step that submits a request, opens a pull request or changes something outside the repository, show the person what you are about to send and wait for their go-ahead.
 - If a step does not match reality, do not improvise. Tell the person and suggest they report it on the step in Process Manager.
+- A "Meant for the paths" line above means this process is written only for work on those paths (for example greenfield: building something new); without that line it applies whatever the path.
 
 `)
 	if len(p.Prerequisites) > 0 {
@@ -483,6 +484,7 @@ func ForStandard(body []byte, c Context, extra map[string]string) ([]Generated, 
 - Meet every **SHOULD** unless there is a stated reason not to, and say what the reason is.
 - **MAY** is optional good practice.
 - A requirement that names tiers, languages or environments applies only there. If you do not know the tier or environment of the application, ask.
+- A "Meant for the paths" line above means this standard is written only for work on those paths (for example greenfield: building something new); without that line it applies whatever the path.
 - When a change is driven by a requirement, name its id (for example in the pull request description).
 
 ## Requirements
@@ -546,7 +548,7 @@ func ForStandard(body []byte, c Context, extra map[string]string) ([]Generated, 
 
 1. Get the change: the pull request diff, or ` + "`git diff`" + ` against the main branch.
 2. For each requirement below, look at the changed lines in the files it names (all changed files if none are named) for the listed signs. Read enough of the surrounding code to be sure.
-3. Skip a requirement that is limited to tiers, languages or environments the change is not about. If you cannot tell, check it and say that you assumed it applies.
+3. Skip a requirement that is limited to tiers, languages or environments the change is not about. If you cannot tell, check it and say that you assumed it applies. A "Meant for the paths" line above means the standard is written only for work on those paths; without that line it applies whatever the path.
 4. Report as described at the end. Report only violations of these requirements; this review is not about style or anything else.
 
 ## Requirements to check

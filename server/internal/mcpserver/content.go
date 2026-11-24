@@ -262,7 +262,7 @@ type Header struct {
 	Practice   *Ref      `json:"practice,omitempty"`
 	Platform   *Ref      `json:"platform,omitempty"`
 	AppliesTo  AppliesTo `json:"appliesTo"`
-	Paths      []PathRef `json:"paths" jsonschema:"the paths it is meant for (greenfield: something new is built; brownfield: something that exists is changed or moved; paved path, also called the golden path: the ready-made, supported way); empty: whatever the path"`
+	Paths      []PathRef `json:"paths" jsonschema:"the paths it is meant for (greenfield: something new is built; brownfield: something that exists is changed or moved; paved path, also called the golden path: the ready-made, supported way). A document names paths only when it is meant only for that kind of work; empty: it applies whatever the path"`
 	Review     Review    `json:"review"`
 	UpdatedAt  string    `json:"updatedAt,omitempty"`
 	Link       string    `json:"link,omitempty" jsonschema:"the page in the portal"`
@@ -282,7 +282,7 @@ func pathRefs(list []docs.Named, ids []string) []PathRef {
 		r := PathRef{ID: id, Name: id}
 		for _, n := range list {
 			if n.ID == id {
-				r = PathRef{ID: n.ID, Name: n.Name, AlsoCalled: docs.PathAlso[n.Symbol], Description: n.Description}
+				r = PathRef{ID: n.ID, Name: n.Name, AlsoCalled: docs.OtherNames(n), Description: n.Description}
 			}
 		}
 		out = append(out, r)

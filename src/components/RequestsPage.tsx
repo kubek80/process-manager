@@ -7,7 +7,7 @@ import {
   type DocRequest, type NewRequest, type RequestFilter, type RequestState,
 } from "../lib/requests";
 import { createRequest, go, href, loadRequests, setRequestState, voteRequest, withdrawRequest } from "../lib/store";
-import { usePerms } from "../lib/session";
+import { useChangeBlocked, usePerms } from "../lib/session";
 import { confirmDialog, Field, LoadError, Loading, Modal, notify, useLayer } from "./ui";
 import { KindTag } from "./marks";
 import "../requests.css";
@@ -54,6 +54,7 @@ export function RequestsPage({ state, kind, processes, standards }: {
   const [requests, setRequests] = useState<DocRequest[] | null>(null);
   const [error, setError] = useState("");
   const [asking, setAsking] = useState(false);
+  const blocked = useChangeBlocked(); // viewing as somebody else: asking and voting show, unavailable
   const [changing, setChanging] = useState<{ request: DocRequest; to: RequestState } | null>(null);
   const voting = useRef(new Set<number>()); // one vote on its way per request
 
@@ -119,7 +120,7 @@ export function RequestsPage({ state, kind, processes, standards }: {
           <h1>Requests</h1>
           <p className="lead">Missing a process or standard? Ask for it, and vote for what others asked for: the most wanted come first. Whoever looks after that kind of content plans it, makes it, or says why not.</p>
         </div>
-        <button className="btn primary" onClick={() => setAsking(true)}><Plus size={16} />Ask for a process or standard</button>
+        <button className="btn primary" disabled={!!blocked} title={blocked || undefined} onClick={() => setAsking(true)}><Plus size={16} />Ask for a process or standard</button>
       </header>
 
       <div className="req-filters">
@@ -147,7 +148,7 @@ export function RequestsPage({ state, kind, processes, standards }: {
           {requests.length === 0
             ? <p><b>Nothing has been asked for yet.</b> Missing a process or a standard? Be the first to ask: others can vote for it.</p>
             : <p><b>No {filter === "all" ? "" : `${STATE_LABEL[filter].toLowerCase()} `}requests{kind ? ` for ${kind === "process" ? "processes" : "standards"}` : ""}.</b> {filter === "open" ? "Missing something? Ask for it." : "Choose another state above to see the others."}</p>}
-          <button className="btn" onClick={() => setAsking(true)}><Plus size={15} />Ask for a process or standard</button>
+          <button className="btn" disabled={!!blocked} title={blocked || undefined} onClick={() => setAsking(true)}><Plus size={15} />Ask for a process or standard</button>
         </div>
       )}
       {requests && shown.length > 0 && (
@@ -184,6 +185,7 @@ function RequestItem({ r, showState, processes, standards, onVote, onWithdraw, o
   const { catalog } = useCatalog();
   // the server says who may move a request along (whoever could create what is asked for)
   const admin = usePerms().admin;
+  const blocked = useChangeBlocked();
   const acts = requestActions(r, admin);
   const run = (a: RequestAct) => (a === "withdraw" ? onWithdraw() : a === "remove" ? onRemove() : a === "open" ? onReopen() : onChange(a));
   const answer = r.state === "done" ? answerOf(r, r.kind === "process" ? processes : standards) : null;
@@ -192,7 +194,7 @@ function RequestItem({ r, showState, processes, standards, onVote, onWithdraw, o
     <li className={`req-item state-${r.state}`} aria-labelledby={titleId}>
       <button className={`req-vote ${r.votedByMe ? "on" : ""}`} aria-pressed={r.votedByMe}
         aria-label={`Vote for ${r.title}, ${r.votes} ${r.votes === 1 ? "vote" : "votes"}`}
-        title={r.votedByMe ? "You voted for this. Press again to take your vote back." : "Vote: I need this too"} onClick={onVote}>
+        disabled={!!blocked} title={blocked || (r.votedByMe ? "You voted for this. Press again to take your vote back." : "Vote: I need this too")} onClick={onVote}>
         <ChevronUp size={18} aria-hidden="true" /><b className="req-votes">{r.votes}</b>
       </button>
       <div className="req-body">
@@ -268,13 +270,14 @@ function MoreActions({ acts, run, title }: { acts: RequestAct[]; run: (a: Reques
 
 function MorePop({ acts, run, onClose }: { acts: RequestAct[]; run: (a: RequestAct) => void; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  const blocked = useChangeBlocked();
   useLayer(ref, onClose);
   return (
     <div ref={ref} className="req-more-pop" role="group" aria-label="More actions" tabIndex={-1}>
       {acts.map((a, i) => {
         const Icon = ACT_ICON[a];
         return (
-          <button key={a} className={`req-more-item ${a === "withdraw" || a === "remove" ? "danger" : ""}`} data-autofocus={i === 0 ? "" : undefined} onClick={() => run(a)}>
+          <button key={a} className={`req-more-item ${a === "withdraw" || a === "remove" ? "danger" : ""}`} data-autofocus={i === 0 ? "" : undefined} disabled={!!blocked} title={blocked || undefined} onClick={() => run(a)}>
             <Icon size={15} aria-hidden="true" />{ACTION_LABEL[a]}
           </button>
         );

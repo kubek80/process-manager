@@ -114,7 +114,7 @@ func (o Options) resolve() (map[string]bool, int, error) {
 
 // Version changes whenever the text of the chunks is put together differently, so that an
 // index can tell that every stored chunk has to be embedded again.
-const Version = 3
+const Version = 2
 
 // The shapes below read only what the chunks need; every field is optional here, so a body
 // that lacks one never panics. The format itself is checked elsewhere (docs.Check).

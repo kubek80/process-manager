@@ -46,7 +46,7 @@ B. OWNER, WHAT IT BELONGS TO, AND WHERE IT APPLIES
 - "platform": the id of the platform the process is about (the system or service it gives access to or changes), ONLY from the PLATFORMS list below. Leave it out if it is not about one platform.
 - "practice": the id of the practice whose way of working it describes, ONLY from the PRACTICES list below. Leave it out if no practice is named or obvious.
 - "rigour": how binding the process is. "mandatory" when the text says this is the only allowed way (must, required, only way). "recommended" when it is the expected way but another way is allowed with a good reason (should, recommended). "optional" when it is a help that may be used (may, can, optional). Leave it out when the text does not say.
-- "paths": the ids of the paths the process is meant for, ONLY from the PATHS list below: for example greenfield when it is about building something new, brownfield when it changes or moves something that already exists, the paved path (also called the golden path) when it is the ready-made, supported way. If the text does not say, leave "paths" out (that means: whatever the path).
+- "paths": the ids of the paths the process is meant for, ONLY from the PATHS list below: for example greenfield when it is about building something new, brownfield when it changes or moves something that already exists, the paved path (also called the golden path) when it is the ready-made, supported way. Name paths ONLY when the process is meant only for that kind of work; a process that everyone follows names none. If the text does not say, leave "paths" out (that means: whatever the path).
 - "tiers": the ids of the application tiers the process applies to, ONLY from the TIERS list below. If the text does not restrict the process to certain tiers, leave "tiers" out (that means: all tiers).
 
 - "environments": the ids of the environments the process applies to, ONLY from the ENVIRONMENTS list below. If the text does not restrict it, leave "environments" out (that means: all environments).
@@ -125,7 +125,7 @@ ${JSON.stringify(schema)}
 \`\`\`
 
 # EXAMPLE OF A CORRECT ANSWER
-(The ids in the example are illustrative. For "owner", "teamId", "category", "platform", "practice", "tool", "tiers" and "languages" use only the lists above.)
+(The ids in the example are illustrative. For "owner", "teamId", "category", "platform", "practice", "tool", "paths", "tiers" and "languages" use only the lists above.)
 \`\`\`json
 ${JSON.stringify(example, null, 2)}
 \`\`\`
@@ -216,7 +216,7 @@ A. THE STANDARD
 - "practice": the id of the practice that sets the rule (for example cyber security or engineering), ONLY from the PRACTICES list below. Leave it out if no practice is named or obvious.
 - "platform": the id of the platform the standard is about, ONLY from the PLATFORMS list below. Leave it out when it applies whatever the platform.
 - "scope": what it covers and what is out of scope, if the text says so.
-- "paths": the ids of the paths the standard is meant for, ONLY from the PATHS list below (greenfield: building something new; brownfield: changing or moving something that exists; paved path, also called the golden path: the ready-made, supported way). Leave it out when it applies whatever the path, which is the usual case. A requirement has no paths.
+- "paths": the ids of the paths the standard is meant for, ONLY from the PATHS list below (greenfield: building something new; brownfield: changing or moving something that exists; paved path, also called the golden path: the ready-made, supported way). Name paths ONLY when the standard is meant only for that kind of work; a rule that everyone follows names none. Leave it out when it applies whatever the path, which is the usual case. A requirement has no paths.
 - "tiers", "languages", "environments": only when the WHOLE standard is limited to some; otherwise leave them out. Use ids from the lists below.
 - "status": always "draft", so that the owner team reviews it before it is published. Add "review": { "intervalMonths": 12 } unless the text names another rhythm.
 - "exceptionProcessId": the id of the process for asking for an exception, ONLY from the EXISTING PROCESSES list.

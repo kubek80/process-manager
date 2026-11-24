@@ -692,6 +692,8 @@ type Named struct {
 	// Symbol: the picture of a path (greenfield's sprout, the paved path's road…); empty for a
 	// neutral mark and for the other lists.
 	Symbol string `json:"symbol,omitempty"`
+	// AlsoCalled: the other names of a path ("golden path"), found by the search.
+	AlsoCalled []string `json:"alsoCalled,omitempty"`
 }
 
 // Contacts is how to reach a team, platform or practice (schema/catalog.schema.json): every

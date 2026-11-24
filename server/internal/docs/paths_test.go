@@ -65,3 +65,29 @@ func TestPathsAreUsesAndCanBeRemoved(t *testing.T) {
 		t.Fatalf("duplicate path: %v", err)
 	}
 }
+
+// The other names of a path belong to its entry; one is claimed by one path only and is no
+// other path's name, in the app's words (otherNameClashes in src/lib/paths.ts).
+func TestOtherNamesOfThePaths(t *testing.T) {
+	l := docs.Lists{Paths: []docs.Named{
+		{ID: "paved-path", Name: "Paved path", Symbol: "road", AlsoCalled: []string{"golden path", " ", "paved road"}},
+		{ID: "toll", Name: "Toll road", Symbol: "road"},
+	}}
+	if got := docs.PathNames(l.Paths, []string{"toll", "paved-path", "gone"}); got != "Toll road, Paved path (also called golden path, paved road), gone" {
+		t.Fatalf("%q", got)
+	}
+	clash := func(body string) error {
+		return docs.Check(docs.Catalog, []byte(`{"tiers":[],"environments":[],"languages":[],"teams":[],"tools":[],"paths":`+body+`}`), docs.Lists{})
+	}
+	if err := clash(`[{"id":"a","name":"A","alsoCalled":["x"]},{"id":"b","name":"B","alsoCalled":["y"]}]`); err != nil {
+		t.Fatal(err)
+	}
+	for body, want := range map[string]string{
+		`[{"id":"a","name":"Paved path","alsoCalled":["golden path"]},{"id":"b","name":"Lift","alsoCalled":["Golden Path"]}]`: "paths[1].alsoCalled: The paths “Paved path” and “Lift” are both also called “Golden Path”: keep it on one of them.",
+		`[{"id":"a","name":"Brownfield"},{"id":"b","name":"Lift","alsoCalled":["brownfield"]}]`:                               "paths[1].alsoCalled: The path “Lift” is also called “brownfield”, which is the name of the path “Brownfield”: take it off “Lift”.",
+	} {
+		if err := clash(body); !errors.Is(err, docs.ErrInvalid) || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: %v", body, err)
+		}
+	}
+}

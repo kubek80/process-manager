@@ -9,7 +9,7 @@
   "platform": "azure",
   "rigour": "mandatory",
   "paths": [
-    "greenfield"
+    "paved-path"
   ],
   "estimatedDuration": "2-3 weeks",
   "tags": [

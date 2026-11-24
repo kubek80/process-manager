@@ -8,9 +8,6 @@
   "category": "security",
   "practice": "security",
   "rigour": "mandatory",
-  "paths": [
-    "brownfield"
-  ],
   "estimatedDuration": "1-2 weeks",
   "tags": [
     "exception",

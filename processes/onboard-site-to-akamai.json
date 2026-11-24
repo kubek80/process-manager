@@ -8,9 +8,6 @@
   "category": "network",
   "platform": "akamai",
   "rigour": "mandatory",
-  "paths": [
-    "brownfield"
-  ],
   "tiers": [
     "tier-0",
     "tier-1"

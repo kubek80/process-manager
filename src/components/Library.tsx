@@ -1,6 +1,6 @@
 import { Plus, Sparkles } from "lucide-react";
 import type { DocMeta, Feedback, Process } from "../types";
-import { canCreate, usePerms } from "../lib/session";
+import { canCreate, useChangeBlocked, usePerms } from "../lib/session";
 import { DocList } from "./DocList";
 
 export function Library({ processes, standardIds, onNew, onAi, feedback, meta }: {
@@ -9,6 +9,7 @@ export function Library({ processes, standardIds, onNew, onAi, feedback, meta }:
   meta?: Record<string, DocMeta | undefined>;
 }) {
   const perms = usePerms();
+  const blocked = useChangeBlocked(); // viewing as somebody else: shown, unavailable
   // the buttons to create one: for a process editor, and for whoever owns or is a member of a platform or practice
   const editor = canCreate(perms, "process");
   return (
@@ -21,8 +22,8 @@ export function Library({ processes, standardIds, onNew, onAi, feedback, meta }:
         {editor && (
           <div className="hero-actions">
             {/* the usual way is a blank one; writing it from a text with AI is the other choice */}
-            <button className="btn" onClick={onAi}><Sparkles size={16} />Create from text with AI</button>
-            <button className="btn primary" onClick={onNew}><Plus size={16} />New process</button>
+            <button className="btn" disabled={!!blocked} title={blocked || undefined} onClick={onAi}><Sparkles size={16} />Create from text with AI</button>
+            <button className="btn primary" disabled={!!blocked} title={blocked || undefined} onClick={onNew}><Plus size={16} />New process</button>
           </div>
         )}
       </section>

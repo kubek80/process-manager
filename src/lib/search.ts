@@ -16,9 +16,20 @@ export const FILTER_LABEL: Record<FilterKey, string> = { type: "Type", rigour: "
 /** The category value of what has no category: not a valid id, so it cannot clash with one. */
 export const NO_CATEGORY = "-";
 export const NO_CATEGORY_LABEL = "Other";
-/** The path value of what names no path (it applies whatever the path): not a valid id either. */
+/**
+ * The path filter means "made for this path": what names the path, like every other filter. What
+ * names no path (it applies whatever the path) has its own value, not a valid id either. My
+ * application's path means something else, "applies to this path" (`appliesTo`): what names it or
+ * names none.
+ */
 export const NO_PATH = "-";
-export const NO_PATH_LABEL = "Any path (names none)";
+export const NO_PATH_LABEL = "Not tied to a path";
+/** An option of the path filter: "Made for Greenfield". */
+export const pathOptionLabel = (name: string) => `Made for ${name}`;
+/** What a filter's open list says first, where choosing needs explaining. */
+export const FILTER_HINT: Partial<Record<FilterKey, string>> = {
+  path: "Shows what is made for the path you choose; what is for any path is left out. To see everything that applies to your application's path, choose it under My application.",
+};
 export const KINDS: TargetKind[] = ["process", "standard"];
 export const KIND_LABEL: Record<TargetKind, string> = { process: "Processes", standard: "Standards" };
 export const RIGOURS: Rigour[] = ["mandatory", "recommended", "optional"];
@@ -253,7 +264,7 @@ export function search(input: SearchInput): SearchOutput {
   };
   // the paths in the order of their list, then what names none; nothing at all without paths
   const pathOptions = () => {
-    const all = optionsFor("path", [...(c.paths ?? []).map((x) => ({ value: x.id, label: x.name })), { value: NO_PATH, label: NO_PATH_LABEL }]);
+    const all = optionsFor("path", [...(c.paths ?? []).map((x) => ({ value: x.id, label: pathOptionLabel(x.name) })), { value: NO_PATH, label: NO_PATH_LABEL }]);
     return all.some((o) => o.value !== NO_PATH) ? all : [];
   };
   const named = (l?: { id: string; name: string }[]) =>
@@ -289,7 +300,7 @@ const PROFILE_LIST: Record<ProfileKey, "tiers" | "paths" | "environments" | "lan
 /** What the dropdowns of "My application" say about themselves. */
 export const PROFILE_HINT: Record<ProfileKey, string> = {
   tier: "Shows only what applies to an application of this tier.",
-  path: "Shows only what applies to an application on this path: what is for another path only is hidden.",
+  path: "Shows what applies to an application on this path: what is made for it and what is for any path. What is made only for other paths is hidden.",
   environment: "Shows only what applies to an application in this environment.",
   language: "Shows only what applies to an application written in this language.",
 };
@@ -339,7 +350,7 @@ export function emptyFilterText(key: FilterKey | ProfileKey, subject: Subject, t
     case "platform": return `${who} belongs to a platform.`;
     case "practice": return `${who} belongs to a practice.`;
     case "owner": return `${who} names the team that maintains it.`;
-    case "path": return `${who} names a path.`;
+    case "path": return `${who} is made for a particular path: everything is for any path.`;
     case "type": return "There is nothing here to choose between.";
     default: return `${who} is limited to particular ${PROFILE_LIST[key]}: everything applies.`;
   }

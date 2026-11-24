@@ -96,16 +96,35 @@ func (r Report) String() string {
 	if !r.Converted {
 		return "nothing to convert: the content already fits this version"
 	}
-	lists := "the lists were left as they were"
-	if r.Lists {
-		lists = "the lists were updated"
+	// only what happened
+	var parts []string
+	if r.Documents > 0 || r.Versions > 0 {
+		parts = append(parts, fmt.Sprintf("%d documents moved to the new lists (%d older versions adjusted)", r.Documents, r.Versions))
 	}
-	paths := ""
+	var added []string
+	for _, a := range []struct {
+		n    int
+		noun string
+	}{{r.Practices, "practices"}, {r.Platforms, "platforms"}, {r.Categories, "categories"}} {
+		if a.n > 0 {
+			added = append(added, fmt.Sprintf("%d %s", a.n, a.noun))
+		}
+	}
+	if len(added) > 0 {
+		parts = append(parts, "added "+strings.Join(added, ", "))
+	}
+	if r.RolesConverted > 0 || r.RolesRemoved > 0 {
+		parts = append(parts, fmt.Sprintf("%d roles converted, %d removed", r.RolesConverted, r.RolesRemoved))
+	}
 	if r.Paths > 0 {
-		paths = fmt.Sprintf("; added the list of paths with %d entries", r.Paths)
+		parts = append(parts, fmt.Sprintf("added the list of paths with %d entries", r.Paths))
 	}
-	return fmt.Sprintf("%d documents moved to the new lists (%d older versions adjusted); added %d practices, %d platforms, %d categories; %d roles converted, %d removed%s; %s",
-		r.Documents, r.Versions, r.Practices, r.Platforms, r.Categories, r.RolesConverted, r.RolesRemoved, paths, lists)
+	if r.Lists {
+		parts = append(parts, "the lists were updated")
+	} else {
+		parts = append(parts, "the lists were left as they were")
+	}
+	return strings.Join(parts, "; ")
 }
 
 // a team as the earlier version knew it
@@ -418,7 +437,11 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) (Report, error) {
 		}
 	}
 
-	// ----- the paths: lists from before there were paths get the list with its three entries
+	// ----- the paths: lists from before there were paths get the list with its three entries.
+	// "Never again" rests on the key "paths" being present in the stored lists: the app always
+	// saves it, also empty when an admin removed every path. Lists saved without the key (by a
+	// client that leaves it out, or imported from files made before there were paths) get the
+	// three entries again at the next start.
 	movedLists := catChanged
 	pathsAdded := 0
 	if _, had := cat.get("paths"); !had {

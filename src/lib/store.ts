@@ -32,12 +32,24 @@ export const unreachableMessage = (method: string) =>
 export const isLoadFailure = (message: string) =>
   /Unable to preload CSS|Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i.test(message);
 
+/**
+ * Whom the page acts as: the address `/api/me` gave it (`loadMe`). Sent with every change, so
+ * that a page left open while an admin started or stopped viewing the portal as somebody else
+ * in another tab is refused (409) instead of acting as the other one.
+ */
+export const ACTING_AS_HEADER = "X-Acting-As";
+let actingAs = "";
+/** The headers of every change: JSON, the CSRF header and whom the page acts as. */
+export const changeHeaders = (contentType = "application/json"): Record<string, string> => ({
+  "Content-Type": contentType, "X-Requested-With": "process-manager", ...(actingAs ? { [ACTING_AS_HEADER]: encodeURIComponent(actingAs) } : {}),
+});
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<{ data: T; headers: Headers }> {
   let res: Response;
   try {
     res = await fetch(path, {
       method,
-      headers: method === "GET" ? undefined : { "Content-Type": "application/json", "X-Requested-With": "process-manager" },
+      headers: method === "GET" ? undefined : changeHeaders(),
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
@@ -59,8 +71,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return { data: data as T, headers: res.headers };
 }
 
-export async function loadMe(): Promise<Me> {
+/** Who is signed in. `adopt`: the page now acts as them (false: only looking, as the check for a changed view does). */
+export async function loadMe(adopt = true): Promise<Me> {
   const me = await call<Me>("GET", "/api/me");
+  if (adopt) actingAs = me.authenticated ? me.user?.email ?? "" : "";
   return me.perms ? { ...me, perms: completePerms(me.perms) } : me;
 }
 export const devLogin = (email: string) => call<void>("POST", "/auth/dev/login", { email });
@@ -657,7 +671,7 @@ export const iconUrl = (id: string) => `/api/icons/${encodeURIComponent(id)}`;
 export async function uploadIcon(file: Blob): Promise<{ id: string; contentType: string; width: number; height: number }> {
   let res: Response;
   try {
-    res = await fetch("/api/icons", { method: "POST", headers: { "Content-Type": file.type || "application/octet-stream", "X-Requested-With": "process-manager" }, body: file });
+    res = await fetch("/api/icons", { method: "POST", headers: changeHeaders(file.type || "application/octet-stream"), body: file });
   } catch {
     throw new ApiError(0, unreachableMessage("POST"));
   }
