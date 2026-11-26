@@ -27,6 +27,16 @@ export const NO_PATH = "-";
 export const NO_PATH_LABEL = "Not tied to a path";
 /** An option of the path filter: "Made for Greenfield". */
 export const pathOptionLabel = (name: string) => `Made for ${name}`;
+/**
+ * Whether a filter's name and its chosen value fit on one line of its button, each whole: `room`
+ * is the width inside the button, `others` the widths of what stands beside them (the count, the
+ * chevron), `gap` the space between any two.
+ */
+export function fitsOneLine(room: number, name: number, value: number, others: number[], gap: number): boolean {
+  const parts = [name, value, ...others];
+  return parts.reduce((a, b) => a + b, 0) + gap * (parts.length - 1) <= room + 0.5;
+}
+
 /** What a filter's open list says first, where choosing needs explaining. */
 export const FILTER_HINT: Partial<Record<FilterKey, string>> = {
   path: "Shows what is made for the path you choose; what is for any path is left out. To see everything that applies to your application's path, choose it under My application.",

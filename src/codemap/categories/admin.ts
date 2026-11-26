@@ -59,6 +59,15 @@ export const admin: CodeCategory = {
       tests: ["e2e/admin.spec.ts", "e2e/catalog.spec.ts"],
     },
     {
+      path: "src/lib/listTabs.ts",
+      role: "The lists' tabs as one set for the keyboard (`tabAfterKey`: the arrows through all twelve across the three groups, Home and End), and what an address of the lists asks to show (`addressedList`).",
+      requirements: [
+        { text: "An address without a list asks nothing of Admin › Lists: the page stays where it is, and its unsaved changes with it. Admin › Lists is never remounted by its address (no `key` on it in `AdminPage`): its draft is the page's own state, and `#/admin/lists…` is one place to `moveTo`, which asks nothing. Test: `e2e/tribes.spec.ts`.", at: "if (!list) return editor ? null : { list: first, id: null };" },
+        { text: "The arrows go round in the order of the tabs shown, across the groups; the chosen tab is the one Tab stop (`tabIndex` in `CatalogPage`).", at: "case \"ArrowRight\": return keys[(at + 1) % keys.length];" },
+      ],
+      tests: ["src/lib/__tests__/listTabs.test.ts", "e2e/catalog.spec.ts", "e2e/tribes.spec.ts"],
+    },
+    {
       path: "src/components/CatalogPage.tsx",
       role: "The twelve lists, their tabs in three named groups (who: teams, tribes, domains, practices, platforms; what: categories, tools, architecture patterns; where it applies: tiers, paths, environments, languages): a directory for everyone under Teams & tools (the teams under their domain and tribe when there are tribes; an empty optional list left out for readers), and their editor in Admin › Lists (a path with its picture and other names, an architecture pattern with its other names, a team's tribe, a tribe's domain).",
       requirements: [

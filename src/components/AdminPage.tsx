@@ -269,7 +269,7 @@ export function AdminPage({ section, list, id, processes, standards, feedback, m
         {/* the code map has a heading of its own: the category or the file that is open */}
         {current.id !== "code" && <header className="admin-head"><h1>{current.label}</h1><p className="lead">{current.hint}</p></header>}
         {current.id === "access" && <UsersSection />}
-        {current.id === "lists" && <CatalogPage key={`${list ?? ""}/${id ?? ""}`} processes={processes} standards={standards} editable list={list} id={id} />}
+        {current.id === "lists" && <CatalogPage processes={processes} standards={standards} editable list={list} id={id} />}
         {current.id === "skills" && <SkillsSection />}
         {current.id === "health" && <HealthSection processes={processes} standards={standards} feedback={feedback} meta={meta} />}
         {current.id === "activity" && <ActivitySection processes={processes} standards={standards} feedback={feedback} />}

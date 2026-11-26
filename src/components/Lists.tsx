@@ -1,11 +1,11 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Alert } from "./Alert";
 import { AppWindow, ChevronDown, ChevronLeft, ChevronRight, LayoutGrid, Lightbulb, Rows3, Search, ShieldCheck, SlidersHorizontal, Workflow, X } from "lucide-react";
 import type { Process, Rigour, Standard, TargetKind } from "../types";
 import { href } from "../lib/store";
 import type { Profile } from "../lib/edit";
 import { EMPTY_CATALOG, useCatalog } from "../lib/catalog";
-import { appSummary, countText, countWords, DROPPED_FILTER_TEXT, emptyFilterText, FILTER_HINT, FILTER_LABEL, NO_PATH, NO_PATH_LABEL, knownFilters, type Filters, PROFILE_HINT, PROFILE_KEYS, PROFILE_LABEL, RIGOURS, rigourFilterName, rigourOptionLabel, type FilterKey, type Option, type ProfileKey, type TypeTab } from "../lib/search";
+import { appSummary, countText, fitsOneLine, countWords, DROPPED_FILTER_TEXT, emptyFilterText, FILTER_HINT, FILTER_LABEL, NO_PATH, NO_PATH_LABEL, knownFilters, type Filters, PROFILE_HINT, PROFILE_KEYS, PROFILE_LABEL, RIGOURS, rigourFilterName, rigourOptionLabel, type FilterKey, type Option, type ProfileKey, type TypeTab } from "../lib/search";
 import { useRemembered } from "../lib/profile";
 import { LevelBars, PathMark } from "./marks";
 import type { ListView } from "../lib/paging";
@@ -134,6 +134,9 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast, single
   const dead = !single && nothingToChoose(options);
   const shown = dead ? [] : HIDE_EMPTY.includes(name) ? options.filter((o) => o.count > 0 || o.chosen) : options;
   const boxes = () => [...(box.current?.querySelectorAll<HTMLInputElement>("input:not(:disabled)") ?? [])];
+  // the chosen value under the name when the two do not fit on one line (a long name such as
+  // "Architecture pattern" in a narrow column): readable whole instead of cut
+  const stacked = useStacked(button);
   const focusAt = (i: number) => { const all = boxes(); all[(i + all.length) % all.length]?.focus(); };
   // the down arrow on the button opens the list and goes to its first option
   useEffect(() => { if (open && focusFirst) { setFocusFirst(false); focusAt(0); } }, [open, focusFirst]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -155,7 +158,7 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast, single
     else if (e.key === "End") { e.preventDefault(); focusAt(all.length - 1); }
   };
   return (
-    <div className={`filter-dd ${open ? "open" : ""} ${n ? "chosen" : ""} ${dead ? "nothing" : ""}`.trim()} data-filter={name}>
+    <div className={`filter-dd ${open ? "open" : ""} ${n ? "chosen" : ""} ${dead ? "nothing" : ""} ${stacked ? "stacked" : ""}`.replace(/\s+/g, " ").trim()} data-filter={name}>
       <button ref={button} type="button" className="filter-dd-button" aria-expanded={open} aria-controls={`${id}-list`}
         aria-label={`${within ? `${within}, ` : ""}${title}: ${summary}`} onClick={() => setOpen(!open)} onKeyDown={onButtonKey}>
         <span className="filter-dd-name">{title}</span>
@@ -182,6 +185,35 @@ export function FilterDropdown({ name, label, options, onToggle, atLeast, single
       )}
     </div>
   );
+}
+
+/**
+ * Whether the name and the chosen value of a filter's button need two lines: measured from what
+ * each holds whole (`fitsOneLine`), so the answer does not depend on how it is laid out now, and
+ * measured again when the column or the value changes.
+ */
+function useStacked(button: React.RefObject<HTMLButtonElement | null>): boolean {
+  const [stacked, setStacked] = useState(false);
+  useLayoutEffect(() => {
+    const b = button.current;
+    if (!b) return;
+    const check = () => {
+      const part = (sel: string) => b.querySelector<HTMLElement>(sel);
+      const name = part(".filter-dd-name"), value = part(".filter-dd-value");
+      if (!name || !value) return;
+      const style = getComputedStyle(b);
+      const room = b.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      const others = [part(".filter-dd-n"), part(".filter-dd-chevron")].filter((x): x is HTMLElement => !!x).map((x) => x.getBoundingClientRect().width);
+      setStacked(!fitsOneLine(room, name.scrollWidth, value.scrollWidth, others, parseFloat(style.columnGap) || 0));
+    };
+    check();
+    const watch = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(check);
+    watch?.observe(b);
+    const words = new MutationObserver(check);
+    words.observe(b, { childList: true, subtree: true, characterData: true });
+    return () => { watch?.disconnect(); words.disconnect(); };
+  }, [button]);
+  return stacked;
 }
 
 /** The picture of a path before its name in a filter (a path's own filter and the path of "My application"). */

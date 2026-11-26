@@ -265,3 +265,62 @@ test("an empty tribe and domain say so; the pages fit a phone without sideways s
   await open(page, `/domain/${DOMAIN}`);
   await expect(page.getByRole("region", { name: "Tribes in this domain" }).locator(".cluster-empty")).toHaveText("No tribe is part of this domain yet.");
 });
+
+test("Admin › Lists keeps its unsaved changes while its address changes: the side menu, Back, another entry", async ({ page }) => {
+  await signIn(page, ALEX);
+  // from a tribe's page to its entry in Admin › Lists
+  await open(page, "/tribe/cloud-tribe");
+  await page.getByRole("link", { name: "Edit in Admin › Lists" }).click();
+  await expect(page).toHaveURL(/#\/admin\/lists\/tribes\/cloud-tribe$/);
+  await detail(page).locator('[data-field="description"]').fill("Changed and not saved yet.");
+  const unsaved = page.locator(".cat-save-text");
+  await expect(unsaved).toHaveText("Unsaved changes to the lists");
+  // "Lists" in the side menu: the same place, nothing asked, nothing lost, still on the tribe
+  await page.locator(".admin-nav").getByRole("link", { name: "Lists" }).click();
+  await expect(page).toHaveURL(/#\/admin\/lists$/);
+  await expect(page.getByRole("dialog", { name: "Leave without saving?" })).toHaveCount(0);
+  await expect(unsaved).toHaveText("Unsaved changes to the lists");
+  await expect(detail(page).locator('[data-field="description"]')).toHaveValue("Changed and not saved yet.");
+  // another entry by its address, then Back: the entry the address names, the changes kept
+  await page.evaluate(() => { location.hash = "#/admin/lists/domains/engineering-enablement"; });
+  await expect(page.getByRole("tab", { name: /^Domains/ })).toHaveAttribute("aria-selected", "true");
+  await expect(detail(page).locator('[data-field="name"]')).toHaveValue("Engineering enablement");
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/admin\/lists$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/admin\/lists\/tribes\/cloud-tribe$/);
+  await expect(page.getByRole("tab", { name: /^Tribes/ })).toHaveAttribute("aria-selected", "true");
+  await expect(detail(page).locator('[data-field="description"]')).toHaveValue("Changed and not saved yet.");
+  await expect(unsaved).toHaveText("Unsaved changes to the lists");
+  // leaving Admin › Lists altogether still asks, as before
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Teams & tools" }).click();
+  const ask = page.getByRole("dialog", { name: "Leave without saving?" });
+  await expect(ask).toBeVisible();
+  await ask.getByRole("button", { name: "Stay" }).click();
+  await expect(page).toHaveURL(/#\/admin\/lists/);
+  await expect(detail(page).locator('[data-field="description"]')).toHaveValue("Changed and not saved yet.");
+  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(unsaved).toHaveCount(0);
+});
+
+test("Teams & tools: the domains, “Not in a domain” and “Not in a tribe” are headings of one level, the tribes one under", async ({ page }) => {
+  await signIn(page, SAM);
+  await open(page, "/catalog/teams");
+  const list = page.locator(".cat-list");
+  await expect(list.getByRole("heading", { level: 2 })).toHaveText(["Engineering enablement (domain)", "Platforms and infrastructure (domain)", "Not in a domain", "Not in a tribe"]);
+  await expect(list.getByRole("heading", { level: 3 })).toHaveText(["Developer tools (tribe)", "Cloud (tribe)", "Connectivity (tribe)", "Trust and service (tribe)"]);
+  // the teams in no tribe are their own section, named by its heading
+  await expect(page.getByRole("region", { name: "Not in a tribe" }).locator(".cat-item strong")).toHaveText(["Fulfilment team"]);
+  await expect(page.getByRole("region", { name: "Not in a domain" }).getByRole("heading", { level: 3 })).toHaveText(["Trust and service (tribe)"]);
+});
+
+test("a tribe's and a domain's entry in Admin › Lists leads to its page, as a team's does", async ({ page }) => {
+  await signIn(page, ALEX);
+  await open(page, "/admin/lists/teams/dns-team");
+  await expect(detail(page).getByRole("heading", { level: 2 }).getByRole("link", { name: "DNS team" })).toHaveAttribute("href", "#/team/dns-team");
+  await open(page, "/admin/lists/tribes/connectivity-tribe");
+  await expect(detail(page).getByRole("heading", { level: 2 }).getByRole("link", { name: "Connectivity" })).toHaveAttribute("href", "#/tribe/connectivity-tribe");
+  await open(page, "/admin/lists/domains/platforms-infrastructure");
+  await detail(page).getByRole("heading", { level: 2 }).getByRole("link", { name: "Platforms and infrastructure" }).click();
+  await expect(page).toHaveURL(/#\/domain\/platforms-infrastructure$/);
+});

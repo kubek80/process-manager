@@ -111,3 +111,41 @@ test("a new environment can be chosen in a process; the lists of groups are sepa
   await unfold(page, "Where it applies");
   await expect(fields(page).getByRole("button", { name: "Pre-production" })).toBeVisible();
 });
+
+test("the lists' tabs are one set for the keyboard: one Tab stop, the arrows through all twelve, Home and End", async ({ page }) => {
+  for (const [hash, first] of [["/admin/lists", "Teams"], ["/catalog", "Teams"]] as const) {
+    await open(page, hash);
+    const lists = page.getByRole("group", { name: "Lists" });
+    const tabs = lists.getByRole("tab");
+    await expect(tabs).toHaveCount(12);
+    // one Tab stop: only the chosen tab can be reached with Tab
+    expect(await tabs.evaluateAll((ts) => ts.map((t) => t.getAttribute("tabindex")))).toEqual(["0", ...Array(11).fill("-1")]);
+    await tabs.first().focus();
+    await expect(tabs.first()).toHaveAccessibleName(new RegExp(`^${first}`));
+    // the arrows choose the next one, across the groups, and keep the keyboard on it
+    for (const name of ["Tribes", "Domains", "Practices", "Platforms", "Categories"]) {
+      await page.keyboard.press("ArrowRight");
+      const tab = lists.getByRole("tab", { name: new RegExp(`^${name}`) });
+      await expect(tab).toBeFocused();
+      await expect(tab).toHaveAttribute("aria-selected", "true");
+      await expect(tab).toHaveAttribute("tabindex", "0");
+    }
+    await expect(page.getByRole("tablist", { name: "What", exact: true }).getByRole("tab", { name: /^Categories/ })).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(lists.getByRole("tab", { name: /^Languages/ })).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(lists.getByRole("tab", { name: /^Teams/ })).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(lists.getByRole("tab", { name: /^Languages/ })).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("Home");
+    await expect(lists.getByRole("tab", { name: /^Teams/ })).toBeFocused();
+    // Tab leaves the tabs at once
+    await page.keyboard.press("Tab");
+    await expect(tabs.first()).not.toBeFocused();
+    expect(await page.evaluate(() => !!document.activeElement?.closest(".cat-kinds-groups"))).toBe(false);
+  }
+  // on Teams & tools the address follows the chosen list
+  await page.getByRole("group", { name: "Lists" }).getByRole("tab", { name: /^Teams/ }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page).toHaveURL(/#\/catalog\/tribes$/);
+});

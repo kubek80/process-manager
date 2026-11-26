@@ -244,7 +244,8 @@ export function nameFromMembers(members: readonly { email: string; name?: string
 /**
  * Teams can be grouped in tribes, and tribes in domains. Everything is optional: a team without a
  * tribe, a tribe without a domain, a tribe without teams and a domain without tribes are all fine.
- * Tribes and domains give no rights and have no page of their own; they only group what readers see.
+ * Tribes and domains give no rights; each has a read-only page of its own (`ClusterPage`, `#/tribe/:id`,
+ * `#/domain/:id`), and otherwise they only group what readers see.
  */
 
 /** The tribe a team is part of; undefined without one, or when it names one the lists do not have. */

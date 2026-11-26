@@ -20,6 +20,7 @@ import { go, href, loadMembers, type CatalogList } from "../lib/store";
 import { hasErrors, validateCatalog } from "../lib/validate";
 import { checkerSummary, issueText, listIssueField, listIssuePlace, refusalText } from "../lib/editing";
 import { focusWhenShown, useFieldMarks } from "../lib/fieldMarks";
+import { addressedList, tabAfterKey } from "../lib/listTabs";
 import { Field, IssueList, notify, useScrollFade } from "./ui";
 
 type Key = "teams" | "tribes" | "domains" | "practices" | "platforms" | "categories" | "tools" | "patterns" | "tiers" | "paths" | "environments" | "languages";
@@ -173,8 +174,12 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
   const [key, setKeyHere] = useState<Key>(routeList ?? "teams");
   const [selected, setSelectedHere] = useState<string | null>(routeId ?? null);
   // Teams & tools keeps the list and the entry in the address (a link, Back, the group page's back
-  // link lead to them); Admin › Lists keeps them on the page
-  useEffect(() => { if (!editor) { setKeyHere(routeList ?? "teams"); setSelectedHere(routeId ?? null); } }, [editor, routeList, routeId]);
+  // link lead to them); Admin › Lists keeps them on the page, and follows an address that names an
+  // entry ("Edit in Admin › Lists", Back) without leaving the page: its unsaved changes stay
+  useEffect(() => {
+    const a = addressedList(editor, routeList, routeId, "teams");
+    if (a) { setKeyHere(a.list); setSelectedHere(a.id); if (editor) setAdding(false); }
+  }, [editor, routeList, routeId]);
   const keyRef = useRef(key);
   keyRef.current = key;
   const setKey = (k: Key) => { setKeyHere(k); keyRef.current = k; if (!editor) go({ page: "catalog", list: k }, { replace: true }); };
@@ -308,6 +313,10 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
       </li>
     );
   };
+  // the tabs shown, in order across their groups: an optional list without entries only in Admin
+  const shownKeys = GROUPS.flatMap((g) => g.keys).filter((k) => editor || !OPTIONAL.includes(k) || (draft[k] ?? []).length > 0 || k === key);
+  const tabRefs = useRef<Partial<Record<Key, HTMLButtonElement | null>>>({});
+
   return (
     <div className={editor ? "catalog-page" : "page catalog-page"}>
       {!editor && (
@@ -319,15 +328,22 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
         </div>
       )}
 
-      <div className="cat-kinds-groups" role="group" aria-label="Lists">
+      {/* one set of tabs for the keyboard: one Tab stop, the arrows through all of them (`tabAfterKey`) */}
+      <div className="cat-kinds-groups" role="group" aria-label="Lists" onKeyDown={(e) => {
+        const to = tabAfterKey(shownKeys, key, e.key);
+        if (!to) return;
+        e.preventDefault();
+        if (to !== key) switchTo(to);
+        tabRefs.current[to]?.focus();
+      }}>
         {GROUPS.map((g) => {
-          const keys = g.keys.filter((k) => editor || !OPTIONAL.includes(k) || (draft[k] ?? []).length > 0 || k === key);
+          const keys = g.keys.filter((k) => shownKeys.includes(k));
           return keys.length > 0 && (
             <ListTabs key={g.id} id={g.id} name={g.name} chosen={key}>
               {keys.map((k) => {
                 const K = KINDS[k];
                 return (
-                  <button key={k} role="tab" aria-selected={key === k} className={`tab ${key === k ? "on" : ""}`} title={K.blurb} onClick={() => switchTo(k)}>
+                  <button key={k} ref={(el) => { tabRefs.current[k] = el; }} role="tab" aria-selected={key === k} tabIndex={key === k ? 0 : -1} className={`tab ${key === k ? "on" : ""}`} title={K.blurb} onClick={() => switchTo(k)}>
                     {K.title}<span className="tab-count">{(draft[k] ?? []).length}</span>
                     {!editor && yoursIn(k) > 0 && <span className="tab-yours">{yoursIn(k)} yours</span>}
                   </button>
@@ -366,10 +382,12 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
             <div className="cat-sections">
               {sections.map((sec, i) => (
                 <section key={sec.domain === null ? "-" : sec.domain?.id ?? "+"} className="cat-section" aria-labelledby={`cat-sec-${i}`}>
-                  {sec.domain !== null && <h2 id={`cat-sec-${i}`} className="cat-section-domain">{sec.domain ? <><a href={href({ page: "domain", id: sec.domain.id })}>{sec.domain.name}</a><span className="sr-only"> (domain)</span></> : NO_DOMAIN}</h2>}
+                  {/* a domain (or "Not in a domain") is a heading of its own; so are the teams in no tribe, after
+                      every domain, so that they never read as part of the domain before them */}
+                  <h2 id={`cat-sec-${i}`} className="cat-section-domain">{sec.domain ? <><a href={href({ page: "domain", id: sec.domain.id })}>{sec.domain.name}</a><span className="sr-only"> (domain)</span></> : sec.domain === null ? NO_TRIBE : NO_DOMAIN}</h2>
                   {sec.tribes.map((t, j) => (
                     <div key={t.tribe?.id ?? "-"} className="cat-section-tribe">
-                      <h3 id={sec.domain === null ? `cat-sec-${i}` : `cat-sec-${i}-${j}`} className="cat-section-name">{t.tribe ? <><a href={href({ page: "tribe", id: t.tribe.id })}>{t.tribe.name}</a><span className="sr-only"> (tribe)</span></> : NO_TRIBE}</h3>
+                      {t.tribe && <h3 id={`cat-sec-${i}-${j}`} className="cat-section-name"><a href={href({ page: "tribe", id: t.tribe.id })}>{t.tribe.name}</a><span className="sr-only"> (tribe)</span></h3>}
                       <ul>{t.teams.map((r) => row(r as Row, shown.indexOf(r as Row)))}</ul>
                     </div>
                   ))}
@@ -570,7 +588,8 @@ function ListTabs({ id, name, chosen, children }: { id: string; name: string; ch
   return (
     <div className="cat-kinds-group" data-group={id}>
       <span className="cat-kinds-name" id={`cat-kinds-${id}`}>{name}</span>
-      <div ref={box} className="tabs cat-kinds" role="tablist" aria-labelledby={`cat-kinds-${id}`}>{children}</div>
+      {/* tabIndex -1: a row that scrolls sideways is not a Tab stop of its own (the browser would make it one) */}
+      <div ref={box} className="tabs cat-kinds" role="tablist" aria-labelledby={`cat-kinds-${id}`} tabIndex={-1}>{children}</div>
     </div>
   );
 }

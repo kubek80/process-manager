@@ -105,7 +105,7 @@ export function PatternsEditor({ value, onChange }: { value: string[] | undefine
   if (!all.length) {
     return (
       <p className="muted small patterns-none">
-        No architecture patterns are listed yet.{canManageLists(perms) ? <> Add the ones your organisation uses in <a href={href({ page: "admin", section: "lists" })}>Admin › Lists</a>, under Architecture patterns.</> : null}
+        No architecture patterns are listed yet.{canManageLists(perms) ? <> Add the ones your organisation uses in <a href={href({ page: "admin", section: "lists", list: "patterns" })}>Admin › Lists</a>, under Architecture patterns.</> : null}
       </p>
     );
   }

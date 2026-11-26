@@ -95,6 +95,16 @@ test("a process is tagged on the editing screen, shows its patterns in its head,
   await pickFilter(page, "Architecture pattern", "API-first");
   await expect(page).toHaveURL(/#\/processes\?pattern=event-driven,api-first$/);
   await expect(titles(page)).toHaveText(["Onboard an API to Apigee", "Patterns demo process"]);
+  // the chosen value is read whole: under the long name when the two do not fit on one line
+  const dd = page.locator('[data-filter="pattern"]');
+  await expect(dd).toHaveClass(/\bstacked\b/);
+  const value = dd.locator(".filter-dd-value");
+  await expect(value).toHaveText("API-first, Event-driven");
+  expect(await value.evaluate((e) => e.scrollWidth - e.clientWidth)).toBeLessThanOrEqual(0);
+  const [name, shown] = [(await dd.locator(".filter-dd-name").boundingBox())!, (await value.boundingBox())!];
+  expect(shown.y).toBeGreaterThanOrEqual(name.y + name.height - 1);
+  // a short name and value stay on one line
+  await expect(page.locator('[data-filter="category"]')).not.toHaveClass(/\bstacked\b/);
   // a link carries it: the same results on a fresh page
   await open(page, "/processes?pattern=api-first");
   await expect(titles(page)).toHaveText(["Onboard an API to Apigee"]);
@@ -207,9 +217,10 @@ test("with no patterns listed, readers see nothing about them; whoever manages t
   await unfold(page, "Architecture patterns");
   const none = page.locator(".edit-fields .patterns-none");
   await expect(none).toHaveText("No architecture patterns are listed yet. Add the ones your organisation uses in Admin › Lists, under Architecture patterns.");
-  await expect(none.getByRole("link", { name: "Admin › Lists" })).toHaveAttribute("href", "#/admin/lists");
-  // Admin › Lists offers the empty list to fill
-  await open(page, "/admin/lists");
-  await tab(page, "Architecture patterns").click();
+  await expect(none.getByRole("link", { name: "Admin › Lists" })).toHaveAttribute("href", "#/admin/lists/patterns");
+  // the link opens Admin › Lists at the architecture patterns, the empty list to fill
+  await none.getByRole("link", { name: "Admin › Lists" }).click();
+  await expect(page).toHaveURL(/#\/admin\/lists\/patterns$/);
+  await expect(tab(page, "Architecture patterns")).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".cat-list")).toContainText("No architecture patterns yet.");
 });

@@ -33,6 +33,12 @@
 .filter-dd-name { flex: none; font-size: var(--fs-md); line-height: var(--lh-md); font-weight: var(--fw-medium); color: var(--text); }
 .filter-dd-value { flex: 1; min-width: 0; font-size: var(--fs-md); line-height: var(--lh-md); color: var(--text-3); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .filter-dd.chosen .filter-dd-button { background: var(--ocean-10); }
+/* a long name and the chosen value do not fit side by side: the value on a line of its own, whole */
+.filter-dd.stacked .filter-dd-button { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name n chevron" "value value value"; row-gap: 0; }
+.filter-dd.stacked .filter-dd-name { grid-area: name; justify-self: start; max-width: 100%; }
+.filter-dd.stacked .filter-dd-n { grid-area: n; }
+.filter-dd.stacked .filter-dd-chevron { grid-area: chevron; }
+.filter-dd.stacked .filter-dd-value { grid-area: value; justify-self: start; max-width: 100%; text-align: left; }
 .filter-dd.chosen .filter-dd-value { color: var(--accent); font-weight: var(--fw-medium); }
 .filter-dd-n { flex: none; min-width: 20px; height: 20px; padding: 0 6px; display: grid; place-items: center; border-radius: 999px; background: var(--accent-fill, var(--accent)); color: var(--accent-ink); font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); font-variant-numeric: tabular-nums; }
 .filter-dd-chevron { flex: none; color: var(--text-3); transition: transform .15s; }
