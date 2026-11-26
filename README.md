@@ -146,6 +146,12 @@ The first admins are named in the server setting `PM_ADMINS`.
 
 ![Admin › Lists: the paths, with their pictures and other names](docs/paths-list.png)
 
+![Processes narrowed down by an architecture pattern](docs/patterns.png)
+
+![Teams & tools: teams grouped under their domain and tribe](docs/tribes.png)
+
+![The page of a tribe: its domain, its teams and what they look after](docs/tribe.png)
+
 ![Admin › Theming with its preview](docs/theming.png)
 
 ![An alert on a page: review overdue, with what to do](docs/alert.png)
