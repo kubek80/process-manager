@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://process-manager.local/schema/catalog.schema.json",
   "title": "Catalog",
-  "description": "Shared lists that processes and standards pick from: application tiers, paths, environments, programming languages, teams, practices, platforms, categories and tools.",
+  "description": "Shared lists that processes and standards pick from: application tiers, paths, environments, programming languages, teams with the tribes and domains that group them, practices, platforms, categories, tools and architecture patterns.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -51,6 +51,20 @@
         "$ref": "#/$defs/team"
       }
     },
+    "tribes": {
+      "type": "array",
+      "description": "Tribes: groups of teams. A team may name the tribe it is part of; a tribe may name the domain it is part of. All optional: a tribe without teams or without a domain is fine. Empty or left out, teams are not grouped.",
+      "items": {
+        "$ref": "#/$defs/tribe"
+      }
+    },
+    "domains": {
+      "type": "array",
+      "description": "Domains: groups of tribes. A tribe may name the domain it is part of; a domain without tribes is fine. Empty or left out, tribes are not grouped.",
+      "items": {
+        "$ref": "#/$defs/domain"
+      }
+    },
     "practices": {
       "type": "array",
       "description": "Practices: disciplines such as cyber security or engineering that agree how work is done. Processes and standards can belong to one. Managed separately from teams.",
@@ -77,6 +91,13 @@
       "description": "Systems used in steps.",
       "items": {
         "$ref": "#/$defs/tool"
+      }
+    },
+    "patterns": {
+      "type": "array",
+      "description": "Architecture patterns: ways systems are built, such as microservices or event-driven. Processes and standards are tagged with the patterns they are about. An organisation names its own; empty or left out, nothing is tagged.",
+      "items": {
+        "$ref": "#/$defs/pattern"
       }
     }
   },
@@ -155,6 +176,40 @@
         }
       }
     },
+    "pattern": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "alsoCalled": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "\\S"
+          },
+          "description": "Other names people use for this pattern, e.g. [\"event-based\", \"EDA\"] for event-driven: searching for one of them finds what is tagged with this pattern. At most 5, each written once."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
     "team": {
       "type": "object",
       "additionalProperties": false,
@@ -178,6 +233,58 @@
         },
         "contacts": {
           "$ref": "#/$defs/contacts"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "tribe": {
+          "$ref": "#/$defs/slug",
+          "description": "Id of the tribe (from the tribes list) this team is part of. Leave out when it is part of none."
+        }
+      }
+    },
+    "tribe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "domain": {
+          "$ref": "#/$defs/slug",
+          "description": "Id of the domain (from the domains list) this tribe is part of. Leave out when it is part of none."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 600
+        }
+      }
+    },
+    "domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
         },
         "description": {
           "type": "string",

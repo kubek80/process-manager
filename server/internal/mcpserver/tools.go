@@ -454,16 +454,17 @@ type Group struct {
 
 // Catalog is the answer of get_catalog.
 type Catalog struct {
-	Teams        []Group   `json:"teams" jsonschema:"own processes and standards; members are its owners"`
-	Practices    []Group   `json:"practices" jsonschema:"disciplines such as security; members may change what belongs to it"`
-	Platforms    []Group   `json:"platforms" jsonschema:"what teams build on; members may change what belongs to it"`
-	Categories   []Ref     `json:"categories"`
-	Tools        []Ref     `json:"tools" jsonschema:"systems used in steps, with their link"`
-	Tiers        []Ref     `json:"tiers" jsonschema:"application tiers, most critical first"`
-	Paths        []PathRef `json:"paths" jsonschema:"the paths a process or standard can be meant for: greenfield, brownfield, paved path (golden path) and any the company added"`
-	Environments []Ref     `json:"environments"`
-	Languages    []Ref     `json:"languages"`
-	MembersShown bool      `json:"membersShown" jsonschema:"false: members are only given to callers that present the shared secret"`
+	Teams        []Group      `json:"teams" jsonschema:"own processes and standards; members are its owners"`
+	Practices    []Group      `json:"practices" jsonschema:"disciplines such as security; members may change what belongs to it"`
+	Platforms    []Group      `json:"platforms" jsonschema:"what teams build on; members may change what belongs to it"`
+	Categories   []Ref        `json:"categories"`
+	Tools        []Ref        `json:"tools" jsonschema:"systems used in steps, with their link"`
+	Tiers        []Ref        `json:"tiers" jsonschema:"application tiers, most critical first"`
+	Paths        []PathRef    `json:"paths" jsonschema:"the paths a process or standard can be meant for: greenfield, brownfield, paved path (golden path) and any the company added"`
+	Environments []Ref        `json:"environments"`
+	Languages    []Ref        `json:"languages"`
+	Patterns     []PatternRef `json:"patterns" jsonschema:"the architecture patterns processes and standards can be tagged with (such as event-driven or microservices); empty when the company lists none"`
+	MembersShown bool         `json:"membersShown" jsonschema:"false: members are only given to callers that present the shared secret"`
 }
 
 func plain(list []docs.Named) []Ref {
@@ -519,6 +520,7 @@ func (s *Server) catalog(ctx context.Context) (Catalog, error) {
 		Teams: groups(lists.Teams, rbac.Owner, ""), Practices: groups(lists.Practices, rbac.PracticeOwner, rbac.PracticeMember), Platforms: groups(lists.Platforms, rbac.PlatformOwner, rbac.PlatformMember),
 		Categories: plain(lists.Categories), Tools: plain(lists.Tools), Tiers: plain(lists.Tiers), Environments: plain(lists.Environments), Languages: plain(lists.Languages),
 		Paths:        pathRefs(lists.Paths, idsOf(lists.Paths)),
+		Patterns:     patternRefs(lists.Patterns, idsOf(lists.Patterns)),
 		MembersShown: show,
 	}, nil
 }
@@ -610,10 +612,11 @@ func myStepsText(m MySteps) string {
 }
 
 func catalogText(c Catalog) string {
-	return fmt.Sprintf("%s, %s, %s, %s, %s, %s, %s, %s, %s.",
+	return fmt.Sprintf("%s, %s, %s, %s, %s, %s, %s, %s, %s, %s.",
 		plural(len(c.Teams), "team", "teams"), plural(len(c.Practices), "practice", "practices"), plural(len(c.Platforms), "platform", "platforms"),
 		plural(len(c.Categories), "category", "categories"), plural(len(c.Tools), "tool", "tools"), plural(len(c.Tiers), "tier", "tiers"),
-		plural(len(c.Paths), "path", "paths"), plural(len(c.Environments), "environment", "environments"), plural(len(c.Languages), "language", "languages"))
+		plural(len(c.Paths), "path", "paths"), plural(len(c.Environments), "environment", "environments"), plural(len(c.Languages), "language", "languages"),
+		plural(len(c.Patterns), "architecture pattern", "architecture patterns"))
 }
 
 // idsOf is the ids of a list, in its order.

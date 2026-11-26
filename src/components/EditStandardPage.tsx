@@ -12,7 +12,7 @@ import { useCatalog } from "../lib/catalog";
 import { statusOf } from "../lib/lifecycle";
 import { href } from "../lib/store";
 import { openCount } from "./Feedback";
-import { PreviewFacts } from "./Governance";
+import { PreviewFacts, TeamOptions } from "./Governance";
 import { EditFrame, EditSection, focusSelectedInOutline, ItemIssues, Outline, focusFirstField } from "./EditFrame";
 import { EditSession, type Session } from "./EditSession";
 import { NoRight, StartHere, type StartItem } from "./EditProcessPage";
@@ -152,7 +152,7 @@ function StandardEditor({ s, standard, all, processes, feedback, item }: {
               onFocus={(e) => { if (draft.summary === EXAMPLE.standardSummary) e.target.select(); }} /></Field>
             <Field label="Issued by" hint="The team that reviews it, answers feedback and grants exceptions">
               <select value={draft.owner} onChange={(e) => set({ owner: e.target.value })}>
-                {catalog.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                <TeamOptions />
                 {!catalog.teams.some((t) => t.id === draft.owner) && <option value={draft.owner}>{draft.owner} (not in the list)</option>}
               </select>
             </Field>

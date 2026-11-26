@@ -47,6 +47,8 @@ export interface Governed {
   platform?: string;
   /** Ids of the paths it is for (greenfield, brownfield, paved path…); none: whatever the path. */
   paths?: string[];
+  /** Ids of the architecture patterns it is about (event-driven, microservices…): a tag, never "meant only for". */
+  patterns?: string[];
   tiers?: string[];
   languages?: string[];
   environments?: string[];
@@ -102,6 +104,11 @@ export type PathSymbol = "sprout" | "buildings" | "road" | "trail" | "bridge" | 
 /** A path a process or standard can be for: greenfield, brownfield, paved path, or one an organisation adds. */
 /** `alsoCalled`: other names people use for it ("golden path"), found by the search. */
 export interface PathEntry { id: string; name: string; alsoCalled?: string[]; symbol?: PathSymbol; description?: string }
+/**
+ * An architecture pattern processes and standards can be tagged with (microservices, event-driven…);
+ * `alsoCalled`: other names people use for it ("EDA"), found by the search.
+ */
+export interface PatternEntry { id: string; name: string; alsoCalled?: string[]; description?: string }
 export interface Environment { id: string; name: string; description?: string }
 /** `icon`: id of an uploaded square image (see `iconUrl` in the store). */
 export interface Language { id: string; name: string; icon?: string; description?: string }
@@ -124,7 +131,12 @@ export interface Contacts {
   /** The form where one asks them for something. */
   form?: string;
 }
-export interface Team { id: string; name: string; contact?: string; contacts?: Contacts; description?: string }
+/** `tribe`: the tribe it is part of (optional). */
+export interface Team { id: string; name: string; contact?: string; contacts?: Contacts; description?: string; tribe?: string }
+/** A group of teams; `domain`: the domain it is part of (optional). */
+export interface Tribe { id: string; name: string; description?: string; domain?: string }
+/** A group of tribes. */
+export interface Domain { id: string; name: string; description?: string }
 export interface Practice { id: string; name: string; contact?: string; contacts?: Contacts; description?: string }
 export interface Platform { id: string; name: string; contact?: string; contacts?: Contacts; description?: string }
 export interface Category { id: string; name: string; description?: string }
@@ -137,6 +149,11 @@ export interface Catalog {
   tools: Tool[];
   /** The paths; missing in lists stored before there were paths (the loader fills in an empty one). */
   paths?: PathEntry[];
+  /** The architecture patterns; missing in lists that never had any (the loader fills in an empty one). */
+  patterns?: PatternEntry[];
+  /** The tribes that group teams, and the domains that group tribes; missing in lists that never had any. */
+  tribes?: Tribe[];
+  domains?: Domain[];
 }
 
 export type TargetKind = "process" | "standard";

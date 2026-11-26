@@ -10,7 +10,7 @@ import (
 
 // The format of a document is checked against the JSON schema. This file checks what a schema
 // cannot: that the parts of a document fit together, and that it only names tiers, paths,
-// languages, environments, categories, practices and platforms that exist. These are the same rules the checker in the browser treats as
+// architecture patterns, languages, environments, categories, practices and platforms that exist. These are the same rules the checker in the browser treats as
 // errors (src/lib/validate.ts); what the browser only warns about is allowed here too.
 
 type dims struct {
@@ -29,6 +29,20 @@ func (p paths) check(l Lists, add func(string, ...any)) {
 	for i, id := range p.Paths {
 		if !has(l.Paths, id) {
 			add("paths[%d]: %q is not a known path. Known paths: %s", i, id, ids(l.Paths))
+		}
+	}
+}
+
+// patterns are the architecture patterns a whole process or standard is tagged with (event-driven,
+// microservices…): a tag, never "meant only for". A requirement has none of its own.
+type patterns struct {
+	Patterns []string `json:"patterns"`
+}
+
+func (p patterns) check(l Lists, add func(string, ...any)) {
+	for i, id := range p.Patterns {
+		if !has(l.Patterns, id) {
+			add("patterns[%d]: %q is not a known architecture pattern. Known architecture patterns: %s", i, id, ids(l.Patterns))
 		}
 	}
 }
@@ -74,6 +88,7 @@ type processShape struct {
 	lifecycle
 	dims
 	paths
+	patterns
 	belongs
 	Owner         string   `json:"owner"`
 	ReplacedBy    string   `json:"replacedBy"`
@@ -103,6 +118,7 @@ type standardShape struct {
 	lifecycle
 	dims
 	paths
+	patterns
 	belongs
 	Owner              string `json:"owner"`
 	ReplacedBy         string `json:"replacedBy"`
@@ -165,6 +181,7 @@ func Check(kind string, body []byte, l Lists) error {
 		}
 		p.dims.check("", l, add)
 		p.paths.check(l, add)
+		p.patterns.check(l, add)
 		p.belongs.check(l, add)
 		p.lifecycle.check(add)
 		if p.ReplacedBy != "" && p.ReplacedBy == p.ID {
@@ -230,6 +247,7 @@ func Check(kind string, body []byte, l Lists) error {
 		}
 		s.dims.check("", l, add)
 		s.paths.check(l, add)
+		s.patterns.check(l, add)
 		s.belongs.check(l, add)
 		s.lifecycle.check(add)
 		if s.ReplacedBy != "" && s.ReplacedBy == s.ID {
@@ -262,7 +280,11 @@ func Check(kind string, body []byte, l Lists) error {
 					default:
 						both = fmt.Sprintf(" (“%s” and “%s”)", a, b)
 					}
-					add("%s[%d].id: Two %s have the id “%s”%s: remove one of them.", key, i, key, n.ID, both)
+					many := key
+					if key == "patterns" {
+						many = "architecture patterns" // LIST_WORDS in src/lib/validate.ts
+					}
+					add("%s[%d].id: Two %s have the id “%s”%s: remove one of them.", key, i, many, n.ID, both)
 					continue
 				}
 				first[n.ID] = n.Name
@@ -278,6 +300,19 @@ func Check(kind string, body []byte, l Lists) error {
 			}
 		}
 		problems = append(problems, otherNameClashes(c.Paths)...)
+		problems = append(problems, otherPatternNameClashes(c.Patterns)...)
+		// a team's tribe and a tribe's domain are entries of their lists; all of it is optional
+		// (unknownGroupSentence in src/lib/validate.ts says the same)
+		for i, t := range c.Teams {
+			if t.Tribe != "" && !has(c.Tribes, t.Tribe) {
+				add("teams[%d].tribe: %s", i, unknownGroup("team", t, "tribe"))
+			}
+		}
+		for i, t := range c.Tribes {
+			if t.Domain != "" && !has(c.Domains, t.Domain) {
+				add("tribes[%d].domain: %s", i, unknownGroup("tribe", t, "domain"))
+			}
+		}
 		sort.Strings(problems) // the lists are visited in no fixed order
 	}
 	if len(problems) == 0 {
@@ -289,6 +324,16 @@ func Check(kind string, body []byte, l Lists) error {
 		problems = problems[:3]
 	}
 	return fmt.Errorf("%w: %s%s", ErrInvalid, strings.Join(problems, "; "), more)
+}
+
+// unknownGroup: a team that names a tribe, or a tribe that names a domain, the lists do not have.
+func unknownGroup(kind string, n Named, of string) string {
+	id := n.Tribe
+	if of == "domain" {
+		id = n.Domain
+	}
+	who := EntryWords(kind, n)
+	return fmt.Sprintf("%s%s is part of the %s “%s”, which is not in the list of %ss: choose another %s, or none.", strings.ToUpper(who[:1]), who[1:], of, id, of, of)
 }
 
 // EntryWords names an entry of the lists in a sentence as the app does (listEntryWords in
@@ -304,7 +349,7 @@ func EntryWords(noun string, n Named) string {
 }
 
 // ListKeys are the keys of the lists in the catalog document, in the order it has them.
-var ListKeys = []string{"tiers", "paths", "environments", "languages", "teams", "practices", "platforms", "categories", "tools"}
+var ListKeys = []string{"tiers", "paths", "environments", "languages", "teams", "practices", "platforms", "categories", "tools", "patterns", "tribes", "domains"}
 
 // Uses is what one process or standard takes from the lists and which other documents it
 // names. Keys of Lists: see ListKeys.
@@ -350,6 +395,7 @@ func UsesOf(kind string, body []byte) Uses {
 		}
 		dim(p.dims)
 		list("paths", p.Paths...)
+		list("patterns", p.Patterns...)
 		where(p.belongs)
 		list("teams", p.Owner)
 		doc(Process, p.ReplacedBy)
@@ -373,6 +419,7 @@ func UsesOf(kind string, body []byte) Uses {
 		}
 		dim(s.dims)
 		list("paths", s.Paths...)
+		list("patterns", s.Patterns...)
 		where(s.belongs)
 		list("teams", s.Owner)
 		doc(Standard, s.ReplacedBy)

@@ -11,6 +11,9 @@
   "paths": [
     "brownfield"
   ],
+  "patterns": [
+    "microservices"
+  ],
   "estimatedDuration": "2-4 weeks",
   "tags": [
     "kubernetes",

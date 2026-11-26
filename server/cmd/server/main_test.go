@@ -176,6 +176,15 @@ func TestExportThenImportRoundTrip(t *testing.T) {
 	if n, _ := fresh.docs.Count(ctx); n != 11 {
 		t.Fatalf("round trip: %d documents", n)
 	}
+	// the architecture patterns travel with the lists and with the documents tagged with them
+	lists, err := fresh.docs.Lists(ctx)
+	if err != nil || len(lists.Patterns) != 6 || lists.Patterns[2].ID != "event-driven" || lists.Patterns[2].AlsoCalled[1] != "EDA" {
+		t.Fatalf("patterns after the round trip: %+v %v", lists.Patterns, err)
+	}
+	apigee, err := os.ReadFile(filepath.Join(out, "processes/onboard-api-to-apigee.json"))
+	if err != nil || !strings.Contains(string(apigee), `"patterns": [`+"\n"+`    "api-first"`) {
+		t.Fatalf("the exported process lost its patterns: %s %v", apigee, err)
+	}
 }
 
 func TestRunRefusesBadConfiguration(t *testing.T) {

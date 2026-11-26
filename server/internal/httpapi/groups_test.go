@@ -409,12 +409,13 @@ func TestTheDetailsOfAGroupAreChangedByItsOwners(t *testing.T) {
 	if !strings.Contains(string(before.Body), gcpBefore) || strings.Replace(string(before.Body), gcpBefore, gcpAfter, 1) != string(after.Body) {
 		t.Fatalf("the lists changed elsewhere:\n%s", after.Body)
 	}
-	// null or "" removes a field; the description of a team by one of its Owners
+	// null or "" removes a field; the description of a team by one of its Owners (its tribe stays)
 	status, out = e.as(casey).do("PUT", "/api/groups/teams/cloud-platform-team/details", `{"contact": null, "contacts": {}, "description": ""}`)
 	wantStatus(t, status, 200, out)
 	if !strings.Contains(string(e.version(docs.Catalog, docs.CatalogID).Body), `{
       "id": "cloud-platform-team",
-      "name": "Cloud Platform team"
+      "name": "Cloud Platform team",
+      "tribe": "cloud-tribe"
     }`) {
 		t.Fatalf("%s", e.version(docs.Catalog, docs.CatalogID).Body)
 	}

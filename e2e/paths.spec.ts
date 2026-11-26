@@ -40,10 +40,10 @@ test.afterEach(async ({ request }) => {
   for (const [kind, id] of [["processes", PROC], ["standards", STD]]) await request.delete(`/api/${kind}/${id}`, { headers: CSRF });
 });
 
-test("Admin › Lists has Paths as its ninth list: a path with a picture and other names, a used one that cannot be removed", async ({ page }) => {
+test("Admin › Lists has Paths among where it applies: a path with a picture and other names, a used one that cannot be removed", async ({ page }) => {
   await signIn(page, ALEX);
   await open(page, "/admin/lists");
-  await expect(page.getByRole("tab")).toHaveText([/^Teams/, /^Practices/, /^Platforms/, /^Categories/, /^Tools/, /^Application tiers/, /^Paths/, /^Environments/, /^Languages/]);
+  await expect(page.getByRole("tablist", { name: "Where it applies" }).getByRole("tab")).toHaveText([/^Application tiers/, /^Paths/, /^Environments/, /^Languages/]);
   await tab(page, "Paths").click();
   await expect(page.locator(".cat-item .cat-name, .cat-item strong").first()).toBeVisible();
   for (const name of ["Greenfield", "Brownfield", "Paved path"]) await expect(item(page, name)).toBeVisible();

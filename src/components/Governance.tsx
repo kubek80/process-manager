@@ -1,9 +1,12 @@
 import type { ReactNode } from "react";
 import { Alert } from "./Alert";
-import { ArrowLeft, CalendarCheck, Code2, Compass, Layers, Rows3, Server } from "lucide-react";
+import { ArrowLeft, CalendarCheck, Code2, Compass, Layers, Rows3, Server, Shapes } from "lucide-react";
 import type { DocMeta, Governed, Rigour, TargetKind } from "../types";
 import { environmentLabel, languageLabel, ownedBy, platformName, practiceName, tierLabel, useCatalog } from "../lib/catalog";
-import { belongsChoice, belongsRefused, placesOf, wouldLoseEdit, type Belongs, type BelongsField } from "../lib/rights";
+import { belongsChoice, belongsRefused, canManageLists, placesOf, wouldLoseEdit, type Belongs, type BelongsField } from "../lib/rights";
+import { patternLabel, patternsOf, patternTitle } from "../lib/patterns";
+import { teamChoices } from "../lib/groups";
+import { href } from "../lib/store";
 import { usePerms } from "../lib/session";
 import type { Profile } from "../lib/edit";
 import { quietReview, statusOf, type ReviewInfo } from "../lib/lifecycle";
@@ -86,6 +89,58 @@ export function PathsEditor({ value, onChange }: { value: string[] | undefined; 
   );
 }
 
+/**
+ * Chips to tag a process or standard with the architecture patterns it is about: the same control
+ * as the tiers and the paths. A tag hides nothing: nothing selected means it is not tagged. A
+ * pattern it names that is no longer in the list still shows (under its id), so that it can be
+ * taken away. With no patterns listed, whoever may manage the lists is told where they are added;
+ * the section is not offered to anybody else (`showsPatterns`).
+ */
+export function PatternsEditor({ value, onChange }: { value: string[] | undefined; onChange: (patterns: string[] | undefined) => void }) {
+  const { catalog } = useCatalog();
+  const perms = usePerms();
+  const picked = value ?? [];
+  const all: { id: string; name: string; alsoCalled?: string[]; description?: string }[] = [...(catalog.patterns ?? [])];
+  for (const id of picked) if (!all.some((x) => x.id === id)) all.push({ id, name: `${id} (not in the list)` });
+  if (!all.length) {
+    return (
+      <p className="muted small patterns-none">
+        No architecture patterns are listed yet.{canManageLists(perms) ? <> Add the ones your organisation uses in <a href={href({ page: "admin", section: "lists" })}>Admin › Lists</a>, under Architecture patterns.</> : null}
+      </p>
+    );
+  }
+  return (
+    <div className="field">
+      <span className="field-label">Architecture patterns<em>{picked.length ? "tagged with the selected patterns" : "not tagged"}</em></span>
+      <div className="chips" role="group" aria-label="Architecture patterns">
+        {all.map((x) => (
+          <button key={x.id} className={`chip ${picked.includes(x.id) ? "on" : ""}`} aria-pressed={picked.includes(x.id)} title={x.description ? `${patternTitle(x)}: ${x.description}` : patternTitle(x)}
+            onClick={() => {
+              const next = all.map((y) => y.id).filter((id) => (id === x.id ? !picked.includes(id) : picked.includes(id)));
+              onChange(next.length ? next : undefined);
+            }}>{x.name}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The teams to choose from (the owning team, the team that issues a standard), as options of a
+ * choice box: grouped by tribe where the lists have tribes ("Payments (Digital Channels)", then
+ * "Not in a tribe"), else as one list.
+ */
+export function TeamOptions() {
+  const { catalog } = useCatalog();
+  return (
+    <>
+      {teamChoices(catalog).map((g) => (g.label
+        ? <optgroup key={g.label} label={g.label}>{g.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
+        : g.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)))}
+    </>
+  );
+}
+
 /** "My application is…": hides what does not apply to the reader. */
 export function ProfileFilter({ value, onChange }: { value: Profile; onChange: (p: Profile) => void }) {
   const { catalog } = useCatalog();
@@ -156,7 +211,10 @@ export function ReviewMark({ review }: { review: ReviewInfo }) {
   return <span className={`card-mark ${review.state === "overdue" ? "bad" : "warn"}`} data-line="review">{review.label}</span>;
 }
 
-/** Where it applies and who looks after it, as the cards say it: platform, practice, tiers, and environments and languages when narrowed. */
+/**
+ * Where it applies and who looks after it, as the cards say it: platform, practice, tiers, and
+ * environments and languages when narrowed; then the architecture patterns it is tagged with.
+ */
 export function WhereFacts({ doc, links }: { doc: Governed; links?: boolean }) {
   const { catalog } = useCatalog();
   // on the reader's page the platform and the practice lead to their pages (not in the editing preview, which is a button)
@@ -168,6 +226,9 @@ export function WhereFacts({ doc, links }: { doc: Governed; links?: boolean }) {
       <Fact icon={Rows3} label="Application tiers">{tierLabel(catalog, doc.tiers)}</Fact>
       {!!doc.environments?.length && <Fact icon={Server} label="Environments">{environmentLabel(catalog, doc.environments)}</Fact>}
       {!!doc.languages?.length && <Fact icon={Code2} label="Languages">{languageLabel(catalog, doc.languages)}</Fact>}
+      {patternsOf(catalog.patterns, doc.patterns).length > 0 && (
+        <Fact icon={Shapes} label="Architecture patterns" title={`Architecture patterns: ${patternsOf(catalog.patterns, doc.patterns).map(patternTitle).join("; ")}`}>{patternLabel(catalog, doc.patterns)}</Fact>
+      )}
     </>
   );
 }

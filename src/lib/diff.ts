@@ -43,6 +43,7 @@ const FIELD: Record<string, string> = {
   duration: "typical time", outcome: "result", subProcessId: "sub-process", next: "what comes next",
   level: "level", statement: "the rule", rationale: "why", guidance: "steps to comply", examples: "examples", verification: "how it is checked",
   processId: "process that helps", id: "id", name: "name", teamId: "team", lookFor: "signs of a violation", paths: "files", label: "name of the answer", to: "goes to",
+  patterns: "architecture patterns",
 };
 /** Where a field is called otherwise in one place. */
 const IN: Partial<Record<FieldContext, Record<string, string>>> = {

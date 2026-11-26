@@ -42,6 +42,7 @@ type common struct {
 	UpdatedAt    string     `json:"updatedAt"`
 	Tags         []string   `json:"tags"`
 	Paths        []string   `json:"paths"`
+	Patterns     []string   `json:"patterns"`
 	Tiers        []string   `json:"tiers"`
 	Environments []string   `json:"environments"`
 	Languages    []string   `json:"languages"`
@@ -249,23 +250,24 @@ type Resource struct {
 
 // Header is what every answer says about a process or standard.
 type Header struct {
-	Kind       string    `json:"kind" jsonschema:"process or standard"`
-	ID         string    `json:"id"`
-	Title      string    `json:"title"`
-	Summary    string    `json:"summary"`
-	Version    int       `json:"version" jsonschema:"the stored version; cite it"`
-	Status     string    `json:"status" jsonschema:"active or deprecated (retired)"`
-	Retired    bool      `json:"retired" jsonschema:"true: do not follow it; use replacedBy when given"`
-	ReplacedBy *DocRef   `json:"replacedBy,omitempty"`
-	Owner      *Ref      `json:"owner,omitempty" jsonschema:"the team that owns it, with its contact"`
-	Category   *Ref      `json:"category,omitempty"`
-	Practice   *Ref      `json:"practice,omitempty"`
-	Platform   *Ref      `json:"platform,omitempty"`
-	AppliesTo  AppliesTo `json:"appliesTo"`
-	Paths      []PathRef `json:"paths" jsonschema:"the paths it is meant for (greenfield: something new is built; brownfield: something that exists is changed or moved; paved path, also called the golden path: the ready-made, supported way). A document names paths only when it is meant only for that kind of work; empty: it applies whatever the path"`
-	Review     Review    `json:"review"`
-	UpdatedAt  string    `json:"updatedAt,omitempty"`
-	Link       string    `json:"link,omitempty" jsonschema:"the page in the portal"`
+	Kind       string       `json:"kind" jsonschema:"process or standard"`
+	ID         string       `json:"id"`
+	Title      string       `json:"title"`
+	Summary    string       `json:"summary"`
+	Version    int          `json:"version" jsonschema:"the stored version; cite it"`
+	Status     string       `json:"status" jsonschema:"active or deprecated (retired)"`
+	Retired    bool         `json:"retired" jsonschema:"true: do not follow it; use replacedBy when given"`
+	ReplacedBy *DocRef      `json:"replacedBy,omitempty"`
+	Owner      *Ref         `json:"owner,omitempty" jsonschema:"the team that owns it, with its contact"`
+	Category   *Ref         `json:"category,omitempty"`
+	Practice   *Ref         `json:"practice,omitempty"`
+	Platform   *Ref         `json:"platform,omitempty"`
+	AppliesTo  AppliesTo    `json:"appliesTo"`
+	Paths      []PathRef    `json:"paths" jsonschema:"the paths it is meant for (greenfield: something new is built; brownfield: something that exists is changed or moved; paved path, also called the golden path: the ready-made, supported way). A document names paths only when it is meant only for that kind of work; empty: it applies whatever the path"`
+	Patterns   []PatternRef `json:"patterns" jsonschema:"the architecture patterns it is tagged with (such as event-driven or microservices): it is about systems built that way. A tag only, never a limit: empty means it is not tagged, not that it does not apply"`
+	Review     Review       `json:"review"`
+	UpdatedAt  string       `json:"updatedAt,omitempty"`
+	Link       string       `json:"link,omitempty" jsonschema:"the page in the portal"`
 }
 
 // PathRef is a path a document is meant for.
@@ -274,6 +276,22 @@ type PathRef struct {
 	Name        string   `json:"name"`
 	AlsoCalled  []string `json:"alsoCalled,omitempty" jsonschema:"other words for it, e.g. golden path for the paved path"`
 	Description string   `json:"description,omitempty"`
+}
+
+// PatternRef is an architecture pattern a document is tagged with.
+type PatternRef struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	AlsoCalled  []string `json:"alsoCalled,omitempty" jsonschema:"other words for it, e.g. EDA for event-driven"`
+	Description string   `json:"description,omitempty"`
+}
+
+func patternRefs(list []docs.Named, ids []string) []PatternRef {
+	out := []PatternRef{}
+	for _, r := range pathRefs(list, ids) {
+		out = append(out, PatternRef(r))
+	}
+	return out
 }
 
 func pathRefs(list []docs.Named, ids []string) []PathRef {
@@ -349,6 +367,7 @@ func (s *Server) header(l *library, e *entry) Header {
 		Owner: ref(l.lists.Teams, c.Owner), Category: ref(l.lists.Categories, c.Category), Practice: ref(l.lists.Practices, c.Practice), Platform: ref(l.lists.Platforms, c.Platform),
 		AppliesTo: AppliesTo{Tiers: refs(l.lists.Tiers, c.Tiers), Environments: refs(l.lists.Environments, c.Environments), Languages: refs(l.lists.Languages, c.Languages)},
 		Paths:     pathRefs(l.lists.Paths, c.Paths),
+		Patterns:  patternRefs(l.lists.Patterns, c.Patterns),
 		Review:    reviewOf(e, s.o.Now()), UpdatedAt: c.UpdatedAt, Link: s.link(e.kind, e.doc.ID),
 	}
 	if h.Retired {

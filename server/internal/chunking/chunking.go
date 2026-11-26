@@ -136,6 +136,8 @@ type common struct {
 	Tags     []string `json:"tags"`
 	// Paths: what the whole document is for (greenfield, paved path…); a requirement has none.
 	Paths []string `json:"paths"`
+	// Patterns: the architecture patterns the whole document is tagged with; a requirement has none.
+	Patterns []string `json:"patterns"`
 	where
 }
 
@@ -414,8 +416,10 @@ func (b *builder) name(list []docs.Named, id string) string {
 	return docs.Name(list, id)
 }
 
-// belongs: tags, category, platform, practice, owning team and the paths it is for, by name
-// (a path with what else it is called: "Paved path (also called golden path, paved road)").
+// belongs: tags, category, platform, practice, owning team, the paths it is for and the
+// architecture patterns it is tagged with, by name (each with what else it is called: "Paved path
+// (also called golden path, paved road)", "Event-driven (also called EDA)"). A document without
+// patterns gets no line, so its text, and its vector, stay as they were.
 func (b *builder) belongs(c common) []section {
 	l := b.lists
 	return []section{
@@ -425,6 +429,7 @@ func (b *builder) belongs(c common) []section {
 		{text: line("Practice", b.name(l.Practices, c.Practice))},
 		{text: line("Owned by", b.name(l.Teams, c.Owner))},
 		{text: line("Meant for the paths", docs.PathNames(l.Paths, c.Paths))},
+		{text: line("Architecture patterns", docs.PatternNames(l.Patterns, c.Patterns))},
 	}
 }
 

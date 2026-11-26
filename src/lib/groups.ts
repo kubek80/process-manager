@@ -1,4 +1,4 @@
-import type { Catalog, Contacts, Platform, Practice, Team } from "../types";
+import type { Catalog, Contacts, Domain, Platform, Practice, Team, Tribe } from "../types";
 import type { GroupKind, GroupRank } from "./members";
 import { looksLikeEmail } from "./members";
 import type { Filters } from "./search";
@@ -96,6 +96,7 @@ export const tidyLists = (c: Catalog): Catalog => ({
   teams: c.teams.map(tidyListEntry), practices: (c.practices ?? []).map(tidyListEntry), platforms: (c.platforms ?? []).map(tidyListEntry),
   categories: (c.categories ?? []).map(tidyListEntry), tools: c.tools.map(tidyListEntry), tiers: c.tiers.map(tidyListEntry),
   environments: c.environments.map(tidyListEntry), languages: c.languages.map(tidyListEntry), paths: (c.paths ?? []).map(tidyListEntry),
+  patterns: (c.patterns ?? []).map(tidyListEntry), tribes: (c.tribes ?? []).map(tidyListEntry), domains: (c.domains ?? []).map(tidyListEntry),
 });
 
 /**
@@ -236,4 +237,94 @@ export function addedNote(o: { note?: string; self: boolean; selfRank?: GroupRan
 export function nameFromMembers(members: readonly { email: string; name?: string }[] | undefined, email: string): string | undefined {
   const e = email.trim().toLowerCase();
   return members?.find((m) => m.email.toLowerCase() === e && !!m.name?.trim())?.name?.trim();
+}
+
+// ---------- tribes and domains: optional groups of teams
+
+/**
+ * Teams can be grouped in tribes, and tribes in domains. Everything is optional: a team without a
+ * tribe, a tribe without a domain, a tribe without teams and a domain without tribes are all fine.
+ * Tribes and domains give no rights and have no page of their own; they only group what readers see.
+ */
+
+/** The tribe a team is part of; undefined without one, or when it names one the lists do not have. */
+export const tribeOf = (c: Pick<Catalog, "tribes">, team: { tribe?: string } | undefined): Tribe | undefined =>
+  team?.tribe ? (c.tribes ?? []).find((t) => t.id === team.tribe) : undefined;
+/** The domain a tribe is part of, the same way. */
+export const domainOf = (c: Pick<Catalog, "domains">, tribe: { domain?: string } | undefined): Domain | undefined =>
+  tribe?.domain ? (c.domains ?? []).find((d) => d.id === tribe.domain) : undefined;
+
+/** The teams that name a tribe, by name. */
+export const teamsOfTribe = (c: Pick<Catalog, "teams">, id: string): Team[] =>
+  c.teams.filter((t) => t.tribe === id).sort(byName);
+/** The tribes that name a domain, by name. */
+export const tribesOfDomain = (c: Pick<Catalog, "tribes">, id: string): Tribe[] =>
+  (c.tribes ?? []).filter((t) => t.domain === id).sort(byName);
+
+const byName = (a: { id: string; name: string }, b: { id: string; name: string }) =>
+  a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.id.localeCompare(b.id);
+
+/** One piece of the sentence that says where a team belongs; an entry of the lists links to it. */
+export interface PartOfPiece { text: string; list?: "tribes" | "domains"; id?: string }
+
+/**
+ * Where a team belongs, as the head of its page says it: "Part of the tribe Payments, in the
+ * domain Digital Channels", "Part of the tribe Payments" (a tribe without a domain); nothing for a
+ * team without a tribe. The names are pieces of their own, so the page can link them to the lists.
+ */
+export function partOf(c: Pick<Catalog, "tribes" | "domains">, team: { tribe?: string } | undefined): PartOfPiece[] {
+  const tribe = tribeOf(c, team);
+  if (!tribe) return [];
+  const domain = domainOf(c, tribe);
+  return [
+    { text: "Part of the tribe " }, { text: tribe.name, list: "tribes", id: tribe.id },
+    ...(domain ? [{ text: ", in the domain " }, { text: domain.name, list: "domains" as const, id: domain.id }] : []),
+  ];
+}
+/** The same as one plain sentence. */
+export const partOfText = (c: Pick<Catalog, "tribes" | "domains">, team: { tribe?: string } | undefined) => partOf(c, team).map((p) => p.text).join("");
+
+/** A heading of the teams in Teams & tools: a domain, a tribe, or what has none. */
+export interface TeamSection {
+  /** The domain, undefined for the tribes that are in none; null for the teams that are in no tribe. */
+  domain?: Domain | null;
+  tribes: { tribe?: Tribe; teams: Team[] }[];
+}
+/** What the headings say where there is no domain or no tribe. */
+export const NO_DOMAIN = "Not in a domain";
+export const NO_TRIBE = "Not in a tribe";
+
+/**
+ * The teams of Teams & tools grouped under their domain and tribe: the domains by name, each with
+ * its tribes by name; then the tribes in no domain; the teams in no tribe last. A tribe or domain
+ * none of the `teams` is in is left out. With no tribes in the lists, one section with all the
+ * teams as they are (the page then looks as it does without tribes). `teams` keep their order
+ * within a tribe.
+ */
+export function teamSections(c: Pick<Catalog, "tribes" | "domains">, teams: Team[]): TeamSection[] {
+  if (!(c.tribes ?? []).length) return [{ domain: null, tribes: [{ teams }] }];
+  const out: TeamSection[] = [];
+  const tribesWith = (list: Tribe[]) => list.sort(byName).map((tribe) => ({ tribe, teams: teams.filter((t) => tribeOf(c, t)?.id === tribe.id) })).filter((x) => x.teams.length);
+  for (const domain of [...(c.domains ?? [])].sort(byName)) {
+    const tribes = tribesWith((c.tribes ?? []).filter((t) => domainOf(c, t)?.id === domain.id));
+    if (tribes.length) out.push({ domain, tribes });
+  }
+  const loose = tribesWith((c.tribes ?? []).filter((t) => !domainOf(c, t)));
+  if (loose.length) out.push({ domain: undefined, tribes: loose });
+  const alone = teams.filter((t) => !tribeOf(c, t));
+  if (alone.length) out.push({ domain: null, tribes: [{ teams: alone }] });
+  return out;
+}
+
+/**
+ * The teams to choose from in a long list (the owning team on the editing screen), grouped by
+ * tribe as a choice box groups them: "Payments (Digital Channels)", …, then "Not in a tribe". With
+ * no tribes in the lists, one group without a name.
+ */
+export function teamChoices(c: Pick<Catalog, "teams" | "tribes" | "domains">): { label?: string; teams: Team[] }[] {
+  if (!(c.tribes ?? []).length) return [{ teams: c.teams }];
+  return teamSections(c, [...c.teams].sort(byName)).flatMap((s) => s.tribes.map((x) => ({
+    label: x.tribe ? (s.domain ? `${x.tribe.name} (${s.domain.name})` : x.tribe.name) : NO_TRIBE,
+    teams: x.teams,
+  })));
 }

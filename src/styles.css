@@ -638,7 +638,11 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 
 /* ---------- catalog: tabs, list, detail ---------- */
 /* Teams & tools: the lists are underline tabs (.tabs > .tab, controls.css); one line says what the chosen one is */
-.catalog-page > .tabs.cat-kinds { margin: 22px 0 0; }
+.catalog-page > .cat-kinds-groups { margin: 22px 0 0; }
+/* the lists' tabs in named groups (who, what, where it applies): a group wraps as a whole, its tabs stay one row */
+.cat-kinds-groups { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 28px; }
+.cat-kinds-group { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 100%; }
+.cat-kinds-name { padding: 0 9px; color: var(--text-3); font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); letter-spacing: .06em; text-transform: uppercase; }
 .cat-blurb { margin: 12px 0 14px; color: var(--text-2); font-size: var(--fs-md); line-height: var(--lh-md); }
 /* Admin > Lists: the blurb and the lists' Undo / Redo / Save in one bar that stays in view above the list and the details */
 .cat-toolbar.with-save { position: sticky; top: 56px; z-index: 15; display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; margin: 4px 0 10px; padding: 6px 0; background: var(--bg); }
@@ -652,6 +656,12 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .cat-list-bar { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
 .cat-list-bar .search { height: 36px; flex: 1 1 0; max-width: none; min-width: 0; }
 .cat-list ul { list-style: none; margin: 0; padding: 6px; overflow: auto; flex: 1; }
+/* Teams & tools: the teams under their domain and tribe (only when the lists have tribes) */
+.cat-sections { overflow: auto; flex: 1; padding: 6px; }
+.cat-list .cat-sections ul { padding: 0; overflow: visible; flex: none; }
+.cat-section + .cat-section { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.cat-section-domain { margin: 0; padding: 6px 10px 0; color: var(--text-3); font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); letter-spacing: .06em; text-transform: uppercase; }
+.cat-section-name { margin: 0; padding: 8px 10px 4px; color: var(--text-2); font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); }
 .cat-item { display: flex; align-items: center; gap: 11px; width: 100%; padding: 8px 10px; border-radius: 10px; }
 .cat-item:hover { background: color-mix(in srgb, var(--line) 55%, transparent); }
 .cat-item.on { background: var(--surface); box-shadow: var(--shadow-1), inset 0 0 0 1px var(--ocean-75); }
@@ -687,8 +697,13 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .cat-usage ul { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .cat-usage ul:empty { display: none; }
 .cat-usage li + li { border-top: 1px solid var(--line); }
-.cat-usage button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; }
-.cat-usage button:hover { background: var(--surface-2); }
+.cat-usage :is(button, a) { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; color: var(--text); }
+.cat-usage :is(button, a):hover { background: var(--surface-2); }
+.cat-inner > p { margin-top: 8px; }
+.cat-inner li svg { margin-left: auto; }
+/* a name in a sentence that leads to its entry (a team's tribe and domain, a tribe's domain) */
+.link-like { display: inline; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.cat-part-of { color: var(--text-2); font-size: var(--fs-md); line-height: var(--lh-md); }
 .cat-usage strong { font-weight: var(--fw-medium); font-size: var(--fs-md); line-height: var(--lh-md); }
 .cat-usage em { font-style: normal; font-size: var(--fs-sm); line-height: var(--lh-sm); color: var(--text-3); margin-left: auto; }
 .cat-usage svg { color: var(--text-3); flex: none; }
@@ -1030,7 +1045,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .activity .activity-doc { font-weight: var(--fw-medium); }
 .activity .activity-portal { color: var(--text-2); font-weight: var(--fw-medium); }
 @media (max-width: 520px) { .activity li { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
-.admin .catalog-page > .tabs.cat-kinds { margin-top: 0; }
+.admin .catalog-page > .cat-kinds-groups { margin-top: 0; }
 /* the lists' tabs stay one row: tighter where the column is narrow (Admin, a laptop); where they still do not fit,
    the row scrolls sideways with its cut edge faded (cutEdges), never a second row under the underline */
 .tabs.cat-kinds { gap: 2px; flex-wrap: nowrap; }

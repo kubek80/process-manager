@@ -20,7 +20,7 @@ import "../search.css";
 export { Marked };
 
 /** The filters of the panel; the type is chosen with the tabs above the results. */
-const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "path", "owner"];
+const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "path", "pattern", "owner"];
 
 /** The one search box, on Home and on the results page (it lives with the lists, which use it too). */
 export { SearchBox };

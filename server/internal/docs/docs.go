@@ -692,8 +692,12 @@ type Named struct {
 	// Symbol: the picture of a path (greenfield's sprout, the paved path's road…); empty for a
 	// neutral mark and for the other lists.
 	Symbol string `json:"symbol,omitempty"`
-	// AlsoCalled: the other names of a path ("golden path"), found by the search.
+	// AlsoCalled: the other names of a path ("golden path") or an architecture pattern ("EDA"),
+	// found by the search.
 	AlsoCalled []string `json:"alsoCalled,omitempty"`
+	// Tribe: the tribe a team is part of; Domain: the domain a tribe is part of. Both optional.
+	Tribe  string `json:"tribe,omitempty"`
+	Domain string `json:"domain,omitempty"`
 }
 
 // Contacts is how to reach a team, platform or practice (schema/catalog.schema.json): every
@@ -723,10 +727,16 @@ type Lists struct {
 	Platforms    []Named `json:"platforms"`
 	Categories   []Named `json:"categories"`
 	Tools        []Named `json:"tools"`
+	// Patterns: the architecture patterns documents are tagged with; missing in lists that never
+	// had any, which is an empty list (nothing is added for them).
+	Patterns []Named `json:"patterns"`
+	// Tribes group teams and Domains group tribes, all optional; missing lists are empty.
+	Tribes  []Named `json:"tribes"`
+	Domains []Named `json:"domains"`
 }
 
 // EmptyCatalog is served before any lists exist.
-const EmptyCatalog = `{"tiers":[],"paths":[],"environments":[],"languages":[],"teams":[],"practices":[],"platforms":[],"categories":[],"tools":[]}`
+const EmptyCatalog = `{"tiers":[],"paths":[],"environments":[],"languages":[],"teams":[],"practices":[],"platforms":[],"categories":[],"tools":[],"patterns":[],"tribes":[],"domains":[]}`
 
 // Lists returns the catalog. A missing catalog is empty, not an error.
 func (s *Store) Lists(ctx context.Context) (Lists, error) {
@@ -802,6 +812,12 @@ func (l Lists) ByKey(key string) []Named {
 		return l.Categories
 	case "tools":
 		return l.Tools
+	case "patterns":
+		return l.Patterns
+	case "tribes":
+		return l.Tribes
+	case "domains":
+		return l.Domains
 	}
 	return nil
 }

@@ -140,3 +140,6 @@ p.muted.group-lead { font-size: var(--fs-lg); line-height: var(--lh-lg); }
   .cat-detail:has(> .cat-people) > .cat-people > .cat-members:first-child { padding-top: 0; border-top: 0; }
   .cat-detail:has(> .cat-people) > .cat-danger { margin-top: 0; }
 }
+
+/* a team's tribe and domain, under its name */
+.group-part { margin: -2px 0 6px; color: var(--text-2); font-size: var(--fs-md); line-height: var(--lh-md); }

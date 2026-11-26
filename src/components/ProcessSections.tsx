@@ -6,7 +6,10 @@ import { RIGOUR_LABEL } from "../lib/search";
 import { useCatalog } from "../lib/catalog";
 import { Field } from "./ui";
 import { ResourceEditor } from "./Resources";
-import { BelongsEditor, DimsEditor, DimTags, PathsEditor, ReviewEditor } from "./Governance";
+import { BelongsEditor, DimsEditor, DimTags, PathsEditor, PatternsEditor, ReviewEditor, TeamOptions } from "./Governance";
+import { patternLabel } from "../lib/patterns";
+import { canManageLists } from "../lib/rights";
+import { usePerms } from "../lib/session";
 import { PathMarks } from "./marks";
 import { EditSection } from "./EditFrame";
 
@@ -28,6 +31,7 @@ export function GovernedSections<T extends Process | Standard>({ kind, doc, save
   kind: "process" | "standard"; doc: T; saved: T; others: { id: string; title: string }[]; set: (patch: Partial<T>) => void; issues: Issue[];
 }) {
   const { catalog } = useCatalog();
+  const perms = usePerms();
   const flagged = flaggedKeys(issues);
   const has = (...keys: string[]) => keys.some((k) => flagged.has(k));
   const nameIn = (list: { id: string; name: string }[], id?: string) => (id ? list.find((x) => x.id === id)?.name ?? id : "");
@@ -46,6 +50,13 @@ export function GovernedSections<T extends Process | Standard>({ kind, doc, save
         summary={doc.paths?.length ? <PathMarks ids={doc.paths} catalog={catalog} named /> : none("Any path")}>
         <PathsEditor value={doc.paths} onChange={(paths) => set({ paths } as Partial<T>)} />
       </EditSection>
+      {/* a tag, not a limit; with no patterns listed only whoever may add them is told where */}
+      {((catalog.patterns ?? []).length > 0 || (doc.patterns ?? []).length > 0 || canManageLists(perms)) && (
+        <EditSection title="Architecture patterns" hint="Tag it with the ways of building systems it is about, such as event-driven or microservices, so that people who build that way find it. A tag hides nothing from anybody: most are tagged with none." folded={!has("patterns")}
+          summary={doc.patterns?.length ? patternLabel(catalog, doc.patterns) : none("Not tagged")}>
+          <PatternsEditor value={doc.patterns} onChange={(patterns) => set({ patterns } as Partial<T>)} />
+        </EditSection>
+      )}
       {kind === "process" && <WhereSection kind={kind} doc={doc} set={set} issues={issues} />}
       <EditSection title="Review" folded={!has("review", "replacedBy")}
         summary={doc.review?.intervalMonths
@@ -87,7 +98,7 @@ export function ProcessAbout({ process, saved, all, set, issues }: { process: Pr
           <Field label="Owning team" hint="Reviews it and answers feedback">
             <select value={process.owner ?? ""} onChange={(e) => set({ owner: e.target.value || undefined })}>
               <option value="">Not set</option>
-              {catalog.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              <TeamOptions />
               {process.owner && !catalog.teams.some((t) => t.id === process.owner) && <option value={process.owner}>{process.owner} (not in the list)</option>}
             </select>
           </Field>

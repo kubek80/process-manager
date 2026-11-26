@@ -499,6 +499,25 @@ func (a *api) stillUsed(ctx context.Context, s session, body []byte) error {
 			}
 		}
 	}
+	// within the lists: a tribe the teams are part of, a domain the tribes are part of (as the new lists have them)
+	for _, entry := range removed {
+		key, id, _ := strings.Cut(entry, "/")
+		inner := map[string]struct {
+			noun string
+			list []docs.Named
+			of   func(docs.Named) string
+		}{
+			"tribes":  {"team", next.Teams, func(n docs.Named) string { return n.Tribe }},
+			"domains": {"tribe", next.Tribes, func(n docs.Named) string { return n.Domain }},
+		}
+		if in, ok := inner[key]; ok {
+			for _, n := range in.list {
+				if in.of(n) == id {
+					usedBy[entry] = append(usedBy[entry], docs.EntryWords(in.noun, n))
+				}
+			}
+		}
+	}
 	assignments, err := a.Roles.All(ctx)
 	if err != nil {
 		return err
@@ -665,11 +684,13 @@ func (a *api) save(w http.ResponseWriter, r *http.Request, sv saving) {
 	if kind == docs.Catalog {
 		err = json.Unmarshal(body, &lists) // the lists are checked against themselves
 	}
-	if err == nil {
-		err = docs.Check(kind, body, lists)
-	}
+	// the lists: what is still in use is said first, by who uses it (a tribe a team is part of
+	// would otherwise only be "not in the list of tribes")
 	if err == nil && kind == docs.Catalog {
 		err = a.stillUsed(r.Context(), s, body)
+	}
+	if err == nil {
+		err = docs.Check(kind, body, lists)
 	}
 	if err == nil && kind == docs.Catalog {
 		err = a.knownIcons(r.Context(), body)

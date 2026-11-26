@@ -28,12 +28,13 @@ export function pathTitle(entry: Pick<PathEntry, "name" | "alsoCalled">): string
 }
 
 /**
- * Other names that two paths claim, or that are another path's name, whatever their case: a search
- * or an agent could not tell which path is meant. One sentence each, naming both paths.
+ * Other names that two entries claim, or that are another entry's name, whatever their case: a
+ * search or an agent could not tell which is meant. One sentence each, naming both. The paths and
+ * the architecture patterns have other names; `noun` names the list ("path" by default).
  */
-export function otherNameClashes(paths: Pick<PathEntry, "id" | "name" | "alsoCalled">[] | undefined): { index: number; message: string }[] {
+export function otherNameClashes(entries: Pick<PathEntry, "id" | "name" | "alsoCalled">[] | undefined, noun: { one: string; many: string } = { one: "path", many: "paths" }): { index: number; message: string }[] {
   const out: { index: number; message: string }[] = [];
-  const list = paths ?? [];
+  const list = entries ?? [];
   const key = (s: string) => s.trim().toLowerCase();
   list.forEach((e, i) => {
     for (const also of otherNames(e)) {
@@ -43,8 +44,8 @@ export function otherNameClashes(paths: Pick<PathEntry, "id" | "name" | "alsoCal
       out.push({
         index: i,
         message: key(o.name ?? "") === key(also)
-          ? `The path “${e.name}” is also called “${also}”, which is the name of the path “${o.name}”: take it off “${e.name}”.`
-          : `The paths “${o.name}” and “${e.name}” are both also called “${also}”: keep it on one of them.`,
+          ? `The ${noun.one} “${e.name}” is also called “${also}”, which is the name of the ${noun.one} “${o.name}”: take it off “${e.name}”.`
+          : `The ${noun.many} “${o.name}” and “${e.name}” are both also called “${also}”: keep it on one of them.`,
       });
     }
   });
@@ -56,11 +57,11 @@ export function otherNameClashes(paths: Pick<PathEntry, "id" | "name" | "alsoCal
  * more) as an entry of its own under its id, after the others. Anything that is not a list of
  * ids gives none.
  */
-export function pathsOf(list: PathEntry[] | undefined, ids: unknown): PathEntry[] {
+export function pathsOf<T extends { id: string; name: string } = PathEntry>(list: T[] | undefined, ids: unknown): T[] {
   const want = (Array.isArray(ids) ? ids : []).filter((x): x is string => typeof x === "string" && x !== "");
   if (!want.length) return [];
   const known = (list ?? []).filter((e) => want.includes(e.id));
-  const unknown = want.filter((id, i) => want.indexOf(id) === i && !(list ?? []).some((e) => e.id === id)).map((id) => ({ id, name: id }));
+  const unknown = want.filter((id, i) => want.indexOf(id) === i && !(list ?? []).some((e) => e.id === id)).map((id) => ({ id, name: id }) as T);
   return [...known, ...unknown];
 }
 

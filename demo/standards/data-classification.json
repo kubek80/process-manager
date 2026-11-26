@@ -169,5 +169,8 @@
         "python"
       ]
     }
+  ],
+  "patterns": [
+    "batch-data-pipelines"
   ]
 }

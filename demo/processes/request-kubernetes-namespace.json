@@ -12,6 +12,9 @@
     "greenfield",
     "paved-path"
   ],
+  "patterns": [
+    "microservices"
+  ],
   "estimatedDuration": "2-3 working days",
   "tags": [
     "kubernetes",

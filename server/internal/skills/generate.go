@@ -36,6 +36,7 @@ type process struct {
 	EstimatedDuration string   `json:"estimatedDuration"`
 	Status            string   `json:"status"`
 	Paths             []string `json:"paths"`
+	Patterns          []string `json:"patterns"`
 	Tiers             []string `json:"tiers"`
 	Languages         []string `json:"languages"`
 	Environments      []string `json:"environments"`
@@ -109,6 +110,7 @@ type standard struct {
 	Scope              string        `json:"scope"`
 	Status             string        `json:"status"`
 	Paths              []string      `json:"paths"`
+	Patterns           []string      `json:"patterns"`
 	Tiers              []string      `json:"tiers"`
 	Languages          []string      `json:"languages"`
 	Environments       []string      `json:"environments"`
@@ -190,6 +192,14 @@ func (c Context) appliesTo(tiers, languages, environments []string) string {
 func (c Context) paths(b *strings.Builder, ids []string) {
 	if len(ids) > 0 {
 		fmt.Fprintf(b, "- Meant for the paths: %s\n", docs.PathNames(c.Lists.Paths, ids))
+	}
+}
+
+// patterns is the line that names the architecture patterns a document is tagged with, or nothing
+// when it names none (the skill stays as it was before there were patterns).
+func (c Context) patterns(b *strings.Builder, ids []string) {
+	if len(ids) > 0 {
+		fmt.Fprintf(b, "- Architecture patterns: %s\n", docs.PatternNames(c.Lists.Patterns, ids))
 	}
 }
 
@@ -294,6 +304,7 @@ func ForProcess(body []byte, c Context, extra map[string]string) ([]Generated, e
 	}
 	fmt.Fprintf(&b, "- Applies to: %s\n", c.appliesTo(p.Tiers, p.Languages, p.Environments))
 	c.paths(&b, p.Paths)
+	c.patterns(&b, p.Patterns)
 	if p.EstimatedDuration != "" {
 		fmt.Fprintf(&b, "- Typical lead time: %s\n", p.EstimatedDuration)
 	}
@@ -466,6 +477,7 @@ func ForStandard(body []byte, c Context, extra map[string]string) ([]Generated, 
 		c.placement(b, s.Category, s.Practice, s.Platform)
 		fmt.Fprintf(b, "- Applies to: %s\n", c.appliesTo(s.Tiers, s.Languages, s.Environments))
 		c.paths(b, s.Paths)
+		c.patterns(b, s.Patterns)
 		if s.Scope != "" {
 			fmt.Fprintf(b, "- Scope: %s\n", s.Scope)
 		}

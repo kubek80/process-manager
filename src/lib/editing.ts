@@ -350,7 +350,7 @@ const LIST_NOUN: Record<string, { one: string; many: string }> = LIST_WORDS;
 const LIST_FIELD: Record<string, string> = {
   name: "name", id: "id", description: "description", url: "link", icon: "icon", contact: "other ways to reach them", contacts: "contact details",
   email: "group email", slack: "Slack channel", slackUrl: "link to the Slack channel", chat: "Google Chat space", chatUrl: "link to the Chat space",
-  confluence: "Confluence page", page: "page link", form: "request form", symbol: "picture", alsoCalled: "other names",
+  confluence: "Confluence page", page: "page link", form: "request form", symbol: "picture", alsoCalled: "other names", tribe: "tribe", domain: "domain",
 };
 
 /** Which list, entry and field a problem of the lists is about: "teams[3].contacts.slackUrl". */
@@ -449,6 +449,8 @@ export function listIssueField(path: string): string[] {
     case "icon": return [".icon-field button"];
     case "alsoCalled": return ['[data-field="alsoCalled"]'];
     case "symbol": return [".symbol-picker button"];
+    case "tribe": return ['[data-field="tribe"]'];
+    case "domain": return ['[data-field="domain"]'];
     default: return ['[data-field="name"]'];
   }
 }
@@ -557,7 +559,7 @@ const keyFor = (label: string, context: FieldContext | undefined, ...objects: un
 export function valueByName(key: string, v: unknown, catalog?: Catalog, actors: { id: string; name: string }[] = []): unknown {
   const LISTS: Record<string, keyof Catalog> = {
     owner: "teams", teamId: "teams", tool: "tools", category: "categories", practice: "practices", platform: "platforms",
-    tiers: "tiers", environments: "environments", languages: "languages", paths: "paths",
+    tiers: "tiers", environments: "environments", languages: "languages", paths: "paths", patterns: "patterns",
   };
   const name = (id: unknown): unknown => {
     if (typeof id !== "string" || !id) return id;

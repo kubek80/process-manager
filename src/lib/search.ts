@@ -2,6 +2,7 @@ import type { Catalog, Level, Process, Rigour, Standard, TargetKind } from "../t
 import type { SearchState } from "./store";
 import { appliesTo, type Profile } from "./edit";
 import { pathWords } from "./paths";
+import { patternWords } from "./patterns";
 
 // One search over processes and standards: every word of the query must be found somewhere in a
 // document; the filters narrow the results down (several values of one filter: any of them;
@@ -11,8 +12,8 @@ import { pathWords } from "./paths";
 /** The filters of the lists and the results page; the results page carries them in the address. */
 export type Filters = Omit<SearchState, "q" | "pageNo" | "size" | "mode" | "sort">;
 export type FilterKey = keyof Filters;
-export const FILTER_KEYS: FilterKey[] = ["type", "category", "platform", "practice", "rigour", "owner", "path"];
-export const FILTER_LABEL: Record<FilterKey, string> = { type: "Type", rigour: "Rigour", category: "Category", practice: "Practice", platform: "Platform", owner: "Owner", path: "Path" };
+export const FILTER_KEYS: FilterKey[] = ["type", "category", "platform", "practice", "rigour", "owner", "path", "pattern"];
+export const FILTER_LABEL: Record<FilterKey, string> = { type: "Type", rigour: "Rigour", category: "Category", practice: "Practice", platform: "Platform", owner: "Owner", path: "Path", pattern: "Architecture pattern" };
 /** The category value of what has no category: not a valid id, so it cannot clash with one. */
 export const NO_CATEGORY = "-";
 export const NO_CATEGORY_LABEL = "Other";
@@ -72,7 +73,7 @@ export interface Option { value: string; label: string; count: number; chosen: b
 export interface SearchInput {
   processes: Process[];
   standards: Standard[];
-  catalog: Pick<Catalog, "teams" | "tools"> & Partial<Pick<Catalog, "categories" | "practices" | "platforms" | "tiers" | "environments" | "languages" | "paths">>;
+  catalog: Pick<Catalog, "teams" | "tools"> & Partial<Pick<Catalog, "categories" | "practices" | "platforms" | "tiers" | "environments" | "languages" | "paths" | "patterns">>;
   q?: string;
   filters?: Filters;
   /**
@@ -130,6 +131,10 @@ const nameIn = (l: { id: string; name: string }[] | undefined, id?: string) => (
 function pathsNamed(c: SearchInput["catalog"], ids: unknown): string[] {
   return pathIds(ids).flatMap((id) => { const e = (c.paths ?? []).find((x) => x.id === id); return e ? pathWords(e) : [id]; });
 }
+/** The words of the architecture patterns a document is tagged with: each one's name and its other names ("EDA" for event-driven). */
+function patternsNamed(c: SearchInput["catalog"], ids: unknown): string[] {
+  return pathIds(ids).flatMap((id) => { const e = (c.patterns ?? []).find((x) => x.id === id); return e ? patternWords(e) : [id]; });
+}
 const pathIds = (ids: unknown) => (Array.isArray(ids) ? ids.filter((x): x is string => typeof x === "string" && x !== "") : []);
 
 function item(hit: Hit, texts: unknown[]): Item {
@@ -142,7 +147,7 @@ function index(kind: TargetKind, d: Process | Standard, c: SearchInput["catalog"
     { norm: fold(str(d.title)), weight: WEIGHT.title },
     { norm: fold(str(d.id)), weight: WEIGHT.id },
     { norm: fold((Array.isArray(d.tags) ? d.tags : []).map(str).join(" ")), weight: WEIGHT.tags },
-    { norm: fold([nameIn(c.categories, d.category), nameIn(c.practices, d.practice), nameIn(c.platforms, d.platform), nameIn(c.teams, d.owner), ...pathsNamed(c, d.paths)].join(" ")), weight: WEIGHT.names },
+    { norm: fold([nameIn(c.categories, d.category), nameIn(c.practices, d.practice), nameIn(c.platforms, d.platform), nameIn(c.teams, d.owner), ...pathsNamed(c, d.paths), ...patternsNamed(c, d.patterns)].join(" ")), weight: WEIGHT.names },
     { norm: fold(str(d.summary)), weight: WEIGHT.summary },
   ];
   const items: Item[] = [];
@@ -171,6 +176,8 @@ function index(kind: TargetKind, d: Process | Standard, c: SearchInput["catalog"
       type: [kind], rigour: RIGOURS.filter((r) => rigour[r]), category: [str(d.category) || NO_CATEGORY],
       practice: one(str(d.practice)), platform: one(str(d.platform)), owner: one(str(d.owner)),
       path: pathIds(d.paths).length ? [...new Set(pathIds(d.paths))] : [NO_PATH],
+      // a tag: what is not tagged has no value (unlike the path, "none" means nothing here)
+      pattern: [...new Set(pathIds(d.patterns))],
     },
     flags: Object.fromEntries(Object.entries(flags).map(([k, f]) => [k, f.test(kind, d)])),
   };
@@ -280,6 +287,7 @@ export function search(input: SearchInput): SearchOutput {
       platform: optionsFor("platform", named(c.platforms)),
       owner: optionsFor("owner", named(c.teams)),
       path: pathOptions(),
+      pattern: optionsFor("pattern", named(c.patterns)),
     },
     flags: Object.fromEntries(Object.keys(flags).map((k) => [k, found.filter(({ d }) => d.flags[k] && passes(d, filters, flags, k)).length])),
   };
@@ -351,6 +359,7 @@ export function emptyFilterText(key: FilterKey | ProfileKey, subject: Subject, t
     case "practice": return `${who} belongs to a practice.`;
     case "owner": return `${who} names the team that maintains it.`;
     case "path": return `${who} is made for a particular path: everything is for any path.`;
+    case "pattern": return `${who} is tagged with an architecture pattern.`;
     case "type": return "There is nothing here to choose between.";
     default: return `${who} is limited to particular ${PROFILE_LIST[key]}: everything applies.`;
   }
@@ -392,6 +401,7 @@ export function knownFilters(f: Filters, catalog: SearchInput["catalog"], docs: 
     category: new Set([NO_CATEGORY, ...ids(catalog.categories), ...used("category")]),
     platform: new Set([...ids(catalog.platforms), ...used("platform")]),
     path: new Set([NO_PATH, ...ids(catalog.paths), ...docs.flatMap((d) => pathIds(d.paths))]),
+    pattern: new Set([...ids(catalog.patterns), ...docs.flatMap((d) => pathIds(d.patterns))]),
     practice: new Set([...ids(catalog.practices), ...used("practice")]),
     owner: new Set([...ids(catalog.teams), ...used("owner")]),
   };

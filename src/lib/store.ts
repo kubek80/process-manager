@@ -332,7 +332,7 @@ export type Route =
   | { page: "group"; kind: GroupKind; id: string };
 
 /** The lists of Teams & tools, as the address names them. */
-export const CATALOG_LISTS = ["teams", "practices", "platforms", "categories", "tools", "tiers", "paths", "environments", "languages"] as const;
+export const CATALOG_LISTS = ["teams", "tribes", "domains", "practices", "platforms", "categories", "tools", "patterns", "tiers", "paths", "environments", "languages"] as const;
 export type CatalogList = (typeof CATALOG_LISTS)[number];
 /** Which list of Teams & tools is open and which entry is chosen: `#/catalog/platforms/google-cloud`. */
 export interface CatalogView { list?: CatalogList; id?: string }
@@ -352,6 +352,8 @@ export interface SearchState {
   owner?: string[];
   /** The paths it is for (greenfield, paved path…); "-" for what names none. */
   path?: string[];
+  /** The architecture patterns it is tagged with (a tag: what is not tagged has no value). */
+  pattern?: string[];
   /** The page of the results shown, from 1 (1 is left out of the address). */
   pageNo?: number;
   /** How many results a page shows: 12, 24 or 48; left out, the person's own choice. */
@@ -365,7 +367,7 @@ export interface SearchState {
 export type ListState = Omit<SearchState, "type" | "mode">;
 /** Only what a list keeps of a search address. */
 const listOf = (r: SearchState): ListState => { const { type: _t, mode: _m, ...rest } = r; void _t; void _m; return rest; };
-const SEARCH_LISTS = ["type", "rigour", "category", "practice", "platform", "owner", "path"] as const;
+const SEARCH_LISTS = ["type", "rigour", "category", "practice", "platform", "owner", "path", "pattern"] as const;
 const SEARCH_SIZES = [12, 24, 48];
 const SEARCH_ALLOWED: Partial<Record<(typeof SEARCH_LISTS)[number], string[]>> = { type: ["process", "standard"], rigour: ["mandatory", "recommended", "optional"] };
 /**

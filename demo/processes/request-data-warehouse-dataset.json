@@ -12,6 +12,9 @@
   "paths": [
     "paved-path"
   ],
+  "patterns": [
+    "batch-data-pipelines"
+  ],
   "languages": [
     "sql",
     "python"

@@ -778,18 +778,22 @@ for (const mode of ["light", "dark"] as const) {
   });
 }
 
-test("the nine lists' tabs stay on one row at 1366, in Admin › Lists and in Teams & tools", async ({ page }) => {
+test("the lists' tabs in their three groups: each group one row, nothing scrolled away at 1366, in Admin › Lists and in Teams & tools", async ({ page }) => {
   await signIn(page, DANA);
   await page.setViewportSize({ width: 1366, height: 900 });
   for (const hash of ["/admin/lists", "/catalog"]) {
     await open(page, hash);
-    const tabs = page.getByRole("tab");
-    await expect(tabs).toHaveCount(9);
-    const tops = await tabs.evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().top)));
-    expect(new Set(tops).size, `${hash}: one row`).toBe(1);
-    const list = page.locator(".tabs.cat-kinds");
-    expect(await list.evaluate((e) => e.scrollWidth - e.clientWidth), `${hash}: nothing scrolled away`).toBeLessThanOrEqual(0);
-    await expect(tabs.last()).toBeInViewport({ ratio: 1 });
+    const groups = page.locator(".cat-kinds-group");
+    await expect(groups.locator(".cat-kinds-name")).toHaveText(["Who", "What", "Where it applies"]);
+    await expect(page.getByRole("tab")).toHaveCount(10);
+    for (const [name, count] of [["Who", 3], ["What", 3], ["Where it applies", 4]] as const) {
+      const list = page.getByRole("tablist", { name });
+      await expect(list.getByRole("tab")).toHaveCount(count);
+      const tops = await list.getByRole("tab").evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().top)));
+      expect(new Set(tops).size, `${hash} ${name}: one row`).toBe(1);
+      expect(await list.evaluate((e) => e.scrollWidth - e.clientWidth), `${hash} ${name}: nothing scrolled away`).toBeLessThanOrEqual(0);
+      await expect(list.getByRole("tab").last()).toBeInViewport({ ratio: 1 });
+    }
   }
 });
 

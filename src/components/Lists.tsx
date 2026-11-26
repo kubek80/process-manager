@@ -21,7 +21,7 @@ import "../lists.css";
  * choices of "My application" (`single`) are facts about the reader, not ways to narrow a list:
  * they always offer every entry, also one that would give nothing.
  */
-const HIDE_EMPTY: string[] = ["category", "practice", "platform", "owner"];
+const HIDE_EMPTY: string[] = ["category", "practice", "platform", "owner", "pattern"];
 
 /**
  * The filters of an address, without the values that name nothing that exists (an old link). When

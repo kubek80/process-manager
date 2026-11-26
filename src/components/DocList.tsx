@@ -14,7 +14,7 @@ import { openCount } from "./Feedback";
 import { DocCard } from "./DocCard";
 import { AskForIt, bookmarksUnknown, ChosenFilters, engagementKnown, FilterPanel, OrderControls, Pager, profileChosen, ResultsBar, ResultsFoot, SearchBox, toResults, useLinkFilters, type Chosen, type FlagControl } from "./Lists";
 
-const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "path", "owner"];
+const KEYS: FilterKey[] = ["category", "platform", "practice", "rigour", "path", "pattern", "owner"];
 const NOUN: Record<TargetKind, { one: string; many: string }> = { process: { one: "process", many: "processes" }, standard: { one: "standard", many: "standards" } };
 const PLACEHOLDER: Record<TargetKind, string> = { process: "Search processes: GCP, repository, Akamai…", standard: "Search standards: logging, Terraform, SEC-LOG-01…" };
 /** On a phone: the examples alone, short enough to be read whole (the heading says what is listed). */

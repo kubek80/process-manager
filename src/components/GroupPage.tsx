@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert } from "./Alert";
 import { ArrowLeft, ArrowRight, Boxes, Compass, PencilLine, Plus, Users } from "lucide-react";
-import type { DocMeta, FeedbackByTarget, Membership, Process, Standard, TargetKind } from "../types";
+import type { DocMeta, FeedbackByTarget, Membership, Process, Standard, TargetKind, Team } from "../types";
 import { docCount, useCatalog } from "../lib/catalog";
-import { belongsHeading, contactsOk, groupEntry, groupFilter, KIND_WORD, LIST_OF, tidyContacts } from "../lib/groups";
+import { belongsHeading, contactsOk, groupEntry, groupFilter, KIND_WORD, LIST_OF, partOf, tidyContacts } from "../lib/groups";
 import { GROUP, hasMembers, type GroupKind } from "../lib/members";
 import { canChangeDetails, canCreate, canManageMembers, editsAll, groupRank, newDocPlaces } from "../lib/rights";
 import { canDraft, canManage, useChangeBlocked, useMe, usePerms } from "../lib/session";
@@ -86,6 +86,12 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta, onNe
           <h1>{entry.name}</h1>
           {mayDetails && <button className="btn" disabled={!!blocked} title={blocked || undefined} onClick={() => setEditing(true)}><PencilLine size={15} aria-hidden="true" />Edit details</button>}
         </div>
+        {/* a team's tribe and domain, when it is part of one; each leads to its entry in Teams & tools */}
+        {kind === "team" && partOf(catalog, entry as Team).length > 0 && (
+          <p className="group-part">{partOf(catalog, entry as Team).map((p, i) => (p.list && p.id
+            ? <a key={i} href={href({ page: "catalog", list: p.list, id: p.id })}>{p.text}</a>
+            : <span key={i}>{p.text}</span>))}</p>
+        )}
         {entry.description?.trim()
           ? <p className="lead group-lead">{entry.description}</p>
           : <p className="muted group-lead">No description yet.</p>}

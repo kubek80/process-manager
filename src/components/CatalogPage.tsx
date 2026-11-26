@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, ArrowUpRight, Boxes, CircleAlert, Code2, Compass, Server, ExternalLink, Layers, Plus, Search, Signpost, Tag, Trash2, Users, Wrench } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowDown, ArrowRight, ArrowUp, ArrowUpRight, Boxes, CircleAlert, Code2, Compass, Server, ExternalLink, Layers, Network, Plus, Search, Shapes, Signpost, Tag, Trash2, Users, UsersRound, Wrench } from "lucide-react";
 import type { Catalog, Contacts, Issue, Membership, PathSymbol, Process, Standard } from "../types";
 import { PATH_SYMBOLS, PathMark, PathSymbolIcon } from "./marks";
 import { otherNames } from "../lib/paths";
@@ -9,7 +9,7 @@ import { ContactList, RankMark } from "./GroupParts";
 import { EntryIcon } from "./EntryIcon";
 import { IconField } from "./IconField";
 import { hasMembers, membersOf, type GroupKind } from "../lib/members";
-import { ownFirst, summaryLine, tidyLists } from "../lib/groups";
+import { NO_DOMAIN, NO_TRIBE, ownFirst, partOf, summaryLine, teamSections, teamsOfTribe, tidyLists, tribesOfDomain } from "../lib/groups";
 import { groupRank } from "../lib/rights";
 import { useChangeBlocked, usePerms } from "../lib/session";
 import { slugify, uniqueId } from "../lib/edit";
@@ -22,17 +22,27 @@ import { checkerSummary, issueText, listIssueField, listIssuePlace, refusalText 
 import { focusWhenShown, useFieldMarks } from "../lib/fieldMarks";
 import { Field, IssueList, notify, useScrollFade } from "./ui";
 
-type Key = "teams" | "practices" | "platforms" | "categories" | "tools" | "tiers" | "paths" | "environments" | "languages";
-type Row = { id: string; name: string; contact?: string; contacts?: Contacts; url?: string; description?: string; icon?: string; symbol?: PathSymbol; alsoCalled?: string[] };
+type Key = "teams" | "tribes" | "domains" | "practices" | "platforms" | "categories" | "tools" | "patterns" | "tiers" | "paths" | "environments" | "languages";
+type Row = { id: string; name: string; contact?: string; contacts?: Contacts; url?: string; description?: string; icon?: string; symbol?: PathSymbol; alsoCalled?: string[]; tribe?: string; domain?: string };
 
 const KINDS: Record<Key, {
   title: string; noun: string; icon: typeof Users; blurb: string;
-  fields: { field: "contact" | "url" | "description"; label: string; placeholder: string; long?: boolean }[];
+  fields: { field: "contact" | "url" | "description"; label: string; placeholder: string; long?: boolean; max?: number }[];
 }> = {
   teams: {
     title: "Teams", noun: "team", icon: Users,
     blurb: "Maintain processes and standards, and take part in them.",
     fields: [], // the details of a team, practice or platform are ContactFields
+  },
+  tribes: {
+    title: "Tribes", noun: "tribe", icon: UsersRound,
+    blurb: "Groups of teams. A team can be part of one tribe, and a tribe part of one domain; all of it is optional.",
+    fields: [{ field: "description", label: "What it is", placeholder: "e.g. The teams that build how customers pay", long: true, max: 600 }],
+  },
+  domains: {
+    title: "Domains", noun: "domain", icon: Network,
+    blurb: "Groups of tribes. A tribe can be part of one domain; a domain without tribes is fine.",
+    fields: [{ field: "description", label: "What it is", placeholder: "e.g. Everything customers use to buy from us", long: true, max: 600 }],
   },
   practices: {
     title: "Practices", noun: "practice", icon: Compass,
@@ -57,6 +67,11 @@ const KINDS: Record<Key, {
       { field: "description", label: "What it is used for", placeholder: "One sentence on what people do in this tool", long: true },
     ],
   },
+  patterns: {
+    title: "Architecture patterns", noun: "architecture pattern", icon: Shapes,
+    blurb: "Ways systems are built, such as event-driven or microservices. Processes and standards are tagged with the ones they are about, and readers filter by them.",
+    fields: [{ field: "description", label: "What it means", placeholder: "e.g. Services react to events instead of calling each other", long: true }],
+  },
   tiers: {
     title: "Application tiers", noun: "tier", icon: Layers,
     blurb: "A process applies to every tier or to a chosen few. Most critical first.",
@@ -78,7 +93,26 @@ const KINDS: Record<Key, {
     fields: [{ field: "description", label: "Notes", placeholder: "e.g. Includes TypeScript", long: true }],
   },
 };
-const KEYS: Key[] = ["teams", "practices", "platforms", "categories", "tools", "tiers", "paths", "environments", "languages"];
+/**
+ * The lists' tabs in three groups, each its own row of tabs under a name: who (the groups of
+ * people), what (how things are grouped and the systems used) and where it applies. A group
+ * wraps as a whole; where a group's row is still too wide (a phone), it scrolls sideways with
+ * its cut edge faded.
+ */
+const GROUPS: { id: string; name: string; keys: Key[] }[] = [
+  { id: "who", name: "Who", keys: ["teams", "tribes", "domains", "practices", "platforms"] },
+  { id: "what", name: "What", keys: ["categories", "tools", "patterns"] },
+  { id: "where", name: "Where it applies", keys: ["tiers", "paths", "environments", "languages"] },
+];
+/** Lists an organisation may leave empty: readers of Teams & tools see them only once they have entries. */
+const OPTIONAL: Key[] = ["patterns", "tribes", "domains"];
+/** The lists that group other entries of the lists (tribes group teams, domains tribes), not processes and standards. */
+const INNER: Partial<Record<Key, { of: "teams" | "tribes"; noun: string; many: string; field: "tribe" | "domain" }>> = {
+  tribes: { of: "teams", noun: "team", many: "teams", field: "tribe" },
+  domains: { of: "tribes", noun: "tribe", many: "tribes", field: "domain" },
+};
+/** The lists whose entries have other names ("golden path", "EDA"), found by the search. */
+const WITH_OTHER_NAMES: Key[] = ["paths", "patterns"];
 /** The lists whose entries have members. */
 const GROUP_OF: Partial<Record<Key, GroupKind>> = { teams: "team", practices: "practice", platforms: "platform" };
 const ORDERED: Key[] = ["tiers", "paths", "environments"]; // lists whose order means something (the paths: the order of the lanes of "Which path is this for")
@@ -99,10 +133,14 @@ function usesOf(key: Key, id: string, processes: (Process | Standard)[]): Use[] 
       if (p[field] === id) how.push(key === "categories" ? "grouped here" : `belongs to this ${field}`);
     } else if (key === "paths") {
       if (Array.isArray(p.paths) && p.paths.includes(id)) how.push("is for this path");
+    } else if (key === "patterns") {
+      if (Array.isArray(p.patterns) && p.patterns.includes(id)) how.push("tagged with this pattern");
+    } else if (INNER[key]) {
+      // tribes and domains group entries of the lists, not documents
     } else if (key === "tools") {
       const n = "steps" in p ? p.steps?.filter((s) => s.tool === id).length ?? 0 : 0;
       if (n) how.push(`${n} step${n > 1 ? "s" : ""}`);
-    } else {
+    } else if (key === "tiers" || key === "environments" || key === "languages") {
       const inReq = "requirements" in p && Array.isArray(p.requirements) && p.requirements.some((r) => r?.[key]?.includes(id));
       if (p[key]?.includes(id)) how.push(key === "languages" ? "specific to this language" : `applies to this ${key === "tiers" ? "tier" : "environment"}`);
       else if (inReq) how.push("one of its requirements");
@@ -168,8 +206,15 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
   // the person's own groups first, then by name; tiers and environments keep their order
   const found = rows.filter((r) => `${r.name} ${r.contact ?? ""} ${summaryLine(r)} ${r.description ?? ""} ${r.url ?? ""}`.toLowerCase().includes(q.toLowerCase()));
   const shown = ORDERED.includes(key) ? found : ownFirst(found, mine);
-  const current = adding ? undefined : rows.find((r) => r.id === selected) ?? shown[0];
+  // Teams & tools: the teams under their domain and tribe, when the lists have tribes
+  const sections = !editor && key === "teams" && (draft.tribes ?? []).length > 0 ? teamSections(draft, shown) : null;
+  const first = sections ? sections[0]?.tribes[0]?.teams[0] as Row | undefined : shown[0];
+  const current = adding ? undefined : rows.find((r) => r.id === selected) ?? first;
   const uses = current ? usesOf(key, current.id, docs) : [];
+  // the teams of a tribe, the tribes of a domain, as the lists now have them
+  const inner = INNER[key];
+  const innerOf = (id: string) => (inner ? ((draft[inner.of] ?? []) as Row[]).filter((r) => r[inner.field] === id).sort((a, b) => a.name.localeCompare(b.name)) : []);
+  const grouped = current ? innerOf(current.id) : [];
   // people who are still members: the server refuses to remove an entry that roles point to
   const stillMembers = current && GROUP_OF[key] && members ? membersOf(members, GROUP_OF[key]!, current.id).length + membersOf(members, GROUP_OF[key]!, current.id, "member").length : 0;
   // two entries with the same id: removing one leaves everything that uses the id with the other
@@ -235,19 +280,34 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
   };
 
   // the chosen entry is kept in view in the list (after adding, removing or Undo)
-  const listBox = useRef<HTMLUListElement>(null);
+  const listBox = useRef<HTMLElement>(null);
   useEffect(() => {
     listBox.current?.querySelector<HTMLElement>(".cat-item.on")?.scrollIntoView({ block: "nearest" });
   }, [current?.id, key]);
-  // on a narrow screen the lists' tabs scroll sideways: the cut edge fades, the chosen one is brought into view
-  const tabsBox = useRef<HTMLDivElement>(null);
-  useScrollFade(tabsBox);
-  useEffect(() => {
-    const box = tabsBox.current, on = box?.querySelector<HTMLElement>(".tab.on");
-    if (!box || !on || box.scrollWidth <= box.clientWidth) return;
-    box.scrollLeft = Math.max(0, on.offsetLeft - box.offsetLeft - (box.clientWidth - on.offsetWidth) / 2);
-  }, [key]);
-
+  /** One entry in the list on the left. */
+  const row = (r: Row, at: number) => {
+    const used = usesOf(key, r.id, docs);
+    const n = inner ? innerOf(r.id).length : used.length;
+    const rank = rows.findIndex((x) => x.id === r.id);
+    return (
+      // a second entry with the same id (lists imported with a mistake) is still its own row
+      <li key={shown.findIndex((x) => x.id === r.id) === at ? r.id : `${r.id}/${at}`}>
+        <button className={`cat-item ${current === r ? "on" : ""}`} onClick={() => { setSelected(r.id); setAdding(false); }}>
+          <EntryIcon icon={WITH_ICON.includes(key) ? r.icon : undefined} size={32}
+            fallback={key === "paths" ? <span className="cat-avatar path-avatar" data-symbol={r.symbol ?? "none"}><PathSymbolIcon symbol={r.symbol} size={18} /></span>
+              : <span className="cat-avatar">{ORDERED.includes(key) ? rank + (key === "tiers" ? 0 : 1) : r.name.slice(0, 1).toUpperCase()}</span>} />
+          <span className="cat-item-text">
+            <span className="cat-item-line">
+              <strong>{r.name || "Unnamed"}{isNew(r.id) && <i>new</i>}</strong>
+              {group && !isNew(r.id) && <RankMark rank={groupRank(perms, group, r.id)} />}
+            </span>
+            <em>{summaryLine(r)}</em>
+          </span>
+          <span className={`cat-uses ${n ? "" : "none"}`} title={inner ? (n ? `${n} ${n === 1 ? inner.noun : inner.many} in it` : `No ${inner.many} in it`) : n ? `Used by ${countOf(used)}` : "Not used by any process or standard"}>{n}</span>
+        </button>
+      </li>
+    );
+  };
   return (
     <div className={editor ? "catalog-page" : "page catalog-page"}>
       {!editor && (
@@ -259,14 +319,21 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
         </div>
       )}
 
-      <div ref={tabsBox} className="tabs cat-kinds" role="tablist" aria-label="Lists">
-        {KEYS.map((k) => {
-          const K = KINDS[k];
-          return (
-            <button key={k} role="tab" aria-selected={key === k} className={`tab ${key === k ? "on" : ""}`} title={K.blurb} onClick={() => switchTo(k)}>
-              {K.title}<span className="tab-count">{(draft[k] ?? []).length}</span>
-              {!editor && yoursIn(k) > 0 && <span className="tab-yours">{yoursIn(k)} yours</span>}
-            </button>
+      <div className="cat-kinds-groups" role="group" aria-label="Lists">
+        {GROUPS.map((g) => {
+          const keys = g.keys.filter((k) => editor || !OPTIONAL.includes(k) || (draft[k] ?? []).length > 0 || k === key);
+          return keys.length > 0 && (
+            <ListTabs key={g.id} id={g.id} name={g.name} chosen={key}>
+              {keys.map((k) => {
+                const K = KINDS[k];
+                return (
+                  <button key={k} role="tab" aria-selected={key === k} className={`tab ${key === k ? "on" : ""}`} title={K.blurb} onClick={() => switchTo(k)}>
+                    {K.title}<span className="tab-count">{(draft[k] ?? []).length}</span>
+                    {!editor && yoursIn(k) > 0 && <span className="tab-yours">{yoursIn(k)} yours</span>}
+                  </button>
+                );
+              })}
+            </ListTabs>
           );
         })}
       </div>
@@ -290,37 +357,32 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
       )}
 
       <div className="cat-split">
-        <section className="cat-list">
+        <section className="cat-list" ref={listBox}>
           <div className="cat-list-bar">
             <div className="search"><Search size={15} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${kind.title.toLowerCase()}`} aria-label={`Search ${kind.title.toLowerCase()}`} /></div>
             {editor && <button className="btn" onClick={() => { setAdding(true); setNewName(""); }}><Plus size={16} />New {kind.noun}</button>}
           </div>
-          <ul ref={listBox}>
-            {shown.map((r, at) => {
-              const used = usesOf(key, r.id, docs);
-              const n = used.length;
-              const rank = rows.findIndex((x) => x.id === r.id);
-              return (
-                // a second entry with the same id (lists imported with a mistake) is still its own row
-                <li key={shown.findIndex((x) => x.id === r.id) === at ? r.id : `${r.id}/${at}`}>
-                  <button className={`cat-item ${current === r ? "on" : ""}`} onClick={() => { setSelected(r.id); setAdding(false); }}>
-                    <EntryIcon icon={WITH_ICON.includes(key) ? r.icon : undefined} size={32}
-                      fallback={key === "paths" ? <span className="cat-avatar path-avatar" data-symbol={r.symbol ?? "none"}><PathSymbolIcon symbol={r.symbol} size={18} /></span>
-                        : <span className="cat-avatar">{ORDERED.includes(key) ? rank + (key === "tiers" ? 0 : 1) : r.name.slice(0, 1).toUpperCase()}</span>} />
-                    <span className="cat-item-text">
-                      <span className="cat-item-line">
-                        <strong>{r.name || "Unnamed"}{isNew(r.id) && <i>new</i>}</strong>
-                        {group && !isNew(r.id) && <RankMark rank={groupRank(perms, group, r.id)} />}
-                      </span>
-                      <em>{summaryLine(r)}</em>
-                    </span>
-                    <span className={`cat-uses ${n ? "" : "none"}`} title={n ? `Used by ${countOf(used)}` : "Not used by any process or standard"}>{n}</span>
-                  </button>
-                </li>
-              );
-            })}
+          {sections ? (
+            <div className="cat-sections">
+              {sections.map((sec, i) => (
+                <section key={sec.domain === null ? "-" : sec.domain?.id ?? "+"} className="cat-section" aria-labelledby={`cat-sec-${i}`}>
+                  {sec.domain !== null && <h2 id={`cat-sec-${i}`} className="cat-section-domain">{sec.domain ? sec.domain.name : NO_DOMAIN}<span className="sr-only"> (domain)</span></h2>}
+                  {sec.tribes.map((t, j) => (
+                    <div key={t.tribe?.id ?? "-"} className="cat-section-tribe">
+                      <h3 id={sec.domain === null ? `cat-sec-${i}` : `cat-sec-${i}-${j}`} className="cat-section-name">{t.tribe ? t.tribe.name : NO_TRIBE}{t.tribe && <span className="sr-only"> (tribe)</span>}</h3>
+                      <ul>{t.teams.map((r) => row(r as Row, shown.indexOf(r as Row)))}</ul>
+                    </div>
+                  ))}
+                </section>
+              ))}
+              {shown.length === 0 && <p className="cat-empty">Nothing matches your search.</p>}
+            </div>
+          ) : (
+          <ul>
+            {shown.map((r, at) => row(r, at))}
             {shown.length === 0 && <li className="cat-empty">{rows.length ? "Nothing matches your search." : `No ${kind.title.toLowerCase()} yet.`}</li>}
           </ul>
+          )}
         </section>
 
         <section className="cat-detail" ref={detailBox}>
@@ -330,7 +392,7 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
               <h2>New {kind.noun}</h2>
               <p className="muted">Give it the name people already use. You can add the details afterwards.</p>
               <Field label="Name">
-                <input autoFocus value={newName} maxLength={40} placeholder={`e.g. ${key === "teams" ? "Cloud Platform team" : key === "practices" ? "Cyber security" : key === "platforms" ? "Google Cloud" : key === "categories" ? "Cloud" : key === "tools" ? "ServiceNow" : key === "tiers" ? "Tier 4" : key === "paths" ? "Lift and shift" : key === "environments" ? "Pre-production" : "Rust"}`}
+                <input autoFocus value={newName} maxLength={40} placeholder={`e.g. ${key === "teams" ? "Cloud Platform team" : key === "practices" ? "Cyber security" : key === "platforms" ? "Google Cloud" : key === "categories" ? "Cloud" : key === "tools" ? "ServiceNow" : key === "tiers" ? "Tier 4" : key === "paths" ? "Lift and shift" : key === "patterns" ? "Event-driven" : key === "environments" ? "Pre-production" : "Rust"}`}
                   onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
               </Field>
               <p className="muted small">Id: <code>{slugify(newName) ? newId : "…"}</code>. It is made from the name and never changes, even if you rename.</p>
@@ -366,25 +428,36 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                 <div className="form">
                   <Field label="Name"><input data-field="name" value={current.name} maxLength={40} onChange={(e) => upd({ name: e.target.value })} /></Field>
                   {WITH_ICON.includes(key) && <IconField key={current.id} icon={current.icon} name={current.name} onChange={(icon) => upd({ icon })} />}
-                  {key === "paths" && (
-                    <Field label="Also called" hint="Other names people use for it, separated by commas, e.g. golden path. Searching for one finds what is for this path.">
-                      <input data-field="alsoCalled" value={(current.alsoCalled ?? []).join(", ")} placeholder="e.g. golden path"
+                  {WITH_OTHER_NAMES.includes(key) && (
+                    <Field label="Also called" hint={key === "paths" ? "Other names people use for it, separated by commas, e.g. golden path. Searching for one finds what is for this path." : "Other names people use for it, separated by commas, e.g. EDA. Searching for one finds what is tagged with this pattern."}>
+                      <input data-field="alsoCalled" value={(current.alsoCalled ?? []).join(", ")} placeholder={key === "paths" ? "e.g. golden path" : "e.g. EDA"}
                         onChange={(e) => { const names = e.target.value.split(",").map((t) => t.trimStart()); upd({ alsoCalled: names.some((t) => t.trim()) ? names : undefined }); }} />
                     </Field>
                   )}
                   {key === "paths" && <SymbolField value={current.symbol} onChange={(symbol) => upd({ symbol })} />}
+                  {key === "teams" && ((draft.tribes ?? []).length > 0 || !!current.tribe) && (
+                    <Field label="Tribe" hint="The group of teams it is part of, if any">
+                      <GroupChoice field="tribe" value={current.tribe} options={(draft.tribes ?? []) as Row[]} none="No tribe" onChange={(tribe) => upd({ tribe })} />
+                    </Field>
+                  )}
+                  {key === "tribes" && (
+                    <Field label="Domain" hint="The group of tribes it is part of, if any">
+                      <GroupChoice field="domain" value={current.domain} options={(draft.domains ?? []) as Row[]} none="No domain" onChange={(domain) => upd({ domain })} />
+                    </Field>
+                  )}
                   {group && <ContactFields key={`${key}/${current.id}`} kind={group} idPrefix={`lists-${group}`} value={{ description: current.description, contact: current.contact, contacts: current.contacts }}
                     onChange={(v) => upd({ description: v.description, contact: v.contact, contacts: v.contacts })} />}
                   {!group && kind.fields.map((f) => (
                     <Field key={f.field} label={f.label}>
                       {f.long
-                        ? <textarea data-field={f.field} rows={2} maxLength={200} value={current[f.field] ?? ""} placeholder={f.placeholder} onChange={(e) => upd({ [f.field]: e.target.value })} />
+                        ? <textarea data-field={f.field} rows={2} maxLength={f.max ?? 200} value={current[f.field] ?? ""} placeholder={f.placeholder} onChange={(e) => upd({ [f.field]: e.target.value })} />
                         : <input data-field={f.field} value={current[f.field] ?? ""} placeholder={f.placeholder} onChange={(e) => upd({ [f.field]: e.target.value })} />}
                     </Field>
                   ))}
                 </div>
               ) : group ? (
                 <div className="cat-group-facts">
+                  {key === "teams" && partOf(draft, current).length > 0 && <p className="cat-part-of"><PartOf pieces={partOf(draft, current)} onPick={(list, id) => { setKey(list); setSelected(id); }} /></p>}
                   {current.description?.trim() ? <p className="cat-group-description">{current.description}</p> : null}
                   <ContactList entry={current} name={current.name} empty="Nothing is known yet about how to reach them." />
                   <a className="btn cat-open-page" href={href({ page: "group", kind: group, id: current.id })}>Open the page of {current.name}<ArrowRight size={15} aria-hidden="true" /></a>
@@ -397,10 +470,16 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                       <dd><PathMark entry={current} named size="md" /></dd>
                     </div>
                   )}
-                  {key === "paths" && otherNames(current).length > 0 && (
+                  {WITH_OTHER_NAMES.includes(key) && otherNames(current).length > 0 && (
                     <div>
                       <dt>Also called</dt>
                       <dd>{otherNames(current).join(", ")}</dd>
+                    </div>
+                  )}
+                  {key === "tribes" && (
+                    <div>
+                      <dt>Domain</dt>
+                      <dd>{(() => { const d = ((draft.domains ?? []) as Row[]).find((x) => x.id === current.domain); return d ? <button type="button" className="link-like" onClick={() => { setKey("domains"); setSelected(d.id); }}>{d.name}</button> : "Not in a domain"; })()}</dd>
                     </div>
                   )}
                   {kind.fields.map((f) => current[f.field] && (
@@ -411,10 +490,25 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                         : current[f.field]}</dd>
                     </div>
                   ))}
-                  {kind.fields.every((f) => !current[f.field]) && <p className="muted">No details have been added yet.</p>}
+                  {kind.fields.every((f) => !current[f.field]) && key !== "tribes" && <p className="muted">No details have been added yet.</p>}
                 </dl>
               )}
 
+              {inner ? (
+                <div className="cat-usage cat-inner">
+                  <h3>{grouped.length ? `${grouped.length} ${grouped.length === 1 ? inner.noun : inner.many} in this ${kind.noun}` : `No ${inner.many} in this ${kind.noun} yet`}</h3>
+                  <ul>
+                    {grouped.map((r) => (
+                      <li key={r.id}>
+                        {!editor && inner.of === "teams"
+                          ? <a href={href({ page: "group", kind: "team", id: r.id })}><strong>{r.name || "Unnamed"}</strong><ArrowUpRight size={14} aria-hidden="true" /></a>
+                          : <button type="button" onClick={() => { setKey(inner.of); setSelected(r.id); }}><strong>{r.name || "Unnamed"}</strong><ArrowUpRight size={14} aria-hidden="true" /></button>}
+                      </li>
+                    ))}
+                  </ul>
+                  {editor && <p className="muted small">{inner.of === "teams" ? "A team is put in a tribe under Teams, in its own details." : "A tribe is put in a domain under Tribes, in its own details."}</p>}
+                </div>
+              ) : (
               <div className="cat-usage">
                 <h3>Used by {uses.length ? countOf(uses) : "nothing yet"}</h3>
                 <ul>
@@ -427,6 +521,7 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                   ))}
                 </ul>
               </div>
+              )}
 
               {/* who belongs to the team, platform or practice: everyone sees it, admins change it where the lists are managed */}
               {group && (
@@ -438,10 +533,10 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
 
               {editor && (
                 <div className="cat-danger">
-                  <button className="btn danger" disabled={!twin && (uses.length > 0 || stillMembers > 0)} onClick={() => remove(current)}>
+                  <button className="btn danger" disabled={!twin && (uses.length > 0 || stillMembers > 0 || grouped.length > 0)} onClick={() => remove(current)}>
                     <Trash2 size={15} />Remove this {kind.noun}
                   </button>
-                  <span className="muted small">{twin ? `Another ${kind.noun} has the same id: what uses it keeps the other one.` : removeHint(countOf(uses), stillMembers, kind.noun)}</span>
+                  <span className="muted small">{twin ? `Another ${kind.noun} has the same id: what uses it keeps the other one.` : inner && grouped.length ? groupedHint(grouped.length, inner, kind.noun) : removeHint(countOf(uses), stillMembers, kind.noun)}</span>
                 </div>
               )}
             </>
@@ -454,6 +549,52 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
       {editor && <ConflictDialog d={d} kind="catalog" id="catalog" noun="the lists" />}
     </div>
   );
+}
+
+/**
+ * One group of the lists' tabs: its name, then its tabs in a row of their own (a tablist named by
+ * the group). On a narrow screen the row scrolls sideways: the cut edge fades, the chosen tab is
+ * brought into view.
+ */
+function ListTabs({ id, name, chosen, children }: { id: string; name: string; chosen: string; children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  useScrollFade(box);
+  useEffect(() => {
+    const el = box.current, on = el?.querySelector<HTMLElement>(".tab.on");
+    if (!el || !on || el.scrollWidth <= el.clientWidth) return;
+    el.scrollLeft = Math.max(0, on.offsetLeft - el.offsetLeft - (el.clientWidth - on.offsetWidth) / 2);
+  }, [chosen]);
+  return (
+    <div className="cat-kinds-group" data-group={id}>
+      <span className="cat-kinds-name" id={`cat-kinds-${id}`}>{name}</span>
+      <div ref={box} className="tabs cat-kinds" role="tablist" aria-labelledby={`cat-kinds-${id}`}>{children}</div>
+    </div>
+  );
+}
+
+/**
+ * The tribe of a team, or the domain of a tribe: a choice of the list by name, "No tribe" (or "No
+ * domain") first. One it names that is no longer in the list still shows, so that it can be changed.
+ */
+function GroupChoice({ field, value, options, none, onChange }: { field: "tribe" | "domain"; value?: string; options: Row[]; none: string; onChange: (id: string | undefined) => void }) {
+  const sorted = [...options].sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <select data-field={field} value={value ?? ""} onChange={(e) => onChange(e.target.value || undefined)}>
+      <option value="">{none}</option>
+      {sorted.map((o) => <option key={o.id} value={o.id}>{o.name || o.id}</option>)}
+      {value && !options.some((o) => o.id === value) && <option value={value}>{value} (not in the list)</option>}
+    </select>
+  );
+}
+
+/** Where a team belongs, in the words of `partOf`; the tribe and the domain lead to their entries. */
+function PartOf({ pieces, onPick }: { pieces: ReturnType<typeof partOf>; onPick: (list: "tribes" | "domains", id: string) => void }) {
+  return <>{pieces.map((p, i) => (p.list && p.id ? <button key={i} type="button" className="link-like" onClick={() => onPick(p.list!, p.id!)}>{p.text}</button> : <span key={i}>{p.text}</span>))}</>;
+}
+
+/** Why a tribe or a domain cannot be removed yet: "Still the tribe of 2 teams. Take them out of it first, then it can be removed." */
+function groupedHint(n: number, inner: { noun: string; many: string }, noun: string): string {
+  return `Still the ${noun} of ${n} ${n === 1 ? inner.noun : inner.many}. Take ${n === 1 ? "it" : "them"} out of it first, then it can be removed.`;
 }
 
 /**

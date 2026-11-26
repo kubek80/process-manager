@@ -97,12 +97,14 @@
     {
       "id": "api-platform-team",
       "name": "API Platform team",
-      "contact": "Slack #api-platform"
+      "contact": "Slack #api-platform",
+      "tribe": "connectivity-tribe"
     },
     {
       "id": "azure-platform-team",
       "name": "Azure Platform team",
-      "contact": "Slack #azure-platform"
+      "contact": "Slack #azure-platform",
+      "tribe": "cloud-tribe"
     },
     {
       "id": "cloud-platform-team",
@@ -112,26 +114,31 @@
         "slack": "#cloud-platform",
         "slackUrl": "https://example.slack.com/archives/C0CLOUDPLAT"
       },
-      "description": "Runs the Google Cloud platform: landing zones, projects, networks and the shared tooling around them."
+      "description": "Runs the Google Cloud platform: landing zones, projects, networks and the shared tooling around them.",
+      "tribe": "cloud-tribe"
     },
     {
       "id": "security",
       "name": "Cyber Security",
-      "contact": "Slack #security"
+      "contact": "Slack #security",
+      "tribe": "trust-service-tribe"
     },
     {
       "id": "dns-team",
-      "name": "DNS team"
+      "name": "DNS team",
+      "tribe": "connectivity-tribe"
     },
     {
       "id": "developer-experience-team",
       "name": "Developer Experience team",
-      "contact": "Slack #devex"
+      "contact": "Slack #devex",
+      "tribe": "developer-tools-tribe"
     },
     {
       "id": "edge-cdn-team",
       "name": "Edge & CDN team",
-      "contact": "Slack #edge-cdn"
+      "contact": "Slack #edge-cdn",
+      "tribe": "connectivity-tribe"
     },
     {
       "id": "fulfilment-team",
@@ -140,11 +147,50 @@
     {
       "id": "network-team",
       "name": "Network team",
-      "contact": "Slack #network"
+      "contact": "Slack #network",
+      "tribe": "connectivity-tribe"
     },
     {
       "id": "service-management",
-      "name": "Service Management"
+      "name": "Service Management",
+      "tribe": "trust-service-tribe"
+    }
+  ],
+  "tribes": [
+    {
+      "id": "cloud-tribe",
+      "name": "Cloud",
+      "domain": "platforms-infrastructure",
+      "description": "The teams that run the company's Google Cloud and Azure estates."
+    },
+    {
+      "id": "connectivity-tribe",
+      "name": "Connectivity",
+      "domain": "platforms-infrastructure",
+      "description": "The teams that connect services to each other and to the internet: network, DNS, CDN and the API gateway."
+    },
+    {
+      "id": "developer-tools-tribe",
+      "name": "Developer tools",
+      "domain": "engineering-enablement",
+      "description": "The teams that build and run what engineers use every day: repositories, pipelines and templates."
+    },
+    {
+      "id": "trust-service-tribe",
+      "name": "Trust and service",
+      "description": "The teams that keep the company secure and run its service desk."
+    }
+  ],
+  "domains": [
+    {
+      "id": "engineering-enablement",
+      "name": "Engineering enablement",
+      "description": "The tribes that give engineers their tools, templates and ways of working."
+    },
+    {
+      "id": "platforms-infrastructure",
+      "name": "Platforms and infrastructure",
+      "description": "The tribes that run the clouds, the network and the shared platforms teams build on."
     }
   ],
   "practices": [
@@ -297,6 +343,60 @@
       "id": "terraform",
       "name": "Terraform",
       "icon": "39670e5de4fa16a98b53cd3e18e2781247b96f7931ee34d0b1db0b1dc57b063a"
+    }
+  ],
+  "patterns": [
+    {
+      "id": "api-first",
+      "name": "API-first",
+      "alsoCalled": [
+        "contract-first",
+        "API-led"
+      ],
+      "description": "The interface is designed and agreed as an API before it is built, and every use goes through that API."
+    },
+    {
+      "id": "batch-data-pipelines",
+      "name": "Batch and data pipelines",
+      "alsoCalled": [
+        "ETL",
+        "data pipeline"
+      ],
+      "description": "Data is collected, moved and transformed in scheduled runs, for example into the data warehouse."
+    },
+    {
+      "id": "event-driven",
+      "name": "Event-driven",
+      "alsoCalled": [
+        "event-based",
+        "EDA"
+      ],
+      "description": "Services react to events they receive from a broker or a stream instead of calling each other directly."
+    },
+    {
+      "id": "microservices",
+      "name": "Microservices",
+      "alsoCalled": [
+        "microservice architecture"
+      ],
+      "description": "An application is split into small services that are built, deployed and scaled on their own, usually in containers."
+    },
+    {
+      "id": "serverless",
+      "name": "Serverless",
+      "alsoCalled": [
+        "functions as a service",
+        "FaaS"
+      ],
+      "description": "Code runs in functions or managed services the cloud starts on demand; there are no servers to look after."
+    },
+    {
+      "id": "static-site-cdn",
+      "name": "Static site behind a CDN",
+      "alsoCalled": [
+        "JAMstack"
+      ],
+      "description": "Pages and files are built ahead of time and served from a content delivery network close to the readers."
     }
   ]
 }

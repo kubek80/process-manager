@@ -449,7 +449,7 @@ test("Teams & tools: own groups first with a mark, “N yours” on the tabs, th
   await open(page, "/");
   await navigate(page, "Teams & tools");
   await expect(page).toHaveURL(/#\/catalog(\/teams)?$/);
-  const tabs = page.getByRole("tablist", { name: "Lists" });
+  const tabs = page.getByRole("group", { name: "Lists" });
   await expect(tabs.getByRole("tab", { name: /^Teams/ }).locator(".tab-yours")).toHaveText("1 yours");
   await expect(tabs.getByRole("tab", { name: /^Platforms/ }).locator(".tab-yours")).toHaveText("1 yours");
   await expect(tabs.getByRole("tab", { name: /^Practices/ }).locator(".tab-yours")).toHaveText("1 yours");

@@ -294,8 +294,9 @@ func partsOf(e *entry, l docs.Lists) []part {
 
 func fieldsOf(e *entry, l docs.Lists) []field {
 	c := e.c
-	// the paths with what else they are called: "golden path" finds what is on the paved path
-	names := strings.Join([]string{name(l.Categories, c.Category), name(l.Practices, c.Practice), name(l.Platforms, c.Platform), name(l.Teams, c.Owner), docs.PathNames(l.Paths, c.Paths)}, " ")
+	// the paths and the architecture patterns with what else they are called: "golden path" finds
+	// what is on the paved path, "EDA" what is tagged event-driven
+	names := strings.Join([]string{name(l.Categories, c.Category), name(l.Practices, c.Practice), name(l.Platforms, c.Platform), name(l.Teams, c.Owner), docs.PathNames(l.Paths, c.Paths), docs.PatternNames(l.Patterns, c.Patterns)}, " ")
 	return []field{
 		{fold(c.Title), weightTitle},
 		{fold(e.doc.ID), weightID},

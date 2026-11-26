@@ -11,6 +11,9 @@
   "paths": [
     "paved-path"
   ],
+  "patterns": [
+    "api-first"
+  ],
   "tiers": [
     "tier-0",
     "tier-1",

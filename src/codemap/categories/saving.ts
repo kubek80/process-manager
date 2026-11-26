@@ -210,7 +210,7 @@ export const saving: CodeCategory = {
       requirements: [
         { text: "A category, practice or platform that is not in the lists refuses the save, with the known ids in the answer: a document never points at nothing.", at: "add(\"%s: %q is not a known %s. Known %s: %s\", field, id, noun, plural, ids(list))" },
         { text: "Every reference a document makes to a list or another document; `stillUsed` in `httpapi/content.go` uses it to refuse removing a used entry. A new field that refers to a list must be added here.", at: "func UsesOf(kind string, body []byte) Uses {" },
-        { text: "Two entries of one list with the same id are refused in the app's words (`duplicateSentence` in `src/lib/validate.ts`); an entry is named by `EntryWords`, by name, else by id, never by its place.", at: "add(\"%s[%d].id: Two %s have the id “%s”%s: remove one of them.\", key, i, key, n.ID, both)" },
+        { text: "Two entries of one list with the same id are refused in the app's words (`duplicateSentence` in `src/lib/validate.ts`); an entry is named by `EntryWords`, by name, else by id, never by its place.", at: "add(\"%s[%d].id: Two %s have the id “%s”%s: remove one of them.\", key, i, many, n.ID, both)" },
       ],
       tests: ["server/internal/docs/check_test.go"],
     },
