@@ -322,14 +322,16 @@ export type Route =
   | { page: "home" } | ({ page: "search" } & SearchState)
   | ({ page: "library" } & ListState) | ({ page: "standards" } & ListState) | ({ page: "catalog" } & CatalogView) | { page: "guide" } | { page: "mine" }
   | ({ page: "requests" } & RequestsView)
-  | ({ page: "admin"; section: AdminSection } & CodeView)
+  | ({ page: "admin"; section: AdminSection } & CodeView & CatalogView)
   | { page: "process"; id: string; tab: Tab; item?: string }
   | { page: "standard"; id: string; tab: StandardTab; item?: string }
   /** The editing screen; `item` is the step or requirement that is selected. */
   | { page: "edit-process"; id: string; item?: string }
   | { page: "edit-standard"; id: string; item?: string }
   /** The page of a team, a platform or a practice. */
-  | { page: "group"; kind: GroupKind; id: string };
+  | { page: "group"; kind: GroupKind; id: string }
+  /** The page of a tribe (a group of teams) or a domain (a group of tribes). */
+  | { page: "tribe" | "domain"; id: string };
 
 /** The lists of Teams & tools, as the address names them. */
 export const CATALOG_LISTS = ["teams", "tribes", "domains", "practices", "platforms", "categories", "tools", "patterns", "tiers", "paths", "environments", "languages"] as const;
@@ -449,12 +451,17 @@ const parse = (h: string = location.hash): Route => {
   if (h.startsWith("#/guide")) return { page: "guide" };
   if (h.startsWith("#/mine")) return { page: "mine" };
   if (h.startsWith("#/standards")) return { page: "standards" };
+  const cluster = h.match(/^#\/(tribe|domain)\/([a-z0-9-]+)\/?$/);
+  if (cluster) return { page: cluster[1] as "tribe" | "domain", id: cluster[2] };
   const group = h.match(/^#\/(team|platform|practice)\/([a-z0-9-]+)\/?$/);
   if (group) return { page: "group", kind: group[1] as GroupKind, id: group[2] };
   const requests = h.match(/^#\/requests(?:\?(.*))?$/);
   if (requests) return { page: "requests", ...parseRequestsQuery(requests[1] ?? "") };
   const code = h.match(/^#\/admin\/code(?:\/([^/?#]+)(?:\/file(?:\/([^?#]*))?)?)?\/?(?:\?(.*))?$/);
   if (code) return { page: "admin", section: "code", ...parseCode(code[1], code[2], code[3]) };
+  // Admin › Lists opened at one entry ("Edit in Admin › Lists" on a tribe's or a domain's page)
+  const lists = h.match(/^#\/admin\/lists\/([a-z]+)(?:\/([a-z0-9-]+))?\/?$/);
+  if (lists && (CATALOG_LISTS as readonly string[]).includes(lists[1])) return { page: "admin", section: "lists", list: lists[1] as CatalogList, ...(lists[2] ? { id: lists[2] } : {}) };
   const admin = h.match(/^#\/admin(?:\/(access|lists|skills|health|activity|statistics|theming|system|code))?/);
   if (admin) return { page: "admin", section: (admin[1] as AdminSection) ?? "access" };
   const es = h.match(/^#\/s\/([a-z0-9-]+)\/(?:edit(?:\/([A-Z][A-Z0-9-]*))?|json)/);
@@ -627,12 +634,13 @@ export const href = (r: Route): string => {
     case "guide": return "#/guide";
     case "mine": return "#/mine";
     case "requests": return `#/requests${requestsQuery(r)}`;
-    case "admin": return r.section === "code" ? codeHref(r) : `#/admin/${r.section}`;
+    case "admin": return r.section === "code" ? codeHref(r) : r.section === "lists" && r.list ? `#/admin/lists/${r.list}${r.id ? `/${r.id}` : ""}` : `#/admin/${r.section}`;
     case "standard": return r.tab === "json" ? `#/s/${r.id}/edit` : `#/s/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
     case "process": return r.tab === "json" ? `#/p/${r.id}/edit` : `#/p/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
     case "edit-process": return `#/p/${r.id}/edit${r.item ? `/${r.item}` : ""}`;
     case "edit-standard": return `#/s/${r.id}/edit${r.item ? `/${r.item}` : ""}`;
     case "group": return `#/${r.kind}/${r.id}`;
+    case "tribe": case "domain": return `#/${r.page}/${r.id}`;
   }
 };
 /**
@@ -663,6 +671,7 @@ export function pageTitle(r: Route, names: { process?: string; standard?: string
     case "edit-process": here = names.process ? `Editing ${names.process}` : of(undefined, "Process not found"); break;
     case "edit-standard": here = names.standard ? `Editing ${names.standard}` : of(undefined, "Standard not found"); break;
     case "group": here = of(names.group, `${r.kind === "team" ? "Team" : r.kind === "platform" ? "Platform" : "Practice"} not found`); break;
+    case "tribe": case "domain": here = of(names.group, `${r.page === "tribe" ? "Tribe" : "Domain"} not found`); break;
   }
   return here ? `${here} · ${APP}` : APP;
 }

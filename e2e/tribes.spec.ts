@@ -102,17 +102,18 @@ test("a domain, a tribe in it and a team in the tribe: made in Admin › Lists, 
   // the first team in that order is the one shown
   await expect(detail(page).getByRole("heading", { name: "Fulfilment team" })).toBeVisible();
   await expect(detail(page).locator(".cat-part-of")).toHaveText("Part of the tribe Payments demo, in the domain Customer demo");
-  await detail(page).locator(".cat-part-of").getByRole("button", { name: "Payments demo" }).click();
-  await expect(page).toHaveURL(new RegExp(`#/catalog/tribes/${TRIBE}$`));
+  await expect(detail(page).locator(".cat-part-of").getByRole("link", { name: "Payments demo" })).toHaveAttribute("href", `#/tribe/${TRIBE}`);
+  await open(page, `/catalog/tribes/${TRIBE}`);
   await expect(detail(page).locator(".cat-facts")).toContainText(/Domain\s*Customer demo/);
   await expect(detail(page).locator(".cat-inner").getByRole("link", { name: "Fulfilment team" })).toHaveAttribute("href", "#/team/fulfilment-team");
+  await expect(detail(page).getByRole("link", { name: "Open the page of Payments demo" })).toHaveAttribute("href", `#/tribe/${TRIBE}`);
 
   // the team's page says it in its head; the names lead to their entries
   await open(page, "/team/fulfilment-team");
   const part = page.locator(".group-head .group-part");
   await expect(part).toHaveText("Part of the tribe Payments demo, in the domain Customer demo");
-  await expect(part.getByRole("link", { name: "Payments demo" })).toHaveAttribute("href", `#/catalog/tribes/${TRIBE}`);
-  await expect(part.getByRole("link", { name: "Customer demo" })).toHaveAttribute("href", `#/catalog/domains/${DOMAIN}`);
+  await expect(part.getByRole("link", { name: "Payments demo" })).toHaveAttribute("href", `#/tribe/${TRIBE}`);
+  await expect(part.getByRole("link", { name: "Customer demo" })).toHaveAttribute("href", `#/domain/${DOMAIN}`);
   // a team in a tribe without a domain; a team in no tribe says nothing
   await open(page, "/team/security");
   await expect(page.locator(".group-head .group-part")).toHaveText("Part of the tribe Trust and service");
@@ -185,4 +186,82 @@ test("with no tribes and no domains, everything looks as it did before", async (
   await expect(detail(page).getByLabel("Tribe")).toHaveCount(0);
   await tab(page, "Tribes").click();
   await expect(page.locator(".cat-list")).toContainText("No tribes yet.");
+});
+
+test("a tribe and a domain have pages: from Teams & tools to the tribe, its domain, a team and back", async ({ page }) => {
+  await signIn(page, SAM);
+  await open(page, "/catalog/teams");
+  await page.locator(".cat-list .cat-section-name").getByRole("link", { name: "Developer tools" }).click();
+  await expect(page).toHaveURL(/#\/tribe\/developer-tools-tribe$/);
+  await expect(page).toHaveTitle(/^Developer tools · /);
+  const head = page.locator(".group-head");
+  await expect(head.locator(".group-kind")).toHaveText("Tribe");
+  await expect(head.locator("h1")).toHaveText("Developer tools");
+  await expect(head.locator(".group-lead")).toHaveText("The teams that build and run what engineers use every day: repositories, pipelines and templates.");
+  await expect(head.getByRole("link", { name: "Edit in Admin › Lists" })).toHaveCount(0); // a reader
+  const members = page.getByRole("region", { name: "Teams in this tribe" });
+  await expect(members.locator(".cluster-team a")).toHaveText(["Developer Experience team"]);
+  await expect(members.locator(".cluster-team-line")).toHaveText(["Slack #devex"]);
+  // what its teams own: the cards of the team's page
+  const docs = page.getByRole("region", { name: "What its teams look after" });
+  await expect(docs.locator(".group-count")).toHaveText("2 processes and 1 standard");
+  await expect(docs.locator(".card .card-title")).toHaveCount(3);
+  expect((await docs.locator(".card .card-title").allTextContents()).sort()).toEqual(["Code review", "Publish an internal library", "Request a repository"]);
+  await expect(docs.getByRole("link", { name: /Open in the search/ })).toHaveAttribute("href", "#/search?owner=developer-experience-team");
+  // its domain
+  await head.locator(".group-part").getByRole("link", { name: "Engineering enablement" }).click();
+  await expect(page).toHaveURL(/#\/domain\/engineering-enablement$/);
+  await expect(page.locator(".group-head .group-kind")).toHaveText("Domain");
+  const tribes = page.getByRole("region", { name: "Tribes in this domain" });
+  await expect(tribes.locator(".cluster-tribe h3")).toHaveText(["Developer tools"]);
+  await expect(page.getByRole("region", { name: "What the teams of its tribes look after" }).locator(".group-count")).toHaveText("2 processes and 1 standard");
+  // a team, whose page says its tribe, which leads back
+  await tribes.getByRole("link", { name: "Developer Experience team" }).click();
+  await expect(page).toHaveURL(/#\/team\/developer-experience-team$/);
+  await page.locator(".group-part").getByRole("link", { name: "Developer tools" }).click();
+  await expect(page).toHaveURL(/#\/tribe\/developer-tools-tribe$/);
+  // back to Teams & tools, at the entry
+  await page.locator(".group-page > a.back").click();
+  await expect(page).toHaveURL(/#\/catalog\/tribes\/developer-tools-tribe$/);
+
+  // a tribe without a domain says nothing about one; an unknown id is not found
+  await open(page, "/tribe/trust-service-tribe");
+  await expect(page.locator(".group-head .group-part")).toHaveCount(0);
+  await open(page, "/tribe/no-such-tribe");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tribe not found");
+  await expect(page.getByRole("link", { name: "Back to Teams & tools" })).toBeVisible();
+  await open(page, "/domain/no-such-domain");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Domain not found");
+
+  // a lists manager: one way to change it, in Admin › Lists, at its entry
+  await signIn(page, ALEX);
+  await open(page, "/domain/engineering-enablement");
+  await page.getByRole("link", { name: "Edit in Admin › Lists" }).click();
+  await expect(page).toHaveURL(/#\/admin\/lists\/domains\/engineering-enablement$/);
+  await expect(page.getByRole("tab", { name: /^Domains/ })).toHaveAttribute("aria-selected", "true");
+  await expect(detail(page).locator('[data-field="name"]')).toHaveValue("Engineering enablement");
+});
+
+test("an empty tribe and domain say so; the pages fit a phone without sideways scroll", async ({ page }) => {
+  const res = await putLists(page.request, (c) => {
+    c.domains.push({ id: DOMAIN, name: "Customer demo" });
+    c.tribes.push({ id: TRIBE, name: "Payments demo", domain: DOMAIN });
+  });
+  expect(res.ok(), await res.text()).toBeTruthy();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page, SAM);
+  await open(page, `/tribe/${TRIBE}`);
+  await expect(page.getByRole("region", { name: "Teams in this tribe" }).locator(".cluster-empty")).toHaveText("No team is part of this tribe yet.");
+  await expect(page.getByRole("region", { name: "What its teams look after" }).locator(".group-empty")).toHaveText("No team is part of this tribe yet.");
+  await expect(page.locator(".alert")).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await open(page, "/domain/platforms-infrastructure");
+  await expect(page.locator(".cluster-tribe h3")).toHaveText(["Cloud", "Connectivity"]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  // a domain without tribes
+  const res2 = await putLists(page.request, (c) => { c.tribes = c.tribes.filter((t: { id: string }) => t.id !== TRIBE); });
+  expect(res2.ok()).toBeTruthy();
+  await signIn(page, SAM);
+  await open(page, `/domain/${DOMAIN}`);
+  await expect(page.getByRole("region", { name: "Tribes in this domain" }).locator(".cluster-empty")).toHaveText("No tribe is part of this domain yet.");
 });

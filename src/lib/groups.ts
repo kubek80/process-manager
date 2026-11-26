@@ -328,3 +328,39 @@ export function teamChoices(c: Pick<Catalog, "teams" | "tribes" | "domains">): {
     teams: x.teams,
   })));
 }
+
+// ---------- the page of a tribe or a domain
+
+/** A tribe or a domain: each has a page of its own (`#/tribe/:id`, `#/domain/:id`). */
+export type ClusterKind = "tribe" | "domain";
+export const CLUSTER_LIST: Record<ClusterKind, "tribes" | "domains"> = { tribe: "tribes", domain: "domains" };
+export const CLUSTER_WORD: Record<ClusterKind, string> = { tribe: "Tribe", domain: "Domain" };
+
+/** The entry of the lists a tribe's or a domain's page is about; undefined for an id that does not exist. */
+export const clusterEntry = (c: Pick<Catalog, "tribes" | "domains">, kind: ClusterKind, id: string): Tribe | Domain | undefined =>
+  ((kind === "tribe" ? c.tribes : c.domains) ?? []).find((e) => e.id === id);
+
+/**
+ * What a tribe's or a domain's page lists: a tribe its teams; a domain its tribes, each with its
+ * teams. `teams` are all the teams in it, whose processes and standards the page shows.
+ */
+export function clusterContents(c: Pick<Catalog, "teams" | "tribes" | "domains">, kind: ClusterKind, id: string): { tribes: { tribe: Tribe; teams: Team[] }[]; teams: Team[] } {
+  const tribes = kind === "tribe"
+    ? (c.tribes ?? []).filter((t) => t.id === id)
+    : tribesOfDomain(c, id);
+  const grouped = tribes.map((tribe) => ({ tribe, teams: teamsOfTribe(c, tribe.id) }));
+  return { tribes: grouped, teams: grouped.flatMap((g) => g.teams) };
+}
+
+/**
+ * The search filter that finds what the teams of a tribe or domain own: the same as a team's page
+ * uses (`groupFilter`), for several teams. Null when it has no teams: then nothing belongs to it
+ * (an empty owner filter would mean everything).
+ */
+export const clusterFilter = (teams: { id: string }[]): Filters | null => (teams.length ? { owner: teams.map((t) => t.id) } : null);
+
+/** What a tribe or a domain without teams or tribes says, in plain words. */
+export const clusterEmpty = (kind: ClusterKind, contents: { tribes: unknown[]; teams: unknown[] }): string =>
+  kind === "domain" && !contents.tribes.length ? "No tribe is part of this domain yet."
+    : !contents.teams.length ? (kind === "tribe" ? "No team is part of this tribe yet." : "No team is part of the tribes of this domain yet.")
+    : "";

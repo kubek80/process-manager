@@ -21,7 +21,7 @@ import { StandardsLibrary } from "./components/StandardsLibrary";
 import { MinePage } from "./components/MinePage";
 import { accountRoles, minePlace } from "./lib/responsibilities";
 import { platformName, practiceName } from "./lib/catalog";
-import { groupEntry } from "./lib/groups";
+import { clusterEntry, groupEntry } from "./lib/groups";
 import type { GroupKind } from "./lib/members";
 import { chooseDialog, confirmDialog, ErrorBoundary, Field, LoadError, Loading, Modal, Notices, notify, useLayer } from "./components/ui";
 import { BrandLogo } from "./components/Brand";
@@ -38,6 +38,7 @@ const GuidePage = lazy(() => import("./components/GuidePage").then((m) => ({ def
 const HomePage = lazy(() => import("./components/HomePage").then((m) => ({ default: m.HomePage })));
 const SearchPage = lazy(() => import("./components/SearchPage").then((m) => ({ default: m.SearchPage })));
 const GroupPage = lazy(() => import("./components/GroupPage").then((m) => ({ default: m.GroupPage })));
+const ClusterPage = lazy(() => import("./components/ClusterPage").then((m) => ({ default: m.ClusterPage })));
 const RequestsPage = lazy(() => import("./components/RequestsPage").then((m) => ({ default: m.RequestsPage })));
 const EditProcessPage = lazy(() => import("./components/EditProcessPage").then((m) => ({ default: m.EditProcessPage })));
 const EditStandardPage = lazy(() => import("./components/EditStandardPage").then((m) => ({ default: m.EditStandardPage })));
@@ -47,7 +48,7 @@ const AiDialog = lazy(() => import("./components/AiDialog").then((m) => ({ defau
  * A page for something that is not there (deleted, or never existed). The lists in memory may be
  * older than the address - somebody may have created it since - so the server is asked once first.
  */
-function NotFound({ noun, recheck }: { noun: "process" | "standard" | GroupKind; recheck?: () => Promise<unknown> }) {
+function NotFound({ noun, recheck }: { noun: "process" | "standard" | GroupKind | "tribe" | "domain"; recheck?: () => Promise<unknown> }) {
   const [checked, setChecked] = useState(!recheck);
   useEffect(() => { if (recheck) void recheck().catch(() => {}).finally(() => setChecked(true)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!checked) return <Loading page />;
@@ -591,12 +592,13 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     { key: "requests", pages: ["requests"], href: href({ page: "requests" }), label: "Requests", title: "Requests: ask for a process or standard that is missing, vote for what others asked for", icon: Lightbulb },
     ...(mine.length > 0 ? [{ key: "mine", pages: ["mine"], href: href({ page: "mine" }), label: "My responsibilities", title: minePl.title, icon: ClipboardCheck, count: waiting,
       name: waiting ? `My responsibilities, ${waiting} waiting` : "My responsibilities" }] : []),
-    { key: "catalog", pages: ["catalog", "group"], href: href({ page: "catalog" }), label: "Teams & tools", title: "Teams & tools", icon: Users },
+    { key: "catalog", pages: ["catalog", "group", "tribe", "domain"], href: href({ page: "catalog" }), label: "Teams & tools", title: "Teams & tools", icon: Users },
     { key: "guide", pages: ["guide"], href: href({ page: "guide" }), label: "Guide", title: "Guide", icon: BookOpen },
     ...(canOpenAdmin(perms) ? [{ key: "admin", pages: ["admin"], href: href({ page: "admin", section: perms.admin ? "access" : "lists" }), label: "Admin", title: "Admin", icon: Settings2 }] : []),
   ];
 
-  const group = route.page === "group" ? groupEntry(catalog, route.kind, route.id) : undefined;
+  const group = route.page === "group" ? groupEntry(catalog, route.kind, route.id)
+    : route.page === "tribe" || route.page === "domain" ? clusterEntry(catalog, route.page, route.id) : undefined;
   const title = pageTitle(route, { process: process?.title, standard: standard?.title, group: group?.name, loading: !processes }, name);
   useEffect(() => { document.title = title; }, [title]);
 
@@ -639,6 +641,9 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
         ? <GroupPage key={`${route.kind}/${route.id}`} kind={route.kind} id={route.id} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }}
           onNew={(noun, place) => { setPending(null); setPreset(place); if (noun === "standard") newStandard(); else setNaming("process"); }} />
         : <NotFound key={`g/${route.kind}/${route.id}`} noun={route.kind} recheck={refreshAll} />)}
+      {processes && (route.page === "tribe" || route.page === "domain") && (group
+        ? <ClusterPage key={`${route.page}/${route.id}`} kind={route.page} id={route.id} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }} />
+        : <NotFound key={`c/${route.page}/${route.id}`} noun={route.page} recheck={refreshAll} />)}
       {processes && route.page === "requests" && <RequestsPage state={route.state} kind={route.kind} processes={all} standards={standards} />}
       {processes && route.page === "mine" && (
         <MinePage processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }}
@@ -646,7 +651,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       )}
       {processes && route.page === "guide" && <GuidePage />}
       {processes && route.page === "admin" && (canOpenAdmin(perms)
-        ? <AdminPage section={route.section} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }} />
+        ? <AdminPage section={route.section} list={route.list} id={route.id} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }} />
         : <div className="page not-found"><h1>Admin</h1><p className="muted">You do not have access to the Admin panel. An admin can give it to you.</p></div>)}
       {processes && route.page === "process" && (process
         ? <ProcessPage key={process.id} process={process} meta={processMeta[process.id]} all={all} standards={standards} tab={route.tab} item={route.item}

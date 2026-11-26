@@ -139,11 +139,13 @@ export const formats: CodeCategory = {
     },
     {
       path: "schema/catalog.schema.json",
-      role: "The format of the lists: tiers, paths, environments, languages, teams, practices, platforms, categories and tools.",
+      role: "The format of the lists: tiers, paths, environments, languages, teams with the tribes and domains that group them, practices, platforms, categories, tools and architecture patterns.",
       requirements: [
         { text: "An icon id has exactly the shape of a SHA-256 (`icons.ValidID` checks the same); whether that icon is stored is checked by the server (`knownIcons`), not by the schema.", at: "\"pattern\": \"^[a-f0-9]{64}$\"," },
         { text: "`contacts` may not be empty (`minProperties: 1`): no contacts means leaving the object out, which `groups.go` does for an empty set.", at: "\"minProperties\": 1," },
         { text: "`paths` is not required, so lists stored before there were paths stay valid; the upgrade adds them once (`upgrade/lists.go`).", at: "\"description\": \"Paths a process or standard can be for: greenfield" },
+        { text: "`patterns`, `tribes` and `domains` are not required: lists without them have none, and nothing adds any (an organisation names its own).", at: "\"description\": \"Tribes: groups of teams." },
+        { text: "A team's `tribe` and a tribe's `domain` are slugs only here; that they are entries of their lists is checked by `docs.Check` and the app's `validateCatalog`, in words.", at: "\"description\": \"Id of the tribe (from the tribes list) this team is part of. Leave out when it is part of none.\"" },
         { text: "A path's picture is one of the built-in set (`PATH_SYMBOLS` in `marks.tsx` draws exactly these); a picture the app cannot draw is refused, not shown as a broken mark.", at: "\"symbol\": {" },
       ],
       tests: ["server/internal/schema/schema_test.go", "server/internal/docs/check_test.go"],
@@ -174,13 +176,15 @@ export const formats: CodeCategory = {
         { text: "A category, practice or platform that is not in the lists is refused: `stillUsed` and the rights by platform and practice depend on every id being an entry. An unknown owning team is not checked here.", at: "if id != \"\" && !has(list, id) {" },
         { text: "Every path a process or standard names must be in the list of paths (the app's `checkPaths` says the same in its words): otherwise `stillUsed` could not protect it and the filters would offer a path that does not exist. Test: `docs/paths_test.go`.", at: "add(\"paths[%d]: %q is not a known path. Known paths: %s\", i, id, ids(l.Paths))" },
         { text: "The paths a document names count as uses of the list, so `stillUsed` refuses to remove a path that a process or standard (also a draft) still names. Working drafts are not counted: one that names a removed path is refused at publish until it names another. Test: `httpapi/paths_test.go`.", at: "list(\"paths\", p.Paths...)" },
+        { text: "Every architecture pattern a process or standard is tagged with must be in the list (the app's `checkPatterns` says the same); the patterns count as uses, so `stillUsed` protects them. Test: `docs/patterns_test.go`.", at: "add(\"patterns[%d]: %q is not a known architecture pattern. Known architecture patterns: %s\", i, id, ids(l.Patterns))" },
+        { text: "A team's tribe and a tribe's domain must be entries of their lists, said as the app says it (`unknownGroupSentence`). Test: `docs/tribes_test.go`.", at: "add(\"teams[%d].tribe: %s\", i, unknownGroup(\"team\", t, \"tribe\"))" },
         { text: "`Removed` gives the entries a new version of the lists drops, as `<list>/<id>`; `stillUsed` refuses them while a document or a role still names them.", at: "func Removed(old, new Lists) []string {" },
       ],
       tests: ["server/internal/docs/check_test.go", "server/internal/httpapi/versions_test.go"],
     },
     {
       path: "server/internal/docs/paths.go",
-      role: "The paths' names as the skills, the chunk text and the MCP server write them (with their other names), and the check that an other name belongs to one path only.",
+      role: "The names of the paths and of the architecture patterns as the skills, the chunk text and the MCP server write them (with their other names), and the check that an other name belongs to one entry of its list only.",
       requirements: [
         { text: "One wording for every machine reader: \"Paved path (also called golden path, paved road)\", so a search for \"golden path\" finds what is on the paved path in the index too. The app's `pathWords` (`src/lib/paths.ts`) gives the word search the same names.", at: "func PathNames(list []Named, ids []string) string {" },
         { text: "An other name belongs to one path and is no other path's name, whatever its case; otherwise a search or an agent's `path=` could not tell which path is meant. Same sentences as the app's `otherNameClashes`.", at: "func otherNameClashes(paths []Named) []string {" },

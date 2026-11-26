@@ -4,7 +4,7 @@ import type { AuditEntry, FeedbackByTarget, Process, Skill, Standard, TargetKind
 import { teamName, useCatalog } from "../lib/catalog";
 import { reviewOf, statusOf } from "../lib/lifecycle";
 import { usePerms } from "../lib/session";
-import { go, href, loadAudit, loadMembers, loadSkills, loadUsers, loadSystem, type AdminSection, type MetaById, type SystemInfo } from "../lib/store";
+import { go, href, loadAudit, loadMembers, loadSkills, loadUsers, loadSystem, type AdminSection, type CatalogList, type MetaById, type SystemInfo } from "../lib/store";
 import { KindTag } from "./marks";
 import { describeEntry, detailParts, type Names } from "../lib/activity";
 import { reviewsDue } from "../lib/responsibilities";
@@ -238,8 +238,11 @@ function SystemSection() {
   );
 }
 
-export function AdminPage({ section, processes, standards, feedback, meta }: {
-  section: AdminSection; processes: Process[]; standards: Standard[]; feedback: FeedbackByTarget;
+export function AdminPage({ section, list, id, processes, standards, feedback, meta }: {
+  section: AdminSection;
+  /** Admin › Lists opened at one list and entry (`#/admin/lists/tribes/payments`). */
+  list?: CatalogList; id?: string;
+  processes: Process[]; standards: Standard[]; feedback: FeedbackByTarget;
   /** When each was first published (`meta[id].publishedAt`): where the first review is counted from. */
   meta?: Partial<Record<TargetKind, MetaById>>;
 }) {
@@ -266,7 +269,7 @@ export function AdminPage({ section, processes, standards, feedback, meta }: {
         {/* the code map has a heading of its own: the category or the file that is open */}
         {current.id !== "code" && <header className="admin-head"><h1>{current.label}</h1><p className="lead">{current.hint}</p></header>}
         {current.id === "access" && <UsersSection />}
-        {current.id === "lists" && <CatalogPage processes={processes} standards={standards} editable />}
+        {current.id === "lists" && <CatalogPage key={`${list ?? ""}/${id ?? ""}`} processes={processes} standards={standards} editable list={list} id={id} />}
         {current.id === "skills" && <SkillsSection />}
         {current.id === "health" && <HealthSection processes={processes} standards={standards} feedback={feedback} meta={meta} />}
         {current.id === "activity" && <ActivitySection processes={processes} standards={standards} feedback={feedback} />}

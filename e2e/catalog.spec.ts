@@ -76,7 +76,7 @@ test("a new environment can be chosen in a process; the lists of groups are sepa
   await expect(page.getByRole("group", { name: "Lists" }).getByRole("tablist")).toHaveCount(3);
   for (const n of ["Who", "What", "Where it applies"]) await expect(page.getByRole("tablist", { name: n, exact: true })).toBeVisible();
   const tabs = page.getByRole("group", { name: "Lists" }).getByRole("tab");
-  const names = ["Teams", "Practices", "Platforms", "Categories", "Tools", "Architecture patterns", "Application tiers", "Paths", "Environments", "Languages"];
+  const names = ["Teams", "Tribes", "Domains", "Practices", "Platforms", "Categories", "Tools", "Architecture patterns", "Application tiers", "Paths", "Environments", "Languages"];
   await expect(tabs).toHaveText(names.map((n) => new RegExp(`^${n}\\s*\\d+$`)));
   // each tab counts its entries; the one chosen is marked, and says what the list is for under the tabs
   const lists = await readCatalog(page);

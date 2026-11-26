@@ -455,13 +455,20 @@ test("Teams & tools: own groups first with a mark, “N yours” on the tabs, th
   await expect(tabs.getByRole("tab", { name: /^Practices/ }).locator(".tab-yours")).toHaveText("1 yours");
   await expect(tabs.getByRole("tab", { name: /^Tools/ }).locator(".tab-yours")).toHaveCount(0);
 
-  // his own team first, with the mark on its line; the rest by name
+  // the teams are under their tribes (the sample has tribes): in his tribe his own team first,
+  // with the mark on its line; in every tribe the rest by name
   const rows = page.locator(".cat-item");
-  await expect(rows.first()).toContainText("Cloud Platform team");
-  await expect(rows.first().locator(".cat-item-line .rank-mark")).toHaveText("You are an owner");
-  const names = (await rows.locator(".cat-item-line").allTextContents()).slice(1).map((t) => t.replace("You are an owner", "").trim());
-  expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })));
-  await expect(rows.first()).toContainText("Slack #cloud-platform"); // the summary says what it is
+  const cloud = page.locator(".cat-section-tribe", { has: page.getByRole("heading", { name: "Cloud (tribe)" }) }).locator(".cat-item");
+  await expect(cloud.first()).toContainText("Cloud Platform team");
+  await expect(cloud.first().locator(".cat-item-line .rank-mark")).toHaveText("You are an owner");
+  await expect(rows.locator(".rank-mark")).toHaveCount(1);
+  const tribes = page.locator(".cat-section-tribe");
+  expect(await tribes.count()).toBeGreaterThan(3);
+  for (const section of await tribes.all()) {
+    const names = (await section.locator(".cat-item-line").allTextContents()).map((t) => t.replace("You are an owner", "").trim()).filter((t) => t !== "Cloud Platform team");
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })));
+  }
+  await expect(cloud.first()).toContainText("Slack #cloud-platform"); // the summary says what it is
 
   // the tab and the entry follow in the address, and survive a reload
   await tabs.getByRole("tab", { name: /^Platforms/ }).click();

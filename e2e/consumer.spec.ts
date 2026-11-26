@@ -118,7 +118,7 @@ test("a prerequisite links to the process that provides it", async ({ page }) =>
 test("teams and tools are a read-only directory", async ({ page }) => {
   await open(page, "/catalog");
   await expect(page.getByRole("heading", { name: /Teams, tools/ })).toBeVisible();
-  await expect(page.getByRole("tab")).toHaveCount(9); // teams, practices, platforms, categories, tools, tiers, paths, environments, languages
+  await expect(page.getByRole("tab")).toHaveCount(12); // teams, tribes, domains, practices, platforms, categories, tools, architecture patterns, tiers, paths, environments, languages
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   await expect(page.locator(".cat-detail .contact-row[data-contact=\"slack\"]")).toHaveText("Slack channel#cloud-platform");
   await expect(page.locator(".cat-detail .eyebrow")).toHaveText("team");

@@ -5,11 +5,11 @@ import { PATH_SYMBOLS, PathMark, PathSymbolIcon } from "./marks";
 import { otherNames } from "../lib/paths";
 import { GroupMembers } from "./TeamMembers";
 import { ContactFields } from "./ContactFields";
-import { ContactList, RankMark } from "./GroupParts";
+import { ContactList, PartOf, RankMark } from "./GroupParts";
 import { EntryIcon } from "./EntryIcon";
 import { IconField } from "./IconField";
 import { hasMembers, membersOf, type GroupKind } from "../lib/members";
-import { NO_DOMAIN, NO_TRIBE, ownFirst, partOf, summaryLine, teamSections, teamsOfTribe, tidyLists, tribesOfDomain } from "../lib/groups";
+import { NO_DOMAIN, NO_TRIBE, ownFirst, partOf, summaryLine, teamSections, tidyLists } from "../lib/groups";
 import { groupRank } from "../lib/rights";
 import { useChangeBlocked, usePerms } from "../lib/session";
 import { slugify, uniqueId } from "../lib/edit";
@@ -366,10 +366,10 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
             <div className="cat-sections">
               {sections.map((sec, i) => (
                 <section key={sec.domain === null ? "-" : sec.domain?.id ?? "+"} className="cat-section" aria-labelledby={`cat-sec-${i}`}>
-                  {sec.domain !== null && <h2 id={`cat-sec-${i}`} className="cat-section-domain">{sec.domain ? sec.domain.name : NO_DOMAIN}<span className="sr-only"> (domain)</span></h2>}
+                  {sec.domain !== null && <h2 id={`cat-sec-${i}`} className="cat-section-domain">{sec.domain ? <><a href={href({ page: "domain", id: sec.domain.id })}>{sec.domain.name}</a><span className="sr-only"> (domain)</span></> : NO_DOMAIN}</h2>}
                   {sec.tribes.map((t, j) => (
                     <div key={t.tribe?.id ?? "-"} className="cat-section-tribe">
-                      <h3 id={sec.domain === null ? `cat-sec-${i}` : `cat-sec-${i}-${j}`} className="cat-section-name">{t.tribe ? t.tribe.name : NO_TRIBE}{t.tribe && <span className="sr-only"> (tribe)</span>}</h3>
+                      <h3 id={sec.domain === null ? `cat-sec-${i}` : `cat-sec-${i}-${j}`} className="cat-section-name">{t.tribe ? <><a href={href({ page: "tribe", id: t.tribe.id })}>{t.tribe.name}</a><span className="sr-only"> (tribe)</span></> : NO_TRIBE}</h3>
                       <ul>{t.teams.map((r) => row(r as Row, shown.indexOf(r as Row)))}</ul>
                     </div>
                   ))}
@@ -412,7 +412,9 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                     : <span className="cat-avatar big">{ORDERED.includes(key) ? rows.findIndex((x) => x.id === current.id) + (key === "tiers" ? 0 : 1) : current.name.slice(0, 1).toUpperCase()}</span>} />
                 <div>
                   <span className="eyebrow">{kind.noun}</span>
-                  <h2>{group && !isNew(current.id) ? <a className="group-link" href={href({ page: "group", kind: group, id: current.id })}>{current.name || "Unnamed"}</a> : current.name || "Unnamed"}</h2>
+                  <h2>{group && !isNew(current.id) ? <a className="group-link" href={href({ page: "group", kind: group, id: current.id })}>{current.name || "Unnamed"}</a>
+                    : inner && !isNew(current.id) ? <a className="group-link" href={href({ page: key === "tribes" ? "tribe" : "domain", id: current.id })}>{current.name || "Unnamed"}</a>
+                    : current.name || "Unnamed"}</h2>
                   {group && !isNew(current.id) && <RankMark rank={groupRank(perms, group, current.id)} className="cat-rank" />}
                   {editor && <p className="cat-id">Id <code>{current.id}</code></p>}
                 </div>
@@ -457,7 +459,7 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                 </div>
               ) : group ? (
                 <div className="cat-group-facts">
-                  {key === "teams" && partOf(draft, current).length > 0 && <p className="cat-part-of"><PartOf pieces={partOf(draft, current)} onPick={(list, id) => { setKey(list); setSelected(id); }} /></p>}
+                  {key === "teams" && partOf(draft, current).length > 0 && <p className="cat-part-of"><PartOf pieces={partOf(draft, current)} /></p>}
                   {current.description?.trim() ? <p className="cat-group-description">{current.description}</p> : null}
                   <ContactList entry={current} name={current.name} empty="Nothing is known yet about how to reach them." />
                   <a className="btn cat-open-page" href={href({ page: "group", kind: group, id: current.id })}>Open the page of {current.name}<ArrowRight size={15} aria-hidden="true" /></a>
@@ -479,7 +481,7 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                   {key === "tribes" && (
                     <div>
                       <dt>Domain</dt>
-                      <dd>{(() => { const d = ((draft.domains ?? []) as Row[]).find((x) => x.id === current.domain); return d ? <button type="button" className="link-like" onClick={() => { setKey("domains"); setSelected(d.id); }}>{d.name}</button> : "Not in a domain"; })()}</dd>
+                      <dd>{(() => { const d = ((draft.domains ?? []) as Row[]).find((x) => x.id === current.domain); return d ? <a href={href({ page: "domain", id: d.id })}>{d.name}</a> : "Not in a domain"; })()}</dd>
                     </div>
                   )}
                   {kind.fields.map((f) => current[f.field] && (
@@ -493,6 +495,7 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                   {kind.fields.every((f) => !current[f.field]) && key !== "tribes" && <p className="muted">No details have been added yet.</p>}
                 </dl>
               )}
+              {!editor && inner && <div><a className="btn cat-open-page" href={href({ page: key === "tribes" ? "tribe" : "domain", id: current.id })}>Open the page of {current.name}<ArrowRight size={15} aria-hidden="true" /></a></div>}
 
               {inner ? (
                 <div className="cat-usage cat-inner">
@@ -500,8 +503,8 @@ export function CatalogPage({ processes, standards, editable: editor, list: rout
                   <ul>
                     {grouped.map((r) => (
                       <li key={r.id}>
-                        {!editor && inner.of === "teams"
-                          ? <a href={href({ page: "group", kind: "team", id: r.id })}><strong>{r.name || "Unnamed"}</strong><ArrowUpRight size={14} aria-hidden="true" /></a>
+                        {!editor
+                          ? <a href={inner.of === "teams" ? href({ page: "group", kind: "team", id: r.id }) : href({ page: "tribe", id: r.id })}><strong>{r.name || "Unnamed"}</strong><ArrowUpRight size={14} aria-hidden="true" /></a>
                           : <button type="button" onClick={() => { setKey(inner.of); setSelected(r.id); }}><strong>{r.name || "Unnamed"}</strong><ArrowUpRight size={14} aria-hidden="true" /></button>}
                       </li>
                     ))}
@@ -585,11 +588,6 @@ function GroupChoice({ field, value, options, none, onChange }: { field: "tribe"
       {value && !options.some((o) => o.id === value) && <option value={value}>{value} (not in the list)</option>}
     </select>
   );
-}
-
-/** Where a team belongs, in the words of `partOf`; the tribe and the domain lead to their entries. */
-function PartOf({ pieces, onPick }: { pieces: ReturnType<typeof partOf>; onPick: (list: "tribes" | "domains", id: string) => void }) {
-  return <>{pieces.map((p, i) => (p.list && p.id ? <button key={i} type="button" className="link-like" onClick={() => onPick(p.list!, p.id!)}>{p.text}</button> : <span key={i}>{p.text}</span>))}</>;
 }
 
 /** Why a tribe or a domain cannot be removed yet: "Still the tribe of 2 teams. Take them out of it first, then it can be removed." */

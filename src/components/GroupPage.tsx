@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Alert } from "./Alert";
 import { ArrowLeft, ArrowRight, Boxes, Compass, PencilLine, Plus, Users } from "lucide-react";
 import type { DocMeta, FeedbackByTarget, Membership, Process, Standard, TargetKind, Team } from "../types";
@@ -10,14 +10,14 @@ import { canDraft, canManage, useChangeBlocked, useMe, usePerms } from "../lib/s
 import { sortResults, type MetaByKind } from "../lib/sorting";
 import { useListView } from "../lib/paging";
 import { usePrinting } from "../lib/media";
-import { search } from "../lib/search";
+import { search, type Filters } from "../lib/search";
 import { href, loadMembers, putGroupDetails } from "../lib/store";
 import { hasErrors, validateProcess, validateStandard } from "../lib/validate";
 import { openCount } from "./Feedback";
 import { DocCard } from "./DocCard";
 import { ViewSwitch } from "./Lists";
 import { ContactFields, type DetailsValue } from "./ContactFields";
-import { ContactList, RankMark } from "./GroupParts";
+import { ContactList, PartOf, RankMark } from "./GroupParts";
 import { GroupMembers } from "./TeamMembers";
 import { confirmDialog, Modal, notify } from "./ui";
 import "../group.css";
@@ -41,14 +41,11 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta, onNe
   const { catalog, reload } = useCatalog();
   const perms = usePerms();
   const blocked = useChangeBlocked(); // viewing as somebody else: their buttons show, unavailable
-  const me = useMe();
   const entry = groupEntry(catalog, kind, id)!;
   const Icon = ICON[kind];
   const rank = groupRank(perms, kind, id);
   const mayDetails = canChangeDetails(perms, kind, id);
   const [editing, setEditing] = useState(false);
-  const [all, setAll] = useState(false);
-  const [view, setView] = useListView(me.user?.email);
 
   // who is behind it: everyone signed in may read it
   const [members, setMembers] = useState<Membership[] | null>(null);
@@ -56,17 +53,6 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta, onNe
   const reloadMembers = useCallback(() => { loadMembers().then((m) => { setMembers(m); setMembersError(""); }, (e) => setMembersError(e.message)); }, []);
   useEffect(reloadMembers, [reloadMembers]);
 
-  // what belongs to it: the same search and cards as the lists; drafts only for whoever may see them
-  const filters = groupFilter(kind, id);
-  const out = useMemo(() => search({ processes, standards, catalog, filters, drafts: true }), [processes, standards, catalog, kind, id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const sorted = useMemo(() => sortResults(out.results, "", meta), [out.results, meta]);
-  const nP = sorted.filter((r) => r.kind === "process").length;
-  const nS = sorted.length - nP;
-  const printing = usePrinting();
-  const shown = all || printing ? sorted : sorted.slice(0, FIRST);
-  const ids = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds: standards.map((s) => s.id), catalog }), [processes, standards, catalog]);
-  const usedBy = (pid: string) => processes.filter((p) => Array.isArray(p.steps) && p.steps.some((s) => s && s.subProcessId === pid)).length;
-  const searchLink = href({ page: "search", ...filters });
   // a new process or standard starts here for whoever may draft here (a team: whoever may create at all)
   const mayNew = (noun: TargetKind) => kind === "team"
     ? canCreate(perms, noun)
@@ -86,11 +72,9 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta, onNe
           <h1>{entry.name}</h1>
           {mayDetails && <button className="btn" disabled={!!blocked} title={blocked || undefined} onClick={() => setEditing(true)}><PencilLine size={15} aria-hidden="true" />Edit details</button>}
         </div>
-        {/* a team's tribe and domain, when it is part of one; each leads to its entry in Teams & tools */}
+        {/* a team's tribe and domain, when it is part of one; each leads to its page */}
         {kind === "team" && partOf(catalog, entry as Team).length > 0 && (
-          <p className="group-part">{partOf(catalog, entry as Team).map((p, i) => (p.list && p.id
-            ? <a key={i} href={href({ page: "catalog", list: p.list, id: p.id })}>{p.text}</a>
-            : <span key={i}>{p.text}</span>))}</p>
+          <p className="group-part"><PartOf pieces={partOf(catalog, entry as Team)} /></p>
         )}
         {entry.description?.trim()
           ? <p className="lead group-lead">{entry.description}</p>
@@ -111,52 +95,83 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta, onNe
           )}
         </section>
 
-        <section className="group-docs" aria-labelledby="group-docs">
-          <div className="group-docs-head">
-            <div>
-              <h2 id="group-docs" className="group-h">{belongsHeading(kind)}</h2>
-              <p className="group-count" aria-live="polite">{sorted.length ? docCount(nP, nS) : "Nothing yet"}</p>
-            </div>
-            {(sorted.length > 0 || news.length > 0) && (
-              <div className="group-docs-tools">
-                {sorted.length > 0 && <ViewSwitch view={view} onView={setView} />}
-                {sorted.length > 0 && <a className="btn small" href={searchLink}>Open in the search<ArrowRight size={14} aria-hidden="true" /></a>}
-                {news.map((noun) => (
-                  <button key={noun} type="button" className="btn small" disabled={!!blocked} title={blocked || undefined} onClick={() => onNew!(noun, place)}><Plus size={14} aria-hidden="true" />New {noun}</button>
-                ))}
-              </div>
-            )}
-          </div>
-          {sorted.length === 0 ? (
-            <p className="muted group-empty">{kind === "team"
-              ? "This team does not look after any process or standard yet."
-              : `No process or standard belongs to this ${GROUP[kind].noun} yet.`}</p>
-          ) : (
-            <>
-              <ol className={`cards ${view === "rows" ? "rows" : ""}`.trim()}>
-                {shown.map((r) => {
-                  const edits = canDraft(perms, r.kind, r.doc);
-                  const broken = edits && hasErrors(r.kind === "process" ? validateProcess(r.doc, ids) : validateStandard(r.doc, ids));
-                  return (
-                    <DocCard key={`${r.kind}:${r.doc.id}`} kind={r.kind} doc={r.doc} rigour={r.rigour} rules={r.rules} view={view} level={3}
-                      openFeedback={openCount(feedback?.[r.kind]?.[r.doc.id] ?? [])} mayEdit={edits} manages={canManage(perms, r.kind, r.doc)} broken={broken}
-                      meta={metaOf(meta, r.kind, r.doc.id)} usedBy={r.kind === "process" ? usedBy(r.doc.id) : undefined} />
-                  );
-                })}
-              </ol>
-              {sorted.length > FIRST && (
-                <button type="button" className="btn small group-more" aria-expanded={all} onClick={() => setAll(!all)}>
-                  {all ? "Show fewer" : `Show all ${sorted.length}`}
-                </button>
-              )}
-            </>
-          )}
-        </section>
+        <GroupDocs filters={groupFilter(kind, id)} heading={belongsHeading(kind)} processes={processes} standards={standards} feedback={feedback} meta={meta}
+          empty={kind === "team" ? "This team does not look after any process or standard yet." : `No process or standard belongs to this ${GROUP[kind].noun} yet.`}
+          tools={news.map((noun) => (
+            <button key={noun} type="button" className="btn small" disabled={!!blocked} title={blocked || undefined} onClick={() => onNew!(noun, place)}><Plus size={14} aria-hidden="true" />New {noun}</button>
+          ))} />
       </div>
 
       {editing && <DetailsDialog kind={kind} id={id} name={entry.name} saved={entry} onClose={() => setEditing(false)}
         onSaved={async () => { await reload().catch(() => {}); setEditing(false); notify.info(`The details of ${entry.name} are saved.`); }} />}
     </div>
+  );
+}
+
+/**
+ * What belongs to a group, as its page shows it: the same search and cards (or rows) as the lists,
+ * the first 12 with "Show all", "Open in the search", and `tools` beside them. Drafts are only
+ * those the server sent this person (the same data path as every list). Used by the page of a team,
+ * platform or practice and by the page of a tribe or domain (what its teams own); `filters` null:
+ * nothing can belong to it (a tribe without teams).
+ */
+export function GroupDocs({ filters, heading, empty, tools, processes, standards, feedback, meta }: {
+  filters: Filters | null; heading: string; empty: string; tools?: ReactNode[];
+  processes: Process[]; standards: Standard[]; feedback?: FeedbackByTarget; meta?: MetaByKind;
+}) {
+  const { catalog } = useCatalog();
+  const perms = usePerms();
+  const me = useMe();
+  const [all, setAll] = useState(false);
+  const [view, setView] = useListView(me.user?.email);
+  const key = JSON.stringify(filters);
+  const out = useMemo(() => (filters ? search({ processes, standards, catalog, filters, drafts: true }).results : []), [processes, standards, catalog, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sorted = useMemo(() => sortResults(out, "", meta), [out, meta]);
+  const nP = sorted.filter((r) => r.kind === "process").length;
+  const nS = sorted.length - nP;
+  const printing = usePrinting();
+  const shown = all || printing ? sorted : sorted.slice(0, FIRST);
+  const ids = useMemo(() => ({ processIds: processes.map((p) => p.id), standardIds: standards.map((s) => s.id), catalog }), [processes, standards, catalog]);
+  const usedBy = (pid: string) => processes.filter((p) => Array.isArray(p.steps) && p.steps.some((s) => s && s.subProcessId === pid)).length;
+  const extra = tools ?? [];
+  return (
+    <section className="group-docs" aria-labelledby="group-docs">
+      <div className="group-docs-head">
+        <div>
+          <h2 id="group-docs" className="group-h">{heading}</h2>
+          <p className="group-count" aria-live="polite">{sorted.length ? docCount(nP, nS) : "Nothing yet"}</p>
+        </div>
+        {(sorted.length > 0 || extra.length > 0) && (
+          <div className="group-docs-tools">
+            {sorted.length > 0 && <ViewSwitch view={view} onView={setView} />}
+            {sorted.length > 0 && filters && <a className="btn small" href={href({ page: "search", ...filters })}>Open in the search<ArrowRight size={14} aria-hidden="true" /></a>}
+            {extra}
+          </div>
+        )}
+      </div>
+      {sorted.length === 0 ? (
+        <p className="muted group-empty">{empty}</p>
+      ) : (
+        <>
+          <ol className={`cards ${view === "rows" ? "rows" : ""}`.trim()}>
+            {shown.map((r) => {
+              const edits = canDraft(perms, r.kind, r.doc);
+              const broken = edits && hasErrors(r.kind === "process" ? validateProcess(r.doc, ids) : validateStandard(r.doc, ids));
+              return (
+                <DocCard key={`${r.kind}:${r.doc.id}`} kind={r.kind} doc={r.doc} rigour={r.rigour} rules={r.rules} view={view} level={3}
+                  openFeedback={openCount(feedback?.[r.kind]?.[r.doc.id] ?? [])} mayEdit={edits} manages={canManage(perms, r.kind, r.doc)} broken={broken}
+                  meta={metaOf(meta, r.kind, r.doc.id)} usedBy={r.kind === "process" ? usedBy(r.doc.id) : undefined} />
+              );
+            })}
+          </ol>
+          {sorted.length > FIRST && (
+            <button type="button" className="btn small group-more" aria-expanded={all} onClick={() => setAll(!all)}>
+              {all ? "Show fewer" : `Show all ${sorted.length}`}
+            </button>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

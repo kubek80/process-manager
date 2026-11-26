@@ -785,8 +785,8 @@ test("the lists' tabs in their three groups: each group one row, nothing scrolle
     await open(page, hash);
     const groups = page.locator(".cat-kinds-group");
     await expect(groups.locator(".cat-kinds-name")).toHaveText(["Who", "What", "Where it applies"]);
-    await expect(page.getByRole("tab")).toHaveCount(10);
-    for (const [name, count] of [["Who", 3], ["What", 3], ["Where it applies", 4]] as const) {
+    await expect(page.getByRole("tab")).toHaveCount(12);
+    for (const [name, count] of [["Who", 5], ["What", 3], ["Where it applies", 4]] as const) {
       const list = page.getByRole("tablist", { name });
       await expect(list.getByRole("tab")).toHaveCount(count);
       const tops = await list.getByRole("tab").evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().top)));

@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Catalog } from "../../types";
 import { completeCatalog, EMPTY_CATALOG } from "../catalog";
-import { domainOf, NO_TRIBE, partOf, partOfText, teamChoices, teamSections, teamsOfTribe, tidyLists, tribeOf, tribesOfDomain } from "../groups";
+import { clusterContents, clusterEmpty, clusterEntry, clusterFilter, domainOf, NO_TRIBE, partOf, partOfText, teamChoices, teamSections, teamsOfTribe, tidyLists, tribeOf, tribesOfDomain } from "../groups";
 import { hasErrors, LIST_WORDS, refusalIssues, unknownGroupSentence, validateCatalog } from "../validate";
 import { issueText, listIssueField, listIssuePlace, refusalText } from "../editing";
-import { CATALOG_LISTS, parseRoute } from "../store";
+import { CATALOG_LISTS, href, pageTitle, parseRoute } from "../store";
+import { opensChange } from "../rights";
+import { search } from "../search";
+import { base } from "./fixtures";
 import { catalog as sample, readJson } from "./fixtures";
 
 // Tribes group teams and domains group tribes: two optional lists. A team may name a tribe, a
@@ -128,5 +131,50 @@ describe("Teams & tools groups the teams", () => {
     ]);
     const flat = lists({ tribes: [] });
     expect(teamChoices(flat)).toEqual([{ teams: flat.teams }]);
+  });
+});
+
+describe("the page of a tribe or a domain", () => {
+  const c = lists();
+  it("is at #/tribe/:id and #/domain/:id, changes nothing, and names itself in the tab", () => {
+    expect(parseRoute("#/tribe/money")).toEqual({ page: "tribe", id: "money" });
+    expect(parseRoute("#/domain/digital/")).toEqual({ page: "domain", id: "digital" });
+    expect(href({ page: "tribe", id: "money" })).toBe("#/tribe/money");
+    expect(href({ page: "domain", id: "digital" })).toBe("#/domain/digital");
+    expect(opensChange("#/tribe/money")).toBe(false);
+    expect(opensChange("#/domain/digital")).toBe(false);
+    expect(pageTitle({ page: "tribe", id: "money" }, { group: "Money" }, "Portal")).toBe("Money · Portal");
+    expect(pageTitle({ page: "domain", id: "gone" }, {}, "Portal")).toBe("Domain not found · Portal");
+    // Admin › Lists can be opened at an entry ("Edit in Admin › Lists")
+    expect(parseRoute("#/admin/lists/tribes/money")).toEqual({ page: "admin", section: "lists", list: "tribes", id: "money" });
+    expect(href({ page: "admin", section: "lists", list: "domains", id: "digital" })).toBe("#/admin/lists/domains/digital");
+    expect(parseRoute("#/admin/lists/nonsense/x")).toEqual({ page: "admin", section: "lists" });
+  });
+  it("of a tribe lists its teams; of a domain its tribes, each with its teams", () => {
+    expect(clusterEntry(c, "tribe", "money")?.name).toBe("Money");
+    expect(clusterEntry(c, "domain", "money")).toBeUndefined();
+    expect(clusterEntry(c, "tribe", "gone")).toBeUndefined();
+    const tribe = clusterContents(c, "tribe", "money");
+    expect(tribe.teams.map((t) => t.name)).toEqual(["Checkout team", "Payments team"]);
+    const domain = clusterContents(c, "domain", "digital");
+    expect(domain.tribes.map((t) => `${t.tribe.name}: ${t.teams.map((x) => x.name).join(", ")}`)).toEqual(["Empty tribe: ", "Money: Checkout team, Payments team"]);
+    expect(domain.teams.map((t) => t.id)).toEqual(["check", "pay"]);
+    expect(clusterFilter(domain.teams)).toEqual({ owner: ["check", "pay"] });
+  });
+  it("says so in plain words when there is nothing in it, and then nothing belongs to it", () => {
+    expect(clusterEmpty("domain", clusterContents(c, "domain", "spare"))).toBe("No tribe is part of this domain yet.");
+    expect(clusterEmpty("tribe", clusterContents(c, "tribe", "empty"))).toBe("No team is part of this tribe yet.");
+    expect(clusterEmpty("domain", clusterContents(lists({ teams: [] }), "domain", "digital"))).toBe("No team is part of the tribes of this domain yet.");
+    expect(clusterEmpty("tribe", clusterContents(c, "tribe", "money"))).toBe("");
+    // no filter at all: an empty owner filter would mean everything
+    expect(clusterFilter([])).toBeNull();
+  });
+  it("shows what its teams own through the search every list uses: a draft only where drafts may be shown", () => {
+    const own = (id: string, owner: string, status?: "draft") => ({ ...base(), id, title: id, owner, ...(status ? { status } : {}) });
+    const processes = [own("a", "pay"), own("b", "check", "draft"), own("c", "net")];
+    const filters = clusterFilter(clusterContents(c, "tribe", "money").teams)!;
+    const ids = (drafts: boolean) => search({ processes, standards: [], catalog: c, filters, drafts }).results.map((r) => r.doc.id).sort();
+    expect(ids(true)).toEqual(["a", "b"]);
+    expect(ids(false)).toEqual(["a"]);
   });
 });

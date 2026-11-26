@@ -701,8 +701,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .cat-usage :is(button, a):hover { background: var(--surface-2); }
 .cat-inner > p { margin-top: 8px; }
 .cat-inner li svg { margin-left: auto; }
-/* a name in a sentence that leads to its entry (a team's tribe and domain, a tribe's domain) */
-.link-like { display: inline; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .cat-part-of { color: var(--text-2); font-size: var(--fs-md); line-height: var(--lh-md); }
 .cat-usage strong { font-weight: var(--fw-medium); font-size: var(--fs-md); line-height: var(--lh-md); }
 .cat-usage em { font-style: normal; font-size: var(--fs-sm); line-height: var(--lh-sm); color: var(--text-3); margin-left: auto; }

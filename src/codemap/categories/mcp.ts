@@ -152,6 +152,7 @@ export const mcp: CodeCategory = {
         { text: "An agent has no reader's day: today and the first publication are UTC days, while the portal counts in the reader's day, so near midnight a review can show as due a day earlier or later for an agent than for a reader far from UTC.", at: "today, _ := time.Parse(time.DateOnly, now.UTC().Format(time.DateOnly))" },
         { text: "An agent may do only steps of `me` that are not approvals.", at: "AgentMayDo: st.Actor == \"me\" && st.Type != \"approval\"," },
         { text: "The search tools' `path` means \"applies to this path\", like My application in the portal: what names the path and what names none (most documents). Not the portal's Path filter, which keeps only what is made for the path. Test: `mcpserver/paths_test.go`.", at: "func (p Profile) onPath(paths []string) bool {" },
+        { text: "Every header carries `patterns`, the architecture patterns it is tagged with, as references with their other names, `[]` when it is tagged with none. There is no pattern parameter: a tag beside the \"applies to\" `path` would mix two meanings; agents find patterns by words or meaning.", at: "type PatternRef struct {" },
         { text: "Every header carries `paths` as references with the entry's other names (`alsoCalled`), `[]` when the document names none.", at: "type PathRef struct {" },
       ],
       tests: ["server/internal/mcpserver/server_test.go", "server/internal/mcpserver/search_test.go"],

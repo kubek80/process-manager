@@ -364,12 +364,21 @@ export const reading: CodeCategory = {
     // ---- the pages of a team, platform or practice
     {
       path: "src/components/GroupPage.tsx",
-      role: "The page of a team, a platform or a practice: what it is, how to reach it, who is behind it, and what belongs to it.",
+      role: "The page of a team, a platform or a practice: what it is, how to reach it, who is behind it, and what belongs to it. For a team, also the tribe and domain it is part of (`partOf`). `GroupDocs`, what belongs to it, is shared with the page of a tribe or domain.",
       requirements: [
-        { text: "What belongs to it is found by the same `search()` with the group's filter, so the page and \"Show in the search\" always agree.", at: "search({ processes, standards, catalog, filters, drafts: true })" },
+        { text: "What belongs to it is found by the same `search()` with the group's filter, so the page and \"Show in the search\" always agree. Drafts are only those the server sent this person: no second way to decide who sees one.", at: "search({ processes, standards, catalog, filters, drafts: true })" },
         { text: "Details are saved only through `/api/groups/…`, where `server/internal/httpapi/groups.go` checks who may change them; `canChangeDetails` here only shows the button.", at: "await putGroupDetails(kind, id, {" },
       ],
-      tests: ["e2e/groups.spec.ts", "src/lib/__tests__/groups.test.ts"],
+      tests: ["e2e/groups.spec.ts", "src/lib/__tests__/groups.test.ts", "e2e/tribes.spec.ts"],
+    },
+    {
+      path: "src/components/ClusterPage.tsx",
+      role: "The page of a tribe or a domain (`#/tribe/:id`, `#/domain/:id`): a sibling of the team's page with its head and body, its teams (a domain: its tribes, each with its teams) as links, and what those teams own through the team's page's `GroupDocs`. No owners, members, contacts or rights: whoever manages the lists gets \"Edit in Admin › Lists\" at the entry.",
+      requirements: [
+        { text: "What its teams own is the team's page's own part with an owner filter of every team in it; a tribe without teams has no filter at all, since an empty one would mean everything.", at: "<GroupDocs filters={clusterFilter(contents.teams)}" },
+        { text: "Only a lists manager gets the way to change it, and only in Admin › Lists; the page itself changes nothing, so it opens while viewing as somebody else.", at: "{canManageLists(perms) && <a className=\"btn\" href={href({ page: \"admin\", section: \"lists\", list: CLUSTER_LIST[kind], id })}>" },
+      ],
+      tests: ["e2e/tribes.spec.ts", "src/lib/__tests__/tribes.test.ts"],
     },
     {
       path: "src/components/GroupParts.tsx",
@@ -389,12 +398,14 @@ export const reading: CodeCategory = {
     },
     {
       path: "src/lib/groups.ts",
-      role: "The rules of a group's page and of the rows of Teams & tools: what belongs to a group, contact details and their checks.",
+      role: "The rules of a group's page and of the rows of Teams & tools: what belongs to a group, contact details and their checks; tribes and domains: where a team belongs (`partOf`), the teams of Teams & tools under their domain and tribe (`teamSections`), the owning team chosen by tribe (`teamChoices`), and what a tribe's or a domain's page lists (`clusterContents`, `clusterFilter`).",
       requirements: [
         { text: "Only `http(s)` links of at most 300 characters are links; the schema (`$defs/contacts`) and the server (`docs/contacts.go`) check the same, so a `javascript:` link can never be drawn.", at: "export const isWebLink = (v: unknown): v is string =>" },
         { text: "A Slack or Chat link that fails the check is dropped, and the plain name shown instead.", at: "const link = isWebLink(url) ? url!.trim() : undefined;" },
+        { text: "With no tribes in the lists the teams are one plain section, so Teams & tools looks exactly as without tribes; teams in no tribe come last, under \"Not in a tribe\".", at: "if (!(c.tribes ?? []).length) return [{ domain: null, tribes: [{ teams }] }];" },
+        { text: "A tribe without teams finds nothing: null, never an empty owner filter (which would match everything).", at: "export const clusterFilter = (teams: { id: string }[]): Filters | null => (teams.length ? { owner: teams.map((t) => t.id) } : null);" },
       ],
-      tests: ["src/lib/__tests__/groups.test.ts"],
+      tests: ["src/lib/__tests__/groups.test.ts", "src/lib/__tests__/tribes.test.ts"],
     },
     {
       path: "src/lib/catalog.tsx",
