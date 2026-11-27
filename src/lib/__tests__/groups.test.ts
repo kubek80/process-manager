@@ -6,7 +6,7 @@ import {
   addedNote, nameFromMembers, ownFirst, repeatsDetail, shortLink, splitOwnerLine, summaryLine, tidyContacts, withScheme,
 } from "../groups";
 import { search } from "../search";
-import { href, pageTitle, parseRoute, type Route } from "../store";
+import { correctedListsAddress, href, pageTitle, parseRoute, type Route } from "../store";
 import { catalog, processes, standards } from "./fixtures";
 
 const doc = (over: Partial<Process>): Process => ({ id: "x", title: "X", summary: "", actors: [], steps: [], ...over }) as unknown as Process;
@@ -161,7 +161,7 @@ describe("how to reach a group", () => {
   });
 });
 
-describe("the one line of a row in Teams & tools", () => {
+describe("the one line of a row in Teams and Tools", () => {
   it("says how to reach them first: the Slack channel, the group email, the Chat space, the free line", () => {
     expect(summaryLine({ contacts: { email: "a@b.co", slack: "#cloud" }, contact: "x", description: "d" })).toBe("Slack #cloud");
     expect(summaryLine({ contacts: { email: "a@b.co", chat: "Space" }, description: "d" })).toBe("Email a@b.co");
@@ -190,7 +190,7 @@ describe("the owner line of a page head", () => {
 import { tidyLists } from "../groups";
 import { hasErrors, validateCatalog } from "../validate";
 
-describe("Admin › Lists saves how to reach a group", () => {
+describe("Admin › Teams saves how to reach a group", () => {
   const withContacts = (contacts: Catalog["platforms"][number]["contacts"]): Catalog => {
     const c = structuredClone(catalog) as Catalog;
     c.platforms = c.platforms.map((p, i) => (i === 0 ? { ...p, contacts } : i === 1 ? { ...p, contacts: { slack: "#other" } } : p));
@@ -240,7 +240,7 @@ describe("a link typed without its beginning", () => {
   });
 });
 
-describe("the order of a list in Teams & tools", () => {
+describe("the order of a list in Teams and Tools", () => {
   it("puts the person's own entries first, then by name", () => {
     const rows = [{ id: "z", name: "Zeta" }, { id: "a", name: "alpha" }, { id: "m", name: "Mid" }, { id: "b", name: "Beta" }];
     expect(ownFirst(rows, (id) => id === "m" || id === "z").map((r) => r.id)).toEqual(["m", "z", "a", "b"]);
@@ -303,5 +303,27 @@ describe("the addresses of Teams and Tools", () => {
     expect(parseRoute("#/admin/lists")).toEqual({ page: "admin", section: "lists", place: "teams" });
     expect(href(parseRoute("#/admin/lists/patterns/event-driven"))).toBe("#/admin/tools/patterns/event-driven");
     expect(href(parseRoute("#/admin/lists/domains"))).toBe("#/admin/teams/domains");
+  });
+  it("that are not the right one are corrected: the wrong place, an unknown list, an older address", () => {
+    // a list asked of the wrong place goes to its own place, with its entry
+    expect(correctedListsAddress("#/teams/tools")).toBe("#/tools");
+    expect(correctedListsAddress("#/tools/teams/dns-team")).toBe("#/teams/teams/dns-team");
+    expect(correctedListsAddress("#/admin/tools/pillars/x")).toBe("#/admin/teams/pillars/x");
+    expect(correctedListsAddress("#/admin/teams/paths")).toBe("#/admin/tools/paths");
+    // an unknown list leaves only the place, which opens on its first list
+    expect(correctedListsAddress("#/admin/teams/bogus")).toBe("#/admin/teams");
+    expect(correctedListsAddress("#/tools/bogus/x")).toBe("#/tools");
+    // the older addresses and the long way of writing the short one
+    expect(correctedListsAddress("#/catalog/platforms/google-cloud")).toBe("#/teams/platforms/google-cloud");
+    expect(correctedListsAddress("#/admin/lists/patterns")).toBe("#/admin/tools/patterns");
+    expect(correctedListsAddress("#/teams/teams")).toBe("#/teams");
+    // a right address, and anything that is not of the lists, is left alone; a correction is never corrected again
+    for (const right of ["#/teams", "#/tools", "#/teams/pillars", "#/teams/teams/dns-team", "#/tools/paths/greenfield", "#/admin/teams", "#/admin/tools/tools/github"]) {
+      expect(correctedListsAddress(right)).toBeNull();
+    }
+    for (const other of ["#/", "#/admin/access", "#/team/dns-team", "#/pillar/compute", "#/guide"]) expect(correctedListsAddress(other)).toBeNull();
+    for (const wrong of ["#/teams/tools", "#/tools/teams/dns-team", "#/admin/tools/pillars/x", "#/admin/teams/bogus", "#/catalog", "#/admin/lists"]) {
+      expect(correctedListsAddress(correctedListsAddress(wrong)!)).toBeNull();
+    }
   });
 });

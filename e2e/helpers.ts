@@ -100,7 +100,7 @@ export const answer = async (page: Page, title: string | RegExp, button: string)
   await page.getByRole("dialog", { name: title }).getByRole("button", { name: button, exact: true }).click();
 };
 
-/** Saves the lists (Admin > Lists), which keep the ordinary save bar. */
+/** Saves the lists (Admin › Teams and Admin › Tools), which keep the ordinary save bar. */
 export const save = async (page: Page) => {
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.locator(".saved")).toBeVisible();

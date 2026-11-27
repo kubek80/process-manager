@@ -4,7 +4,7 @@ import { BookOpen, ClipboardCheck, LayoutGrid, LogOut, Menu, Moon, Search, Setti
 import { Lightbulb } from "lucide-react";
 import type { Catalog, DocMeta, Feedback, FeedbackByTarget, Me, Process, Standard, TargetKind } from "./types";
 import {
-  ApiError, confirmReview, createFeedback, deleteFeedback, go, href, loadCatalog, loadFeedback, loadMe, loadProcesses, loadStandards, logout, pageTitle, placeOfView, putCatalog, putProcess, putStandard,
+  ApiError, confirmReview, correctedListsAddress, createFeedback, deleteFeedback, go, href, loadCatalog, loadFeedback, loadMe, loadProcesses, loadStandards, logout, pageTitle, placeOfView, putCatalog, putProcess, putStandard,
   removeProcess, removeStandard, savedMeta, setAlsoHit, setResolved, SIGNED_OUT, forgetUnsaved, hasUnsaved, unsavedSaver, unsavedWork, useRoute, type MetaById,
 } from "./lib/store";
 import { CatalogContext, EMPTY_CATALOG, useCatalog } from "./lib/catalog";
@@ -600,9 +600,10 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     ...(canOpenAdmin(perms) ? [{ key: "admin", pages: ["admin"], href: href({ page: "admin", section: perms.admin ? "access" : "lists" }), label: "Admin", title: "Admin", icon: Settings2 }] : []),
   ];
 
-  // an older address of the lists (#/catalog…, #/admin/lists…) is replaced by its new one, in place
+  // an address of the lists that is not the right one (the wrong place, an unknown list, an older
+  // address) is replaced by the right one, in place: never a new entry of the history
   useEffect(() => {
-    if (/^#\/(catalog|admin\/lists)(\/|$)/.test(window.location.hash)) go(route, { replace: true });
+    if (correctedListsAddress(window.location.hash)) go(route, { replace: true });
   }, [route]);
   const group = route.page === "group" ? groupEntry(catalog, route.kind, route.id)
     : route.page === "pillar" || route.page === "tribe" || route.page === "domain" ? clusterEntry(catalog, route.page, route.id) : undefined;

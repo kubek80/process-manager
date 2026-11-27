@@ -539,7 +539,7 @@ body:has(.edit-screen) .toast p span { white-space: pre-line; }
 .people-rows .row > .actor-name, .people-rows .row.indent > textarea { width: 100%; }
 /* the name has no button after it: how to reach them ends at the same right edge */
 .people-rows .row.indent { padding-right: 0; }
-/* every field with a problem, the moment it has one: styles.css (`useFieldMarks`, shared with Admin › Lists) */
+/* every field with a problem, the moment it has one: styles.css (`useFieldMarks`, shared with Admin › Teams and Admin › Tools) */
 .edit-fields .row[data-problem]::after { padding-left: 28px; }
 .edit-fields .row.indent[data-problem]::after { padding-left: 0; }
 /* a line of the Publish list that would take back a change somebody published since */

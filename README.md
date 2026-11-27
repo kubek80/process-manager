@@ -82,7 +82,7 @@ React + Vite frontend; Go server; Postgres. Everything people change lives in th
 | **Processes** | Map (with zoom: the buttons or Ctrl + scroll; Fit shows the whole flow until a step is selected; the selected step is brought to the middle; the steps are one Tab stop with arrow keys) and checklist, both under one compact “Before you start” panel, sub-processes, prerequisites, block types; a phone opens on the checklist; printing gives the checklist with every step and a line saying which version was printed |
 | **Editing** | A separate editing screen (`#/p/<id>/edit`, `#/s/<id>/edit`): the outline (add by typing names, drag or Alt+arrows to move, or, by choice, a narrow rail), the fields of what is selected next to it (with arrows and Alt + Page Up / Down to the step or requirement before or after), what readers will see after them (the map or the requirements, changeable in place), what is to fix and suggestions (choosing one puts the cursor in the field), and Save draft / Publish; a fault in showing the screen keeps the changes and offers Undo and Save draft. Save draft always works: changes to something published stay unpublished changes, and unfinished changes to a draft stay beside it, seen only by whoever may write drafts of it; a member of the platform or practice saves drafts and is told who publishes them; problems are shown on their own field as instructions; moving or deleting a step says what that did to the flow; retire, unpublish and delete are explicit |
 | **Standards** | Requirements with level (must / should / may), reason, how to comply, examples, how it is checked, and what a reviewer looks for; printing gives every requirement |
-| **Teams and Tools** | The lists are two places of the top bar: Teams (`#/teams/<list>/<id>`: teams, pillars, tribes, domains, practices, platforms) and Tools (`#/tools/<list>/<id>`: tools, categories, architecture patterns, tiers, paths, environments, languages); the older `#/catalog/…` leads to the same list and entry. In Admin they are two entries, Teams and Tools, of one page with one draft |
+| **Teams and Tools** | The lists are two places of the top bar: Teams (`#/teams/<list>/<id>`: teams, pillars, tribes, domains, practices, platforms) and Tools (`#/tools/<list>/<id>`: tools, categories, architecture patterns, tiers, paths, environments, languages); an address that names a list under the other place, an unknown list or the older `#/catalog/…` is corrected in place. In Admin they are two entries, Teams and Tools, of one page with one draft |
 | **Teams, platforms and practices** | Teams lists them, your own first, marked “You are an owner” / “You are a member”; each has a page (`#/team/<id>`, `#/platform/<id>`, `#/practice/<id>`) with its description, how to reach it, its owners and members and what belongs to it; its owners edit the details and add or remove the members there; the names in the head of a process or standard lead to these pages |
 | **What it belongs to** | An owning team, and optionally a category, a platform and a practice; a process also has a rigour, how binding it is (mandatory, recommended, optional), a standard follows from its requirements' levels |
 | **Where it applies** | Application tiers, environments and programming languages, on a process, a standard or a single requirement; the Tier, Environment and Language filters (“My application” on a standard) hide the rest |
@@ -145,13 +145,15 @@ The first admins are named in the server setting `PM_ADMINS`.
 
 ![An admin viewing the portal as another person: the band, and what would change something greyed](docs/view-as.png)
 
-![Admin › Lists: the paths, with their pictures and other names](docs/paths-list.png)
+![Admin › Tools: the paths, with their pictures and other names](docs/paths-list.png)
 
 ![Processes narrowed down by an architecture pattern](docs/patterns.png)
 
-![Teams & tools: teams grouped under their domain and tribe](docs/tribes.png)
+![Teams: teams grouped under their domain, tribe and pillar](docs/tribes.png)
 
-![The page of a tribe: its domain, its teams and what they look after](docs/tribe.png)
+![The page of a tribe: its domain, its pillars with their teams, and what they look after](docs/tribe.png)
+
+![The page of a pillar: its tribe and domain, its teams and what they look after](docs/pillar.png)
 
 ![Admin › Theming with its preview](docs/theming.png)
 

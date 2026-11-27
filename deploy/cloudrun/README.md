@@ -159,7 +159,7 @@ what there is:
 
 - **To remove it afterwards:** an admin deletes the sample processes and standards in the
   portal (on each one's editing screen, *More › Delete…*) and changes or removes the list
-  entries on the *Teams, tools & more* page (an entry still used cannot be removed).
+  entries in *Admin › Teams* and *Admin › Tools* (an entry still used cannot be removed).
   The lists themselves stay, so the database is never empty again and the samples do not come
   back.
 - **To start without it:** set `PM_SEED_DIR` to a folder that does not exist, for example

@@ -287,7 +287,7 @@ a.btn { color: var(--action-other, var(--accent)); }
 .issue-place { font-weight: var(--fw-strong); color: var(--text); }
 .issue-detail { margin-left: 6px; font-size: var(--fs-sm); line-height: var(--lh-sm); color: var(--text-3); background: none; border: 0; padding: 0; overflow-wrap: anywhere; }
 /* every field with a problem, the moment it has one (`useFieldMarks`): outlined, and what to do in a
-   line under it - on the editing screen and in Admin › Lists alike */
+   line under it - on the editing screen and in Admin › Teams and Admin › Tools alike */
 :is(.edit-fields, .cat-detail) .has-problem { outline: 2px solid var(--bad); outline-offset: 1px; }
 :is(.edit-fields, .cat-detail) .has-example { outline: 2px solid var(--warn); outline-offset: 1px; }
 :is(.edit-fields, .cat-detail) [data-problem] { flex-wrap: wrap; }
@@ -298,7 +298,7 @@ a.btn { color: var(--action-other, var(--accent)); }
 :is(.edit-fields, .cat-detail) [data-problem].problem-example::after { color: var(--warn); }
 /* a field that says its own problem under it already (the contact details) does not say it twice */
 :is(.edit-fields, .cat-detail) [data-problem]:has(> .field-error)::after { content: none; }
-/* Admin › Lists: what stops saving the lists, above them */
+/* Admin › Teams and Admin › Tools: what stops saving the lists, above them */
 .cat-issues-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0 0 10px; font-size: var(--fs-lg); line-height: var(--lh-lg); font-weight: var(--fw-strong); color: var(--bad); }
 .cat-issues-head svg { align-self: center; flex: none; }
 .cat-issues-head span { font-size: var(--fs-md); line-height: var(--lh-md); font-weight: var(--fw-regular); color: var(--text-2); }
@@ -637,14 +637,14 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .drawer-fb .fb-list, .drawer-fb .fb-form { width: 100%; margin-top: 0; }
 
 /* ---------- catalog: tabs, list, detail ---------- */
-/* Teams & tools: the lists are underline tabs (.tabs > .tab, controls.css); one line says what the chosen one is */
+/* Teams and Tools: the lists are underline tabs (.tabs > .tab, controls.css); one line says what the chosen one is */
 .catalog-page > .cat-kinds-groups { margin: 22px 0 0; }
 /* the lists' tabs in named groups (who, what, where it applies): a group wraps as a whole, its tabs stay one row */
 .cat-kinds-groups { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 28px; }
 .cat-kinds-group { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 100%; }
 .cat-kinds-name { padding: 0 9px; color: var(--text-3); font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); letter-spacing: .06em; text-transform: uppercase; }
 .cat-blurb { margin: 12px 0 14px; color: var(--text-2); font-size: var(--fs-md); line-height: var(--lh-md); }
-/* Admin > Lists: the blurb and the lists' Undo / Redo / Save in one bar that stays in view above the list and the details */
+/* Admin › Teams and Admin › Tools: the blurb and the lists' Undo / Redo / Save in one bar that stays in view above the list and the details */
 .cat-toolbar.with-save { position: sticky; top: 56px; z-index: 15; display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; margin: 4px 0 10px; padding: 6px 0; background: var(--bg); }
 .cat-toolbar.with-save .cat-blurb { margin: 0; flex: 1 1 280px; min-width: 0; }
 .cat-toolbar.with-save.dirty { padding: 8px 10px 8px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-2); }
@@ -656,14 +656,15 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .cat-list-bar { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
 .cat-list-bar .search { height: 36px; flex: 1 1 0; max-width: none; min-width: 0; }
 .cat-list ul { list-style: none; margin: 0; padding: 6px; overflow: auto; flex: 1; }
-/* Teams & tools: the teams under their domain and tribe (only when the lists have tribes) */
+/* Teams: the teams under their domain, tribe and pillar (only when the lists have pillars) */
 .cat-sections { overflow: auto; flex: 1; padding: 6px; }
 .cat-list .cat-sections ul { padding: 0; overflow: visible; flex: none; }
 .cat-section + .cat-section { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
 .cat-section-domain { margin: 0; padding: 6px 10px 0; color: var(--text-3); font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); letter-spacing: .06em; text-transform: uppercase; }
 .cat-section-name { margin: 0; padding: 8px 10px 4px; color: var(--text-2); font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); }
-/* the tribe before its pillar, quieter: "Cloud › Compute" */
-.cat-section-name .cat-section-up { color: var(--text-3); font-weight: var(--fw-medium); }
+/* the tribe before its pillar, quieter by its weight but in the link colour like the pillar and
+   the domain: "Cloud › Compute"; a link is recognisable without hovering */
+.cat-section-name .cat-section-up { font-weight: var(--fw-medium); }
 .cat-section-sep { color: var(--text-3); font-weight: var(--fw-medium); }
 .cat-item { display: flex; align-items: center; gap: 11px; width: 100%; padding: 8px 10px; border-radius: 10px; }
 .cat-item:hover { background: color-mix(in srgb, var(--line) 55%, transparent); }

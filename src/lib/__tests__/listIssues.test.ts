@@ -5,7 +5,7 @@ import { refusalIssues, validateCatalog } from "../validate";
 import { catalog } from "./fixtures";
 
 /**
- * Admin › Lists: every problem the lists can have reads as an instruction that names the list and
+ * Admin › Teams and Admin › Tools: every problem the lists can have reads as an instruction that names the list and
  * the entry by name - never by a path or an index - whether the app's checker found it or the
  * server refused the save.
  */

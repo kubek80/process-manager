@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { ALEX, CSRF, DANA, SAM, open, readCatalog, save, signIn } from "./helpers";
 
-// Icons of tools and languages: uploaded in Admin > Lists by whoever may edit the lists, square,
+// Icons of tools and languages: uploaded in Admin › Tools by whoever may edit the lists, square,
 // small, and served so that nothing in them can run. Few uploads here: the server allows 60 per
 // person per hour.
 

@@ -127,8 +127,8 @@ export function PatternsEditor({ value, onChange }: { value: string[] | undefine
 
 /**
  * The teams to choose from (the owning team, the team that issues a standard), as options of a
- * choice box: grouped by tribe where the lists have tribes ("Payments (Digital Channels)", then
- * "Not in a tribe"), else as one list.
+ * choice box: grouped by pillar where the lists have pillars ("Compute (Cloud)": the pillar and its
+ * tribe, then "Not in a pillar"), else as one list (`teamChoices`).
  */
 export function TeamOptions() {
   const { catalog } = useCatalog();

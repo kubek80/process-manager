@@ -678,6 +678,19 @@ export const href = (r: Route): string => {
  * `replace` the address changes without a new entry in the browser's history: for what is not
  * a step forward, such as a step that got another id.
  */
+/**
+ * The right address of a page of the lists when the one typed or followed is not it: a list asked
+ * of the wrong place (`#/teams/tools`, `#/tools/teams/dns-team`, `#/admin/tools/pillars/x`), an
+ * unknown list (`#/admin/teams/bogus`: the place, which opens on its first list) and the older
+ * addresses (`#/catalog…`, `#/admin/lists…`). Null when the address is already right or not one of
+ * the lists, so that replacing it once never leads to another replacement.
+ */
+export function correctedListsAddress(hash: string): string | null {
+  const r = parse(hash);
+  if (r.page !== "catalog" && !(r.page === "admin" && r.section === "lists")) return null;
+  const right = href(r);
+  return right === hash ? null : right;
+}
 export const go = (r: Route, opts: { replace?: boolean } = {}) => { void moveTo(href(r), opts.replace); };
 
 /** What the browser tab says for a page: the thing being read first, the portal's name (Admin › Theming) last. */

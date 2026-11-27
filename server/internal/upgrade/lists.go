@@ -670,7 +670,9 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) (Report, error) {
 			summary += "; " + said
 		}
 	}
-	log.Info("database converted to practices, platforms and categories", "documents", saved, "versions", versions, "workingDrafts", workingDrafts, "practices", len(practices.added),
+	// the same account as the activity log: only the paths, only the pillars, or the move to
+	// practices, platforms and categories with whatever else was done with it
+	log.Info("database converted: "+summary, "documents", saved, "versions", versions, "workingDrafts", workingDrafts, "practices", len(practices.added),
 		"platforms", len(platforms.added), "categories", len(categories.added), "rolesConverted", converted, "rolesRemoved", dropped)
 	report := Report{Converted: true, Lists: catChanged, Documents: saved, Versions: versions, Practices: len(practices.added),
 		Platforms: len(platforms.added), Categories: len(categories.added), Paths: pathsAdded, Pillars: pillarsAdded, TeamsInPillars: teamsInPillars,

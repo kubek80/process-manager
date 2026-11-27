@@ -72,7 +72,7 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta, onNe
           <h1>{entry.name}</h1>
           {mayDetails && <button className="btn" disabled={!!blocked} title={blocked || undefined} onClick={() => setEditing(true)}><PencilLine size={15} aria-hidden="true" />Edit details</button>}
         </div>
-        {/* a team's tribe and domain, when it is part of one; each leads to its page */}
+        {/* a team's pillar, tribe and domain, as far as it is part of them; each leads to its page */}
         {kind === "team" && partOf(catalog, entry as Team).length > 0 && (
           <p className="group-part"><PartOf pieces={partOf(catalog, entry as Team)} /></p>
         )}
@@ -112,8 +112,8 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta, onNe
  * What belongs to a group, as its page shows it: the same search and cards (or rows) as the lists,
  * the first 12 with "Show all", "Open in the search", and `tools` beside them. Drafts are only
  * those the server sent this person (the same data path as every list). Used by the page of a team,
- * platform or practice and by the page of a tribe or domain (what its teams own); `filters` null:
- * nothing can belong to it (a tribe without teams).
+ * platform or practice and by the page of a pillar, tribe or domain (what its teams own); `filters` null:
+ * nothing can belong to it (a pillar, tribe or domain without teams).
  */
 export function GroupDocs({ filters, heading, empty, tools, processes, standards, feedback, meta }: {
   filters: Filters | null; heading: string; empty: string; tools?: ReactNode[];

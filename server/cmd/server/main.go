@@ -159,25 +159,7 @@ func run(log *slog.Logger, o options) error {
 		}
 		return set, err
 	}
-	// Imported files get the same checks as a save in the portal: the format, and that the
-	// parts fit together. The lists are imported first, so tiers and the like are known.
-	st.validate = func(kind string, body []byte) error {
-		set, err := loadSchemas()
-		if err != nil {
-			return err
-		}
-		if err := set.Validate(kind, body); err != nil {
-			return err
-		}
-		lists, err := st.docs.Lists(ctx)
-		if err == nil && kind == docs.Catalog {
-			err = json.Unmarshal(body, &lists)
-		}
-		if err != nil {
-			return err
-		}
-		return docs.Check(kind, body, lists)
-	}
+	st.validate = importChecks(ctx, st.docs, loadSchemas)
 
 	// one-off commands
 	if o.importDir != "" {
@@ -616,11 +598,35 @@ func devRoles(ctx context.Context, st stores, log *slog.Logger) error {
 	return nil
 }
 
+// importChecks are the checks imported files get, the same as a save in the portal: the format,
+// and that the parts fit together. The lists are imported first, so tiers and the like are known.
+func importChecks(ctx context.Context, d *docs.Store, loadSchemas func() (*schema.Set, error)) func(kind string, body []byte) error {
+	return func(kind string, body []byte) error {
+		set, err := loadSchemas()
+		if err != nil {
+			return err
+		}
+		if err := set.Validate(kind, body); err != nil {
+			return err
+		}
+		lists, err := d.Lists(ctx)
+		if err == nil && kind == docs.Catalog {
+			err = json.Unmarshal(body, &lists)
+		}
+		if err != nil {
+			return err
+		}
+		return docs.Check(kind, body, lists)
+	}
+}
+
 func importFiles(ctx context.Context, st stores, dir string, log *slog.Logger) error {
 	// Lists in the shape of the version before pillars (teams that name a tribe) are converted as
 	// they are at start (upgrade.PillarsFromTribes), so that files exported by that version can
-	// still be imported.
-	st.docs.Prepare = func(kind string, body []byte) ([]byte, error) {
+	// still be imported. The conversion belongs to this import only: a copy of the store does it,
+	// the shared one never converts what it saves.
+	importer := *st.docs
+	importer.Prepare = func(kind string, body []byte) ([]byte, error) {
 		if kind != docs.Catalog {
 			return body, nil
 		}
@@ -633,7 +639,7 @@ func importFiles(ctx context.Context, st stores, dir string, log *slog.Logger) e
 	if _, err := importIcons(ctx, st, dir, log); err != nil {
 		return err
 	}
-	n, problems, err := st.docs.ImportDir(ctx, dir, "import", st.validate)
+	n, problems, err := importer.ImportDir(ctx, dir, "import", st.validate)
 	if err != nil {
 		return err
 	}

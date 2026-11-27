@@ -132,7 +132,7 @@
   .preview-path-marks { display: inline-flex; }
 }
 
-/* the picker of a picture in Admin › Lists, with the name of the picture pointed at, focused or chosen under it */
+/* the picker of a picture in Admin › Tools, with the name of the picture pointed at, focused or chosen under it */
 .symbol-picker { display: flex; flex-wrap: wrap; gap: 6px; }
 .symbol-choice {
   display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 9px;

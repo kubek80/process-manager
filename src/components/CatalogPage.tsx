@@ -20,7 +20,7 @@ import { go, href, loadMembers, PLACE_LISTS, placeOfList, type CatalogList, type
 import { hasErrors, validateCatalog } from "../lib/validate";
 import { checkerSummary, issueText, listIssueField, listIssuePlace, refusalText } from "../lib/editing";
 import { focusWhenShown, useFieldMarks } from "../lib/fieldMarks";
-import { addressedList, tabAfterKey } from "../lib/listTabs";
+import { addressedList, searchStays, tabAfterKey } from "../lib/listTabs";
 import { Field, IssueList, notify, useScrollFade } from "./ui";
 
 type Key = "teams" | "pillars" | "tribes" | "domains" | "practices" | "platforms" | "categories" | "tools" | "patterns" | "tiers" | "paths" | "environments" | "languages";
@@ -120,7 +120,7 @@ const GROUPS: Record<ListPlace, { id: string; name: string; keys: Key[] }[]> = {
 /** What each place says at the top, for readers and in Admin. */
 export const PLACE_HEAD: Record<ListPlace, { title: string; lead: string }> = {
   teams: { title: "Teams", lead: "Who owns what, how teams are grouped in pillars, tribes and domains, who belongs to each team, platform and practice, and how to reach them." },
-  tools: { title: "Tools", lead: "The systems steps are done in, the categories and architecture patterns things are filed under, and where rules apply: application tiers, paths, environments and languages." },
+  tools: { title: "Tools", lead: "The systems used for the work, how things are filed, and where rules apply." },
 };
 /** What a section of the grouped teams is called where it has no domain. */
 const SECTION_WORDS = { "no-domain": NO_DOMAIN, "no-tribe": NO_TRIBE, "no-pillar": NO_PILLAR, all: "" } as const;
@@ -210,7 +210,10 @@ export function CatalogPage({ processes, standards, editable: editor, place: rou
     const back = editor && !routeList ? lastIn.current[routePlace ?? "teams"] : undefined;
     const a = back && placeOfList(keyRef.current) !== (routePlace ?? "teams") ? { list: back.key, id: back.selected }
       : addressedList<Key, ListPlace>(editor, routePlace ?? "teams", routeList, routeId, keyRef.current, (p) => PLACE_LISTS[p][0], placeOfList);
-    if (a) { setKeyHere(a.list); keyRef.current = a.list; setSelectedHere(a.id); if (editor) setAdding(false); }
+    if (!a) return;
+    // the search belongs to the list: another list (another tab, the other place) starts without one
+    if (!searchStays(keyRef.current, a.list)) setQ("");
+    setKeyHere(a.list); keyRef.current = a.list; setSelectedHere(a.id); if (editor) setAdding(false);
   }, [editor, routePlace, routeList, routeId]);
   const place = placeOfList(key);
   useEffect(() => { lastIn.current[placeOfList(key)] = { key, selected }; }, [key, selected]);

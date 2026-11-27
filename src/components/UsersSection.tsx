@@ -58,7 +58,7 @@ export function UsersSection() {
 
   return (
     <div className="admin-section">
-      <p className="lead small">People sign in with their company account. Everyone who can sign in can read, tick steps and give feedback; what else they may do is decided here. The owners and members of one team, platform or practice can also be managed on it, under <a href="#/admin/lists">Lists</a>. An owner of a platform or practice adds and removes its members on the page of that platform or practice.</p>
+      <p className="lead small">People sign in with their company account. Everyone who can sign in can read, tick steps and give feedback; what else they may do is decided here. The owners and members of one team, platform or practice can also be managed on it, under <a href="#/admin/teams">Teams</a>. An owner of a platform or practice adds and removes its members on the page of that platform or practice.</p>
       {error && <LoadError what="The people with roles could not be loaded." error={error} onRetry={load} />}
 
       <section className="admin-card users-card">

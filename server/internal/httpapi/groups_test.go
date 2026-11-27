@@ -471,7 +471,7 @@ func TestDetailsSurviveSavesOfTheListsAtTheSameTime(t *testing.T) {
 			}
 		}(g)
 	}
-	// meanwhile a lists manager saves the lists, as Admin › Lists does: from the version read,
+	// meanwhile a lists manager saves the lists, as Admin › Teams and Admin › Tools do: from the version read,
 	// again from the newest when somebody was faster
 	wg.Add(1)
 	go func() {

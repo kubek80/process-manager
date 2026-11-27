@@ -7,7 +7,7 @@ description: Add, rename or remove the teams, pillars, tribes, domains, practice
 
 All thirteen lists live in one file: `catalog/catalog.json`, validated by `schema/catalog.schema.json`.
 
-This file is **sample content**: it fills an empty database on its first start. `demo/catalog/catalog.json` is the list of the larger demo set (`npm run db:demo`): it replaces the stored lists when loaded, so it must hold every entry of `catalog/catalog.json` unchanged plus the entries the demo documents use. Change both files together. A running installation is changed in the portal (Admin › Lists), or by loading the files with `npm run db:import`.
+This file is **sample content**: it fills an empty database on its first start. `demo/catalog/catalog.json` is the list of the larger demo set (`npm run db:demo`): it replaces the stored lists when loaded, so it must hold every entry of `catalog/catalog.json` unchanged plus the entries the demo documents use. Change both files together. A running installation is changed in the portal (Admin › Teams and Admin › Tools), or by loading the files with `npm run db:import`.
 
 ```json
 {
@@ -56,7 +56,7 @@ Processes in `processes/*.json` and standards in `standards/*.json` reference th
 
 ## Icons of tools and languages
 
-A tool or a language may name a square icon: `"icon"` is the SHA-256 of the image file (64 characters `0-9a-f`), and the file lies in `catalog/icons/<id>.<png|jpg|webp|svg>`. The demo set has its own folder, `demo/catalog/icons/`, with a copy of every sample icon plus its own, since loading it replaces the lists. In a running installation icons are uploaded in Admin › Lists ("Choose image…"); the server stores and serves them by the same id.
+A tool or a language may name a square icon: `"icon"` is the SHA-256 of the image file (64 characters `0-9a-f`), and the file lies in `catalog/icons/<id>.<png|jpg|webp|svg>`. The demo set has its own folder, `demo/catalog/icons/`, with a copy of every sample icon plus its own, since loading it replaces the lists. In a running installation icons are uploaded in Admin › Tools ("Choose image…"); the server stores and serves them by the same id.
 
 To add one by hand:
 

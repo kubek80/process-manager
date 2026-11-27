@@ -39,7 +39,7 @@ test("Teams and Tools are two places of the top bar, each with its own heading, 
   await expect(page).toHaveURL(/#\/tools$/);
   await expect(page).toHaveTitle(/^Tools · /);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tools");
-  await expect(lead).toHaveText("The systems steps are done in, the categories and architecture patterns things are filed under, and where rules apply: application tiers, paths, environments and languages.");
+  await expect(lead).toHaveText("The systems used for the work, how things are filed, and where rules apply.");
   await expect(lead).not.toContainText(/team|pillar|tribe|domain|practice|platform/i);
   await expect(tabs(page)).toHaveText(TOOL_TABS);
   await expect(page.getByRole("tablist", { name: "Tools and how things are filed" }).getByRole("tab")).toHaveCount(3);
@@ -187,6 +187,10 @@ test("on a phone the Menu offers Teams and Tools, and each place fits without si
     await open(page, hash);
     await expect(page.locator("button.menu-btn")).toContainText(place);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    if (place === "Tools") { // its lead is one sentence of two lines at most
+      const lines = await page.locator(".catalog-page .head-text .lead").evaluate((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)));
+      expect(lines).toBeLessThanOrEqual(2);
+    }
   }
   await page.locator("button.menu-btn").click();
   const sheet = page.getByRole("navigation", { name: "Main" });
@@ -194,4 +198,96 @@ test("on a phone the Menu offers Teams and Tools, and each place fits without si
   await expect(sheet.getByRole("link", { name: "Tools", exact: true })).toHaveAttribute("aria-current", "page");
   await sheet.getByRole("link", { name: "Teams", exact: true }).click();
   await expect(page).toHaveURL(/#\/teams$/);
+});
+
+// The search belongs to the list one is looking at: it stays while only the entry changes, and
+// the box is emptied when the address moves the page to another list (another tab, the other place)
+test("the search of a list stays with that list, for readers and in Admin", async ({ page }) => {
+  await signIn(page, ALEX);
+  const search = page.locator(".cat-list-bar input");
+  const to = (hash: string) => page.evaluate((h) => { location.hash = h; }, hash);
+  // a second team to go to by its address, one other tests leave in place
+  const other = (await readCatalog(page)).teams.find((t: { id: string; name: string }) => t.id !== "dns-team" && /team/i.test(t.name)) as { id: string; name: string };
+  // the reader's places
+  await open(page, "/teams");
+  await search.fill("team");
+  await page.locator(".cat-item", { hasText: "DNS team" }).click();
+  await expect(page).toHaveURL(/#\/teams\/teams\/dns-team$/);
+  await expect(search).toHaveValue("team");
+  await to(`#/teams/teams/${other.id}`); // another entry of the same list, by its address
+  await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText(other.name);
+  await expect(search).toHaveValue("team");
+  await to("#/teams/pillars"); // another tab, by its address
+  await expect(tabs(page).filter({ hasText: /^Pillars/ })).toHaveAttribute("aria-selected", "true");
+  await expect(search).toHaveValue("");
+  await search.fill("core");
+  await navigate(page, "Tools"); // the other place
+  await expect(page).toHaveURL(/#\/tools$/);
+  await expect(search).toHaveValue("");
+  await search.fill("terra");
+  await page.goBack(); // Back to the pillars
+  await expect(tabs(page).filter({ hasText: /^Pillars/ })).toHaveAttribute("aria-selected", "true");
+  await expect(search).toHaveValue("");
+  // Admin's two entries
+  await open(page, "/admin/teams");
+  await search.fill("team");
+  await page.locator(".cat-item", { hasText: "DNS team" }).click();
+  await expect(search).toHaveValue("team");
+  await to(`#/admin/teams/teams/${other.id}`); // an entry of the same list
+  await expect(detail(page).locator('[data-field="name"]')).toHaveValue(other.name);
+  await expect(search).toHaveValue("team");
+  await sideMenu(page).getByRole("link", { name: "Tools" }).click();
+  await expect(page).toHaveURL(/#\/admin\/tools$/);
+  await expect(search).toHaveValue("");
+  await search.fill("terra");
+  await sideMenu(page).getByRole("link", { name: "Teams" }).click();
+  await expect(detail(page).locator('[data-field="name"]')).toHaveValue(other.name); // where it was left
+  await expect(search).toHaveValue("");
+  await search.fill("team");
+  await to("#/admin/teams/pillars/core-network"); // another tab of the same place
+  await expect(detail(page).locator('[data-field="name"]')).toHaveValue("Core network");
+  await expect(search).toHaveValue("");
+});
+
+// An address that names a list of the other place, or a list that does not exist, is replaced by
+// the right one - in place, never as a new step of the history - and Admin keeps its unsaved changes
+test("an address of the wrong place or of an unknown list is corrected in place", async ({ page }) => {
+  await signIn(page, ALEX);
+  const to = (hash: string) => page.evaluate((h) => { location.hash = h; }, hash);
+  await open(page, "/");
+  for (const [wrong, right] of [
+    ["#/teams/tools", /#\/tools$/],
+    ["#/tools/teams/dns-team", /#\/teams\/teams\/dns-team$/],
+    ["#/teams/bogus", /#\/teams$/],
+  ] as const) {
+    await to(wrong);
+    await expect(page, wrong).toHaveURL(right);
+    await page.goBack(); // the wrong address is not a step of its own
+    await expect(page, wrong).toHaveURL(/#\/$/);
+  }
+  await to("#/teams/tools");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tools");
+  await expect(tabs(page).first()).toHaveAttribute("aria-selected", "true");
+  // Admin: the unsaved changes stay through every correction
+  await open(page, "/admin/teams");
+  await page.locator(".cat-item", { hasText: "DNS team" }).click();
+  await detail(page).getByLabel("What they do").fill("Changed in a test, not saved.");
+  const unsaved = page.locator(".cat-save-text");
+  await expect(unsaved).toHaveText("Unsaved changes to the lists");
+  await to("#/admin/tools/pillars/core-network");
+  await expect(page).toHaveURL(/#\/admin\/teams\/pillars\/core-network$/);
+  await expect(detail(page).locator('[data-field="name"]')).toHaveValue("Core network");
+  await to("#/admin/teams/paths/greenfield");
+  await expect(page).toHaveURL(/#\/admin\/tools\/paths\/greenfield$/);
+  await expect(page.locator(".admin-main > header.admin-head h1")).toHaveText("Tools");
+  await to("#/admin/teams/bogus");
+  await expect(page).toHaveURL(/#\/admin\/teams$/);
+  await expect(page.locator(".admin-main > header.admin-head h1")).toHaveText("Teams");
+  await expect(page.getByRole("dialog", { name: "Leave without saving?" })).toHaveCount(0);
+  await expect(unsaved).toHaveText("Unsaved changes to the lists");
+  // Admin › Teams opens where it was left, the pillar
+  await expect(detail(page).locator('[data-field="name"]')).toHaveValue("Core network");
+  await tabs(page).filter({ hasText: /^Teams/ }).click();
+  await page.locator(".cat-item", { hasText: "DNS team" }).click();
+  await expect(detail(page).getByLabel("What they do")).toHaveValue("Changed in a test, not saved.");
 });

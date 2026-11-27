@@ -10,7 +10,7 @@ import { opensChange } from "./rights";
 /** The roles, what they allow in plain words, and for the five that are limited to a group: which list it is picked from. */
 export const ROLES: Record<Role, { label: string; can: string; scope: "none" | "required"; scopeLabel?: string; always?: string }> = {
   admin: { label: "Admin", can: "Everything, including who has access", scope: "none" },
-  "catalog-manager": { label: "Lists manager", can: "Teams, tribes, domains, practices, platforms, categories, tools, architecture patterns, tiers, paths, environments, languages", scope: "none" },
+  "catalog-manager": { label: "Lists manager", can: "Teams, pillars, tribes, domains, practices, platforms, categories, tools (with their icons), architecture patterns, tiers, paths, environments and languages", scope: "none" },
   "process-editor": { label: "Process editor", can: "Create and change every process; close its feedback", scope: "none" },
   "standards-editor": { label: "Standards editor", can: "Create and change every standard; close its feedback", scope: "none" },
   "platform-owner": { label: "Platform owner", can: "Create, change and publish the processes and standards that belong to a platform; confirm their reviews, close their feedback and add its members", scope: "required", scopeLabel: "For the platform", always: "Always for one platform" },

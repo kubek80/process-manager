@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -188,30 +187,65 @@ func TestExportThenImportRoundTrip(t *testing.T) {
 	}
 }
 
-// Files exported by the version before pillars (teams straight in a tribe) are imported with the
-// teams put in pillars, as the conversion at start does.
+// Files exported by the version before pillars (teams straight in tribes, which today's format
+// refuses) are converted, then pass the same checks as any import (the format and docs.Check);
+// the conversion belongs to that import only.
 func TestImportOfListsBeforePillars(t *testing.T) {
 	st := newStores(t)
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "catalog"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	old := `{"tiers":[],"environments":[],"languages":[],"tools":[],"teams":[{"id":"a","name":"Alpha","tribe":"cloud"},{"id":"b","name":"Beta"}],"tribes":[{"id":"cloud","name":"Cloud"}]}`
+	// yesterday's shape, small: two tribes in a domain, three teams of which two name a tribe
+	old := `{"tiers":[],"environments":[],"languages":[],"tools":[],
+"teams":[{"id":"dns-team","name":"DNS team","tribe":"connectivity-tribe"},{"id":"network-team","name":"Network team","tribe":"connectivity-tribe"},
+{"id":"cloud-platform-team","name":"Cloud platform team","tribe":"cloud-tribe"},{"id":"fulfilment-team","name":"Fulfilment team"}],
+"tribes":[{"id":"cloud-tribe","name":"Cloud","domain":"platforms-infrastructure"},{"id":"connectivity-tribe","name":"Connectivity","domain":"platforms-infrastructure"}],
+"domains":[{"id":"platforms-infrastructure","name":"Platforms and infrastructure"}]}`
 	if err := os.WriteFile(filepath.Join(dir, "catalog", "catalog.json"), []byte(old), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	st.validate = func(kind string, body []byte) error {
-		if strings.Contains(string(body), `"tribe":"cloud"}`) && strings.Contains(string(body), `"name":"Alpha","tribe"`) {
-			return fmt.Errorf("a team still names a tribe")
-		}
-		return nil
+	set, err := schema.Load(filepath.Join(repo, "..", "schema"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.validate = importChecks(ctx, st.docs, func() (*schema.Set, error) { return set, nil })
+	// the format refuses a team that names a tribe: without the conversion nothing would be imported
+	if err := st.validate(docs.Catalog, []byte(old)); err == nil {
+		t.Fatal("the format took a team that names a tribe")
 	}
 	if err := importFiles(ctx, st, dir, quiet); err != nil {
 		t.Fatal(err)
 	}
 	lists, err := st.docs.Lists(ctx)
-	if err != nil || len(lists.Pillars) != 1 || lists.Pillars[0].ID != "cloud" || lists.Pillars[0].Tribe != "cloud" || lists.Teams[0].Pillar != "cloud" || lists.Teams[0].Tribe != "" || lists.Teams[1].Pillar != "" {
-		t.Fatalf("imported: %+v %v", lists, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pillars, teams []string
+	for _, p := range lists.Pillars {
+		pillars = append(pillars, p.ID+"/"+p.Tribe)
+	}
+	for _, tm := range lists.Teams {
+		teams = append(teams, tm.ID+":"+tm.Pillar+":"+tm.Tribe)
+	}
+	if strings.Join(pillars, ",") != "connectivity-tribe/connectivity-tribe,cloud-tribe/cloud-tribe" ||
+		strings.Join(teams, ",") != "dns-team:connectivity-tribe:,network-team:connectivity-tribe:,cloud-platform-team:cloud-tribe:,fulfilment-team::" ||
+		len(lists.Tribes) != 2 || lists.Tribes[0].Domain != "platforms-infrastructure" {
+		t.Fatalf("imported: pillars %v, teams %v, tribes %+v", pillars, teams, lists.Tribes)
+	}
+	// what was stored passes the checks of today's version, and the shared store converts nothing
+	stored, err := st.docs.Get(ctx, docs.Catalog, docs.CatalogID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := set.Validate(docs.Catalog, stored.Body); err != nil {
+		t.Fatalf("stored lists: %v", err)
+	}
+	if err := docs.Check(docs.Catalog, stored.Body, lists); err != nil {
+		t.Fatalf("stored lists: %v", err)
+	}
+	if st.docs.Prepare != nil {
+		t.Fatal("the import left its conversion on the shared store")
 	}
 }
 

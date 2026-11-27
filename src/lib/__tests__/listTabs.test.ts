@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressedList, tabAfterKey } from "../listTabs";
+import { addressedList, searchStays, tabAfterKey } from "../listTabs";
 import { fitsOneLine } from "../search";
 
 const KEYS = ["teams", "tribes", "domains", "practices", "platforms", "categories", "tools", "patterns", "tiers", "paths", "environments", "languages"] as const;
@@ -50,5 +50,13 @@ describe("a filter's name and value on one line", () => {
     expect(fitsOneLine(172, 60, 80, [16], 8)).toBe(true);
     expect(fitsOneLine(171, 60, 80, [16], 8)).toBe(false);
     expect(fitsOneLine(200, 60, 80, [20, 16], 8)).toBe(true); // with the count of chosen values
+  });
+});
+
+describe("the search of the lists", () => {
+  it("stays while only the entry changes, and is emptied when the list changes", () => {
+    expect(searchStays("teams", "teams")).toBe(true);
+    expect(searchStays("teams", "pillars")).toBe(false); // another tab
+    expect(searchStays("pillars", "paths")).toBe(false); // the other place
   });
 });

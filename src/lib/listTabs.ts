@@ -32,3 +32,10 @@ export function addressedList<K extends string, P extends string>(
   if (editor && placeOf(current) === place) return null;
   return { list: firstOf(place), id: null };
 }
+
+/**
+ * Whether the search box of the lists keeps its words when the page moves from one list to
+ * another: the search belongs to the list a person is looking at, so it stays while only the
+ * entry changes and is emptied when the list changes (another tab or the other place).
+ */
+export const searchStays = <K extends string>(from: K, to: K): boolean => from === to;

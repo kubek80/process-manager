@@ -193,10 +193,11 @@ export const saving: CodeCategory = {
     },
     {
       path: "server/internal/upgrade/pillars.go",
-      role: "Lists stored before there were pillars (teams that name a tribe) get one pillar in each such tribe, named like it, with those teams in it; at start (from `lists.go`) and for an import of files of that shape (`importFiles` in `cmd/server/main.go`, through `docs.Store.Prepare`).",
+      role: "Lists stored before there were pillars (teams that name a tribe) get one pillar in each such tribe, named like it, with those teams in it; at start (from `lists.go`) and for an import of files of that shape (`importFiles` in `cmd/server/main.go`, through `docs.Store.Prepare` on a copy of the store that belongs to that import only).",
       requirements: [
         { text: "Nothing is lost and it runs once: lists in which no team names a tribe come back unchanged, and afterwards no team names one. Test: `TestTeamsInTribesArePutInPillarsOnce`, `TestListsWithoutTeamsInTribesAreLeftAlone`.", at: "if _, had := o.get(\"tribe\"); !had {" },
         { text: "A pillar's id is the tribe's, with a number when the pillars already have it; a team that named a tribe the lists do not have ends up in no pillar, said in the log. Test: `TestPillarIdsThatWouldClash`.", at: "for n := 2; pillars.ids[pillar]; n++ {" },
+        { text: "A team that names both a pillar and a tribe stays in its pillar; the pillar is put in that tribe only when it is in no tribe, the tribe exists and every team of the pillar that names a tribe names that one; otherwise nothing is guessed and the log says why. Test: `TestPillarAndTribeOnOneTeam`.", at: "case len(tribesOfPillar[pillar]) != 1:" },
       ],
       tests: ["server/internal/upgrade/pillars_test.go", "server/cmd/server/main_test.go"],
     },

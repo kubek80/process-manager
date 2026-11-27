@@ -60,10 +60,11 @@ export const admin: CodeCategory = {
     },
     {
       path: "src/lib/listTabs.ts",
-      role: "The lists' tabs as one set for the keyboard (`tabAfterKey`: the arrows through the tabs of the place one is in, across its two sets, Home and End), and what an address of the lists asks to show (`addressedList`).",
+      role: "The lists' tabs as one set for the keyboard (`tabAfterKey`: the arrows through the tabs of the place one is in, across its two sets, Home and End), what an address of the lists asks to show (`addressedList`), and whether the search box keeps its words when the list shown changes (`searchStays`).",
       requirements: [
         { text: "An address that names only its place asks nothing of Admin when the list shown is in that place: the page stays where it is, and its unsaved changes with it; the other place opens its first list on the same page. Admin › Teams and Admin › Tools are one page, never remounted by its address (no `key` on it in `AdminPage`): its draft is the page's own state, and every `#/admin/teams|tools…` is one place to `moveTo`, which asks nothing. Test: `e2e/tribes.spec.ts`, `e2e/places.spec.ts`.", at: "if (editor && placeOf(current) === place) return null;" },
         { text: "The arrows go round in the order of the tabs shown, across the groups; the chosen tab is the one Tab stop (`tabIndex` in `CatalogPage`).", at: "case \"ArrowRight\": return keys[(at + 1) % keys.length];" },
+        { text: "The search belongs to the list one is looking at: when the address moves the page to another list (another tab, the other place, Back) `CatalogPage` empties the box; when only the entry changes it stays. Test: `e2e/places.spec.ts`.", at: "export const searchStays = <K extends string>(from: K, to: K): boolean => from === to;" },
       ],
       tests: ["src/lib/__tests__/listTabs.test.ts", "e2e/catalog.spec.ts", "e2e/tribes.spec.ts"],
     },

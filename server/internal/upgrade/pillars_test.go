@@ -1,6 +1,7 @@
 package upgrade_test
 
 import (
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -116,5 +117,44 @@ func TestPillarIdsThatWouldClash(t *testing.T) {
 	}
 	if strings.Contains(text, `"tribe":"cloud","pillar"`) || strings.Contains(text, `"name":"A","tribe"`) {
 		t.Fatalf("a team still names a tribe:\n%s", text)
+	}
+}
+
+// A team that names both a pillar and a tribe stays in its pillar. The pillar is put in that tribe
+// only when it is in no tribe yet, the tribe exists and every team of the pillar that names a tribe
+// names that one; otherwise nothing is guessed and the log says why.
+func TestPillarAndTribeOnOneTeam(t *testing.T) {
+	body := `{"teams":[
+{"id":"a","name":"A","pillar":"same","tribe":"cloud"},{"id":"b","name":"B","pillar":"same","tribe":"cloud"},{"id":"c","name":"C","pillar":"same"},
+{"id":"d","name":"D","pillar":"mixed","tribe":"cloud"},{"id":"e","name":"E","pillar":"mixed","tribe":"net"},
+{"id":"f","name":"F","pillar":"placed","tribe":"cloud"},
+{"id":"g","name":"G","pillar":"unknown-tribe","tribe":"gone"}],
+"pillars":[{"id":"same","name":"Same"},{"id":"mixed","name":"Mixed"},{"id":"placed","name":"Placed","tribe":"net"},{"id":"unknown-tribe","name":"Unknown"}],
+"tribes":[{"id":"cloud","name":"Cloud"},{"id":"net","name":"Net"}]}`
+	var said strings.Builder
+	log := slog.New(slog.NewTextHandler(&said, nil))
+	out, pillars, teams, err := upgrade.PillarsFromTribes([]byte(body), log)
+	if err != nil || pillars != 0 || teams != 0 {
+		t.Fatalf("%s %d %d %v", out, pillars, teams, err)
+	}
+	text := string(out)
+	for _, want := range []string{
+		`{"id":"same","name":"Same","tribe":"cloud"}`,   // its teams agree
+		`{"id":"mixed","name":"Mixed"}`,                 // its teams name two tribes
+		`{"id":"placed","name":"Placed","tribe":"net"}`, // already in a tribe
+		`{"id":"unknown-tribe","name":"Unknown"}`,       // the tribe does not exist
+		`{"id":"a","name":"A","pillar":"same"}`, `{"id":"d","name":"D","pillar":"mixed"}`, `{"id":"f","name":"F","pillar":"placed"}`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %s in\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, `"pillar":"same","tribe"`) {
+		t.Fatalf("a team still names a tribe:\n%s", text)
+	}
+	for _, why := range []string{"the pillar is put in that tribe", "name different tribes", "in a tribe of its own", "the tribe is not in the lists"} {
+		if !strings.Contains(said.String(), why) {
+			t.Errorf("the log does not say %q:\n%s", why, said.String())
+		}
 	}
 }
