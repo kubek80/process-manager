@@ -502,6 +502,9 @@ const parse = (h: string = location.hash): Route => {
   if (place) return readerLists(parseLists(place[1] as ListPlace, place[2], place[3]));
   const cat = h.match(/^#\/catalog(?:\/([a-z]+)(?:\/([a-z0-9-]+))?)?\/?$/);
   if (cat) return readerLists(parseLists("teams", cat[1], cat[2]));
+  // the plural with an entry (a likely slip) is that service's page; the address is corrected
+  const servicePlural = h.match(/^#\/services\/([a-z0-9-]+)\/?$/);
+  if (servicePlural) return { page: "service", id: servicePlural[1] };
   const services = h.match(/^#\/services(?:\?(.*))?$/);
   if (services) return { page: "services", ...parseServicesQuery(services[1] ?? "") };
   const service = h.match(/^#\/service\/([a-z0-9-]+)\/?$/);
@@ -524,6 +527,9 @@ const parse = (h: string = location.hash): Route => {
   // way the other places write it) is read as the same and corrected
   const adminServices = h.match(/^#\/admin\/services(?:\/([a-z0-9-]+))?(?:\/([a-z0-9-]+))?\/?$/);
   if (adminServices) {
+    // another list and its entry (`#/admin/services/teams/x`) is that list's entry, in its own place
+    if (adminServices[2] && adminServices[1] !== "services" && (CATALOG_LISTS as readonly string[]).includes(adminServices[1]))
+      return { page: "admin", section: "lists", ...parseLists(undefined, adminServices[1], adminServices[2]) };
     const id = adminServices[2] ? (adminServices[1] === "services" ? adminServices[2] : undefined) : adminServices[1];
     // without an entry it names only the place: Admin goes back to the service last shown there
     return { page: "admin", section: "lists", place: "services", ...(id ? { list: "services", id } : {}) };
@@ -731,7 +737,7 @@ export const href = (r: Route): string => {
 export function correctedListsAddress(hash: string): string | null {
   const r = parse(hash);
   // a service asked of Teams or Tools (`#/teams/services/x`) is the page of that service
-  const asList = (r.page === "service" || r.page === "services") && /^#\/(teams|tools|catalog)(\/|$)/.test(hash);
+  const asList = (r.page === "service" || r.page === "services") && /^#\/((teams|tools|catalog)(\/|$)|services\/)/.test(hash);
   if (r.page !== "catalog" && !(r.page === "admin" && r.section === "lists") && !asList) return null;
   const right = href(r);
   return right === hash ? null : right;

@@ -413,6 +413,7 @@ function listIssueText(path: string, message: string, doc: unknown): string {
   if (key === "symbol") return `The picture of ${entry} is not one the portal knows: choose one of the pictures, or none.`;
   // a service: the team that performs it and its front-door form, in the server's words (docs.Check)
   if (list === "services" && key === "team") return `Choose the team that performs ${entry}.`;
+  if (/on one line/.test(message)) return `Write the ${words} of ${entry} on one line, without line breaks.`;
   if (list === "services" && key === "form") {
     if (missing || /^is empty$|^is too short/.test(message)) return `Give the front-door form of ${entry}: the link where people request it.`;
     const tooLong = message.match(/^is too long \(maximum (\d+)/);

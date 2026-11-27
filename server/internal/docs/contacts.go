@@ -4,19 +4,21 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
+
+	"github.com/kubek80/process-manager/server/internal/richtext"
 )
 
 // How to reach a team, platform or practice: checked here as the schema checks it, so that a
 // link is never anything but http:// or https://, and written out in one compact, repeatable form
 // for skills, the search index and agents.
 
-var (
-	linkPattern  = regexp.MustCompile(`^https?://\S+$`)
-	emailPattern = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
-)
+var emailPattern = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 
-// ValidLink reports whether s is a link people may follow: http:// or https:// and no spaces.
-func ValidLink(s string) bool { return linkPattern.MatchString(s) }
+// ValidLink reports whether s is a link people may follow: http:// or https:// and no white
+// space, control character, quote, "<", ">" or backslash (richtext.WebLink: the one rule, the
+// same in the app and the schema). Its length is checked where it is used, in characters.
+func ValidLink(s string) bool { return richtext.WebLink(s) }
 
 // ValidEmail reports whether s looks like an email address.
 func ValidEmail(s string) bool { return emailPattern.MatchString(s) }
@@ -43,7 +45,7 @@ func (c *Contacts) Problems(what string) []string {
 	for _, l := range links {
 		switch {
 		case l.value == "":
-		case len(l.value) > 300:
+		case utf8.RuneCountInString(l.value) > 300:
 			out = append(out, fmt.Sprintf("Shorten the %s of %s to at most 300 characters.", l.label, what))
 		case !ValidLink(l.value):
 			spaces := ""

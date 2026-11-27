@@ -700,6 +700,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .cat-usage h3 { font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); margin-bottom: 8px; }
 .cat-usage ul { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .cat-usage ul:empty { display: none; }
+.cat-usage ul + h3 { margin-top: 14px; }
 .cat-usage li + li { border-top: 1px solid var(--line); }
 .cat-usage :is(button, a) { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; color: var(--text); }
 .cat-usage :is(button, a):hover { background: var(--surface-2); }

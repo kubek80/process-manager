@@ -413,7 +413,8 @@ export function CatalogPage({ processes, standards, editable: editor, place: rou
         })}
       </div>}
       <div ref={saveBar} className={`cat-toolbar ${editor ? "with-save" : ""} ${editor && dirty ? "dirty" : ""}`}>
-        <p className="cat-blurb">{kind.blurb}</p>
+        {/* a place of one list has its heading's lead only: the list's own words would say it again */}
+        <p className="cat-blurb">{GROUPS[place].flatMap((g) => g.keys).length > 1 ? kind.blurb : ""}</p>
         {/* the lists are saved together: Undo, Redo and Save stay in view above the list and the details */}
         {editor && (
           <div className="cat-save">
@@ -611,7 +612,7 @@ export function CatalogPage({ processes, standards, editable: editor, place: rou
                 </div>
               ) : (
               <div className="cat-usage">
-                <h3>Used by {uses.length ? countOf(uses) : "nothing yet"}</h3>
+                <h3>Used by {uses.length ? countOf(uses) : performs.length ? "no process or standard" : "nothing yet"}</h3>
                 <ul>
                   {uses.map((u) => (
                     <li key={("requirements" in u.process ? "s/" : "p/") + u.process.id}>
@@ -621,6 +622,21 @@ export function CatalogPage({ processes, standards, editable: editor, place: rou
                     </li>
                   ))}
                 </ul>
+                {/* a team that performs services: they are named, each leading to it under Services (the same draft) */}
+                {performs.length > 0 && (
+                  <>
+                    <h3>Performs {performs.length} service{performs.length === 1 ? "" : "s"}</h3>
+                    <ul className="cat-performs">
+                      {performs.map((sv) => (
+                        <li key={sv.id}>
+                          <button type="button" onClick={() => { setKey("services"); setSelected(sv.id); setAdding(false); setQ(""); }}>
+                            <strong>{sv.name || "Unnamed"}</strong><em>under Services</em><ArrowUpRight size={14} aria-hidden="true" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
               </div>
               )}
 
@@ -736,7 +752,7 @@ function ServiceFields({ value, teams, onChange }: { value: Row; teams: ReturnTy
   return (
     <>
       <Field label="Summary" hint="One or two plain sentences: what people get. Shown on cards, in the box of a process and to AI agents.">
-        <textarea data-field="summary" rows={2} maxLength={200} value={value.summary ?? ""} placeholder="e.g. A new or changed DNS record in the company's zones, within one working day"
+        <input data-field="summary" maxLength={200} value={value.summary ?? ""} placeholder="e.g. A new or changed DNS record in the company's zones, within one working day"
           onChange={(e) => onChange({ summary: e.target.value || undefined })} />
       </Field>
       <Field label="Performed by" hint="The team that does the work">

@@ -783,3 +783,35 @@ func TestReportProblem(t *testing.T) {
 		t.Fatal("report_problem without a person")
 	}
 }
+
+// Lists written straight into the store, past every check: a service without an id, one whose
+// team is gone, and a step that names a service that is not there. Nothing panics; what can be
+// read is given.
+func TestServicesWhateverTheDatabaseHolds(t *testing.T) {
+	e := setup(t, "", nil)
+	ctx := context.Background()
+	lists, err := e.docs.Get(ctx, docs.Catalog, docs.CatalogID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	_ = json.Unmarshal(lists.Body, &m)
+	m["services"] = []any{
+		map[string]any{"id": "", "name": "No id"},
+		map[string]any{"id": "orphan", "name": "Orphan", "team": "gone-team", "form": "https://f.example", "description": "<p>a\u0001b</p>"},
+	}
+	body, _ := json.Marshal(m)
+	if _, _, err := e.docs.Put(ctx, docs.Catalog, docs.CatalogID, body, "test"); err != nil {
+		t.Fatal(err)
+	}
+	var c Catalog
+	mustCall(t, e.session(nil), "get_catalog", nil, &c)
+	if len(c.Services) != 1 || c.Services[0].ID != "orphan" || c.Services[0].Team == nil || c.Services[0].Team.Name != "gone-team" || c.Services[0].Description != "ab" {
+		t.Fatalf("%+v", c.Services)
+	}
+	var p Process
+	mustCall(t, e.session(nil), "get_process", map[string]any{"id": "onboard-site-to-akamai"}, &p)
+	if p.Steps[8].Service != nil {
+		t.Fatalf("a service that is not there: %+v", p.Steps[8].Service)
+	}
+}

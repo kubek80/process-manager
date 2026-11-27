@@ -1,0 +1,309 @@
+{
+  "about": "Rich text: problem is exactly what richtext.Problem and richProblem (src/lib/richText.ts) say, empty when it may be stored. Read by richtext/richtext_test.go and src/lib/__tests__/richText.test.ts.",
+  "cases": [
+    {
+      "html": "",
+      "problem": ""
+    },
+    {
+      "html": "Plain words.",
+      "problem": ""
+    },
+    {
+      "html": "<p>What you get: a <strong>new record</strong> within <em>one day</em>.</p>",
+      "problem": ""
+    },
+    {
+      "html": "<h3>What to prepare</h3><h4>Names</h4><ul><li><p>the name</p></li><li>the target</li></ul><ol><li>first</li></ol>",
+      "problem": ""
+    },
+    {
+      "html": "<p>See <a href=\"https://wiki.example.com/dns?a=1&amp;b=2\">the wiki</a> or <a href=\"mailto:dns@example.com\">us</a>.</p>",
+      "problem": ""
+    },
+    {
+      "html": "<blockquote><p>Quoted</p></blockquote><p>Line<br>break<br/>again</p><pre><code>a &lt; b &amp;&amp; c</code></pre>",
+      "problem": ""
+    },
+    {
+      "html": "<p>5 &lt; 6, &gt; &quot;q&quot; &apos; &#169; &#xA9; &nbsp; \u00a0 tab\there\nline\r\n</p>",
+      "problem": ""
+    },
+    {
+      "html": "<P>Upper case tags</P>",
+      "problem": ""
+    },
+    {
+      "html": "<p>open <strong>nested <em>unclosed",
+      "problem": ""
+    },
+    {
+      "html": "<p >spaced</p >",
+      "problem": ""
+    },
+    {
+      "html": "a < b",
+      "problem": "a \u201c<\u201d that does not start a tag (write it as &lt;)"
+    },
+    {
+      "html": "a <",
+      "problem": "a \u201c<\u201d that does not start a tag (write it as &lt;)"
+    },
+    {
+      "html": "<",
+      "problem": "a \u201c<\u201d that does not start a tag (write it as &lt;)"
+    },
+    {
+      "html": "Tom & Jerry",
+      "problem": "an \u201c&\u201d that is not written as &amp;"
+    },
+    {
+      "html": "&unknown;",
+      "problem": "an \u201c&\u201d that is not written as &amp;"
+    },
+    {
+      "html": "&#1;",
+      "problem": "an \u201c&\u201d that is not written as &amp;"
+    },
+    {
+      "html": "&#x7f;",
+      "problem": "an \u201c&\u201d that is not written as &amp;"
+    },
+    {
+      "html": "&#xd800;",
+      "problem": "an \u201c&\u201d that is not written as &amp;"
+    },
+    {
+      "html": "&#0;",
+      "problem": "an \u201c&\u201d that is not written as &amp;"
+    },
+    {
+      "html": "<script>alert(1)</script>",
+      "problem": "a script"
+    },
+    {
+      "html": "<SCRIPT SRC=//x.example/a.js></SCRIPT>",
+      "problem": "a script"
+    },
+    {
+      "html": "<scr<script>ipt>alert(1)</script>",
+      "problem": "the element \u201cscr\u201d"
+    },
+    {
+      "html": "<p onclick=\"alert(1)\">x</p>",
+      "problem": "the attribute \u201conclick\u201d"
+    },
+    {
+      "html": "<p ONMOUSEOVER=alert(1)>x</p>",
+      "problem": "the attribute \u201conmouseover\u201d"
+    },
+    {
+      "html": "<p/onclick=alert(1)>x</p>",
+      "problem": "a tag the portal cannot read"
+    },
+    {
+      "html": "<a href=\"javascript:alert(1)\">x</a>",
+      "problem": "a link to \u201cjavascript:alert(1)\u201d"
+    },
+    {
+      "html": "<a href=\" javascript:alert(1)\">x</a>",
+      "problem": "a link to \u201c javascript:alert(1)\u201d"
+    },
+    {
+      "html": "<a href=\"&#106;avascript:alert(1)\">x</a>",
+      "problem": "a link to \u201c&#106;avascript:alert(1)\u201d"
+    },
+    {
+      "html": "<a href=\"javascript&colon;alert(1)\">x</a>",
+      "problem": "a link to \u201cjavascript&colon;alert(1)\u201d"
+    },
+    {
+      "html": "<a href=\"data:text/html;base64,PHNjcmlwdD4=\">x</a>",
+      "problem": "a link to \u201cdata:text/html;base64,PHNjcmlwdD4=\u201d"
+    },
+    {
+      "html": "<a href=https://x.example>x</a>",
+      "problem": "an attribute without quotes"
+    },
+    {
+      "html": "<a href='https://x.example'>x</a>",
+      "problem": "an attribute without quotes"
+    },
+    {
+      "html": "<a href>x</a>",
+      "problem": "an attribute without quotes"
+    },
+    {
+      "html": "<a href=\"https://x y.example\">x</a>",
+      "problem": "a link to \u201chttps://x y.example\u201d"
+    },
+    {
+      "html": "<a href=\"https://ok.example\" target=\"_blank\">x</a>",
+      "problem": "the attribute \u201ctarget\u201d"
+    },
+    {
+      "html": "<a href=\"https://a.example\" HREF=\"https://b.example\">x</a>",
+      "problem": "the attribute \u201chref\u201d twice"
+    },
+    {
+      "html": "<a href=\"https://a.example\"href=\"https://b.example\">x</a>",
+      "problem": "a tag the portal cannot read"
+    },
+    {
+      "html": "<p style=\"color:red\">x</p>",
+      "problem": "the attribute \u201cstyle\u201d"
+    },
+    {
+      "html": "<p class=\"x\">x</p>",
+      "problem": "the attribute \u201cclass\u201d"
+    },
+    {
+      "html": "<p data-x=\"1\">x</p>",
+      "problem": "the attribute \u201cdata-x\u201d"
+    },
+    {
+      "html": "</p onclick=alert(1)><p>x</p>",
+      "problem": "a closing tag with attributes"
+    },
+    {
+      "html": "<p>ok</p><p onclick=\"alert(1)",
+      "problem": "the attribute \u201conclick\u201d"
+    },
+    {
+      "html": "<p>ok</p><p",
+      "problem": "a tag that is not finished"
+    },
+    {
+      "html": "<p>ok</p><a href=\"https://x.example",
+      "problem": "a tag that is not finished"
+    },
+    {
+      "html": "<p>ok</p></p",
+      "problem": "a tag that is not finished"
+    },
+    {
+      "html": "<p>ok</p></",
+      "problem": "a tag that is not finished"
+    },
+    {
+      "html": "<p>ok</p><br/",
+      "problem": "a tag that is not finished"
+    },
+    {
+      "html": "</>",
+      "problem": "a tag the portal cannot read"
+    },
+    {
+      "html": "<p/>",
+      "problem": "a tag the portal cannot read"
+    },
+    {
+      "html": "<!-- a comment -->",
+      "problem": "a hidden comment"
+    },
+    {
+      "html": "<!--><script>alert(1)</script>-->",
+      "problem": "a hidden comment"
+    },
+    {
+      "html": "<![CDATA[x]]>",
+      "problem": "a hidden comment"
+    },
+    {
+      "html": "<!DOCTYPE html>",
+      "problem": "a document type"
+    },
+    {
+      "html": "<?php echo 1 ?>",
+      "problem": "a tag the portal cannot read"
+    },
+    {
+      "html": "<svg onload=alert(1)>",
+      "problem": "a picture"
+    },
+    {
+      "html": "<math><mtext>x</mtext></math>",
+      "problem": "the element \u201cmath\u201d"
+    },
+    {
+      "html": "<iframe src=\"https://x.example\"></iframe>",
+      "problem": "an embedded page"
+    },
+    {
+      "html": "<base href=\"https://evil.example/\">",
+      "problem": "the element \u201cbase\u201d"
+    },
+    {
+      "html": "<meta http-equiv=\"refresh\">",
+      "problem": "the element \u201cmeta\u201d"
+    },
+    {
+      "html": "<link rel=\"stylesheet\">",
+      "problem": "the element \u201clink\u201d"
+    },
+    {
+      "html": "<form><input></form>",
+      "problem": "a form"
+    },
+    {
+      "html": "<noscript><p title=\"</noscript><img src=x onerror=alert(1)>\"></p></noscript>",
+      "problem": "a script"
+    },
+    {
+      "html": "<template><p>t</p></template>",
+      "problem": "the element \u201ctemplate\u201d"
+    },
+    {
+      "html": "<p><title>t</title></p>",
+      "problem": "the element \u201ctitle\u201d"
+    },
+    {
+      "html": "<img src=x onerror=alert(1)>",
+      "problem": "a picture"
+    },
+    {
+      "html": "<table><tr><td>x</td></tr></table>",
+      "problem": "a table"
+    },
+    {
+      "html": "<span>x</span>",
+      "problem": "the element \u201cspan\u201d"
+    },
+    {
+      "html": "<h1>x</h1>",
+      "problem": "the element \u201ch1\u201d"
+    },
+    {
+      "html": "<body onload=alert(1)>",
+      "problem": "the element \u201cbody\u201d"
+    },
+    {
+      "html": "<plaintext>",
+      "problem": "the element \u201cplaintext\u201d"
+    },
+    {
+      "html": "<p>a\u0001b</p>",
+      "problem": "an invisible control character"
+    },
+    {
+      "html": "<p>a\u001bc</p>",
+      "problem": "an invisible control character"
+    },
+    {
+      "html": "<p>a\u007fb</p>",
+      "problem": "an invisible control character"
+    },
+    {
+      "html": "<p>a\fb</p>",
+      "problem": "an invisible control character"
+    },
+    {
+      "html": "<p>a\u0000b</p>",
+      "problem": "an invisible control character"
+    },
+    {
+      "html": "<a href=\"https://x.example\u0001y\">x</a>",
+      "problem": "an invisible control character"
+    }
+  ]
+}

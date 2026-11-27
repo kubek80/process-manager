@@ -437,7 +437,7 @@
         },
         "url": {
           "type": "string",
-          "pattern": "^https?://\\S+$"
+          "pattern": "^https?://[^\u0000- \"<>\\\\\u007f-\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$"
         },
         "description": {
           "type": "string",
@@ -514,7 +514,7 @@
         },
         "slackUrl": {
           "type": "string",
-          "pattern": "^https?://\\S+$",
+          "pattern": "^https?://[^\u0000- \"<>\\\\\u007f-\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$",
           "maxLength": 300,
           "description": "Link to that Slack channel."
         },
@@ -526,25 +526,25 @@
         },
         "chatUrl": {
           "type": "string",
-          "pattern": "^https?://\\S+$",
+          "pattern": "^https?://[^\u0000- \"<>\\\\\u007f-\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$",
           "maxLength": 300,
           "description": "Link to that Google Chat space."
         },
         "confluence": {
           "type": "string",
-          "pattern": "^https?://\\S+$",
+          "pattern": "^https?://[^\u0000- \"<>\\\\\u007f-\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$",
           "maxLength": 300,
           "description": "Link to their Confluence page."
         },
         "page": {
           "type": "string",
-          "pattern": "^https?://\\S+$",
+          "pattern": "^https?://[^\u0000- \"<>\\\\\u007f-\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$",
           "maxLength": 300,
           "description": "Link to their own page or site."
         },
         "form": {
           "type": "string",
-          "pattern": "^https?://\\S+$",
+          "pattern": "^https?://[^\u0000- \"<>\\\\\u007f-\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$",
           "maxLength": 300,
           "description": "Link to the form where people ask them for something."
         }
@@ -565,11 +565,13 @@
         },
         "name": {
           "type": "string",
+          "pattern": "^[^\r\n\u2028\u2029]*$",
           "minLength": 1,
           "maxLength": 80
         },
         "summary": {
           "type": "string",
+          "pattern": "^[^\r\n\u2028\u2029]*$",
           "maxLength": 200,
           "description": "What the service is, in one or two plain sentences: shown on cards, rows, the box in a process and to agents."
         },
@@ -579,12 +581,13 @@
         },
         "form": {
           "type": "string",
-          "pattern": "^https?://\\S+$",
+          "pattern": "^https?://[^\u0000- \"<>\\\\\u007f-\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$",
           "maxLength": 300,
           "description": "The front-door form: the link where people request the service."
         },
         "formLabel": {
           "type": "string",
+          "pattern": "^[^\r\n\u2028\u2029]*$",
           "minLength": 1,
           "maxLength": 60,
           "description": "The words of the button that opens the front-door form; left out, \"Request this service\"."

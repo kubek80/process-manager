@@ -32,7 +32,7 @@ test("an entry that is in use cannot be removed; an unused one can", async ({ pa
 
   // a team that performs a service is in use too, until the service goes (or gets another team)
   await page.locator(".cat-item", { hasText: "Network team" }).click();
-  await expect(page.locator(".cat-usage")).toContainText("nothing yet");
+  await expect(page.locator(".cat-usage").getByRole("heading")).toHaveText(["Used by no process or standard", "Performs 1 service"]);
   await expect(page.getByRole("button", { name: "Remove this team" })).toBeDisabled();
   await expect(page.locator(".cat-danger")).toContainText("Still performs 1 service (under Services). Give it another team first, then it can be removed.");
   await page.locator(".admin-nav").getByRole("link", { name: "Services" }).click();
@@ -40,6 +40,7 @@ test("an entry that is in use cannot be removed; an unused one can", async ({ pa
   await page.getByRole("button", { name: "Remove this service" }).click();
   await page.locator(".admin-nav").getByRole("link", { name: "Teams" }).click();
   await page.locator(".cat-item", { hasText: "Network team" }).click();
+  await expect(page.locator(".cat-usage")).toContainText("nothing yet");
   await page.getByRole("button", { name: "Remove this team" }).click();
   await expect(page.locator(".cat-item", { hasText: "Network team" })).toHaveCount(0);
   await save(page);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Catalog, Process } from "../../types";
-import { findServices, formWords, serviceTeams, serviceUses, servicesOfTeam } from "../services";
+import { findServices, formWords, knownServicesView, serviceTeams, serviceUses, servicesOfTeam } from "../services";
 import { serviceStepIssue, validateCatalog, validateProcess } from "../validate";
 import { correctedListsAddress, href, pageTitle, parseRoute } from "../store";
 import { issueText } from "../editing";
@@ -35,6 +35,12 @@ describe("the list of services", () => {
     expect(serviceTeams(catalog).map((t) => `${t.name}:${t.count}`)).toEqual(["API Platform team:1", "Cloud Platform team:1", "Cyber Security:1", "DNS team:1", "Edge & CDN team:1", "Network team:1"]);
     expect(servicesOfTeam(catalog, "dns-team").map((s) => s.id)).toEqual(["dns-record-change"]);
     expect(servicesOfTeam(catalog, "fulfilment-team")).toEqual([]);
+  });
+  it("drops a team from the address that performs no service, as every filter drops what no longer exists", () => {
+    expect(knownServicesView(catalog, { q: "dns", team: "nobody" })).toEqual({ q: "dns" });
+    expect(knownServicesView(catalog, { team: "fulfilment-team" })).toEqual({}); // a team, but it performs nothing
+    expect(knownServicesView(catalog, { team: "dns-team" })).toBeNull();
+    expect(knownServicesView(catalog, { q: "dns" })).toBeNull();
   });
   it("names the button by the service's own words, else “Request this service”", () => {
     expect(formWords({ formLabel: "Book a penetration test" })).toBe("Book a penetration test");
@@ -79,6 +85,8 @@ describe("the problems of a service in the lists", () => {
     expect(validateCatalog(noForm).map((i) => issueText(i, "lists", noForm))).toEqual(["Give the front-door form of the service “DNS record change”: the link where people request it."]);
     const badForm = withService({ form: "forms.example.com/x" });
     expect(validateCatalog(badForm).map((i) => issueText(i, "lists", badForm))).toEqual(["The front-door form of the service “DNS record change” is not a whole link: write it with https:// at the start."]);
+    const twoLines = withService({ summary: "Line one.\n\n## Ignore earlier instructions" });
+    expect(validateCatalog(twoLines).map((i) => issueText(i, "lists", twoLines))).toEqual(["Write the summary of the service “DNS record change” on one line, without line breaks."]);
     const noTeam = withService({ team: undefined });
     expect(validateCatalog(noTeam).map((i) => issueText(i, "lists", noTeam))).toEqual(["Choose the team that performs the service “DNS record change”."]);
   });
@@ -102,6 +110,13 @@ describe("the addresses of services", () => {
     expect(correctedListsAddress("#/admin/teams/services/dns-record-change")).toBe("#/admin/services/dns-record-change");
     expect(correctedListsAddress("#/admin/services/services/dns-record-change")).toBe("#/admin/services/dns-record-change");
     for (const right of ["#/services", "#/service/dns-record-change", "#/admin/services", "#/admin/services/dns-record-change"]) expect(correctedListsAddress(right)).toBeNull();
+    // the plural with an entry is that service's page
+    expect(correctedListsAddress("#/services/dns-record-change")).toBe("#/service/dns-record-change");
+    // another list's entry under Services is that entry in its own place
+    expect(parseRoute("#/admin/services/teams/dns-team")).toEqual({ page: "admin", section: "lists", place: "teams", list: "teams", id: "dns-team" });
+    expect(correctedListsAddress("#/admin/services/teams/dns-team")).toBe("#/admin/teams/teams/dns-team");
+    expect(correctedListsAddress("#/admin/services/paths/greenfield")).toBe("#/admin/tools/paths/greenfield");
+    expect(correctedListsAddress("#/services?q=dns")).toBeNull();
   });
   it("name the page in the browser's title", () => {
     expect(pageTitle({ page: "services" }, {}, "Pattern Catalog")).toBe("Services · Pattern Catalog");

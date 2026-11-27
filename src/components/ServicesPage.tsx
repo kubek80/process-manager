@@ -5,7 +5,7 @@ import { useCatalog } from "../lib/catalog";
 import { partOf } from "../lib/groups";
 import { canManageLists } from "../lib/rights";
 import { usePerms } from "../lib/session";
-import { findServices, formWords, serviceOf, serviceTeams, serviceUses } from "../lib/services";
+import { findServices, formWords, knownServicesView, serviceOf, serviceTeams, serviceUses } from "../lib/services";
 import { go, href, type ServicesView } from "../lib/store";
 import { GroupLink, PartOf } from "./GroupParts";
 import { RichText } from "./RichText";
@@ -30,9 +30,12 @@ export function ServicesPage({ q, team }: ServicesView) {
   // the address wins when it changes (Back, a link); typing changes the address in place
   useEffect(() => { setText(q ?? ""); }, [q]);
   const set = (next: ServicesView) => go({ page: "services", ...next }, { replace: true });
+  // a team that performs no service (an old link, a typo) is dropped, and the address with it
+  const known = knownServicesView(catalog, { q, team });
+  useEffect(() => { if (known) set(known); }, [known?.q, known?.team, !!known]); // eslint-disable-line react-hooks/exhaustive-deps
   const all = catalog.services ?? [];
   const teams = serviceTeams(catalog);
-  const shown = findServices(catalog, text, team);
+  const shown = findServices(catalog, text, known ? undefined : team);
   const manager = canManageLists(perms);
   return (
     <div className="page services-page">

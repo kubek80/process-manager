@@ -60,3 +60,13 @@ export function serviceUses(processes: Process[], id: string): { process: Proces
     .filter((u) => u.steps.length > 0)
     .sort((a, b) => Number(a.retired) - Number(b.retired) || a.process.title.localeCompare(b.process.title));
 }
+
+/**
+ * The list's search as the address may hold it, without a team that performs no service (removed,
+ * mistyped, an old link): as every other filter of the app drops a value that no longer exists.
+ * Null when nothing is to drop.
+ */
+export function knownServicesView(c: Pick<Catalog, "teams" | "services">, v: { q?: string; team?: string }): { q?: string; team?: string } | null {
+  if (!v.team || serviceTeams(c).some((t) => t.id === v.team)) return null;
+  return v.q ? { q: v.q } : {};
+}

@@ -64,6 +64,9 @@ export const admin: CodeCategory = {
       requirements: [
         { text: "What it holds and what is pasted (Word, Google Docs, a web page) is cleaned to the allow-list before it reaches the lists' one draft; its own styles are left out (`injectCSS: false`), ours are tokens in `services.css`.", at: "transformPastedHTML: (html) => cleanRichHtml(html)," },
         { text: "The page's Undo, Redo and Discard change what it shows; its own changes are what it last gave the page.", at: "if (!editor || value === sent.current) return;" },
+        { text: "No shortcut with Ctrl and Alt together (AltGr on Windows types characters with it): every extension's shortcuts are filtered; headings, a code block and back to a paragraph are buttons only. Test: `e2e/services.spec.ts`.", at: "export const withoutCtrlAlt = <E extends AnyExtension>(ext: E): E => ext.extend({" },
+        { text: "When the page replaces what it shows (its Undo, Redo, Discard), the editor's own history starts afresh, so its Undo never brings back what the page took back. Test: `e2e/services.spec.ts`.", at: "editor.view.updateState(EditorState.create({ doc: now.doc, plugins: now.plugins, selection: now.selection }));" },
+        { text: "The toolbar is one Tab stop; the arrows, Home and End move between its buttons.", at: "const roam = (e: KeyboardEvent) => {" },
       ],
       tests: ["e2e/services.spec.ts"],
     },

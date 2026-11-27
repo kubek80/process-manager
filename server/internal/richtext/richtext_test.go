@@ -1,88 +1,61 @@
 package richtext_test
 
 import (
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/kubek80/process-manager/server/internal/richtext"
 )
 
-// What the editor writes, and what a person may format, passes.
-func TestAllowedFormattingPasses(t *testing.T) {
-	for _, ok := range []string{
-		"",
-		"Plain words, no formatting.",
-		"<p>What you get: a <strong>new record</strong> within <em>one day</em>.</p>",
-		"<h3>What to prepare</h3><h4>Names</h4><ul><li><p>the name</p></li><li>the target</li></ul><ol><li>first</li></ol>",
-		`<p>See <a href="https://wiki.example.com/dns">the wiki</a> or write to <a href="mailto:dns@example.com">the team</a>.</p>`,
-		"<blockquote><p>Quoted</p></blockquote><p>Line<br>break<br/>again</p><p><code>dig example.com</code></p><pre><code>a &lt; b &amp;&amp; c</code></pre>",
-		"<p>5 &lt; 6 and &quot;quotes&quot; &#169; &nbsp;</p>",
-		"<p>a < b, a stray less-than</p>",
-	} {
-		if p := richtext.Problem(ok); p != "" {
-			t.Errorf("%q refused: %s", ok, p)
+type htmlCase struct{ HTML, Problem string }
+type linkCase struct {
+	Link      string
+	Web, Href bool
+}
+
+func read[T any](t *testing.T, file string) []T {
+	t.Helper()
+	var doc struct{ Cases []T }
+	b, err := os.ReadFile("testdata/" + file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(b, &doc); err != nil {
+		t.Fatal(err)
+	}
+	return doc.Cases
+}
+
+// The shared cases (testdata/html.json, also read by the app's richText.test.ts): what may be
+// stored, and every hostile input refused in exactly the words the app uses.
+func TestSharedRichTextCases(t *testing.T) {
+	cases := read[htmlCase](t, "html.json")
+	if len(cases) < 60 {
+		t.Fatalf("%d cases", len(cases))
+	}
+	for _, c := range cases {
+		if got := richtext.Problem(c.HTML); got != c.Problem {
+			t.Errorf("%q: got %q, want %q", c.HTML, got, c.Problem)
 		}
 	}
 }
 
-// A hostile set: everything that could run, load, hide or restyle something is refused, named in words.
-func TestHostileContentIsRefused(t *testing.T) {
-	for in, want := range map[string]string{
-		"<script>alert(1)</script>":                                                  "a script",
-		"<SCRIPT SRC=//x.example/a.js></SCRIPT>":                                     "a script",
-		"<scr<script>ipt>alert(1)</script>":                                          "the element",
-		"<p onclick=\"alert(1)\">x</p>":                                              "the attribute “onclick”",
-		"<p ONMOUSEOVER=alert(1)>x</p>":                                              "the attribute “onmouseover”",
-		"<a href=\"javascript:alert(1)\">x</a>":                                      "a link to “javascript:alert(1)”",
-		"<a href=\" javascript:alert(1)\">x</a>":                                     "a link to",
-		"<a href=\"JAVASCRIPT:alert(1)\">x</a>":                                      "a link to",
-		"<a href=\"java&#x09;script:alert(1)\">x</a>":                                "a link to",
-		"<a href=\"&#106;avascript:alert(1)\">x</a>":                                 "a link to “javascript:alert(1)”",
-		"<a href=\"data:text/html;base64,PHNjcmlwdD4=\">x</a>":                       "a link to “data:",
-		"<a href=\"https://ok.example\" target=\"_blank\">x</a>":                     "the attribute “target”",
-		"<a href=\"https://a.example\" href=\"https://b.example\">x</a>":             "twice",
-		"<a href=\"//evil.example\">x</a>":                                           "a link to",
-		"<a href=\"https://ok.example/a b\">x</a>":                                   "a link to",
-		"<p style=\"color:red\">x</p>":                                               "the attribute “style”",
-		"<p class=\"x\">x</p>":                                                       "the attribute “class”",
-		"<p id=\"x\">x</p>":                                                          "the attribute “id”",
-		"<p data-x=\"1\">x</p>":                                                      "the attribute “data-x”",
-		"<style>p{color:red}</style>":                                                "a style sheet",
-		"<p>open <strong>nested <em>unclosed":                                        "",
-		"<!-- a comment -->":                                                         "a hidden comment",
-		"<!--><script>alert(1)</script>-->":                                          "a hidden comment",
-		"<!DOCTYPE html>":                                                            "a document type",
-		"<svg><script>alert(1)</script></svg>":                                       "a picture",
-		"<svg onload=alert(1)>":                                                      "a picture",
-		"<math><mtext><img src=x onerror=alert(1)>":                                  "the element “math”",
-		"<iframe src=\"https://x.example\"></iframe>":                                "an embedded page",
-		"<object data=x></object>":                                                   "an embedded page",
-		"<embed src=x>":                                                              "an embedded page",
-		"<base href=\"https://evil.example/\">":                                      "the element “base”",
-		"<meta http-equiv=\"refresh\" content=\"0;url=x\">":                          "the element “meta”",
-		"<link rel=\"stylesheet\" href=\"x.css\">":                                   "the element “link”",
-		"<form action=\"https://x.example\"><input></form>":                          "a form",
-		"<noscript><p title=\"</noscript><img src=x onerror=alert(1)>\"></noscript>": "a script",
-		"<template><script>alert(1)</script></template>":                             "the element “template”",
-		"<p><title><img src=x onerror=alert(1)></title></p>":                         "the element “title”",
-		"<img src=x onerror=alert(1)>":                                               "a picture",
-		"<table><tr><td>x</td></tr></table>":                                         "a table",
-		"<span>x</span>":                                                             "the element “span”",
-		"<div>x</div>":                                                               "the element “div”",
-		"<h1>x</h1>":                                                                 "the element “h1”",
-		"<body onload=alert(1)>":                                                     "the element “body”",
-		"<p>a\x00b</p>":                                                              "an invisible control character",
-	} {
-		got := richtext.Problem(in)
-		if want == "" {
-			if got != "" {
-				t.Errorf("%q: unclosed allowed tags are no danger, got %q", in, got)
-			}
-			continue
+// The shared links (testdata/links.json): one rule for every link, on both sides.
+func TestSharedLinkCases(t *testing.T) {
+	for _, c := range read[linkCase](t, "links.json") {
+		if got := richtext.WebLink(c.Link); got != c.Web {
+			t.Errorf("WebLink(%q) = %v", c.Link, got)
 		}
-		if got == "" || !strings.Contains(got, want) {
-			t.Errorf("%q: got %q, want it to say %q", in, got, want)
+		if got := richtext.ValidHref(c.Link); got != c.Href {
+			t.Errorf("ValidHref(%q) = %v", c.Link, got)
 		}
+	}
+	// lengths are characters, not bytes
+	long := "https://x.example/" + strings.Repeat("é", 1982)
+	if !richtext.ValidHref(long) || richtext.ValidHref(long+"é") {
+		t.Fatal("2000 characters, counted as characters")
 	}
 }
 
@@ -99,6 +72,9 @@ func TestCheckSaysWhatAndWhere(t *testing.T) {
 	if got := richtext.Check("<p>fine</p>", what); got != "" {
 		t.Fatalf("got %q", got)
 	}
+	if got := richtext.Problem("<p>a\xffb</p>"); got != "characters that are not text" {
+		t.Fatalf("got %q", got)
+	}
 }
 
 func TestPlainText(t *testing.T) {
@@ -106,7 +82,8 @@ func TestPlainText(t *testing.T) {
 	if got := richtext.PlainText(in); got != "What you get\nA record & a link.\none\ntwo\na\nb" {
 		t.Fatalf("got %q", got)
 	}
-	if got := richtext.PlainText("<script>alert(1)</script><p>ok</p>"); got != "ok" {
+	// whatever is stored: no script's text, no control character reaches an agent
+	if got := richtext.PlainText("<script>alert(1)</script><p>o\x1b[31mk\x01</p>"); got != "o[31mk" {
 		t.Fatalf("got %q", got)
 	}
 }

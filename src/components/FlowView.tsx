@@ -13,11 +13,15 @@ import { scrollBehavior, TypeIcon } from "./ui";
 import { QuickAdd, type InsertAt } from "./QuickAdd";
 import "../detail.css";
 
-/** What the block of a service step says under its name: the team that performs it (the step's panel has the service and its form). */
+/**
+ * What the block of a service step says under its name: the team that performs it, its name
+ * first, so that a narrow block cuts the end of a name (the kicker and the bell already say
+ * "Service"; the step's panel has the service and its form).
+ */
 function serviceLine(c: Catalog, id: string): string {
   const s = (c.services ?? []).find((x) => x.id === id);
-  if (!s) return "a service no longer listed";
-  return `service of ${c.teams.find((t) => t.id === s.team)?.name ?? s.team}`;
+  if (!s) return "no longer listed";
+  return c.teams.find((t) => t.id === s.team)?.name ?? s.team;
 }
 
 export type { InsertAt };

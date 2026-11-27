@@ -1,0 +1,185 @@
+{
+  "about": "Links: web is a web link (docs.ValidLink, richtext.WebLink, validWebLink, the schema's pattern), href a link of rich text (richtext.ValidHref, validHref). Read by richtext/links_test.go and src/lib/__tests__/richText.test.ts.",
+  "cases": [
+    {
+      "link": "https://wiki.example.com/dns",
+      "web": true,
+      "href": true
+    },
+    {
+      "link": "http://x.example",
+      "web": true,
+      "href": true
+    },
+    {
+      "link": "https://x.example/a?b=1&c=2#d",
+      "web": true,
+      "href": true
+    },
+    {
+      "link": "https://\u00fcn\u00efcode.example/p\u00e4th",
+      "web": true,
+      "href": true
+    },
+    {
+      "link": "mailto:dns@example.com",
+      "web": false,
+      "href": true
+    },
+    {
+      "link": "mailto:nobody",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "mailto:@example.com",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "mailto:a@example.",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "mailto:a@b@example.com",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "http://",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https:x.example",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "//evil.example",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "ftp://x.example",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "HTTPS://X.EXAMPLE",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "javascript:alert(1)",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": " https://x.example",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://x.example ",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://x y.example",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://forms.example.com/\u2028x",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://forms.example.com/\u00a0x",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://forms.example.com/\u3000x",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://forms.example.com/\u0085x",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://forms.example.com/\ufeffx",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://forms.example.com/\u200ax",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://forms.example.com/\u1680x",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://forms.example.com/\u202fx",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://forms.example.com/\u205fx",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://x.example/\tx",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://x.example\u0001y",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://x.example\u007fy",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://x.example/\"><script>",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://x.example/<b>",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https:\\\\x.example",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "https://x.example/\\",
+      "web": false,
+      "href": false
+    },
+    {
+      "link": "",
+      "web": false,
+      "href": false
+    }
+  ]
+}

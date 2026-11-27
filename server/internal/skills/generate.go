@@ -609,9 +609,11 @@ func serviceLine(l docs.Lists, id string) string {
 	if !ok {
 		return fmt.Sprintf("   - This step requests the service “%s”, which is not in the lists at the moment: ask the person how to request it.\n", id)
 	}
-	line := fmt.Sprintf("   - Request the service “%s” from the team “%s” through its front-door form: <%s>", sv.Name, docs.Name(l.Teams, sv.Team), sv.Form)
-	if sv.Summary != "" {
-		line += " (" + strings.TrimSpace(sv.Summary) + ")"
+	// every text on one line: a line break in a name or summary cannot start a heading or a list of its own
+	one := func(s string) string { return strings.Join(strings.Fields(s), " ") }
+	line := fmt.Sprintf("   - Request the service “%s” from the team “%s” through its front-door form: <%s>", one(sv.Name), one(docs.Name(l.Teams, sv.Team)), sv.Form)
+	if s := one(sv.Summary); s != "" {
+		line += " (" + s + ")"
 	}
 	return line + "\n"
 }

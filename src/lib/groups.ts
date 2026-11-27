@@ -1,3 +1,4 @@
+import { charCount, validWebLink } from "./richText";
 import type { Catalog, Contacts, Domain, Pillar, Platform, Practice, Team, Tribe } from "../types";
 import type { GroupKind, GroupRank } from "./members";
 import { looksLikeEmail } from "./members";
@@ -44,7 +45,7 @@ export const rankText = (rank: GroupRank | undefined): string =>
 // ---------- contact details
 
 /** A link people typed is drawn as a link only when it is http or https, as the server checks it. */
-export const isWebLink = (v: unknown): v is string => typeof v === "string" && /^https?:\/\/\S+$/.test(v.trim()) && v.trim().length <= 300;
+export const isWebLink = (v: unknown): v is string => validWebLink(v) && charCount(v) <= 300;
 
 /** The longest each contact detail may be, as the lists' format allows. */
 export const CONTACT_MAX: Record<keyof Contacts, number> = {

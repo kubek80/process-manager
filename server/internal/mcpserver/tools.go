@@ -633,7 +633,10 @@ func idsOf(list []docs.Named) []string {
 func services(l docs.Lists) []Service {
 	out := []Service{}
 	for _, sv := range l.Services {
-		out = append(out, *serviceOf(l, sv.ID))
+		// whatever the database holds: an entry that cannot be read as a service is left out
+		if one := serviceOf(l, sv.ID); one != nil {
+			out = append(out, *one)
+		}
 	}
 	return out
 }

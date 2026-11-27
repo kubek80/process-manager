@@ -5,6 +5,7 @@ import type { Catalog, Issue, Process, Standard } from "../types";
 import { isDate } from "./lifecycle";
 import { otherNameClashes } from "./paths";
 import { patternNameClashes } from "./patterns";
+import { richCheck } from "./richText";
 // The checks for the three formats are generated from schema/*.schema.json by `npm run validators`.
 // They are not built in the browser: that needs eval, which the app's security policy forbids.
 import { validateCatalogDoc as validateCatalogSchema, validateProcessDoc as validateSchema, validateStandardDoc as validateStandardSchema } from "./validators.generated.js";
@@ -51,6 +52,8 @@ function describe(e: ErrorObject): string {
         ? "must be kebab-case: lowercase letters, digits and single dashes (e.g. \"raise-request\")"
         : String(e.params.pattern).startsWith("^[A-Z]")
         ? "must be upper case with dashes, e.g. \"SEC-LOG-01\""
+      : String(e.params.pattern).includes("\n")
+          ? "must be on one line"
       : String(e.params.pattern).startsWith("^https?")
           ? "must be a full link starting with http:// or https://"
           : String(e.params.pattern).includes("@")
@@ -302,6 +305,13 @@ export function validateCatalog(data: unknown): Issue[] {
   // a service is performed by a team of the list (the front-door form and the size of the
   // description are the format's; what the description holds is cleaned before it is saved)
   (c.services ?? []).forEach((s, i) => { if (s.team && !c.teams.some((t) => t.id === s.team)) issues.push({ level: "error", path: `services[${i}].team`, message: unknownTeamSentence(s, s.team) }); });
+  // its description is rich text of the allow-list: refused as the server refuses it (richCheck,
+  // the gate written again), so `npm run validate` and Admin say what an import or a save would
+  (c.services ?? []).forEach((s, i) => {
+    const what = typeof s.name === "string" && s.name.trim() ? `the service “${s.name.trim()}”` : `the service with the id “${s.id}”`;
+    const problem = typeof s.description === "string" ? richCheck(s.description, what) : "";
+    if (problem) issues.push({ level: "error", path: `services[${i}].description`, message: problem });
+  });
   // and of an architecture pattern to one pattern only
   for (const clash of patternNameClashes(c.patterns)) issues.push({ level: "error", path: `patterns[${clash.index}].alsoCalled`, message: clash.message });
   return issues;

@@ -1,6 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { plainOfHtml, RICH_ATTRIBUTES, RICH_ELEMENTS, RICH_MAX, richEmpty, richHtml, richPlain, richTree, validHref, type DomLike } from "../richText";
+import { plainOfHtml, RICH_ATTRIBUTES, RICH_ELEMENTS, RICH_MAX, richCheck, richEmpty, richHtml, richPlain, richProblem, richTree, validHref, validWebLink, type DomLike } from "../richText";
+import { isWebLink } from "../groups";
+import { validateCatalog } from "../validate";
+import { issueText } from "../editing";
+import { catalog } from "./fixtures";
+
+const shared = <T,>(file: string): T[] => JSON.parse(readFileSync(new URL(`../../../server/internal/richtext/testdata/${file}`, import.meta.url), "utf8")).cases;
 
 // a stand-in for a parsed document: elements with attributes, text and comments
 type Fake = { tag: string; attrs?: Record<string, string>; kids?: (Fake | string | { comment: string })[] };
@@ -21,9 +27,42 @@ describe("the allow-list of rich text", () => {
     expect(attrs).toBe(Object.entries(RICH_ATTRIBUTES).map(([el, list]) => `"${el}": {${list!.map((a) => `"${a}"`).join(", ")}}`).join(", "));
     expect(go).toContain(`const MaxLength = ${RICH_MAX}`);
   });
-  it("lets links lead only to web pages and email addresses, as the server does", () => {
-    for (const ok of ["https://wiki.example.com/dns", "http://x.example", "mailto:dns@example.com"]) expect(validHref(ok)).toBe(true);
-    for (const bad of ["javascript:alert(1)", " javascript:alert(1)", "JAVASCRIPT:alert(1)", "data:text/html,x", "//evil.example", "https://a b", "mailto:nobody", "ftp://x.example", "", "HTTPS://X.EXAMPLE"]) expect(validHref(bad)).toBe(false);
+  it("lets links lead only where the server lets them: the shared cases, case by case", () => {
+    const cases = shared<{ link: string; web: boolean; href: boolean }>("links.json");
+    expect(cases.length).toBeGreaterThan(30);
+    for (const c of cases) {
+      expect(validWebLink(c.link), `web ${JSON.stringify(c.link)}`).toBe(c.web);
+      expect(validHref(c.link), `href ${JSON.stringify(c.link)}`).toBe(c.href);
+      expect(isWebLink(c.link), `contact ${JSON.stringify(c.link)}`).toBe(c.web);
+      // the schema's pattern says the same, for a front-door form
+      if (c.link) {
+        const c2 = { ...catalog, services: [{ id: "s", name: "S", team: catalog.teams[0].id, form: c.link }] };
+        expect(validateCatalog(c2).length === 0, `schema ${JSON.stringify(c.link)}`).toBe(c.web);
+      }
+    }
+    // lengths are characters, not UTF-16 units
+    const long = `https://x.example/${"é".repeat(1982)}`;
+    expect(validHref(long)).toBe(true);
+    expect(validHref(`${long}é`)).toBe(false);
+    expect(isWebLink(`https://x.example/${"😀".repeat(282)}`)).toBe(true); // 300 characters, 582 units
+  });
+});
+
+describe("the check of rich text (the server's gate, written again)", () => {
+  it("answers every shared case in the server's exact words", () => {
+    const cases = shared<{ html: string; problem: string }>("html.json");
+    expect(cases.length).toBeGreaterThan(60);
+    for (const c of cases) expect(richProblem(c.html), JSON.stringify(c.html)).toBe(c.problem);
+  });
+  it("is a sentence of the lists, and the checker says it for a service (npm run validate too)", () => {
+    expect(richCheck("<img src=x onerror=alert(1)>", "the service “X”")).toBe("The description of the service “X” contains a picture, which cannot be shown: remove it, or paste the text again.");
+    const c = { ...catalog, services: [{ ...catalog.services![0], description: "<p>x</p><img src=x onerror=alert(1)>" }] };
+    expect(validateCatalog(c).map((i) => issueText(i, "lists", c))).toEqual(["The description of the service “API key and developer portal access” contains a picture, which cannot be shown: remove it, or paste the text again."]);
+  });
+  it("accepts whatever the cleaner writes: controls removed, a non-breaking space an ordinary one", () => {
+    const out = clean({ tag: "p", kids: ["a\u0001b\u001bc\u007fd e\u00a0f\tg & <h> \"q\""] }, { tag: "a", attrs: { href: "https://x.example/?a=1&b=2" }, kids: ["l\u0002"] }, { tag: "a", attrs: { href: "https://x.example/\u0001" }, kids: ["dropped link"] });
+    expect(out).toBe("<p>abcd e f\tg &amp; &lt;h&gt; \"q\"</p><a href=\"https://x.example/?a=1&amp;b=2\">l</a>dropped link");
+    expect(richProblem(out)).toBe("");
   });
 });
 

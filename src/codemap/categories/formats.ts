@@ -197,7 +197,7 @@ export const formats: CodeCategory = {
       path: "server/internal/docs/contacts.go",
       role: "How to reach a team, platform or practice: checked and put into one line.",
       requirements: [
-        { text: "`javascript:` or `data:` links are refused here as well as in the schema: the app opens these links, so one would run in the portal's page.", at: "func ValidLink(s string) bool { return linkPattern.MatchString(s) }" },
+        { text: "`javascript:` or `data:` links are refused here as well as in the schema: the app opens these links, so one would run in the portal's page. The rule is `richtext.WebLink`, the one rule for links (the app's `validWebLink`, the schema's pattern), held to the shared cases.", at: "func ValidLink(s string) bool { return richtext.WebLink(s) }" },
         { text: "One line in a fixed order, used by the skills and the notifications: changing the order changes every skill's text (a new version of each).", at: "func (n Named) Reach() string {" },
       ],
       tests: ["server/internal/docs/check_test.go"],
@@ -271,11 +271,28 @@ export const formats: CodeCategory = {
       role: "The one gate for rich text (a service's description): an allow-list of elements and attributes, checked token by token as a browser reads it; anything else is refused in words, never cleaned silently. Also the plain text of a description for skills and agents.",
       requirements: [
         { text: "An allow-list, never a deny-list: paragraphs, two levels of headings, bold, italic, lists, links, line breaks, a block quote and code; a link only to `http(s)` or `mailto:`, written exactly so. The app's `RICH_ELEMENTS` is the same list: `richText.test.ts` reads this file. Test: `TestHostileContentIsRefused`.", at: "var Elements = []string{\"p\", \"h3\", \"h4\", \"strong\", \"em\", \"ul\", \"ol\", \"li\", \"a\", \"br\", \"blockquote\", \"code\", \"pre\"}" },
-        { text: "Every tag, also one a tree builder would drop (`<body onload>`) or one inside another's text (`<noscript>`, `<template>`, `<title>`), is read as the tokenizer sees it, so nothing reaches storage that a browser could read differently. Comments and a document type are refused too.", at: "z := html.NewTokenizer(strings.NewReader(in))" },
-        { text: "Every attribute but a link's address is refused (`on…`, `style`, `class`, `id`, `data-…`), and an address is checked after its entities are decoded (`&#106;avascript:`).", at: "if attr == \"href\" && !ValidHref(string(val)) {" },
+        { text: "A strict scanner, not a forgiving parser: it accepts only what it reads completely (every tag whole, every attribute quoted, every `&` an entity it knows), so what is stored is exactly what was checked: a closing tag with attributes, a tag or comment left open at the end, a lone `<` or `&` are refused, never dropped. The app's `richProblem` is the same scanner written again; both answer the shared cases of `testdata/html.json` in the same words.", at: "for i := 0; i < len(in); {" },
+        { text: "Every attribute but a link's address is refused (`on…`, `style`, `class`, `id`, `data-…`); in an address `&` is only `&amp;`, so `&#106;avascript:` is refused as written.", at: "if strings.Contains(strings.ReplaceAll(value, \"&amp;\", \"\"), \"&\") || !ValidHref(strings.ReplaceAll(value, \"&amp;\", \"&\")) {" },
+        { text: "No control character (the C0 controls but tab and line breaks, and DEL), in the text, written as a number (`&#1;`) or in an address.", at: "func Control(r rune) bool { return (r < 0x20 && r != '\\t' && r != '\\n' && r != '\\r') || r == 0x7f }" },
         { text: "At most `MaxLength` characters, its formatting included.", at: "const MaxLength = 20000" },
       ],
       tests: ["server/internal/richtext/richtext_test.go", "server/internal/docs/services_test.go", "e2e/services.spec.ts"],
+    },
+    {
+      path: "server/internal/richtext/link.go",
+      role: "The one rule for links people follow: http:// or https:// and no white space of any kind (also the Unicode ones), control character, quote, `<`, `>` or backslash; a link in rich text also `mailto:`. Lengths in characters. The same in `docs.ValidLink`, the schema's patterns and the app's `validWebLink` / `validHref` / `isWebLink`: `testdata/links.json` holds them to it.",
+      requirements: [
+        { text: "A character list, not `\\S`: Go's and JavaScript's white space differ, so both sides name the same characters. Test: `TestSharedLinkCases`, `TestLinkPatternIsTheOneRule`, `richText.test.ts`.", at: "func linkChar(r rune) bool {" },
+      ],
+      tests: ["server/internal/richtext/richtext_test.go", "server/internal/schema/links_test.go", "src/lib/__tests__/richText.test.ts"],
+    },
+    {
+      path: "server/internal/richtext/plain.go",
+      role: "The plain text of a stored description for skills and agents: whatever is stored, no markup and no control character.",
+      requirements: [
+        { text: "Read with the forgiving tokenizer, since it may meet anything stored by hand; control characters are left out.", at: "z := html.NewTokenizer(strings.NewReader(in))" },
+      ],
+      tests: ["server/internal/richtext/richtext_test.go", "server/internal/mcpserver/server_test.go"],
     },
     {
       path: "src/lib/richText.ts",
@@ -284,6 +301,7 @@ export const formats: CodeCategory = {
         { text: "What a paste uses for the same formatting becomes the allowed element (`b` → `strong`, `h1` → `h3`); an unknown element gives its words; script, style, svg, math, iframe, template, forms and images give nothing; a link with any other address is its words only.", at: "const DROP = new Set([" },
         { text: "Words are escaped when the HTML is written, attributes too, so a description's words never become markup.", at: "const escapeAttr = (s: string) => escapeText(s).replace(/\"/g, \"&quot;\");" },
         { text: "Parsed with `DOMParser` into a document that runs and loads nothing; never `innerHTML` on the page.", at: "const doc = new DOMParser().parseFromString(`<!doctype html><body>${html}`, \"text/html\");" },
+        { text: "`richProblem` is the server's gate written again (it refuses, it never cleans), so the checker and `npm run validate` refuse what an import or a save would, in its words; the shared cases hold the two equal. What the cleaner writes always passes it: control characters are removed and a non-breaking space becomes an ordinary one.", at: "export function richProblem(html: string): string {" },
       ],
       tests: ["src/lib/__tests__/richText.test.ts"],
     },

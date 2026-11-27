@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/kubek80/process-manager/server/internal/richtext"
 )
@@ -343,7 +344,7 @@ func Check(kind string, body []byte, l Lists) error {
 			switch {
 			case strings.TrimSpace(s.Form) == "":
 				add("services[%d].form: Give the front-door form of %s: the link where people request it.", i, what)
-			case len(s.Form) > 300:
+			case utf8.RuneCountInString(s.Form) > 300:
 				add("services[%d].form: Shorten the front-door form of %s to at most 300 characters.", i, what)
 			case !ValidLink(s.Form):
 				add("services[%d].form: The front-door form of %s is not a whole link: write it with https:// at the start.", i, what)

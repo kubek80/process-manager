@@ -1,19 +1,16 @@
 // Package richtext is the one gate for the rich text a service's description is stored as: a
-// small HTML allow-list, checked token by token, the way a browser reads it. Nothing outside the
-// list is stored: a save or an import with anything else is refused in words (the app cleans what
-// a person pastes before it sends it, so nothing is changed silently after Save). The app shows
-// stored text through one component that rebuilds it from the same list (src/lib/richText.ts,
-// `RICH_ELEMENTS`; a unit test there reads this file and fails when the two lists differ).
+// small HTML allow-list, read by a strict scanner that accepts only what it can read completely:
+// every tag whole and quoted, every "&" an entity it knows, no control character. Anything else
+// is refused in words; nothing is cleaned or dropped here, so what is stored is exactly what was
+// checked. The app cleans what a person pastes or types before it sends it (`cleanRichHtml`), and
+// checks with the same scanner written again (`richProblem` in src/lib/richText.ts): both read
+// the shared cases in testdata/ and must answer each in the same words.
 package richtext
 
 import (
 	"fmt"
-	"io"
-	"regexp"
 	"strings"
 	"unicode/utf8"
-
-	"golang.org/x/net/html"
 )
 
 // MaxLength is the most characters a description may have, markup included.
@@ -27,16 +24,13 @@ var Elements = []string{"p", "h3", "h4", "strong", "em", "ul", "ol", "li", "a", 
 // Attributes are the only attributes, by element: a link's address and nothing else.
 var Attributes = map[string][]string{"a": {"href"}}
 
-var (
-	webLink   = regexp.MustCompile(`^https?://\S+$`) // as docs.ValidLink: http:// or https://, no spaces
-	emailLink = regexp.MustCompile(`^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$`)
-)
+// entities are the named character references the text may use (what the app writes, and the
+// usual ones); numbers (&#169; &#xA9;) are read too.
+var entities = map[string]rune{"amp": '&', "lt": '<', "gt": '>', "quot": '"', "apos": '\'', "nbsp": ' '}
 
-// ValidHref reports whether a link may lead there: a web page (http:// or https://) or an email
-// address (mailto:), nothing else; written exactly so, without spaces or other schemes.
-func ValidHref(s string) bool {
-	return len(s) <= 2000 && (webLink.MatchString(s) || emailLink.MatchString(s))
-}
+// Control reports whether a character may not be in a description: the C0 controls other than
+// tab, line feed and carriage return, and DEL.
+func Control(r rune) bool { return (r < 0x20 && r != '\t' && r != '\n' && r != '\r') || r == 0x7f }
 
 func allowed(name string) bool {
 	for _, e := range Elements {
@@ -56,55 +50,224 @@ func allowedAttr(el, attr string) bool {
 	return false
 }
 
+func letter(c byte) bool { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
+func digit(c byte) bool  { return c >= '0' && c <= '9' }
+func space(c byte) bool  { return c == ' ' || c == '\t' || c == '\n' || c == '\r' }
+
+// Problems in words, the same in the app (richProblem).
+const (
+	notText    = "characters that are not text"
+	control    = "an invisible control character"
+	unfinished = "a tag that is not finished"
+	unreadable = "a tag the portal cannot read"
+	ampersand  = "an “&” that is not written as &amp;"
+	lessThan   = "a “<” that does not start a tag (write it as &lt;)"
+	comment    = "a hidden comment"
+	doctype    = "a document type"
+	unquoted   = "an attribute without quotes"
+	endAttr    = "a closing tag with attributes"
+)
+
 // Problem says, in a few plain words, the first thing in the text that may not be stored ("a
 // script", "the attribute “onclick”", "a link to “javascript:alert(1)”"), or "" when the
 // text is fine. Its length is checked by Check.
 func Problem(in string) string {
-	if strings.ContainsRune(in, 0) {
-		return "an invisible control character"
-	}
 	if !utf8.ValidString(in) {
-		return "characters that are not text"
+		return notText
 	}
-	z := html.NewTokenizer(strings.NewReader(in))
+	for _, r := range in {
+		if Control(r) {
+			return control
+		}
+	}
+	for i := 0; i < len(in); {
+		switch in[i] {
+		case '&':
+			n, ok := entity(in[i:])
+			if !ok {
+				return ampersand
+			}
+			i += n
+		case '<':
+			n, p := tag(in[i:])
+			if p != "" {
+				return p
+			}
+			i += n
+		default:
+			i++
+		}
+	}
+	return ""
+}
+
+// entity reads a character reference at the start of s: its length, and whether it is one the
+// text may hold (a name of the list, or the number of a character that is no control).
+func entity(s string) (int, bool) {
+	end := strings.IndexByte(s, ';')
+	if end < 2 || end > 10 {
+		return 0, false
+	}
+	body := s[1:end]
+	if body[0] != '#' {
+		_, ok := entities[body]
+		return end + 1, ok
+	}
+	r, ok := number(body[1:])
+	return end + 1, ok && r > 0 && r <= utf8.MaxRune && !(r >= 0xd800 && r <= 0xdfff) && !Control(r)
+}
+
+func number(s string) (rune, bool) {
+	base := 10
+	if s != "" && (s[0] == 'x' || s[0] == 'X') {
+		base, s = 16, s[1:]
+	}
+	if s == "" || len(s) > 7 {
+		return 0, false
+	}
+	var r rune
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		var d rune
+		switch {
+		case digit(c):
+			d = rune(c - '0')
+		case base == 16 && c >= 'a' && c <= 'f':
+			d = rune(c-'a') + 10
+		case base == 16 && c >= 'A' && c <= 'F':
+			d = rune(c-'A') + 10
+		default:
+			return 0, false
+		}
+		r = r*rune(base) + d
+	}
+	return r, true
+}
+
+// tag reads the tag at the start of s ("<…>"): its length, or the problem with it.
+func tag(s string) (int, string) {
+	if len(s) < 2 {
+		return 0, lessThan
+	}
+	switch {
+	case s[1] == '!':
+		if len(s) >= 9 && strings.EqualFold(s[2:9], "doctype") {
+			return 0, doctype
+		}
+		return 0, comment
+	case s[1] == '?':
+		return 0, unreadable
+	case s[1] == '/':
+		i, name := tagName(s, 2)
+		if name == "" {
+			if i >= len(s) {
+				return 0, unfinished
+			}
+			return 0, unreadable
+		}
+		if !allowed(name) {
+			return 0, elementWords(name)
+		}
+		for i < len(s) && space(s[i]) {
+			i++
+		}
+		switch {
+		case i >= len(s):
+			return 0, unfinished
+		case s[i] == '>':
+			return i + 1, ""
+		default:
+			return 0, endAttr
+		}
+	case !letter(s[1]):
+		return 0, lessThan
+	}
+	i, name := tagName(s, 1)
+	if i >= len(s) {
+		return 0, unfinished
+	}
+	if !allowed(name) {
+		return 0, elementWords(name)
+	}
+	seen := map[string]bool{}
 	for {
-		tt := z.Next()
-		switch tt {
-		case html.ErrorToken:
-			if z.Err() == io.EOF {
-				return ""
+		spaced := false
+		for i < len(s) && space(s[i]) {
+			i, spaced = i+1, true
+		}
+		switch {
+		case i >= len(s):
+			return 0, unfinished
+		case s[i] == '>':
+			return i + 1, ""
+		case s[i] == '/':
+			if i+1 >= len(s) {
+				return 0, unfinished
 			}
-			return "something that is not text or formatting"
-		case html.TextToken:
-			continue
-		case html.CommentToken:
-			return "a hidden comment"
-		case html.DoctypeToken:
-			return "a document type"
-		case html.StartTagToken, html.EndTagToken, html.SelfClosingTagToken:
-			name, more := z.TagName()
-			el := string(name)
-			if !allowed(el) {
-				return elementWords(el)
+			if s[i+1] != '>' || name != "br" {
+				return 0, unreadable
 			}
-			seen := map[string]bool{}
-			for more {
-				var key, val []byte
-				key, val, more = z.TagAttr()
-				attr := string(key)
-				if !allowedAttr(el, attr) {
-					return fmt.Sprintf("the attribute “%s”", attr)
-				}
-				if seen[attr] {
-					return fmt.Sprintf("the attribute “%s” twice", attr)
-				}
-				seen[attr] = true
-				if attr == "href" && !ValidHref(string(val)) {
-					return fmt.Sprintf("a link to “%s”", shorten(string(val)))
-				}
+			return i + 2, ""
+		case !spaced:
+			return 0, unreadable
+		}
+		// an attribute: name="value"
+		start := i
+		for i < len(s) && !space(s[i]) && s[i] != '=' && s[i] != '>' && s[i] != '/' && s[i] != '"' && s[i] != '\'' && s[i] != '<' {
+			i++
+		}
+		attr := strings.ToLower(s[start:i])
+		if attr == "" {
+			if i >= len(s) {
+				return 0, unfinished
+			}
+			return 0, unreadable
+		}
+		if !allowedAttr(name, attr) {
+			return 0, fmt.Sprintf("the attribute “%s”", shorten(attr))
+		}
+		if seen[attr] {
+			return 0, fmt.Sprintf("the attribute “%s” twice", attr)
+		}
+		seen[attr] = true
+		if i >= len(s) {
+			return 0, unfinished
+		}
+		if s[i] != '=' {
+			return 0, unquoted
+		}
+		i++
+		if i >= len(s) {
+			return 0, unfinished
+		}
+		if s[i] != '"' {
+			return 0, unquoted
+		}
+		end := strings.IndexByte(s[i+1:], '"')
+		if end < 0 {
+			return 0, unfinished
+		}
+		value := s[i+1 : i+1+end]
+		i += end + 2
+		if attr == "href" {
+			// "&" only as &amp;: the address checked is the address followed
+			if strings.Contains(strings.ReplaceAll(value, "&amp;", ""), "&") || !ValidHref(strings.ReplaceAll(value, "&amp;", "&")) {
+				return 0, fmt.Sprintf("a link to “%s”", shorten(value))
 			}
 		}
 	}
+}
+
+// tagName reads a tag's name from s[i]: letters and digits, starting with a letter; lower case.
+func tagName(s string, i int) (int, string) {
+	start := i
+	if i >= len(s) || !letter(s[i]) {
+		return i, ""
+	}
+	for i < len(s) && (letter(s[i]) || digit(s[i])) {
+		i++
+	}
+	return i, strings.ToLower(s[start:i])
 }
 
 // elementWords names an element that may not be stored, for a person.
@@ -145,38 +308,4 @@ func Check(in, what string) string {
 		return fmt.Sprintf("The description of %s contains %s, which cannot be shown: remove it, or paste the text again.", what, p)
 	}
 	return ""
-}
-
-// block elements end a line in the plain text
-var block = map[string]bool{"p": true, "h3": true, "h4": true, "li": true, "br": true, "blockquote": true, "pre": true, "ul": true, "ol": true}
-
-// PlainText is the text of a description without its formatting, for the search, skills and
-// agents: one line per paragraph, heading or item, links as their words; entities decoded.
-func PlainText(in string) string {
-	z := html.NewTokenizer(strings.NewReader(in))
-	var b strings.Builder
-	for {
-		tt := z.Next()
-		switch tt {
-		case html.ErrorToken:
-			lines := strings.Split(b.String(), "\n")
-			out := lines[:0]
-			for _, l := range lines {
-				if l = strings.Join(strings.Fields(l), " "); l != "" {
-					out = append(out, l)
-				}
-			}
-			return strings.Join(out, "\n")
-		case html.TextToken:
-			b.Write(z.Text())
-		case html.StartTagToken, html.EndTagToken, html.SelfClosingTagToken:
-			name, _ := z.TagName()
-			if block[string(name)] {
-				b.WriteByte('\n')
-			}
-			if tt == html.StartTagToken && (string(name) == "script" || string(name) == "style") {
-				z.Next() // their text is no text of the description
-			}
-		}
-	}
 }

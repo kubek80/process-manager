@@ -211,7 +211,7 @@ test("a service in a process: chosen on the editing screen, a box on the map and
   await open(page, `/p/${id}/flow`);
   const block = page.locator(`.block[data-step="${step.id}"]`);
   await expect(block.locator(".block-type")).toHaveText("Service");
-  await expect(block.locator(".meta-service")).toHaveText("service of Network team");
+  await expect(block.locator(".meta-service")).toHaveText("Network team");
   await block.locator(".block-main").click();
   const box = page.locator(".drawer .svc-box");
   await expect(box.getByRole("link", { name: "Firewall rule change" })).toHaveAttribute("href", "#/service/firewall-rule-change");
@@ -299,4 +299,86 @@ test("an installation without services: the place is calm and says where to add 
   await signIn(page, SAM);
   await open(page, "/services");
   await expect(page.locator(".svc-empty")).toHaveText("No services are listed yet.");
+});
+
+test("the editor: white space kept as typed, its own Undo never reaches back past the page's, no Ctrl+Alt shortcut, one Tab stop for its toolbar", async ({ page }) => {
+  test.setTimeout(90_000);
+  const warnings: string[] = [];
+  page.on("console", (m) => { if (m.type() === "warning" || m.type() === "error") warnings.push(m.text()); });
+  await signIn(page, ALEX);
+  await open(page, "/admin/services/dns-record-change");
+  // one sentence at the top: the place's lead, not the list's words again
+  await expect(page.locator(".admin-main > header.admin-head .lead")).toHaveText(/^What teams do for others on request/);
+  await expect(page.locator(".cat-blurb")).toHaveText("");
+  const area = detail(page).locator(".rich-edit-area");
+  await expect(area).toBeVisible();
+  // the toolbar: nothing looks pressed while the editor does not have the keyboard
+  const tools = detail(page).getByRole("toolbar", { name: "Formatting" });
+  await expect(tools.locator('[aria-pressed="true"]')).toHaveCount(0);
+  // one Tab stop, the arrows and Home / End inside it, the text next
+  await detail(page).getByLabel("Words of the button").focus();
+  await page.keyboard.press("Tab");
+  await expect(tools.getByRole("button", { name: /^Bold/ })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(tools.getByRole("button", { name: /^Italic/ })).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(tools.getByRole("button", { name: /^Link/ })).toBeFocused(); // Undo and Redo cannot be pressed yet
+  await page.keyboard.press("Home");
+  await expect(tools.getByRole("button", { name: /^Bold/ })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(area).toBeFocused();
+  await expect(tools.getByRole("button", { name: /^Link/ })).toHaveAttribute("aria-expanded", "false");
+  await expect(tools.getByRole("button", { name: /^Link/ })).not.toHaveAttribute("aria-pressed", /.*/);
+  // no shortcut with Ctrl and Alt (AltGr on Windows types characters with it)
+  await area.locator("p").last().click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("end  two");
+  const before = await area.innerHTML();
+  for (const k of ["Control+Alt+c", "Control+Alt+3", "Control+Alt+4", "Control+Alt+0"]) await page.keyboard.press(k);
+  expect(await area.innerHTML()).toBe(before);
+  // the page's Undo takes it all back; then the editor's own Undo has nothing to bring back
+  const save = page.locator(".cat-save");
+  await expect(page.locator(".cat-save-text")).toHaveText("Unsaved changes to the lists");
+  for (let i = 0; i < 10 && await page.locator(".cat-save-text").count(); i++) await save.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.locator(".cat-save-text")).toHaveCount(0);
+  await expect(area).not.toContainText("end");
+  await expect(tools.getByRole("button", { name: /^Undo/ })).toBeDisabled();
+  await area.click();
+  await page.keyboard.press("Control+z");
+  await expect(area).not.toContainText("end");
+  await expect(page.locator(".cat-save-text")).toHaveCount(0);
+  // typed white space is stored as typed: no non-breaking spaces
+  await area.locator("p").last().click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("end  two");
+  await save.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.locator(".cat-save-text")).toHaveCount(0);
+  const stored = (await readCatalog(page)).services.find((s: { id: string }) => s.id === "dns-record-change").description as string;
+  expect(stored).toContain("<p>end  two</p>");
+  expect(stored).not.toContain(" ");
+  expect(stored).not.toContain("&nbsp;");
+  expect(warnings.filter((w) => /ProseMirror|white-space/i.test(w))).toEqual([]);
+  // put the sample back
+  const res = await changeLists(page.request, (c) => { const s = c.services.find((x: { id: string }) => x.id === "dns-record-change"); s.description = stored.replace("<p>end  two</p>", ""); });
+  expect(res.ok(), await res.text()).toBeTruthy();
+});
+
+test("Admin › Teams names the services a team performs, each leading to it under Services; an unknown team leaves the list's address", async ({ page }) => {
+  await signIn(page, ALEX);
+  await open(page, "/admin/teams/teams/network-team");
+  const usage = detail(page).locator(".cat-usage");
+  await expect(usage.getByRole("heading")).toHaveText(["Used by no process or standard", "Performs 1 service"]);
+  await usage.getByRole("button", { name: /Firewall rule change/ }).click();
+  await expect(page).toHaveURL(/#\/admin\/services$/);
+  await expect(page.locator(".admin-main > header.admin-head h1")).toHaveText("Services");
+  await expect(detail(page).locator('[data-field="name"]')).toHaveValue("Firewall rule change");
+  // a team in the address that performs no service is dropped, as every filter drops what is gone
+  await open(page, "/services?q=dns&team=nobody");
+  await expect(page).toHaveURL(/#\/services\?q=dns$/);
+  await expect(card(page)).toHaveCount(1);
+  // the plural with an entry is that service's page
+  await open(page, "/services/dns-record-change");
+  await expect(page).toHaveURL(/#\/service\/dns-record-change$/);
 });
