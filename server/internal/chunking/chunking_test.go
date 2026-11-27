@@ -285,6 +285,13 @@ Outcome: Open pull request
 Takes: 20 min
 Link: Open gcp-project-factory
 Resources: Skill: add a GCP project`},
+		// a service step: the service's name, summary and the team that performs it
+		{docs.Process, "processes/onboard-site-to-akamai.json", Step, "switch-dns", `Process: Onboard a site to Akamai
+Step 9: Request the DNS change to Akamai
+Done by: You
+Ask the DNS team to point the site’s name to the Akamai edge host name, now that production is active.
+Takes: 1 working day
+Requests the service: DNS record change: A new, changed or removed record in the company's DNS zones, such as a CNAME for a site or a TXT record for a check. (performed by DNS team)`},
 		{docs.Standard, "standards/secure-logging.json", Summary, "", `Standard: Secure logging
 What services must and must not write to their logs, so that incidents can be investigated without logs becoming a leak.
 Requirements: 5 (4 mandatory, 1 recommended)

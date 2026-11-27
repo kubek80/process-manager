@@ -168,7 +168,7 @@ test("Back and reload return to the page the person left; a new browser starts o
   await page.goBack();
   await expect(count(page)).toHaveText(`Showing 13–24 of ${TOTAL} processes`);
   // the list opened afresh starts at the beginning
-  await page.locator(".nav").getByRole("link", { name: "Processes" }).click();
+  await page.locator(".nav").getByRole("link", { name: "Patterns", exact: true }).click();
   await expect(count(page)).toHaveText(`Showing 1–12 of ${TOTAL} processes`);
 
   // another browser (a new tab session) starts at the beginning

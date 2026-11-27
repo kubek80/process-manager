@@ -435,6 +435,8 @@ export function appendStep(p: Process, title: string): { process: Process; id: s
 export function setStepType(p: Process, id: string, type: StepType): Process {
   const s = p.steps.find((x) => x.id === id);
   if (!s || s.type === type) return p;
+  // only a service step requests a service: another kind leaves it
+  if (s.type === "service" && s.service) p = updateStep(p, id, { service: undefined });
   if (type !== "decision" || s.next.length > 1) return updateStep(p, id, { type });
   const before = p.steps.find((x) => x.next.some((n) => n.to === id));
   const next = before ? decisionPaths(s.next, before.id) : s.next;

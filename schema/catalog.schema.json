@@ -106,6 +106,13 @@
       "items": {
         "$ref": "#/$defs/pattern"
       }
+    },
+    "services": {
+      "type": "array",
+      "description": "Services: what a team does for others on request (a DNS record change, a penetration test), each with the team that performs it and the front-door form to request it. Processes can contain one as a step. Empty or left out, no services are listed.",
+      "items": {
+        "$ref": "#/$defs/service"
+      }
     }
   },
   "$defs": {
@@ -540,6 +547,52 @@
           "pattern": "^https?://\\S+$",
           "maxLength": 300,
           "description": "Link to the form where people ask them for something."
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "team",
+        "form"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "What the service is, in one or two plain sentences: shown on cards, rows, the box in a process and to agents."
+        },
+        "team": {
+          "$ref": "#/$defs/slug",
+          "description": "Id of the team (from the teams list) that performs the service."
+        },
+        "form": {
+          "type": "string",
+          "pattern": "^https?://\\S+$",
+          "maxLength": 300,
+          "description": "The front-door form: the link where people request the service."
+        },
+        "formLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "The words of the button that opens the front-door form; left out, \"Request this service\"."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 20000,
+          "description": "What people get, what to prepare and how long it takes, as rich text: HTML of paragraphs, headings (h3, h4), bold, italic, lists, links (http, https, mailto), line breaks, block quotes and code only (the server refuses anything else)."
         }
       }
     }

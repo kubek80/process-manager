@@ -193,23 +193,23 @@ describe("the prompt for standards", () => {
 describe("the title of the browser tab", () => {
   it("names the page first and the product last", async () => {
     const { pageTitle } = await import("../store");
-    expect(pageTitle({ page: "library" })).toBe("Processes · Process Manager");
-    expect(pageTitle({ page: "standards" })).toBe("Standards · Process Manager");
-    expect(pageTitle({ page: "catalog" })).toBe("Teams · Process Manager");
-    expect(pageTitle({ page: "catalog", place: "tools" })).toBe("Tools · Process Manager");
-    expect(pageTitle({ page: "catalog", list: "paths" })).toBe("Tools · Process Manager");
-    expect(pageTitle({ page: "admin", section: "lists", place: "tools" })).toBe("Tools · Admin · Process Manager");
-    expect(pageTitle({ page: "admin", section: "lists", list: "pillars" })).toBe("Teams · Admin · Process Manager");
-    expect(pageTitle({ page: "guide" })).toBe("Guide · Process Manager");
-    expect(pageTitle({ page: "admin", section: "access" })).toBe("Access · Admin · Process Manager");
-    expect(pageTitle({ page: "process", id: "request-gcp-project", tab: "flow" }, { process: "Request a GCP project" })).toBe("Request a GCP project · Process Manager");
-    expect(pageTitle({ page: "standard", id: "secure-logging", tab: "doc" }, { standard: "Secure logging" })).toBe("Secure logging · Process Manager");
+    expect(pageTitle({ page: "library" })).toBe("Patterns · Pattern Catalog");
+    expect(pageTitle({ page: "standards" })).toBe("Standards · Pattern Catalog");
+    expect(pageTitle({ page: "catalog" })).toBe("Teams · Pattern Catalog");
+    expect(pageTitle({ page: "catalog", place: "tools" })).toBe("Tools · Pattern Catalog");
+    expect(pageTitle({ page: "catalog", list: "paths" })).toBe("Tools · Pattern Catalog");
+    expect(pageTitle({ page: "admin", section: "lists", place: "tools" })).toBe("Tools · Admin · Pattern Catalog");
+    expect(pageTitle({ page: "admin", section: "lists", list: "pillars" })).toBe("Teams · Admin · Pattern Catalog");
+    expect(pageTitle({ page: "guide" })).toBe("Guide · Pattern Catalog");
+    expect(pageTitle({ page: "admin", section: "access" })).toBe("Access · Admin · Pattern Catalog");
+    expect(pageTitle({ page: "process", id: "request-gcp-project", tab: "flow" }, { process: "Request a GCP project" })).toBe("Request a GCP project · Pattern Catalog");
+    expect(pageTitle({ page: "standard", id: "secure-logging", tab: "doc" }, { standard: "Secure logging" })).toBe("Secure logging · Pattern Catalog");
   });
   it("says so when the process or standard does not exist, but not while it is still loading", async () => {
     const { pageTitle } = await import("../store");
-    expect(pageTitle({ page: "process", id: "nope", tab: "flow" })).toBe("Process not found · Process Manager");
-    expect(pageTitle({ page: "standard", id: "nope", tab: "doc" })).toBe("Standard not found · Process Manager");
-    expect(pageTitle({ page: "process", id: "nope", tab: "flow" }, { loading: true })).toBe("Process Manager");
+    expect(pageTitle({ page: "process", id: "nope", tab: "flow" })).toBe("Process not found · Pattern Catalog");
+    expect(pageTitle({ page: "standard", id: "nope", tab: "doc" })).toBe("Standard not found · Pattern Catalog");
+    expect(pageTitle({ page: "process", id: "nope", tab: "flow" }, { loading: true })).toBe("Pattern Catalog");
   });
 });
 

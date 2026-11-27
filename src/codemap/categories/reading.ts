@@ -210,6 +210,7 @@ export const reading: CodeCategory = {
         { text: "A picture opens by `pictureZoom`, not by the map's rule that uses the height: whole where that takes 70% or more (`PICTURE_WHOLE_MIN`, at most 100%), else at 80% (`PICTURE_MIN`), cut, with the faded edge. It is as high as its drawing, so a plain wheel or a vertical swipe over it scrolls the page, never the picture.", at: "? pictureZoom(picture === \"print\" ? Math.min(viewWidth(), PRINT_WIDTH) : viewWidth(), drawW, column, picture === \"print\")" },
         { text: "Only Ctrl or ⌘ + wheel (a trackpad pinch) zooms, on the map and on a picture alike; any other wheel event is left to the browser, so a page with many pictures never traps the reader.", at: "if (!isZoomWheel(e)) return;" },
         { text: "\"Fit\" shows the whole flow by one rule on the map and on a picture alike (`fitWhole`, down to `ZOOM_FLOOR`); a picture's box gets lower only when a person presses it, never on its own.", at: "const z = fitWhole({ width: viewWidth(), height }, { width: drawW, height: layout.height }, column);" },
+        { text: "A service step's block names the team that performs it; the box with the service and its form is in the step's panel, so the blocks stay one Tab stop with nothing else to press.", at: "{s.service && !s.tool && <span className=\"meta-service\">" },
       ],
       tests: ["e2e/map.spec.ts", "e2e/editor.spec.ts", "e2e/layout.spec.ts"],
     },
@@ -238,6 +239,7 @@ export const reading: CodeCategory = {
       role: "The checklist of a process (each step with what to do, ticks for the reader) and the body of a step shared with the side panel.",
       requirements: [
         { text: "A tick only changes `done` from `useProgress`, kept in this browser; nothing is sent to the server and the process is never changed.", at: "aria-label={`Mark as done: ${s.title}`}" },
+        { text: "A service step shows its service as a box (`ServiceBox`) with the front-door form first; the step's own link only when it leads elsewhere.", at: "{step.url && step.url !== serviceForm && (" },
       ],
       tests: ["e2e/consumer.spec.ts"],
     },
@@ -368,6 +370,7 @@ export const reading: CodeCategory = {
       requirements: [
         { text: "What belongs to it is found by the same `search()` with the group's filter, so the page and \"Show in the search\" always agree. Drafts are only those the server sent this person: no second way to decide who sees one.", at: "search({ processes, standards, catalog, filters, drafts: true })" },
         { text: "Details are saved only through `/api/groups/…`, where `server/internal/httpapi/groups.go` checks who may change them; `canChangeDetails` here only shows the button.", at: "await putGroupDetails(kind, id, {" },
+        { text: "A team's page lists the services it performs, a quiet section only when there are any.", at: "{kind === \"team\" && servicesOfTeam(catalog, id).length > 0 && (" },
       ],
       tests: ["e2e/groups.spec.ts", "src/lib/__tests__/groups.test.ts", "e2e/tribes.spec.ts"],
     },
@@ -379,6 +382,40 @@ export const reading: CodeCategory = {
         { text: "Only a lists manager gets the way to change it, and only in Admin › Teams / Tools; the page itself changes nothing, so it opens while viewing as somebody else.", at: "{canManageLists(perms) && <a className=\"btn\" href={href({ page: \"admin\", section: \"lists\", list: CLUSTER_LIST[kind], id })}>" },
       ],
       tests: ["e2e/tribes.spec.ts", "src/lib/__tests__/tribes.test.ts"],
+    },
+    {
+      path: "src/components/ServicesPage.tsx",
+      role: "The place Services (`#/services`: every service with its summary, the team that performs it as a link and its request button; a search and a choice of team in the address) and the page of one (`#/service/:id`: its quiet mark, summary, team with its place, the one main button that opens the front-door form, the description through `RichText`, and where it is used).",
+      requirements: [
+        { text: "The front-door form opens in a new tab with `rel=\"noopener noreferrer\"`; on a service's page it is the one main button of the view.", at: "<a className=\"btn primary svc-request\" href={s.form} target=\"_blank\" rel=\"noopener noreferrer\">" },
+        { text: "\"Used in\" lists only published processes (`serviceUses`): a draft is never revealed, also to those who may see it elsewhere.", at: "const uses = serviceUses(processes, id);" },
+        { text: "With no services the place says so, and tells a lists manager where to add one.", at: "{manager && <p className=\"muted\">Add the first one in" },
+      ],
+      tests: ["e2e/services.spec.ts", "src/lib/__tests__/services.test.ts"],
+    },
+    {
+      path: "src/lib/services.ts",
+      role: "The pure parts of the services: the button's words, a team's services, the search of the list (name, summary, team, the words of the description), the teams to choose from, and where a service is used.",
+      requirements: [
+        { text: "Where a service is used is the published processes only; a retired one comes last, marked.", at: ".filter((p) => (p.status ?? \"active\") !== \"draft\" && Array.isArray(p.steps))" },
+      ],
+      tests: ["src/lib/__tests__/services.test.ts"],
+    },
+    {
+      path: "src/components/ServiceBox.tsx",
+      role: "The box of a service step in its panel, in the checklist and in print: the service's name to its page, the team that performs it and the button that opens its front-door form.",
+      requirements: [
+        { text: "The step's own link is shown beside the box only when it leads elsewhere (`StepBody`), so there are never two buttons that mean the same.", at: "<a className=\"btn link-btn svc-request\" href={s.form} target=\"_blank\" rel=\"noopener noreferrer\">" },
+      ],
+      tests: ["e2e/services.spec.ts"],
+    },
+    {
+      path: "src/components/RichText.tsx",
+      role: "The one component that shows rich text (a service's description): rebuilt as React elements from the allow-list (`parseRich`), never trusting what is stored.",
+      requirements: [
+        { text: "No `dangerouslySetInnerHTML`: every element is made by React from the tree, so nothing outside the list reaches the page. A link opens in a new tab with `rel=\"noopener noreferrer\"`. Test: the hostile description in `e2e/services.spec.ts`.", at: "if (n.tag === \"a\") return <a key={i} href={n.href} target=\"_blank\" rel=\"noopener noreferrer\">{render(n.children)}</a>;" },
+      ],
+      tests: ["e2e/services.spec.ts"],
     },
     {
       path: "src/components/GroupParts.tsx",

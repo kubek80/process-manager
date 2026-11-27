@@ -201,8 +201,8 @@ describe("the Theming section in the app", () => {
     const { normalizeHex } = await import("../theme");
     expect(parseRoute("#/admin/theming")).toEqual({ page: "admin", section: "theming" });
     expect(href({ page: "admin", section: "theming" })).toBe("#/admin/theming");
-    expect(pageTitle({ page: "admin", section: "theming" })).toBe("Theming · Admin · Process Manager");
-    expect(pageTitle({ page: "library" }, {}, "Acme Hub")).toBe("Processes · Acme Hub");
+    expect(pageTitle({ page: "admin", section: "theming" })).toBe("Theming · Admin · Pattern Catalog");
+    expect(pageTitle({ page: "library" }, {}, "Acme Hub")).toBe("Patterns · Acme Hub");
     expect(pageTitle({ page: "home" }, {}, "Acme Hub")).toBe("Acme Hub");
     expect(normalizeHex("0055AA")).toBe("#0055aa");
     expect(normalizeHex(" #05a ")).toBe("#0055aa");

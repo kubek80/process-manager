@@ -7,11 +7,17 @@ import { go } from "../lib/store";
 import { TypeIcon } from "./ui";
 import { Resources } from "./Resources";
 import { StepTool } from "./StepTool";
+import { ServiceBox } from "./ServiceBox";
+import { useCatalog } from "../lib/catalog";
+import { serviceOf } from "../lib/services";
 
 export function StepBody({ step, process, all, onSelect, compact }: {
   step: Step; process: Process; all: Process[]; onSelect?: (id: string) => void; compact?: boolean;
 }) {
   const sub = step.subProcessId ? all.find((p) => p.id === step.subProcessId) : undefined;
+  // the service's front-door form is offered first; the step's own link only when it leads elsewhere
+  const { catalog } = useCatalog();
+  const serviceForm = serviceOf(catalog, step.service)?.form;
   const [open, setOpen] = useState(false);
   const num = (id: string) => process.steps.findIndex((s) => s.id === id) + 1;
   const title = (id: string) => process.steps.find((s) => s.id === id)?.title ?? id;
@@ -23,7 +29,8 @@ export function StepBody({ step, process, all, onSelect, compact }: {
           {step.instructions.map((ins, i) => <li key={i}><span>{String.fromCharCode(97 + i)}</span>{ins}</li>)}
         </ol>
       )}
-      {step.url && (
+      {step.service && <ServiceBox id={step.service} />}
+      {step.url && step.url !== serviceForm && (
         <a className="btn link-btn" href={step.url} target="_blank" rel="noopener noreferrer">
           <ExternalLink size={15} />{step.urlLabel ?? "Open link"}
         </a>

@@ -474,6 +474,7 @@ func (a *api) stillUsed(ctx context.Context, s session, body []byte) error {
 	// Who uses an entry is said in a way that gives nothing away: drafts the caller cannot see
 	// are only counted, and who holds a role is for admins.
 	usedBy := map[string][]string{}
+	inLists := map[string][]string{} // entries of the lists that name it, in the order of their list
 	hidden := map[string]int{}
 	roles := map[string]map[string]bool{}
 	for _, kind := range []string{docs.Process, docs.Standard} {
@@ -499,7 +500,8 @@ func (a *api) stillUsed(ctx context.Context, s session, body []byte) error {
 			}
 		}
 	}
-	// within the lists: a pillar the teams are part of, a tribe the pillars are part of, a domain the tribes are part of (as the new lists have them)
+	// within the lists: a pillar the teams are part of, a tribe the pillars are part of, a domain
+	// the tribes are part of, a team that performs a service (as the new lists have them)
 	for _, entry := range removed {
 		key, id, _ := strings.Cut(entry, "/")
 		inner := map[string]struct {
@@ -510,11 +512,13 @@ func (a *api) stillUsed(ctx context.Context, s session, body []byte) error {
 			"pillars": {"team", next.Teams, func(n docs.Named) string { return n.Pillar }},
 			"tribes":  {"pillar", next.Pillars, func(n docs.Named) string { return n.Tribe }},
 			"domains": {"tribe", next.Tribes, func(n docs.Named) string { return n.Domain }},
+			// a team that performs a service
+			"teams": {"service", next.Services, func(n docs.Named) string { return n.Team }},
 		}
 		if in, ok := inner[key]; ok {
 			for _, n := range in.list {
 				if in.of(n) == id {
-					usedBy[entry] = append(usedBy[entry], docs.EntryWords(in.noun, n))
+					inLists[entry] = append(inLists[entry], docs.EntryWords(in.noun, n))
 				}
 			}
 		}
@@ -535,8 +539,10 @@ func (a *api) stillUsed(ctx context.Context, s session, body []byte) error {
 	var problems []string
 	anyUse, anyPeople := false, false
 	for _, entry := range removed {
+		// the documents first, by title; then what in the lists names it (a team's service)
 		users := usedBy[entry]
 		sort.Strings(users)
+		users = append(users, inLists[entry]...)
 		if len(users) > 3 {
 			users = append(users[:3], fmt.Sprintf("%d more", len(users)-3))
 		}

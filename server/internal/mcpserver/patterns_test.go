@@ -22,7 +22,7 @@ func TestAnswersNameThePatterns(t *testing.T) {
 	if none := patternRefs(l.Patterns, nil); none == nil || len(none) != 0 {
 		t.Fatalf("no patterns must be an empty list, not null: %#v", none)
 	}
-	if !strings.HasSuffix(catalogText(Catalog{Patterns: patternRefs(l.Patterns, idsOf(l.Patterns))}), ", 6 architecture patterns.") {
+	if !strings.HasSuffix(catalogText(Catalog{Patterns: patternRefs(l.Patterns, idsOf(l.Patterns))}), ", 6 architecture patterns, 0 services.") {
 		t.Fatal("catalog text")
 	}
 	// found by words through their names and other names, only where they are tagged

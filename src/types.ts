@@ -1,6 +1,6 @@
 export type StepType =
   | "form" | "code" | "approval" | "review" | "wait" | "communication" | "meeting"
-  | "automation" | "document" | "verify" | "decision" | "subprocess" | "task";
+  | "automation" | "document" | "verify" | "decision" | "subprocess" | "service" | "task";
 
 export interface Actor { id: string; name: string; description?: string; teamId?: string }
 export interface Prerequisite { title: string; description?: string; url?: string; processId?: string }
@@ -24,6 +24,8 @@ export interface Step {
   outcome?: string;
   resources?: Resource[];
   subProcessId?: string;
+  /** A step of the kind "service" requests this service of the lists (its front-door form is offered first). */
+  service?: string;
   next: NextLink[];
 }
 
@@ -143,6 +145,12 @@ export interface Practice { id: string; name: string; contact?: string; contacts
 export interface Platform { id: string; name: string; contact?: string; contacts?: Contacts; description?: string }
 export interface Category { id: string; name: string; description?: string }
 export interface Tool { id: string; name: string; icon?: string; url?: string; description?: string }
+/**
+ * Something a team does for others on request: `team` performs it, `form` is the front-door form
+ * people request it through (`formLabel` the button's words, else "Request this service"),
+ * `summary` one or two plain sentences, `description` rich text of the allow-list (`src/lib/richText.ts`).
+ */
+export interface Service { id: string; name: string; summary?: string; team: string; form: string; formLabel?: string; description?: string }
 /** The lists. `practices`, `platforms` and `categories` are always present in the app (the loader fills in empty ones). */
 export interface Catalog {
   $schema?: string;
@@ -157,6 +165,8 @@ export interface Catalog {
   pillars?: Pillar[];
   tribes?: Tribe[];
   domains?: Domain[];
+  /** What teams do for others on request; missing in lists that never had any. */
+  services?: Service[];
 }
 
 export type TargetKind = "process" | "standard";

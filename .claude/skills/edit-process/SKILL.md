@@ -12,14 +12,15 @@ These files are **sample content**: they fill an empty database on its first sta
 ## Before writing
 
 1. Read `schema/process.schema.json` (the format) and `schema/example.process.json` (a correct small example).
-2. Read `catalog/catalog.json`: `owner` and actor `teamId` (from `teams`), `category` (from `categories`), `practice` (from `practices`), `platform` (from `platforms`), step `tool`, `tiers`, `paths`, `patterns`, `environments` and `languages` may only use ids from it. If a needed entry is missing, add it with the `manage-catalog` skill first.
+2. Read `catalog/catalog.json`: `owner` and actor `teamId` (from `teams`), `category` (from `categories`), `practice` (from `practices`), `platform` (from `platforms`), step `tool`, step `service` (from `services`), `tiers`, `paths`, `patterns`, `environments` and `languages` may only use ids from it. If a needed entry is missing, add it with the `manage-catalog` skill first.
 3. List `processes/` so you can reuse existing processes as sub-processes or prerequisites, and `standards/` for the `standards` a process helps to meet.
 
 The full modelling rules (how to split steps, choose block types, model decisions and loops) are in `src/lib/prompt.ts` and, rendered, in `docs/llm-prompt.md`. Follow them. The essentials:
 
 - `actors[0]` is always `{ "id": "me", "name": "You" }` - the person following the process.
 - One step = one action by one actor. Steps done by `me` need concrete `instructions` (one action per item).
-- `type` is one of: form, code, approval, review, wait, communication, meeting, automation, document, verify, decision, subprocess, task.
+- `type` is one of: form, code, approval, review, wait, communication, meeting, automation, document, verify, decision, subprocess, service, task.
+- A step where the reader asks another team for one of the **services** of the lists (a DNS record change, a firewall rule, a penetration test) is `"type": "service"` with `"service": "<id>"`, by `me`, in the reader's lane: the box names the team that performs it and offers its front-door form, so leave out a `url` that is that form and do not add a lane for the team. Only a service step has `service`; it needs no `instructions`. In the sample, `onboard-site-to-akamai` requests `dns-record-change`.
 - A `decision` has two or more labelled `next` entries. Model reject → fix → resubmit as a loop back to the approval.
 - A step with `"next": []` ends the process; at least one must.
 - `owner` is the team that maintains the process (reviews, feedback). `category` is an id, not free text. `platform` and `practice` say what it belongs to: the owners of that platform or practice may change and publish it and its members write drafts of it, so set them only when the source says so. Someone who works only as a platform or practice owner or member can set or change a document's platform only from one of their platforms to another (or to or from none); a platform that is not theirs stays as it is. The same goes, separately, for the practice. `rigour` is `mandatory` (the only allowed way), `recommended` (the expected way) or `optional`; leave it out when the source does not say.

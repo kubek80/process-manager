@@ -68,12 +68,6 @@
       "name": "Security",
       "description": "Owns WAF policies.",
       "teamId": "security"
-    },
-    {
-      "id": "dns-team",
-      "name": "DNS team",
-      "description": "Owns the public DNS zones.",
-      "teamId": "dns-team"
     }
   ],
   "steps": [
@@ -207,10 +201,11 @@
     },
     {
       "id": "switch-dns",
-      "title": "Point DNS to Akamai",
-      "actor": "dns-team",
-      "type": "task",
-      "description": "The hostname becomes a CNAME to the Akamai edge hostname.",
+      "title": "Request the DNS change to Akamai",
+      "actor": "me",
+      "type": "service",
+      "description": "Ask the DNS team to point the site’s name to the Akamai edge host name, now that production is active.",
+      "service": "dns-record-change",
       "duration": "1 working day",
       "next": [
         {

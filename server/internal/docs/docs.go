@@ -711,6 +711,24 @@ type Named struct {
 	Pillar string `json:"pillar,omitempty"`
 	Tribe  string `json:"tribe,omitempty"`
 	Domain string `json:"domain,omitempty"`
+	// A service: Summary, one or two plain sentences; Team, the team that performs it; Form, the
+	// front-door form people request it through, with FormLabel the words of its button. Its
+	// Description is rich text (package richtext), not plain words as in the other lists.
+	Summary   string `json:"summary,omitempty"`
+	Team      string `json:"team,omitempty"`
+	Form      string `json:"form,omitempty"`
+	FormLabel string `json:"formLabel,omitempty"`
+}
+
+// DefaultFormLabel is the words of a service's button when it names none.
+const DefaultFormLabel = "Request this service"
+
+// FormWords is the words of a service's button.
+func (n Named) FormWords() string {
+	if strings.TrimSpace(n.FormLabel) != "" {
+		return n.FormLabel
+	}
+	return DefaultFormLabel
 }
 
 // Contacts is how to reach a team, platform or practice (schema/catalog.schema.json): every
@@ -748,10 +766,13 @@ type Lists struct {
 	Pillars []Named `json:"pillars"`
 	Tribes  []Named `json:"tribes"`
 	Domains []Named `json:"domains"`
+	// Services: what teams do for others on request; missing in lists that never had any, which
+	// is an empty list (nothing is added for them).
+	Services []Named `json:"services"`
 }
 
 // EmptyCatalog is served before any lists exist.
-const EmptyCatalog = `{"tiers":[],"paths":[],"environments":[],"languages":[],"teams":[],"practices":[],"platforms":[],"categories":[],"tools":[],"patterns":[],"pillars":[],"tribes":[],"domains":[]}`
+const EmptyCatalog = `{"tiers":[],"paths":[],"environments":[],"languages":[],"teams":[],"practices":[],"platforms":[],"categories":[],"tools":[],"patterns":[],"pillars":[],"tribes":[],"domains":[],"services":[]}`
 
 // Lists returns the catalog. A missing catalog is empty, not an error.
 func (s *Store) Lists(ctx context.Context) (Lists, error) {
@@ -803,6 +824,9 @@ func (l Lists) Platform(id string) (Named, bool) { return find(l.Platforms, id) 
 // Practice finds a practice.
 func (l Lists) Practice(id string) (Named, bool) { return find(l.Practices, id) }
 
+// Service finds a service.
+func (l Lists) Service(id string) (Named, bool) { return find(l.Services, id) }
+
 // Category finds a category.
 func (l Lists) Category(id string) (Named, bool) { return find(l.Categories, id) }
 
@@ -835,6 +859,8 @@ func (l Lists) ByKey(key string) []Named {
 		return l.Tribes
 	case "domains":
 		return l.Domains
+	case "services":
+		return l.Services
 	}
 	return nil
 }

@@ -25,6 +25,7 @@ export const STEP_META: Record<StepType, { label: string; color: string; tile: s
   verify: { label: "Check the result", color: "var(--step-system)", tile: "var(--step-system-bg)", when: "Someone tests or confirms that the result works (log in, smoke test)." },
   decision: { label: "Decision", color: "var(--step-check)", tile: "var(--step-check-bg)", when: "The flow splits depending on an answer.", rule: "Needs two or more labelled `next` entries.", hint: "Give it two or more named paths." },
   subprocess: { label: "Sub-process", color: "var(--step-system)", tile: "var(--step-system-bg)", when: "The step is a whole other process described elsewhere.", rule: "Needs `subProcessId`.", hint: "Choose that process under “Explained by sub-process”." },
+  service: { label: "Service", color: "var(--step-system)", tile: "var(--step-system-bg)", when: "The step requests a service another team performs (a DNS record change, a firewall rule) through its front-door form.", rule: "Needs `service`: the id of a service from the SERVICES list.", hint: "Choose the service under “Service”." },
   task: { label: "Task", color: "var(--step-plain)", tile: "var(--step-plain-bg)", when: "Any other manual work that fits none of the above." },
 };
 

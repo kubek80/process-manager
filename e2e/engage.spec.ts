@@ -309,7 +309,7 @@ test.describe("sharing", () => {
     await expect(dialog.getByRole("status")).toHaveText("The link and title were copied. Paste them where you want to share them.");
     await expect(dialog.locator(".share-option.copied")).toContainText("Copied");
     await expect(copyLink).not.toHaveClass(/\bcopied\b/); // one at a time
-    expect(await clipboard()).toBe(`${TITLE} · Process Manager\n${url}`); // with the name of the portal
+    expect(await clipboard()).toBe(`${TITLE} · Pattern Catalog\n${url}`); // with the name of the portal
 
     await expect(dialog.getByRole("button", { name: /Slack/ })).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: /Google Chat/ })).toHaveCount(0);
@@ -384,6 +384,6 @@ test.describe("sharing", () => {
     await expect(dialog).toContainText("Your browser did not allow copying.");
     await expect(dialog.getByRole("status")).toHaveText("");
     await dialog.getByRole("button", { name: /^Copy link and title/ }).click();
-    await expect(field).toHaveValue("Secure logging · Process Manager\nhttp://127.0.0.1:8090/#/s/secure-logging");
+    await expect(field).toHaveValue("Secure logging · Pattern Catalog\nhttp://127.0.0.1:8090/#/s/secure-logging");
   });
 });

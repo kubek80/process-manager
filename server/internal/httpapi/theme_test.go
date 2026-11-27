@@ -112,7 +112,7 @@ func TestALookThatDoesNotFitIsRefusedWithAReasonPerProblem(t *testing.T) {
 		t.Fatalf("problems:\n%s", strings.Join(problems, "\n"))
 	}
 	for body, msg := range map[string]string{
-		`{"name": ""}`: "The name cannot be empty. Leave it out to use “Process Manager”.",
+		`{"name": ""}`: "The name cannot be empty. Leave it out to use “Pattern Catalog”.",
 		`{"name": "` + strings.Repeat("x", 41) + `"}`: "The name is 41 characters long; it can be at most 40.",
 		`{"name": "a\nb"}`:                            "The name contains control characters. Remove them and try again.",
 		`{"logo": "nope"}`:                            "The logo is not an image that was uploaded here. Choose the image again.",

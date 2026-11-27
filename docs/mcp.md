@@ -1,11 +1,11 @@
 # Consuming the portal over MCP
 
-Process Manager holds one description of each process and each standard. People read them in the app. AI agents read the **same** content through an MCP server, so that "how do I get a GCP project" and "what must my service meet" have one answer whether a person or an agent asks. The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is the standard way to give an agent that access.
+Pattern Catalog holds one description of each process and each standard. People read them in the app. AI agents read the **same** content through an MCP server, so that "how do I get a GCP project" and "what must my service meet" have one answer whether a person or an agent asks. The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is the standard way to give an agent that access.
 
 ```mermaid
 flowchart LR
   db[("Database<br/>processes, standards, lists, skills,<br/>feedback, search index")]
-  app["Process Manager app"] --> server["Portal server"] --> db
+  app["Pattern Catalog app"] --> server["Portal server"] --> db
   mcp["MCP server<br/>(server/cmd/mcp)"] --> db
   human(["People"]) --> app
   agent(["AI agents"]) --> mcp
@@ -74,11 +74,11 @@ Everywhere: list ids (teams, categories, practices, platforms, tools, tiers, pat
 | --- | --- | --- |
 | `search_processes` | `query?`, `category?`, `practice?`, `platform?`, `owner?`, `rigour?`, `tier?`, `environment?`, `language?`, `path?`, `limit?` (1–50, default 10) | **Active** processes: id, title, summary, version, owner, category, practice, platform, rigour, where they apply, review state, link; with a query the `score` and up to three `matches` (part, step id, label, snippet). `total` (with `totalAtLeast: true` when search by meaning matched more than the 500 documents it returns, so `total` is a lower bound), `rankedBy` (`meaning`, `words`, `words-fallback` or `title`), a `note` when it fell back, and the filters as understood. |
 | `search_standards` | the same | **Active** standards, with the requirements that apply (id, title, level). A standard matches a `rigour` when a requirement that applies has that level (`must` = mandatory, `should` = recommended, `may` = optional). |
-| `get_process` | `id` | The complete published process: prerequisites, actors (the first is always `me`), every step with instructions, tool, link, outcome, sub-process, resources and what follows, `agentMayDo` per step, the standards it helps to meet, its skills. |
+| `get_process` | `id` | The complete published process: prerequisites, actors (the first is always `me`), every step with instructions, tool, link, outcome, sub-process, the service it requests (`service`: `{id, name, summary?, team, form, formLabel, description?}`, the description as plain text), resources and what follows, `agentMayDo` per step, the standards it helps to meet, its skills. |
 | `get_standard` | `id`, `tier?`, `environment?`, `language?` | The complete published standard: scope, exception process, every requirement with level, statement, rationale, guidance, examples, verification, what a reviewer looks for. With a profile only the requirements that apply, and `leftOut` says how many were left out. |
 | `get_my_steps` | `id`, `actor?` (id or name, default `me`) | Only that participant's steps in the order the process flows (from the first step along `next`), each with what it waits for (`before`) and what follows (`after`). |
 | `get_skill` | `id` (e.g. `process-request-gcp-project`, from `skills` of get_process / get_standard), `version?` | The text of a generated skill or review agent, latest by default, with its version, the version of its source and `active`. The skill of a draft does not exist. |
-| `get_catalog` | – | Teams, practices and platforms (with their description, `contact` and `contacts`; with the secret also `members`, and `drafters` for platforms and practices), categories, tools (with link), tiers, `paths` (greenfield, brownfield, paved path and any the company added, each `{id, name, alsoCalled?, description?}`), environments, languages, `patterns` (the architecture patterns, each `{id, name, alsoCalled?, description?}`; `[]` when the company lists none). |
+| `get_catalog` | – | Teams, practices and platforms (with their description, `contact` and `contacts`; with the secret also `members`, and `drafters` for platforms and practices), categories, tools (with link), tiers, `paths` (greenfield, brownfield, paved path and any the company added, each `{id, name, alsoCalled?, description?}`), environments, languages, `patterns` (the architecture patterns, each `{id, name, alsoCalled?, description?}`; `[]` when the company lists none), `services` (what teams do on request, each `{id, name, summary?, team, form, formLabel, description?}`: the team that performs it, the front-door form, the button's words and the description as plain text, never HTML; `[]` when the company lists none). The text answer ends with how many of each, "…, 6 architecture patterns, 6 services." |
 | `report_problem` | `targetKind`, `targetId`, `itemId?`, `kind` (`broken`, `outdated`, `unclear`, `idea`), `text` | Only listed when acting for a person. Files feedback as that person, through the same checks as the flag in the portal: the text check, 3–2000 characters, a published process or standard, an existing step or requirement, at most 30 items per person and hour, counted together with the portal and holding for reports sent at the same moment. The owning team is notified as from the portal, with everything about how to reach it ("Group email: …; Slack: #cloud-platform (https://…)"). |
 
 **Filters** take ids or names, in any case and with or without accents ("Google Cloud", `google-cloud`). An unknown value is refused and names the list to look in. A document without `tiers`, `environments` or `languages` applies to all of them.
@@ -114,6 +114,7 @@ The server gives these to every agent when it connects (its instructions):
 
 - `actors[0]` of a process is always `me`: the party the agent acts for.
 - A step with a sub-process is described by another process.
+- A step with a service requests a service another team performs: the person requests it through its front-door form (`service.form`); the agent does not do the team's work. The server's name for clients is `process-manager` (a machine name, unchanged); its title is "Pattern Catalog".
 - Steps of type `approval`, and anything done by an actor other than `me`, are **not** for the agent to perform (`agentMayDo: false`). It waits and reports.
 - A process with `rigour: "mandatory"` is the only allowed way to get its result; the agent does not look for another.
 - A requirement of level `must` cannot be waived by the agent. If it cannot be met, the agent stops and tells the person; exceptions go through the standard's exception process.

@@ -56,7 +56,7 @@ test("Code map is for admins only: in the Admin menu, on the page and from the s
   await signIn(page, ALEX);
   await open(page, "/");
   await page.locator("nav.nav").getByRole("link", { name: "Admin" }).click();
-  await expect(page.locator(".admin-nav a")).toHaveText(["Teams", "Tools", "Skills", "Health"]);
+  await expect(page.locator(".admin-nav a")).toHaveText(["Teams", "Tools", "Services", "Skills", "Health"]);
   await open(page, "/admin/code");
   await expect(page.locator(".admin-main > header.admin-head h1")).toHaveText("Teams");
   await expect(page.locator(".cm-page")).toHaveCount(0);

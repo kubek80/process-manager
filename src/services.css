@@ -1,0 +1,90 @@
+/* Services: the place (#/services), the page of one (#/service/:id), the box of a service step,
+   the rich text of a description (RichText) and its editor in Admin › Services (RichEditor).
+   Tokens only; the mark of a service is quiet (no colour of processes, standards or states). */
+
+/* ---------- the place ---------- */
+.svc-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
+.svc-bar .search { flex: 1 1 280px; max-width: 520px; }
+.svc-bar select { flex: 0 1 280px; width: auto; min-width: 0; max-width: 100%; }
+.svc-count { margin: 12px 0 8px; }
+.svc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.svc-card { display: flex; align-items: center; gap: 12px 20px; padding: 14px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
+.svc-card-text { flex: 1 1 auto; min-width: 0; display: grid; gap: 4px; }
+.svc-card h2 { margin: 0; font-size: var(--fs-h4); line-height: var(--lh-h4); font-weight: var(--fw-strong); overflow-wrap: anywhere; }
+.svc-card h2 a { color: var(--text); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.svc-card h2 a:hover { color: var(--accent); text-decoration-color: currentColor; }
+.svc-summary { margin: 0; color: var(--text-2); max-width: 72ch; overflow-wrap: anywhere; }
+.svc-team { margin: 0; color: var(--text-3); font-size: var(--fs-sm); line-height: var(--lh-sm); }
+.svc-card .svc-request { flex: none; }
+.svc-request svg { flex: none; }
+@media (max-width: 640px) {
+  .svc-card { flex-direction: column; align-items: stretch; padding: 14px; }
+  .svc-card .svc-request { justify-content: center; }
+}
+.svc-empty { margin-top: 20px; padding: 18px 20px; background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--r); }
+.svc-empty p { margin: 0; }
+.svc-empty p + p { margin-top: 6px; }
+.svc-none { margin-top: 12px; }
+
+/* ---------- the page of a service ---------- */
+.service-kind { color: var(--text-3); }
+.svc-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-top: 4px; }
+.svc-facts .svc-team { font-size: var(--fs-md); line-height: var(--lh-md); color: var(--text-2); }
+.svc-body { display: grid; gap: 28px; margin-top: 28px; }
+@media (min-width: 1000px) { .svc-body { grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); gap: 24px 40px; align-items: start; } }
+.svc-description, .svc-used { display: grid; gap: 12px; min-width: 0; }
+.svc-used { padding: 18px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.svc-uses, .svc-uses ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.svc-uses ul { gap: 4px; margin-top: 4px; padding-left: 12px; border-left: 2px solid var(--line); }
+.svc-uses ul a { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-sm); line-height: var(--lh-sm); }
+.svc-retired { color: var(--text-3); font-style: normal; font-weight: var(--fw-regular); }
+
+/* ---------- a team's services (the team's page) ---------- */
+@media (min-width: 1000px) {
+  .group-body:has(.group-services) { grid-template-rows: auto auto 1fr; grid-template-areas: "docs reach" "docs services" "docs people"; }
+  .group-body .group-services { grid-area: services; }
+}
+/* the same box as "How to reach them" beside it */
+.group-services { display: grid; gap: 12px; min-width: 0; padding: 18px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+@media (max-width: 599px) { .group-services { padding: 16px; } }
+@media print { .group-services { border: 0; padding: 0; margin-bottom: 14px; } }
+.group-service-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.group-service-list li { display: grid; gap: 2px; }
+
+/* ---------- the box of a service step (its panel, the checklist, print) ---------- */
+.svc-box { display: grid; gap: 8px; justify-items: start; border: 1px solid var(--line-strong); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
+.svc-box-head { display: flex; align-items: flex-start; gap: 10px; }
+.svc-box-head > svg { color: var(--c, var(--step-system)); flex: none; margin-top: 2px; }
+.svc-box-head > div { display: grid; gap: 1px; min-width: 0; }
+.svc-box-name { display: inline-flex; align-items: center; gap: 4px; overflow-wrap: anywhere; }
+.svc-box-team { color: var(--text-3); }
+.svc-box-summary { margin: 0; color: var(--text-2); }
+.svc-box.missing { display: flex; align-items: center; gap: 10px; }
+.svc-box.missing p { margin: 0; }
+
+/* ---------- rich text: shown (RichText) and edited (RichEditor) alike ---------- */
+.rich-text, .rich-edit-area { max-width: 72ch; overflow-wrap: anywhere; color: var(--text); }
+.rich-text > :first-child, .rich-edit-area > :first-child { margin-top: 0; }
+.rich-text > :last-child, .rich-edit-area > :last-child { margin-bottom: 0; }
+.rich-text p, .rich-edit-area p { margin: 0 0 10px; }
+.rich-text h3, .rich-edit-area h3 { margin: 18px 0 6px; font-size: var(--fs-h4); line-height: var(--lh-h4); font-weight: var(--fw-strong); }
+.rich-text h4, .rich-edit-area h4 { margin: 14px 0 4px; font-size: var(--fs-lg); line-height: var(--lh-lg); font-weight: var(--fw-strong); }
+.rich-text ul, .rich-text ol, .rich-edit-area ul, .rich-edit-area ol { margin: 0 0 10px; padding-left: 22px; }
+.rich-text li > p, .rich-edit-area li > p { margin: 0; }
+.rich-text li + li, .rich-edit-area li + li { margin-top: 3px; }
+.rich-text blockquote, .rich-edit-area blockquote { margin: 0 0 10px; padding: 4px 0 4px 14px; border-left: 3px solid var(--line-strong); color: var(--text-2); }
+.rich-text pre, .rich-edit-area pre { margin: 0 0 10px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; white-space: pre; }
+.rich-text pre code, .rich-edit-area pre code { background: none; border: 0; padding: 0; }
+.rich-text a, .rich-edit-area a { text-decoration: underline; text-underline-offset: 2px; }
+
+/* ---------- the editor of a description (Admin › Services) ---------- */
+.rich-editor { border: 1px solid var(--control-line); border-radius: 10px; background: var(--surface); min-width: 0; }
+.rich-editor:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rich-tools { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px; border-bottom: 1px solid var(--line); }
+.rich-tools .icon-btn[aria-pressed="true"] { background: var(--seg-on); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--text); }
+.rich-tools .sep { width: 1px; align-self: stretch; margin: 4px 3px; background: var(--line); }
+.rich-edit-area { min-height: 160px; max-height: 480px; overflow-y: auto; padding: 10px 12px; outline: none; }
+.rich-link { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.rich-link input { flex: 1 1 220px; min-width: 0; }
+.rich-count { display: block; padding: 2px 10px 6px; color: var(--text-3); font-size: var(--fs-sm); line-height: var(--lh-sm); text-align: right; }
+.rich-count.over { color: var(--bad); }

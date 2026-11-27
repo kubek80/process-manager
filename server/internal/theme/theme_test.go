@@ -103,7 +103,7 @@ func TestDescribeSaysWhatChanged(t *testing.T) {
 		{theme.Look{Brand: "#0055aa"}, theme.Look{Brand: "#0055aa", Font: "roboto"}, "nothing changed"},
 		{theme.Look{Secondary: "#123456", Highlight: "#ffff00"}, theme.Look{Ink: "#111111", Quiet: "#eeddcc"},
 			"second colour back to the default (Sky); ink #111111; highlight back to the default (Sun); quiet surface #eeddcc"},
-		{theme.Look{Name: "A", Appearance: "dark"}, theme.Look{Brand: "#0055aa"}, "name back to the default (“Process Manager”); brand colour #0055aa; appearance for new visitors back to the default (light)"},
+		{theme.Look{Name: "A", Appearance: "dark"}, theme.Look{Brand: "#0055aa"}, "name back to the default (“Pattern Catalog”); brand colour #0055aa; appearance for new visitors back to the default (light)"},
 	} {
 		if got := theme.Describe(c.old, c.new); got != c.want {
 			t.Errorf("%+v -> %+v: %q", c.old, c.new, got)

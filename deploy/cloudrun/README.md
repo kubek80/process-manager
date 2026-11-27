@@ -1,4 +1,4 @@
-# Process Manager on Cloud Run behind IAP
+# Pattern Catalog on Cloud Run behind IAP
 
 A small set-up for a demo or a first installation: **one** Cloud Run service runs the portal's
 Go server (the image from the repository's `Dockerfile`). It answers `/api/*` and serves the
@@ -108,7 +108,7 @@ nothing else. You need the right to deploy a service that runs as it.
 
 ```sh
 gcloud iam service-accounts create "$SERVICE_ACCOUNT" \
-  --display-name="Process Manager portal" --project "$PROJECT_ID"
+  --display-name="Pattern Catalog portal" --project "$PROJECT_ID"
 
 gcloud iam service-accounts add-iam-policy-binding "$SA" --project "$PROJECT_ID" \
   --member="user:$DEPLOYER_EMAIL" --role=roles/iam.serviceAccountUser

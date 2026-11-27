@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, CalendarCheck, ChartColumn, CodeXml, Flag, KeyRound, List, Palette, Search, Server, ShieldCheck, Sparkles, Users, Workflow, Wrench } from "lucide-react";
+import { Activity, CalendarCheck, ChartColumn, CodeXml, Flag, KeyRound, List, Palette, Search, Server, ShieldCheck, Sparkles, Users, Workflow, Wrench, ConciergeBell } from "lucide-react";
 import type { AuditEntry, FeedbackByTarget, Process, Skill, Standard, TargetKind } from "../types";
 import { teamName, useCatalog } from "../lib/catalog";
 import { reviewOf, statusOf } from "../lib/lifecycle";
@@ -24,7 +24,7 @@ const CodeMapPage = lazy(() => import("./CodeMapPage").then((m) => ({ default: m
 
 const SECTIONS: { id: AdminSection; label: string; icon: typeof List; admin?: boolean; hint: string }[] = [
   { id: "access", label: "Access", icon: KeyRound, admin: true, hint: "Who may do what" },
-  // the lists: two entries, Teams and Tools (`PLACE_HEAD`), on one page with one draft
+  // the lists: three entries, Teams, Tools and Services (`PLACE_HEAD`), on one page with one draft
   { id: "lists", label: "Lists", icon: List, hint: "" },
   { id: "skills", label: "Skills", icon: Sparkles, hint: "Generated skills and review agents" },
   { id: "health", label: "Health", icon: CalendarCheck, hint: "Reviews due and open feedback" },
@@ -265,9 +265,9 @@ export function AdminPage({ section, place, list, id, processes, standards, feed
       <aside ref={nav} className="admin-nav" aria-label="Admin">
         <p className="admin-nav-title">Admin</p>
         {allowed.flatMap((s) => (s.id === "lists"
-          ? (["teams", "tools"] as const).map((p) => {
+          ? (["teams", "tools", "services"] as const).map((p) => {
             const on = current.id === "lists" && listPlace === p;
-            const Icon = p === "teams" ? Users : Wrench;
+            const Icon = p === "teams" ? Users : p === "tools" ? Wrench : ConciergeBell;
             return <a key={p} className={on ? "on" : ""} aria-current={on ? "page" : undefined} href={href({ page: "admin", section: "lists", place: p })} title={PLACE_HEAD[p].lead}><Icon size={16} />{PLACE_HEAD[p].title}</a>;
           })
           : [<a key={s.id} className={current.id === s.id ? "on" : ""} aria-current={current.id === s.id ? "page" : undefined} href={href({ page: "admin", section: s.id })} title={s.hint}><s.icon size={16} />{s.label}</a>]))}

@@ -73,7 +73,7 @@ export const frame: CodeCategory = {
         { label: "The address", shape: "#/p/request-gcp-project/flow/raise-request", note: "Typed, followed from a link, or written by `go()`." },
         { label: "Read by parseRoute", where: "src/lib/store.ts", shape: "{ \"page\": \"process\", \"id\": \"request-gcp-project\", \"tab\": \"flow\", \"item\": \"raise-request\" }", note: "An address it does not know is { \"page\": \"home\" }; the old #/p/request-gcp-project/json is { \"page\": \"edit-process\", \"id\": \"request-gcp-project\" }." },
         { label: "Drawn by Shell", where: "src/App.tsx", shape: "<ProcessPage key=\"request-gcp-project\" process={…} tab=\"flow\" item=\"raise-request\" … />", note: "The step's side panel is open because `item` is set." },
-        { label: "Named by pageTitle", where: "src/lib/store.ts", shape: "Request a GCP project · Process Manager", note: "The portal's name (Admin › Theming) comes last." },
+        { label: "Named by pageTitle", where: "src/lib/store.ts", shape: "Request a GCP project · Pattern Catalog", note: "The portal's name (Admin › Theming) comes last." },
         { label: "Written back by href", where: "src/lib/store.ts", shape: "#/p/request-gcp-project/flow/raise-request", note: "The same address: `parseRoute` and `href` are each other's inverse (tested in `routes.test.ts`)." },
       ],
     },

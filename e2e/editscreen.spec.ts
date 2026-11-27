@@ -344,7 +344,7 @@ test("who does it: “Someone else” adds a participant and gives them the step
   await expect(pick).toHaveAttribute("aria-expanded", "false");
   await pick.click();
   const pop = fields(page).getByRole("group", { name: "Kind of step" });
-  await expect(pop.locator(".type-opt")).toHaveCount(13);
+  await expect(pop.locator(".type-opt")).toHaveCount(14);
   await expect(pop.locator('.type-opt[aria-pressed="true"]')).toHaveText("Task");
   await expect(pop.locator('.type-opt[aria-pressed="true"]')).toBeFocused();
   await page.keyboard.press("Escape");

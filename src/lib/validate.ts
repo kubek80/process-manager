@@ -192,10 +192,12 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
       if (s.subProcessId === p.id) err(`${at}.subProcessId`, "A process cannot be its own sub-process.");
       else if (known && !known.has(s.subProcessId)) warn(`${at}.subProcessId`, "The sub-process does not exist (yet).");
     }
+    const service = serviceStepIssue(s, cat);
+    if (service) err(`${at}.service`, service);
     // one rule for every step: a step the reader does by hand says exactly what to do; a decision,
     // a wait, an automated step and a sub-process need no actions, and what other participants do
     // is theirs to know (their steps say what happens, not how)
-    if (s.actor === "me" && NEEDS_ACTIONS.has(s.type) && !s.instructions?.length && !s.subProcessId)
+    if (s.actor === "me" && NEEDS_ACTIONS.has(s.type) && !s.instructions?.length && !s.subProcessId && !s.service)
       warn(`${at}.instructions`, "Say exactly what the reader does in this step.");
   });
 
@@ -226,6 +228,26 @@ export function validateProcess(data: unknown, ctx: CheckContext = {}): Issue[] 
   return issues;
 }
 
+/**
+ * A step that requests a service: of the kind Service, naming a service of the list. The same
+ * sentences as the server's (`docs.Check`). Null when it is fine.
+ */
+export function serviceStepIssue(s: { type?: string; service?: string }, cat?: Pick<Catalog, "services"> | null): string | null {
+  if (s.type === "service" && !s.service) return "A service step needs the service it requests: choose it under “Service”.";
+  if (s.service && s.type !== "service") return "Only a step of the kind Service requests a service: make it a Service step, or remove the service.";
+  if (s.service && cat && !(cat.services ?? []).some((x) => x.id === s.service)) return `The service “${s.service}” is not in the list of services: choose one of the list.`;
+  return null;
+}
+
+/**
+ * A service's team that the lists do not have, in the server's words (`docs.Check`); `who` is
+ * the service by its name, else by its id.
+ */
+export function unknownTeamSentence(who: { id?: string; name?: string }, id: string): string {
+  const name = typeof who.name === "string" && who.name.trim() ? `the service “${who.name.trim()}”` : `the service with the id “${who.id ?? ""}”`;
+  return `${name[0].toUpperCase()}${name.slice(1)} is performed by the team “${id}”, which is not in the list of teams: choose another team.`;
+}
+
 /** The lists in the order the lists document has them, each with what one entry and several are called. */
 export const LIST_WORDS = {
   tiers: { one: "tier", many: "tiers" }, paths: { one: "path", many: "paths" }, environments: { one: "environment", many: "environments" }, languages: { one: "language", many: "languages" },
@@ -233,6 +255,7 @@ export const LIST_WORDS = {
   categories: { one: "category", many: "categories" }, tools: { one: "tool", many: "tools" },
   patterns: { one: "architecture pattern", many: "architecture patterns" },
   pillars: { one: "pillar", many: "pillars" }, tribes: { one: "tribe", many: "tribes" }, domains: { one: "domain", many: "domains" },
+  services: { one: "service", many: "services" },
 } as const;
 
 /**
@@ -276,6 +299,9 @@ export function validateCatalog(data: unknown): Issue[] {
   c.teams.forEach((t, i) => { if (t.pillar && !(c.pillars ?? []).some((x) => x.id === t.pillar)) issues.push({ level: "error", path: `teams[${i}].pillar`, message: unknownGroupSentence("team", t, t.pillar) }); });
   (c.pillars ?? []).forEach((p, i) => { if (p.tribe && !(c.tribes ?? []).some((x) => x.id === p.tribe)) issues.push({ level: "error", path: `pillars[${i}].tribe`, message: unknownGroupSentence("pillar", p, p.tribe) }); });
   (c.tribes ?? []).forEach((t, i) => { if (t.domain && !(c.domains ?? []).some((x) => x.id === t.domain)) issues.push({ level: "error", path: `tribes[${i}].domain`, message: unknownGroupSentence("tribe", t, t.domain) }); });
+  // a service is performed by a team of the list (the front-door form and the size of the
+  // description are the format's; what the description holds is cleaned before it is saved)
+  (c.services ?? []).forEach((s, i) => { if (s.team && !c.teams.some((t) => t.id === s.team)) issues.push({ level: "error", path: `services[${i}].team`, message: unknownTeamSentence(s, s.team) }); });
   // and of an architecture pattern to one pattern only
   for (const clash of patternNameClashes(c.patterns)) issues.push({ level: "error", path: `patterns[${clash.index}].alsoCalled`, message: clash.message });
   return issues;

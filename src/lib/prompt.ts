@@ -21,7 +21,7 @@ export function basePrompt(known: KnownProcess[] = [], catalog?: Catalog, standa
     ? known.map((k) => `- "${k.id}" - ${k.title}`).join("\n")
     : "- (none yet)";
   return `# ROLE
-You are a business analyst who converts descriptions of company processes into a strict JSON format used by the "Process Manager" tool. The JSON is rendered as a swim-lane diagram and as a step-by-step checklist, so it must be precise and complete.
+You are a business analyst who converts descriptions of company processes into a strict JSON format used by the "Pattern Catalog" tool. The JSON is rendered as a swim-lane diagram and as a step-by-step checklist, so it must be precise and complete.
 
 # OUTPUT RULES (very important)
 1. Answer with ONE JSON object inside ONE \`\`\`json code block. No text before or after it.
@@ -70,6 +70,7 @@ ${types}
 - "tool": the id of the system used, ONLY from the TOOLS list below. If the tool in the text is not on the list, leave "tool" out and name the tool in "description".
 - "outcome": what exists after the step (ticket number, pull request, access).
 - "subProcessId": when a step is fully explained by one of the EXISTING PROCESSES, use type "subprocess" and set "subProcessId" to its id instead of repeating its steps.
+- "service": when a step asks another team for one of the SERVICES listed below (for example a DNS record change), use type "service" for a step of "me", set "service" to its id and do not repeat its front-door form in "url". Only a "service" step has "service".
 
 E. FLOW ("next")
 - "next" lists the steps that follow. The first step in "steps" is the start. A step with "next": [] ends the process. At least one step must end the process.
@@ -83,8 +84,8 @@ E. FLOW ("next")
 - actors[0].id is "me".
 - Every step has id, title, actor, type and next.
 - Every step id used in "next.to" exists; every "actor" exists in "actors".
-- Every decision has 2+ labelled paths. Every "subprocess" step has "subProcessId".
-- "owner", "teamId", "category", "platform", "practice", "tool", "paths", "patterns", "tiers", "environments", "languages" and "standards" only use ids from the lists below. "rigour" is "mandatory", "recommended" or "optional", or left out.
+- Every decision has 2+ labelled paths. Every "subprocess" step has "subProcessId". Every "service" step has "service".
+- "owner", "teamId", "category", "platform", "practice", "tool", "service", "paths", "patterns", "tiers", "environments", "languages" and "standards" only use ids from the lists below. "rigour" is "mandatory", "recommended" or "optional", or left out.
 - All ids are kebab-case. No field outside the schema.
 
 # EXISTING PROCESSES (usable in "subProcessId" and prerequisite "processId")
@@ -104,6 +105,9 @@ ${list(catalog?.practices)}
 
 # TOOLS (usable in step "tool")
 ${list(catalog?.tools)}
+
+# SERVICES (usable in step "service", with type "service")
+${list((catalog?.services ?? []).map((s) => ({ id: s.id, name: s.summary ? `${s.name}: ${s.summary}` : s.name })))}
 
 # PATHS (usable in "paths")
 ${list(catalog?.paths)}
@@ -189,7 +193,7 @@ export function fixPrompt(issues: Issue[], parseError?: string, answer?: unknown
       const value = answer !== undefined && i.path && i.path !== "(root)" && !/^is missing the required field/.test(i.message) ? ` (value now: ${shown(valueAt(answer, i.path))})` : "";
       return `- [${i.level}] ${i.path}${value}: ${i.message}`;
     }).join("\n");
-  return `The JSON you returned did not pass the Process Manager checker. Fix every problem below and return the COMPLETE corrected JSON again, as one \`\`\`json code block and nothing else. Do not change anything that is not needed for the fix.
+  return `The JSON you returned did not pass the Pattern Catalog checker. Fix every problem below and return the COMPLETE corrected JSON again, as one \`\`\`json code block and nothing else. Do not change anything that is not needed for the fix.
 
 Problems found:
 ${list}
@@ -202,7 +206,7 @@ ${list}
 export function standardBasePrompt(catalog?: Catalog, processes: KnownProcess[] = []): string {
   const list = (rows: { id: string; name: string }[] = []) => (rows.length ? rows.map((r) => `- "${r.id}" - ${r.name}`).join("\n") : "- (none yet)");
   return `# ROLE
-You convert policies, guidelines and engineering rules into a strict JSON format used by the "Process Manager" tool. Each standard becomes a readable document for engineers, a skill for AI coding assistants, and a checklist for an AI pull request reviewer, so every requirement must be precise and testable.
+You convert policies, guidelines and engineering rules into a strict JSON format used by the "Pattern Catalog" tool. Each standard becomes a readable document for engineers, a skill for AI coding assistants, and a checklist for an AI pull request reviewer, so every requirement must be precise and testable.
 
 # OUTPUT RULES (very important)
 1. Answer with ONE JSON object inside ONE \`\`\`json code block. No text before or after it.

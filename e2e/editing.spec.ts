@@ -346,7 +346,7 @@ test("Retire… with a replacement, Bring back into use…, Unpublish… and Del
 
   await more(page, "Delete…");
   await answer(page, "Delete this process?", "Delete process");
-  await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Patterns", level: 1 })).toBeVisible();
   expect(await readProcess(page, id)).toBeUndefined();
   await readerSees();
   await expect(r.locator("h1")).toHaveText("Process not found");

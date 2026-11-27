@@ -317,6 +317,8 @@ export type AdminSection = "access" | "lists" | "skills" | "health" | "activity"
  * `src/lib/codemap.ts`). An unknown category or file is kept: the page says it is not there.
  */
 export interface CodeView { category?: string; file?: string; q?: string; at?: string }
+/** What the list of services shows: the words searched for and the team chosen (`#/services?q=dns&team=dns-team`). */
+export interface ServicesView { q?: string; team?: string }
 /** `item` is the step or the requirement that is open, so that a link can point at one. */
 export type Route =
   | { page: "home" } | ({ page: "search" } & SearchState)
@@ -331,32 +333,56 @@ export type Route =
   /** The page of a team, a platform or a practice. */
   | { page: "group"; kind: GroupKind; id: string }
   /** The page of a tribe (a group of teams) or a domain (a group of tribes). */
-  | { page: "pillar" | "tribe" | "domain"; id: string };
+  | { page: "pillar" | "tribe" | "domain"; id: string }
+  /** The list of services, and the page of one. */
+  | ({ page: "services" } & ServicesView)
+  | { page: "service"; id: string };
 
 /** The lists, as the address names them. */
-export const CATALOG_LISTS = ["teams", "pillars", "tribes", "domains", "practices", "platforms", "categories", "tools", "patterns", "tiers", "paths", "environments", "languages"] as const;
+export const CATALOG_LISTS = ["teams", "pillars", "tribes", "domains", "practices", "platforms", "categories", "tools", "patterns", "tiers", "paths", "environments", "languages", "services"] as const;
 export type CatalogList = (typeof CATALOG_LISTS)[number];
 /** Which list of Teams or Tools is open and which entry is chosen: `#/teams/platforms/google-cloud`. */
 export interface CatalogView { place?: ListPlace; list?: CatalogList; id?: string }
 /**
- * The lists are two places, in the top bar and in Admin: Teams (who: the teams and their groups,
- * practices, platforms) and Tools (what things are built with and where rules apply). Each list is
- * in one of them; each place opens on its first list.
+ * The lists are three places, in the top bar and in Admin: Teams (who: the teams and their groups,
+ * practices, platforms), Tools (what things are built with and where rules apply) and Services
+ * (what teams do for others on request: one list, with a place and a page of its own for readers,
+ * `#/services`, `#/service/:id`). Each list is in one of them; each place opens on its first list.
  */
-export type ListPlace = "teams" | "tools";
+export type ListPlace = "teams" | "tools" | "services";
 export const PLACE_LISTS: Record<ListPlace, readonly CatalogList[]> = {
   teams: ["teams", "pillars", "tribes", "domains", "practices", "platforms"],
   tools: ["tools", "categories", "patterns", "tiers", "paths", "environments", "languages"],
+  services: ["services"],
 };
 /** The place a list is in. */
-export const placeOfList = (list: CatalogList): ListPlace => (PLACE_LISTS.tools.includes(list) ? "tools" : "teams");
+export const placeOfList = (list: CatalogList): ListPlace => (list === "services" ? "services" : PLACE_LISTS.tools.includes(list) ? "tools" : "teams");
+/** What each place of the lists is called, in the top bar and in Admin's side menu. */
+export const PLACE_WORD: Record<ListPlace, string> = { teams: "Teams", tools: "Tools", services: "Services" };
 /** The place a view of the lists is in: its list's, else the one it names, else Teams. */
 export const placeOfView = (v: CatalogView): ListPlace => (v.list ? placeOfList(v.list) : v.place ?? "teams");
 /** `#/teams`, `#/tools/paths`, `#/teams/teams/dns-team`: the place, then the list unless it is the place's first and no entry is named. */
 function listsPath(base: string, v: CatalogView): string {
   const place = placeOfView(v);
+  // the services are one list: Admin's address names the entry right after the place
+  // (`#/admin/services/dns-record-change`); readers have the place and a page of their own
+  if (place === "services") return base === "#/" ? (v.id ? `#/service/${v.id}` : "#/services") : `${base}services${v.id ? `/${v.id}` : ""}`;
   const list = v.list && (v.id || v.list !== PLACE_LISTS[place][0]) ? `/${v.list}${v.id ? `/${v.id}` : ""}` : "";
   return `${base}${place}${list}`;
+}
+/** A reader's address of the lists: the services have a place and a page of their own. */
+function readerLists(v: CatalogView): Route {
+  if (v.place !== "services") return { page: "catalog", ...v };
+  return v.id ? { page: "service", id: v.id } : { page: "services" };
+}
+/** The search and the team chosen on the list of services, from its address. */
+function parseServicesQuery(query: string): ServicesView {
+  const v: ServicesView = {};
+  for (const part of query.split("&")) {
+    if (part.startsWith("q=")) { const q = decode(part.slice(2)); if (q.trim()) v.q = q; }
+    if (part.startsWith("team=")) { const t = decodePart(part.slice(5)).trim(); if (/^[a-z0-9-]+$/.test(t)) v.team = t; }
+  }
+  return v;
 }
 /** A place of the lists read from an address: `teams` or `tools`, then a list and an entry; anything not known is left out. */
 function parseLists(place: ListPlace | undefined, list: string | undefined, id: string | undefined): CatalogView {
@@ -473,9 +499,13 @@ const parse = (h: string = location.hash): Route => {
   if (h.startsWith("#/processes")) return { page: "library" };
   // Teams and Tools; the older one place "Teams & tools" (#/catalog…) leads to the same list and entry
   const place = h.match(/^#\/(teams|tools)(?:\/([a-z]+)(?:\/([a-z0-9-]+))?)?\/?$/);
-  if (place) return { page: "catalog", ...parseLists(place[1] as ListPlace, place[2], place[3]) };
+  if (place) return readerLists(parseLists(place[1] as ListPlace, place[2], place[3]));
   const cat = h.match(/^#\/catalog(?:\/([a-z]+)(?:\/([a-z0-9-]+))?)?\/?$/);
-  if (cat) return { page: "catalog", ...parseLists("teams", cat[1], cat[2]) };
+  if (cat) return readerLists(parseLists("teams", cat[1], cat[2]));
+  const services = h.match(/^#\/services(?:\?(.*))?$/);
+  if (services) return { page: "services", ...parseServicesQuery(services[1] ?? "") };
+  const service = h.match(/^#\/service\/([a-z0-9-]+)\/?$/);
+  if (service) return { page: "service", id: service[1] };
   if (h.startsWith("#/catalog")) return { page: "catalog", place: "teams" };
   if (h.startsWith("#/guide")) return { page: "guide" };
   if (h.startsWith("#/mine")) return { page: "mine" };
@@ -490,6 +520,14 @@ const parse = (h: string = location.hash): Route => {
   if (code) return { page: "admin", section: "code", ...parseCode(code[1], code[2], code[3]) };
   // Admin's two entries of the lists, Teams and Tools, at a list and an entry ("Edit in Admin ›
   // Teams" on a pillar's page); the older #/admin/lists… opens the right one of the two
+  // Admin › Services: one list, so the entry comes right after the place; `services/<id>` (the
+  // way the other places write it) is read as the same and corrected
+  const adminServices = h.match(/^#\/admin\/services(?:\/([a-z0-9-]+))?(?:\/([a-z0-9-]+))?\/?$/);
+  if (adminServices) {
+    const id = adminServices[2] ? (adminServices[1] === "services" ? adminServices[2] : undefined) : adminServices[1];
+    // without an entry it names only the place: Admin goes back to the service last shown there
+    return { page: "admin", section: "lists", place: "services", ...(id ? { list: "services", id } : {}) };
+  }
   const adminLists = h.match(/^#\/admin\/(teams|tools|lists)(?:\/([a-z]+)(?:\/([a-z0-9-]+))?)?\/?$/);
   if (adminLists) return { page: "admin", section: "lists", ...parseLists(adminLists[1] === "tools" ? "tools" : "teams", adminLists[2], adminLists[3]) };
   const admin = h.match(/^#\/admin(?:\/(access|lists|skills|health|activity|statistics|theming|system|code))?/);
@@ -671,6 +709,11 @@ export const href = (r: Route): string => {
     case "edit-standard": return `#/s/${r.id}/edit${r.item ? `/${r.item}` : ""}`;
     case "group": return `#/${r.kind}/${r.id}`;
     case "pillar": case "tribe": case "domain": return `#/${r.page}/${r.id}`;
+    case "services": {
+      const q = [r.q?.trim() ? `q=${encodeURIComponent(r.q)}` : "", r.team ? `team=${encodeURIComponent(r.team)}` : ""].filter(Boolean).join("&");
+      return `#/services${q ? `?${q}` : ""}`;
+    }
+    case "service": return `#/service/${r.id}`;
   }
 };
 /**
@@ -687,27 +730,31 @@ export const href = (r: Route): string => {
  */
 export function correctedListsAddress(hash: string): string | null {
   const r = parse(hash);
-  if (r.page !== "catalog" && !(r.page === "admin" && r.section === "lists")) return null;
+  // a service asked of Teams or Tools (`#/teams/services/x`) is the page of that service
+  const asList = (r.page === "service" || r.page === "services") && /^#\/(teams|tools|catalog)(\/|$)/.test(hash);
+  if (r.page !== "catalog" && !(r.page === "admin" && r.section === "lists") && !asList) return null;
   const right = href(r);
   return right === hash ? null : right;
 }
 export const go = (r: Route, opts: { replace?: boolean } = {}) => { void moveTo(href(r), opts.replace); };
 
 /** What the browser tab says for a page: the thing being read first, the portal's name (Admin › Theming) last. */
-export function pageTitle(r: Route, names: { process?: string; standard?: string; group?: string; loading?: boolean } = {}, app = portalName()): string {
+export function pageTitle(r: Route, names: { process?: string; standard?: string; group?: string; service?: string; loading?: boolean } = {}, app = portalName()): string {
   const APP = app;
   const of = (name: string | undefined, missing: string) => name ?? (names.loading ? "" : missing);
   let here: string;
   switch (r.page) {
     case "home": here = ""; break;
     case "search": here = r.q?.trim() ? `“${r.q.trim()}” · Search` : "Search"; break;
-    case "library": here = "Processes"; break;
+    case "library": here = "Patterns"; break;
     case "standards": here = "Standards"; break;
-    case "catalog": here = placeOfView(r) === "tools" ? "Tools" : "Teams"; break;
+    case "catalog": here = PLACE_WORD[placeOfView(r)]; break;
+    case "services": here = "Services"; break;
+    case "service": here = of(names.service, "Service not found"); break;
     case "guide": here = "Guide"; break;
     case "mine": here = "My responsibilities"; break;
     case "requests": here = "Requests"; break;
-    case "admin": here = r.section === "lists" ? `${placeOfView(r) === "tools" ? "Tools" : "Teams"} · Admin`
+    case "admin": here = r.section === "lists" ? `${PLACE_WORD[placeOfView(r)]} · Admin`
       : r.section !== "code" ? `${r.section.slice(0, 1).toUpperCase()}${r.section.slice(1)} · Admin`
       : `${r.file ? `${r.file.split("/").pop()} · ` : ""}Code map · Admin`; break;
     case "process": here = of(names.process, "Process not found"); break;

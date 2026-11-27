@@ -1,6 +1,6 @@
 import { Component, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import { Alert, AlertIcon } from "./Alert";
-import { ClipboardList, GitPullRequest, Stamp, Eye, Hourglass, Send, Users, Bot, FileText, ShieldCheck, Split, Workflow, SquareCheck, X, Check, Copy, CircleAlert, RotateCcw, TriangleAlert, type LucideIcon } from "lucide-react";
+import { ClipboardList, GitPullRequest, Stamp, Eye, Hourglass, Send, Users, Bot, FileText, ShieldCheck, Split, Workflow, ConciergeBell, SquareCheck, X, Check, Copy, CircleAlert, RotateCcw, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { Issue, StepType } from "../types";
 import { STEP_META } from "../lib/stepMeta";
 import { copyText, isLoadFailure } from "../lib/store";
@@ -8,7 +8,7 @@ import { copyText, isLoadFailure } from "../lib/store";
 export const STEP_ICON: Record<StepType, LucideIcon> = {
   form: ClipboardList, code: GitPullRequest, approval: Stamp, review: Eye, wait: Hourglass,
   communication: Send, meeting: Users, automation: Bot, document: FileText, verify: ShieldCheck,
-  decision: Split, subprocess: Workflow, task: SquareCheck,
+  decision: Split, subprocess: Workflow, service: ConciergeBell, task: SquareCheck,
 };
 
 export function TypeIcon({ type, size = 36 }: { type: StepType; size?: number }) {

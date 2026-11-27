@@ -102,7 +102,7 @@ test("below 1120 px the Menu button says how much waits right after the word Men
     expect(parts).toEqual(["menu-word", "nav-count", "menu-here"]);
     const n = Number((await menu.getAttribute("aria-label"))!.match(/\d+/)![0]);
     await expect(menu.locator("b.nav-count")).toHaveText(String(n));
-    await expect(menu.locator(".menu-here")).toHaveText("Processes");
+    await expect(menu.locator(".menu-here")).toHaveText("Patterns");
   } finally {
     await clearFeedback(request, "process", "request-gcp-project");
   }
@@ -220,7 +220,7 @@ test("a process or standard that is gone: said in plain words, with no id; the s
   await expect(page.getByText("This process does not exist (any more). It may have been renamed or deleted.")).toBeVisible();
   await expect(page.locator(".page")).not.toContainText("no-such-process-here");
   await page.getByRole("link", { name: "Back to all processes" }).click();
-  await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Patterns", level: 1 })).toBeVisible();
   await open(page, "/s/no-such-standard-here/doc");
   await expect(page.getByText("This standard does not exist (any more). It may have been renamed or deleted.")).toBeVisible();
   await expect(page.locator(".page")).not.toContainText("no-such-standard-here");

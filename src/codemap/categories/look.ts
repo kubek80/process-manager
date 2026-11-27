@@ -207,6 +207,13 @@ export const look: CodeCategory = {
       ],
     },
     {
+      path: "src/services.css",
+      role: "The place Services, a service's page, the box of a service step, the shown rich text and its editor: one small block of styles on tokens.",
+      requirements: [
+        { text: "The rich text is styled once, shown and edited alike: headings, lists, quotes and code on tokens.", at: ".rich-text h3, .rich-edit-area h3 {" },
+      ],
+    },
+    {
       path: "src/group.css",
       role: "The page of a team, a platform or a practice, and the small parts that name one elsewhere (its link, the owner or member mark, its contact details).",
       requirements: [

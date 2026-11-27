@@ -351,6 +351,7 @@ const LIST_FIELD: Record<string, string> = {
   name: "name", id: "id", description: "description", url: "link", icon: "icon", contact: "other ways to reach them", contacts: "contact details",
   email: "group email", slack: "Slack channel", slackUrl: "link to the Slack channel", chat: "Google Chat space", chatUrl: "link to the Chat space",
   confluence: "Confluence page", page: "page link", form: "request form", symbol: "picture", alsoCalled: "other names", pillar: "pillar", tribe: "tribe", domain: "domain",
+  summary: "summary", team: "team", formLabel: "words of the button",
 };
 
 /** Which list, entry and field a problem of the lists is about: "teams[3].contacts.slackUrl". */
@@ -410,6 +411,14 @@ function listIssueText(path: string, message: string, doc: unknown): string {
   if (key === "icon") return `The icon of ${entry} is not an image the portal knows: choose the image again, or remove the icon.`;
   if (key === "alsoCalled") return `Check the other names of ${entry}: at most 5, each written once, none empty and none longer than 40 characters.`;
   if (key === "symbol") return `The picture of ${entry} is not one the portal knows: choose one of the pictures, or none.`;
+  // a service: the team that performs it and its front-door form, in the server's words (docs.Check)
+  if (list === "services" && key === "team") return `Choose the team that performs ${entry}.`;
+  if (list === "services" && key === "form") {
+    if (missing || /^is empty$|^is too short/.test(message)) return `Give the front-door form of ${entry}: the link where people request it.`;
+    const tooLong = message.match(/^is too long \(maximum (\d+)/);
+    if (tooLong) return `Shorten the front-door form of ${entry} to at most ${tooLong[1]} characters.`;
+    return `The front-door form of ${entry} is not a whole link: ${/\s/.test(value.trim()) ? "remove the spaces and " : ""}write it with https:// at the start.`;
+  }
   if (missing) return `Fill in the ${words} of ${entry}.`;
   if (/^is empty$|^is too short/.test(message)) return `Fill in the ${words} of ${entry}, or leave it out.`;
   const long = message.match(/^is too long \(maximum (\d+)/);
@@ -452,6 +461,7 @@ export function listIssueField(path: string): string[] {
     case "pillar": return ['[data-field="pillar"]'];
     case "tribe": return ['[data-field="tribe"]'];
     case "domain": return ['[data-field="domain"]'];
+    case "summary": case "team": case "form": case "formLabel": return [`[data-field="${field}"]`];
     default: return ['[data-field="name"]'];
   }
 }

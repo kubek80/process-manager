@@ -375,7 +375,7 @@ a.btn { color: var(--action-other, var(--accent)); }
 .block:hover { box-shadow: var(--shadow-2); transform: translateY(-1px); }
 .block.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ocean-35), var(--shadow-2); }
 .block.done .block-title { color: var(--text-3); }
-.block-main { display: flex; align-items: flex-start; gap: 10px; width: 100%; height: 100%; padding: 12px 10px 9px 13px; border-radius: inherit; }
+.block-main { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-width: 0; height: 100%; padding: 12px 10px 9px 13px; border-radius: inherit; }
 .block-text { min-width: 0; flex: 1; display: flex; flex-direction: column; height: 100%; }
 /* the kind of step in its colour: a --step-… token, worked out in theme.ts to read on the surfaces of either look */
 .block-type { font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); letter-spacing: .06em; text-transform: uppercase; color: var(--c); }

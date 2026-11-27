@@ -13,7 +13,7 @@ test("the Admin panel is for admins and for people who manage the lists", async 
   await signIn(page, ALEX);
   await open(page, "/");
   await page.locator(".nav").getByRole("link", { name: "Admin" }).click();
-  await expect(page.locator(".admin-nav a")).toHaveText(["Teams", "Tools", "Skills", "Health"]);
+  await expect(page.locator(".admin-nav a")).toHaveText(["Teams", "Tools", "Services", "Skills", "Health"]);
   // the section's name is the heading of the page: the lists are two entries, Teams and Tools
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Teams");
   await expect(page.locator(".admin-main > header.admin-head h1")).toHaveText("Teams");
@@ -25,7 +25,7 @@ test("the Admin panel is for admins and for people who manage the lists", async 
   await signIn(page, DANA);
   await open(page, "/");
   await page.locator(".nav").getByRole("link", { name: "Admin" }).click();
-  await expect(page.locator(".admin-nav a")).toHaveText(["Access", "Teams", "Tools", "Skills", "Health", "Activity", "Statistics", "Theming", "System", "Code map"]);
+  await expect(page.locator(".admin-nav a")).toHaveText(["Access", "Teams", "Tools", "Services", "Skills", "Health", "Activity", "Statistics", "Theming", "System", "Code map"]);
   await page.locator(".admin-nav").getByRole("link", { name: "Theming" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Theming");
 });

@@ -28,7 +28,7 @@ import (
 // By is who the converted versions are saved by, and Note what their history says.
 const (
 	By   = "system"
-	Name = "Process Manager"
+	Name = "Pattern Catalog"
 	Note = "Moved to the new lists"
 )
 

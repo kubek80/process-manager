@@ -59,6 +59,15 @@ export const admin: CodeCategory = {
       tests: ["e2e/admin.spec.ts", "e2e/catalog.spec.ts"],
     },
     {
+      path: "src/components/RichEditor.tsx",
+      role: "The editor of a service's description in Admin › Services, built on Tiptap (ProseMirror, MIT): bold, italic, two levels of headings, lists, quote, code, links, its own Undo and Redo, with buttons named for screen readers and keyboard shortcuts. Loaded only there (`lazy` in `CatalogPage`).",
+      requirements: [
+        { text: "What it holds and what is pasted (Word, Google Docs, a web page) is cleaned to the allow-list before it reaches the lists' one draft; its own styles are left out (`injectCSS: false`), ours are tokens in `services.css`.", at: "transformPastedHTML: (html) => cleanRichHtml(html)," },
+        { text: "The page's Undo, Redo and Discard change what it shows; its own changes are what it last gave the page.", at: "if (!editor || value === sent.current) return;" },
+      ],
+      tests: ["e2e/services.spec.ts"],
+    },
+    {
       path: "src/lib/listTabs.ts",
       role: "The lists' tabs as one set for the keyboard (`tabAfterKey`: the arrows through the tabs of the place one is in, across its two sets, Home and End), what an address of the lists asks to show (`addressedList`), and whether the search box keeps its words when the list shown changes (`searchStays`).",
       requirements: [
@@ -74,7 +83,8 @@ export const admin: CodeCategory = {
       requirements: [
         { text: "The lists are edited as one document through `useDraft`, as a process is: Undo, Redo, a conflict when somebody else saved first, a question before leaving with unsaved changes.", at: "const d = useDraft<Catalog>(" },
         { text: "`usesOf` sees only the processes and standards the person sees, so it can miss a draft; the server's `stillUsed` counts those too and refuses the save.", at: "function usesOf(key: Key, id: string" },
-        { text: "Remove is off while the entry is used, still has owners or members, or (a tribe, a domain) still groups teams or tribes: removing it would leave documents, roles or entries pointing at nothing. One of two entries with the same id (lists imported with a mistake) can be removed, and only that one: what uses the id keeps the other.", at: "disabled={!twin && (uses.length > 0 || stillMembers > 0 || grouped.length > 0)}" },
+        { text: "Remove is off while the entry is used, still has owners or members, (a tribe, a domain) still groups teams or tribes, or (a team) still performs a service: removing it would leave documents, roles or entries pointing at nothing. One of two entries with the same id (lists imported with a mistake) can be removed, and only that one: what uses the id keeps the other.", at: "disabled={!twin && (uses.length > 0 || stillMembers > 0 || grouped.length > 0 || performs.length > 0)}" },
+        { text: "Admin › Services is the third place of the same page and the same draft: one list, so no row of tabs; a service's fields are `ServiceFields` and its description is edited by `RichEditor`, loaded only here.", at: "const RichEditor = lazy(() => import(\"./RichEditor\"));" },
         { text: "Undo of a removal puts the entry back at its old place only if it is not there already: pressing the message's Undo twice adds no second entry with the same id.", at: "if (have.some((r) => r.id === entry.id)) return;" },
         { text: "What stops saving is listed by `issueText` with \"lists\" (the entry by name, never a path), with how many are to fix; readers of the reader's Teams and Tools, who can change nothing, do not see it.", at: "{editor && issues.length > 0 && (" },
         { text: "Pressing a problem opens that list's tab and that entry and brings the keyboard to the field; the fields of the entry shown are marked by `useFieldMarks`, as on the editing screen.", at: "setKey(at.list); setSelected(at.entry.id); setAdding(false); setQ(\"\");" },

@@ -639,5 +639,57 @@
       ],
       "description": "Pages and files are built ahead of time and served from a content delivery network close to the readers."
     }
+  ],
+  "services": [
+    {
+      "id": "api-portal-access",
+      "name": "API key and developer portal access",
+      "summary": "Access to the developer portal and an API key for a published API, for one application and one environment.",
+      "team": "api-platform-team",
+      "form": "https://forms.example.com/api-platform/access",
+      "formLabel": "Ask for API access",
+      "description": "<h3>What you get</h3><p>An account on the developer portal for your team and an <strong>API key</strong> for one application, in the environment you ask for. Keys for production are tied to a named owner.</p><h3>What to prepare</h3><ul><li><p>The API you want to call, as it is named in the developer portal</p></li><li><p>The application that will call it and its owning team</p></li><li><p>The environment: development, test or production</p></li></ul><h3>How long it takes</h3><p>Development and test keys within <em>one working day</em>; production keys after the API's owner approves, usually two working days.</p><p>Questions: <a href=\"mailto:api-platform@example.com\">api-platform@example.com</a>.</p>"
+    },
+    {
+      "id": "cdn-configuration-change",
+      "name": "CDN configuration change",
+      "summary": "A change to how a site is served through the CDN: caching rules, redirects, headers or the origin it fetches from.",
+      "team": "edge-cdn-team",
+      "form": "https://forms.example.com/edge/cdn-change",
+      "description": "<h3>What you get</h3><p>The change made in the CDN configuration of your site, first on staging and then on production once you confirm it works.</p><h3>What to prepare</h3><ol><li><p>The host name of the site</p></li><li><p>What should change, with an example address that shows it</p></li><li><p>When it may go live, if it must wait for a release</p></li></ol><blockquote><p>A change that makes a site skip the web application firewall is reviewed by Cyber Security first.</p></blockquote><h3>How long it takes</h3><p>Usually <strong>two working days</strong>. The rules the team follows are on <a href=\"https://wiki.example.com/edge/cdn\">the CDN page</a>.</p>"
+    },
+    {
+      "id": "cloud-project-support",
+      "name": "Cloud project support",
+      "summary": "Help from the Cloud Platform team with a Google Cloud project: quotas, access, networking or a service that misbehaves.",
+      "team": "cloud-platform-team",
+      "form": "https://forms.example.com/cloud-platform/support",
+      "description": "<h3>What you get</h3><p>An engineer of the Cloud Platform team looks at your project with you and fixes what is theirs to fix, or tells you exactly what to change.</p><h3>What to prepare</h3><ul><li><p>The project id, such as <code>acme-orders-prod</code></p></li><li><p>What you tried and what happened, with the error message</p></li></ul><p>For an outage in production, call the on-call number on <a href=\"https://wiki.example.com/cloud/on-call\">the on-call page</a> instead of using the form.</p><h3>How long it takes</h3><p>A first answer within <em>four working hours</em>.</p>"
+    },
+    {
+      "id": "dns-record-change",
+      "name": "DNS record change",
+      "summary": "A new, changed or removed record in the company's DNS zones, such as a CNAME for a site or a TXT record for a check.",
+      "team": "dns-team",
+      "form": "https://forms.example.com/dns/record-change",
+      "description": "<h3>What you get</h3><p>The record created, changed or removed in the zone you name. Changes to the company's main domains go out in the daily change window.</p><h3>What to prepare</h3><ul><li><p>The full name, such as <code>shop.example.com</code></p></li><li><p>The type (A, CNAME, TXT…) and the value</p></li><li><p>For a removal: what used the record until now</p></li></ul><p>To see what a name points to now, run:</p><pre><code>dig +short shop.example.com</code></pre><h3>How long it takes</h3><p>Within <strong>one working day</strong>; the change is visible everywhere within an hour after that.</p>"
+    },
+    {
+      "id": "firewall-rule-change",
+      "name": "Firewall rule change",
+      "summary": "A rule that opens or closes a connection between networks, for one source, destination and port.",
+      "team": "network-team",
+      "form": "https://forms.example.com/network/firewall-rule",
+      "description": "<h3>What you get</h3><p>The rule added or removed on the firewalls between the networks you name, with a record of who asked for it and why.</p><h3>What to prepare</h3><ol><li><p>The source and the destination, as host names or address ranges</p></li><li><p>The port and protocol, such as 443/TCP</p></li><li><p>Why the connection is needed and until when</p></li></ol><p>Rules that open a connection from the internet are approved by <strong>Cyber Security</strong> first.</p><h3>How long it takes</h3><p>Three working days, five when an approval is needed.</p>"
+    },
+    {
+      "id": "penetration-test",
+      "name": "Penetration test",
+      "summary": "A security test of an application by Cyber Security before it goes live or after a large change, with a written report.",
+      "team": "security",
+      "form": "https://forms.example.com/security/pentest",
+      "formLabel": "Book a penetration test",
+      "description": "<h3>What you get</h3><p>Testers of Cyber Security try to break into your application the way an attacker would, and write a report with every finding, how severe it is and how to fix it.</p><h3>What to prepare</h3><ul><li><p>A test environment that looks like production, with test accounts</p></li><li><p>The parts in scope, and the parts that must not be touched</p></li><li><p>A contact who can answer questions during the test</p></li></ul><h3>How long it takes</h3><p>Book it <em>three weeks</em> ahead; the test itself takes one week, the report follows within three working days. See <a href=\"https://wiki.example.com/security/pentest\">how a test is run</a>.</p>"
+    }
   ]
 }

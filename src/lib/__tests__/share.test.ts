@@ -33,8 +33,8 @@ describe("one line of summary", () => {
 
 describe("messages", () => {
   it("link and title: the title on one line, the address on the next", () => {
-    expect(linkAndTitle(gcp, URL_)).toBe(`Request a GCP project · Process Manager\n${URL_}`);
-    expect(linkAndTitle({ ...gcp, title: " Two\n lines " }, URL_)).toBe(`Two lines · Process Manager\n${URL_}`);
+    expect(linkAndTitle(gcp, URL_)).toBe(`Request a GCP project · Pattern Catalog\n${URL_}`);
+    expect(linkAndTitle({ ...gcp, title: " Two\n lines " }, URL_)).toBe(`Two lines · Pattern Catalog\n${URL_}`);
     // the portal's name as Admin › Theming sets it
     expect(linkAndTitle(gcp, URL_, "Acme Hub")).toBe(`Request a GCP project · Acme Hub\n${URL_}`);
   });
@@ -50,7 +50,7 @@ describe("messages", () => {
     expect(body).toContain("“Q&A: 100% sure? #1”");
     expect(body).toContain("\r\n\r\nGet a new Google Cloud project created by the project factory.\r\n\r\n");
     expect(body.endsWith(URL_)).toBe(true);
-    expect(body.startsWith("Have a look at the process “Q&A: 100% sure? #1” in Process Manager:")).toBe(true);
+    expect(body.startsWith("Have a look at the process “Q&A: 100% sure? #1” in Pattern Catalog:")).toBe(true);
     expect(decodeURIComponent(mailtoLink(gcp, URL_, "Acme Hub").split("&body=")[1])).toContain("in Acme Hub:");
     // no summary: no empty lines piled up
     expect(decodeURIComponent(mailtoLink({ ...gcp, summary: "" }, URL_).split("&body=")[1])).not.toContain("\r\n\r\n\r\n");

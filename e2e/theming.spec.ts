@@ -126,7 +126,7 @@ test("name, colours and logo: the preview follows before saving; saved, everyone
 
   // the name: the preview's top bar follows at once
   const name = section(page).getByLabel(/^Name of the portal/);
-  await expect(name).toHaveAttribute("placeholder", "Process Manager (the default)");
+  await expect(name).toHaveAttribute("placeholder", "Pattern Catalog (the default)");
   // Undo and Redo at the top of the settings
   const undo = section(page).getByRole("button", { name: "Undo", exact: true });
   await expect(undo).toBeDisabled();
@@ -185,7 +185,7 @@ test("name, colours and logo: the preview follows before saving; saved, everyone
   await expect(sam.page.locator(".topbar .brand .logo img")).toBeVisible();
   await expect(sam.page).toHaveTitle("Acme Ways of Working");
   await sam.page.goto("/#/processes");
-  await expect(sam.page).toHaveTitle("Processes · Acme Ways of Working");
+  await expect(sam.page).toHaveTitle("Patterns · Acme Ways of Working");
   // a primary button: the chosen yellow with dark ink; text in the brand colour: the readable variant
   await sam.page.goto("/#/");
   const button = sam.page.locator(".search-box .btn.primary").first();
@@ -315,7 +315,7 @@ test("a save made from an outdated look is met with a question; Back to the defa
   const back = section(page).getByRole("button", { name: "Back to the default look" });
   await back.click();
   const ask = page.getByRole("dialog", { name: "Go back to the default look?" });
-  await expect(ask).toContainText("Everyone sees the name “Process Manager”");
+  await expect(ask).toContainText("Everyone sees the name “Pattern Catalog”");
   await ask.getByRole("button", { name: "Keep this look" }).click();
   expect((await stored(page.request)).look.name).toBe("Mine");
   await back.click();
@@ -323,7 +323,7 @@ test("a save made from an outdated look is met with a question; Back to the defa
   await expect.poll(async () => (await stored(page.request)).look).toEqual({});
   await expect(name).toHaveValue("");
   await expect(back).toBeDisabled(); // nothing to go back from
-  await expect(page.locator(".topbar:not(.theme-preview *) .brand")).toHaveAccessibleName("Process Manager");
+  await expect(page.locator(".topbar:not(.theme-preview *) .brand")).toHaveAccessibleName("Pattern Catalog");
 });
 
 test("“Dark” for new visitors: a fresh browser gets it, a person's own choice wins", async ({ page, browser }) => {

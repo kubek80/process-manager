@@ -172,6 +172,7 @@ type process struct {
 		URLLabel     string     `json:"urlLabel"`
 		Resources    []resource `json:"resources"`
 		SubProcessID string     `json:"subProcessId"`
+		Service      string     `json:"service"`
 	} `json:"steps"`
 }
 
@@ -250,6 +251,18 @@ func Chunks(kind string, body []byte, lists docs.Lists, o Options) ([]Chunk, err
 			if s.Tool != "" {
 				tool = docs.Name(lists.Tools, s.Tool)
 			}
+			// a service step: the service's name, summary and the team that performs it (a step
+			// without one reads as before, so Version stays: only new documents have such steps)
+			service := ""
+			if sv, ok := lists.Service(s.Service); ok && s.Service != "" {
+				service = clean(sv.Name)
+				if sv.Summary != "" {
+					service += ": " + clean(sv.Summary)
+				}
+				service += " (performed by " + clean(docs.Name(lists.Teams, sv.Team)) + ")"
+			} else if s.Service != "" {
+				service = s.Service
+			}
 			var titles []string
 			for _, r := range s.Resources {
 				titles = append(titles, r.Title)
@@ -265,6 +278,7 @@ func Chunks(kind string, body []byte, lists docs.Lists, o Options) ([]Chunk, err
 				section{text: line("Outcome", s.Outcome)},
 				section{text: line("Takes", s.Duration), drop: 1},
 				section{text: line("Uses the process", s.SubProcessID)},
+				section{text: line("Requests the service", service)},
 				section{text: line("Link", s.URLLabel), drop: 2},
 				section{text: line("Resources", joined(titles)), drop: 2})
 		}

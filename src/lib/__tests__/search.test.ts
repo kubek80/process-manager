@@ -297,9 +297,9 @@ describe("addresses of home and search", () => {
     expect(parseRoute("#/search?q=gcp+project")).toEqual({ page: "search", q: "gcp project" });
   });
   it("names the tab of the browser", () => {
-    expect(pageTitle({ page: "home" })).toBe("Process Manager");
-    expect(pageTitle({ page: "search" })).toBe("Search · Process Manager");
-    expect(pageTitle({ page: "search", q: " gcp " })).toBe("“gcp” · Search · Process Manager");
+    expect(pageTitle({ page: "home" })).toBe("Pattern Catalog");
+    expect(pageTitle({ page: "search" })).toBe("Search · Pattern Catalog");
+    expect(pageTitle({ page: "search", q: " gcp " })).toBe("“gcp” · Search · Pattern Catalog");
   });
 });
 

@@ -9,7 +9,7 @@ export const completeCatalog = (c: Partial<Catalog> | null | undefined): Catalog
   ...c,
   tiers: c?.tiers ?? [], environments: c?.environments ?? [], languages: c?.languages ?? [],
   teams: c?.teams ?? [], practices: c?.practices ?? [], platforms: c?.platforms ?? [], categories: c?.categories ?? [],
-  tools: c?.tools ?? [], paths: c?.paths ?? [], patterns: c?.patterns ?? [], pillars: c?.pillars ?? [], tribes: c?.tribes ?? [], domains: c?.domains ?? [],
+  tools: c?.tools ?? [], paths: c?.paths ?? [], patterns: c?.patterns ?? [], pillars: c?.pillars ?? [], tribes: c?.tribes ?? [], domains: c?.domains ?? [], services: c?.services ?? [],
 });
 
 export interface CatalogApi {

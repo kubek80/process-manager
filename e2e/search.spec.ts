@@ -227,7 +227,7 @@ test("when nothing is found, the filters can be dropped from there", async ({ pa
   await expect(page.locator(".search-empty")).toContainText("Nothing matches “zzqx”, and nothing comes close by meaning either. Try another word.");
   await expect(page.locator(".search-try-other")).toHaveCount(0);
   await page.locator(".search-empty").getByRole("link", { name: "all processes" }).click();
-  await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Patterns", level: 1 })).toBeVisible();
 });
 
 test("a draft is found only by the people who may see it (its editors and its team), and is marked as one", async ({ page }) => {

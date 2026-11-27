@@ -11,6 +11,7 @@ import { EntryIcon } from "./EntryIcon";
 import { DeleteButton, EditSection, FieldsHead, ItemFeedback, ItemIssues, selectExample } from "./EditFrame";
 import { Field, TypeIcon, notify, useLayer } from "./ui";
 import { editNotice } from "./Editing";
+import { href } from "../lib/store";
 
 /** The fields of a step that most steps do without: offered as "+ Tool", "+ Typical time"… until they have a value. */
 type Detail = "description" | "tool" | "duration" | "url" | "outcome" | "resources" | "subProcessId";
@@ -90,6 +91,7 @@ export function StepFields({ process, all, step, feedback, issues, onChange, set
             data-autofocus={step.title === EXAMPLE.newStep ? "" : undefined} onFocus={selectExample(EXAMPLE.newStep, EXAMPLE.firstStep)} />
         </Field>
         <WhoField process={process} step={step} onChange={onChange} setProcess={setProcess} />
+        {step.type === "service" && <ServiceField step={step} onChange={onChange} />}
         <KindField type={step.type} onPick={(t) => {
           const next = setStepType(process, step.id, t);
           setProcess(next);
@@ -456,5 +458,38 @@ function ToolField({ step, onChange, autoFocus }: { step: Step; onChange: (p: Pa
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * The service a service step requests: a choice of the list, grouped by the team that performs
+ * it. Choosing one names the step after it while the step has no name of its own yet; the name
+ * stays the person's. One that is no longer in the list still shows, so that it can be changed.
+ */
+function ServiceField({ step, onChange }: { step: Step; onChange: (p: Partial<Step>) => void }) {
+  const { catalog } = useCatalog();
+  const perms = usePerms();
+  const services = catalog.services ?? [];
+  const byTeam = new Map<string, { name: string; list: typeof services }>();
+  for (const s of [...services].sort((a, b) => a.name.localeCompare(b.name))) {
+    const team = catalog.teams.find((t) => t.id === s.team)?.name ?? s.team;
+    if (!byTeam.has(s.team)) byTeam.set(s.team, { name: team, list: [] });
+    byTeam.get(s.team)!.list.push(s);
+  }
+  const groups = [...byTeam.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const unnamed = !step.title.trim() || step.title === EXAMPLE.newStep || step.title === EXAMPLE.firstStep;
+  return (
+    <Field label="Service" hint="The service this step requests from the team that performs it; readers get its front-door form">
+      <select data-field="service" value={step.service ?? ""} onChange={(e) => {
+        const id = e.target.value || undefined;
+        const chosen = services.find((s) => s.id === id);
+        onChange({ service: id, ...(chosen && unnamed ? { title: chosen.name.slice(0, 70) } : {}) });
+      }}>
+        <option value="">Choose the service…</option>
+        {groups.map((g) => <optgroup key={g.name} label={g.name}>{g.list.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</optgroup>)}
+        {step.service && !services.some((s) => s.id === step.service) && <option value={step.service}>{step.service} (not in the list)</option>}
+      </select>
+      {(perms.admin || perms.catalog) && <p className="muted small field-note">Services are added and changed in <a href={href({ page: "admin", section: "lists", place: "services" })}>Admin › Services</a>.</p>}
+    </Field>
   );
 }

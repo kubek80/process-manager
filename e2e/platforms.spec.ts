@@ -164,7 +164,7 @@ test("a platform owner creates a process for his platform and a standard for his
   expect((await readProcess(page, "order-a-google-cloud-quota-increase"))!).toMatchObject({ status: "draft", platform: "google-cloud" });
   await more(page, "Delete…");
   await answer(page, "Delete this process?", "Delete process");
-  await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Patterns", level: 1 })).toBeVisible();
   expect(await readProcess(page, "order-a-google-cloud-quota-increase")).toBeUndefined();
 
   await open(page, "/standards");

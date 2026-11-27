@@ -64,7 +64,7 @@ for (const width of [390, 360]) {
         await expect(menu).toHaveAttribute("aria-expanded", "true");
         const sheet = page.getByRole("navigation", { name: "Main" });
         await expect(sheet).toBeVisible();
-        const places = ["Home", "Processes", "Standards", "Requests", /^My responsibilities/, "Teams", "Tools", "Guide", ...(who === DANA ? ["Admin"] : [])];
+        const places = ["Home", "Patterns", "Standards", "Services", "Requests", /^My responsibilities/, "Teams", "Tools", "Guide", ...(who === DANA ? ["Admin"] : [])];
         for (const place of places) {
           const link = sheet.getByRole("link", { name: place });
           await expect(link, `${who} at ${width}px: ${place}`).toBeInViewport({ ratio: 1 });
@@ -103,7 +103,7 @@ test("the longest top bar fits every width without scrolling sideways", async ({
   expect((await page.request.post("/api/admin/access", { data: role, headers: CSRF })).ok()).toBeTruthy();
   try {
     await open(page, "/");
-    await expect(page.locator(".nav a")).toHaveCount(9);
+    await expect(page.locator(".nav a")).toHaveCount(10);
     for (const width of [1440, 1366, 1280, 1200, 1100, 1024, 1000, 900, 800, 700, 600, 520, 480, 440, 414, 400, 375, 360]) {
       await page.setViewportSize({ width, height: 800 });
       expect(await sideways(page), `top bar at ${width}px`).toBe(0);

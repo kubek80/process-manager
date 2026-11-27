@@ -492,6 +492,17 @@ func TestGetProcess(t *testing.T) {
 	if p.Actors[2].Team == nil || p.Actors[2].Team.Contacts == nil {
 		t.Fatalf("%+v", p.Actors)
 	}
+	// a step that requests a service: its name, the team that performs it and its front-door form
+	if raise.Service != nil {
+		t.Fatalf("%+v", raise.Service)
+	}
+	var akamai Process
+	mustCall(t, cs, "get_process", map[string]any{"id": "onboard-site-to-akamai"}, &akamai)
+	sv := akamai.Steps[8].Service
+	if akamai.Steps[8].ID != "switch-dns" || akamai.Steps[8].Type != "service" || sv == nil || sv.Name != "DNS record change" || sv.Team == nil || sv.Team.ID != "dns-team" ||
+		sv.Form != "https://forms.example.com/dns/record-change" || sv.FormLabel != "Request this service" {
+		t.Fatalf("%+v %+v", akamai.Steps[8], sv)
+	}
 
 	// a reference to a draft names its id only
 	mustCall(t, cs, "get_process", map[string]any{"id": "request-github-repository"}, &p)
@@ -616,6 +627,15 @@ func TestGetCatalog(t *testing.T) {
 	text := mustCall(t, e.session(nil), "get_catalog", nil, &c)
 	if len(c.Teams) != 10 || len(c.Tools) != 9 || c.Tools[2].URL != "https://portal.azure.com" || c.Teams[0].Contact == "" || len(c.Tiers) != 4 || !strings.HasPrefix(text, "10 teams, 3 practices") {
 		t.Fatalf("%s %+v", text, c)
+	}
+	// the services, each with its team, front-door form and description as plain text
+	if len(c.Services) != 6 || !strings.HasSuffix(text, ", 6 services.") {
+		t.Fatalf("%s %+v", text, c.Services)
+	}
+	dns := c.Services[3]
+	if dns.ID != "dns-record-change" || dns.Team == nil || dns.Team.Name != "DNS team" || dns.Form != "https://forms.example.com/dns/record-change" || dns.FormLabel != "Request this service" ||
+		!strings.HasPrefix(dns.Description, "What you get\nThe record created") || strings.Contains(dns.Description, "<") {
+		t.Fatalf("%+v", dns)
 	}
 	// without the secret nobody vouched for the caller: no people
 	if c.MembersShown || c.Teams[2].Members != nil {

@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, ClipboardCheck, LayoutGrid, LogOut, Menu, Moon, Search, Settings2, ShieldCheck, Sun, Users, Wrench, X } from "lucide-react";
+import { BookOpen, ClipboardCheck, LayoutGrid, LogOut, Menu, Moon, Search, Settings2, ShieldCheck, Sun, Users, Wrench, X, ConciergeBell } from "lucide-react";
 import { Lightbulb } from "lucide-react";
 import type { Catalog, DocMeta, Feedback, FeedbackByTarget, Me, Process, Standard, TargetKind } from "./types";
 import {
@@ -39,6 +39,8 @@ const HomePage = lazy(() => import("./components/HomePage").then((m) => ({ defau
 const SearchPage = lazy(() => import("./components/SearchPage").then((m) => ({ default: m.SearchPage })));
 const GroupPage = lazy(() => import("./components/GroupPage").then((m) => ({ default: m.GroupPage })));
 const ClusterPage = lazy(() => import("./components/ClusterPage").then((m) => ({ default: m.ClusterPage })));
+const ServicesPage = lazy(() => import("./components/ServicesPage").then((m) => ({ default: m.ServicesPage })));
+const ServicePage = lazy(() => import("./components/ServicesPage").then((m) => ({ default: m.ServicePage })));
 const RequestsPage = lazy(() => import("./components/RequestsPage").then((m) => ({ default: m.RequestsPage })));
 const EditProcessPage = lazy(() => import("./components/EditProcessPage").then((m) => ({ default: m.EditProcessPage })));
 const EditStandardPage = lazy(() => import("./components/EditStandardPage").then((m) => ({ default: m.EditStandardPage })));
@@ -48,7 +50,7 @@ const AiDialog = lazy(() => import("./components/AiDialog").then((m) => ({ defau
  * A page for something that is not there (deleted, or never existed). The lists in memory may be
  * older than the address - somebody may have created it since - so the server is asked once first.
  */
-function NotFound({ noun, recheck }: { noun: "process" | "standard" | GroupKind | "pillar" | "tribe" | "domain"; recheck?: () => Promise<unknown> }) {
+function NotFound({ noun, recheck }: { noun: "process" | "standard" | GroupKind | "pillar" | "tribe" | "domain" | "service"; recheck?: () => Promise<unknown> }) {
   const [checked, setChecked] = useState(!recheck);
   useEffect(() => { if (recheck) void recheck().catch(() => {}).finally(() => setChecked(true)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!checked) return <Loading page />;
@@ -58,6 +60,7 @@ function NotFound({ noun, recheck }: { noun: "process" | "standard" | GroupKind 
       <p className="muted">This {noun} does not exist (any more). It may have been {doc ? "renamed or deleted" : "removed from the lists"}.</p>
       {doc
         ? <a className="btn" href={href({ page: noun === "process" ? "library" : "standards" })}>Back to all {noun === "process" ? "processes" : "standards"}</a>
+        : noun === "service" ? <a className="btn" href={href({ page: "services" })}>Back to Services</a>
         : <a className="btn" href={href({ page: "catalog", place: "teams" })}>Back to Teams</a>}</div>
   );
 }
@@ -589,8 +592,9 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   // the main places, in the top bar and, on small screens, in the menu
   const places: Place[] = [
     { key: "home", pages: ["home", "search"], href: href({ page: "home" }), label: "Home", title: "Home: search processes and standards", icon: Search },
-    { key: "library", pages: ["library", "process"], href: href({ page: "library" }), label: "Processes", title: "Processes", icon: LayoutGrid },
+    { key: "library", pages: ["library", "process"], href: href({ page: "library" }), label: "Patterns", title: "Patterns: the processes, the proven ways of getting something done", icon: LayoutGrid },
     { key: "standards", pages: ["standards", "standard"], href: href({ page: "standards" }), label: "Standards", title: "Standards", icon: ShieldCheck },
+    { key: "services", pages: ["services", "service"], href: href({ page: "services" }), label: "Services", title: "Services: what teams do for others on request, and their front-door forms", icon: ConciergeBell },
     { key: "requests", pages: ["requests"], href: href({ page: "requests" }), label: "Requests", title: "Requests: ask for a process or standard that is missing, vote for what others asked for", icon: Lightbulb },
     ...(mine.length > 0 ? [{ key: "mine", pages: ["mine"], href: href({ page: "mine" }), label: "My responsibilities", title: minePl.title, icon: ClipboardCheck, count: waiting,
       name: waiting ? `My responsibilities, ${waiting} waiting` : "My responsibilities" }] : []),
@@ -607,7 +611,8 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   }, [route]);
   const group = route.page === "group" ? groupEntry(catalog, route.kind, route.id)
     : route.page === "pillar" || route.page === "tribe" || route.page === "domain" ? clusterEntry(catalog, route.page, route.id) : undefined;
-  const title = pageTitle(route, { process: process?.title, standard: standard?.title, group: group?.name, loading: !processes }, name);
+  const service = route.page === "service" ? (catalog.services ?? []).find((s) => s.id === route.id) : undefined;
+  const title = pageTitle(route, { process: process?.title, standard: standard?.title, group: group?.name, service: service?.name, loading: !processes }, name);
   useEffect(() => { document.title = title; }, [title]);
 
   // the page itself is the main region; the editing screen has a main region of its own inside
@@ -652,6 +657,10 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       {processes && (route.page === "pillar" || route.page === "tribe" || route.page === "domain") && (group
         ? <ClusterPage key={`${route.page}/${route.id}`} kind={route.page} id={route.id} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }} />
         : <NotFound key={`c/${route.page}/${route.id}`} noun={route.page} recheck={refreshAll} />)}
+      {processes && route.page === "services" && <ServicesPage q={route.q} team={route.team} />}
+      {processes && route.page === "service" && (service
+        ? <ServicePage key={route.id} id={route.id} processes={all} />
+        : <NotFound key={`sv/${route.id}`} noun="service" recheck={refreshAll} />)}
       {processes && route.page === "requests" && <RequestsPage state={route.state} kind={route.kind} processes={all} standards={standards} />}
       {processes && route.page === "mine" && (
         <MinePage processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }}

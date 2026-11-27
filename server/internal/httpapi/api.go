@@ -568,7 +568,7 @@ func (a *api) static() http.Handler {
 // content security policy would block.
 const notInPlacePage = `<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Process Manager</title></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Pattern Catalog</title></head>
 <body>
 <h1>The portal's pages are not in place yet</h1>
 <p>The portal is running, but the files of its pages have not been put in place. Try again in a few minutes.</p>

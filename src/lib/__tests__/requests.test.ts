@@ -75,12 +75,12 @@ describe("the address of the requests", () => {
     expect(href({ page: "requests", state: "planned", kind: "process" })).toBe("#/requests?state=planned&kind=process");
     expect(parseRequestsQuery("kind=process")).toEqual({ kind: "process" });
     expect(requestsQuery({})).toBe("");
-    expect(pageTitle({ page: "requests" })).toBe("Requests · Process Manager");
+    expect(pageTitle({ page: "requests" })).toBe("Requests · Pattern Catalog");
   });
   it("and of Admin > Statistics", () => {
     expect(parseRoute("#/admin/statistics")).toEqual({ page: "admin", section: "statistics" });
     expect(href({ page: "admin", section: "statistics" })).toBe("#/admin/statistics");
-    expect(pageTitle({ page: "admin", section: "statistics" })).toBe("Statistics · Admin · Process Manager");
+    expect(pageTitle({ page: "admin", section: "statistics" })).toBe("Statistics · Admin · Pattern Catalog");
   });
 });
 

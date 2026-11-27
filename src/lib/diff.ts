@@ -40,7 +40,7 @@ const FIELD: Record<string, string> = {
   estimatedDuration: "typical lead time", tags: "tags", status: "status", replacedBy: "use instead", review: "review", resources: "links",
   standards: "standards it helps to meet", actors: "who takes part", prerequisites: "before you start", scope: "scope", exceptionProcessId: "how to ask for an exception",
   actor: "who does it", type: "kind of step", description: "description", instructions: "what to do", tool: "tool", url: "link", urlLabel: "link text",
-  duration: "typical time", outcome: "result", subProcessId: "sub-process", next: "what comes next",
+  duration: "typical time", outcome: "result", subProcessId: "sub-process", service: "service it requests", next: "what comes next",
   level: "level", statement: "the rule", rationale: "why", guidance: "steps to comply", examples: "examples", verification: "how it is checked",
   processId: "process that helps", id: "id", name: "name", teamId: "team", lookFor: "signs of a violation", paths: "files", label: "name of the answer", to: "goes to",
   patterns: "architecture patterns",

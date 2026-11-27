@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { ALEX, fields, open, openEditor, outline, publish, readCatalog, readProcess, readWorkingDraft, save, saveDraft, signIn, unfold } from "./helpers";
+import { ALEX, CSRF, fields, open, openEditor, outline, publish, readCatalog, readProcess, readWorkingDraft, save, saveDraft, signIn, unfold } from "./helpers";
 
-// Alex manages the lists: for him the Admin panel has Teams, Tools, Skills and Health only.
+// Alex manages the lists: for him the Admin panel has Teams, Tools, Services, Skills and Health only.
 
 test.beforeEach(async ({ page }) => { await signIn(page, ALEX); });
 
@@ -23,18 +23,33 @@ test("add a tool, fill in its details and save", async ({ page }) => {
 });
 
 test("an entry that is in use cannot be removed; an unused one can", async ({ page }) => {
+  const before = await readCatalog(page);
   await open(page, "/admin/teams");
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   await expect(page.getByRole("button", { name: "Remove this team" })).toBeDisabled();
   await expect(page.locator(".cat-danger")).toContainText("Still used by");
   await expect(page.locator(".cat-usage")).toContainText("Request a GCP project");
 
+  // a team that performs a service is in use too, until the service goes (or gets another team)
   await page.locator(".cat-item", { hasText: "Network team" }).click();
   await expect(page.locator(".cat-usage")).toContainText("nothing yet");
+  await expect(page.getByRole("button", { name: "Remove this team" })).toBeDisabled();
+  await expect(page.locator(".cat-danger")).toContainText("Still performs 1 service (under Services). Give it another team first, then it can be removed.");
+  await page.locator(".admin-nav").getByRole("link", { name: "Services" }).click();
+  await page.locator(".cat-item", { hasText: "Firewall rule change" }).click();
+  await page.getByRole("button", { name: "Remove this service" }).click();
+  await page.locator(".admin-nav").getByRole("link", { name: "Teams" }).click();
+  await page.locator(".cat-item", { hasText: "Network team" }).click();
   await page.getByRole("button", { name: "Remove this team" }).click();
   await expect(page.locator(".cat-item", { hasText: "Network team" })).toHaveCount(0);
   await save(page);
-  expect((await readCatalog(page)).teams.map((t: { id: string }) => t.id)).not.toContain("network-team");
+  const saved = await readCatalog(page);
+  expect(saved.teams.map((t: { id: string }) => t.id)).not.toContain("network-team");
+  expect(saved.services.map((s: { id: string }) => s.id)).not.toContain("firewall-rule-change");
+  // both back as they were: other tests read the sample's services
+  const now = await page.request.get("/api/catalog");
+  const back = await page.request.put(`/api/catalog?base=${now.headers()["x-document-version"]}`, { data: { ...saved, teams: before.teams, services: before.services }, headers: CSRF });
+  expect(back.ok(), await back.text()).toBeTruthy();
 });
 
 test("discard restores the lists; renaming keeps the id", async ({ page }) => {
@@ -70,7 +85,7 @@ test("a missing tool can be added straight from a step", async ({ page }) => {
 
 test("a new environment can be chosen in a process; the lists of groups are separate", async ({ page }) => {
   await open(page, "/admin/teams");
-  await expect(page.locator(".admin-nav a")).toHaveText(["Teams", "Tools", "Skills", "Health"]); // no Access, Activity or System for a lists manager
+  await expect(page.locator(".admin-nav a")).toHaveText(["Teams", "Tools", "Services", "Skills", "Health"]); // no Access, Activity or System for a lists manager
   // teams, practices and platforms are three lists: a team is just a group of people, of no kind
   // Admin › Teams: its tabs in two sets, the teams with their groups, then practices and platforms
   await expect(page.getByRole("group", { name: "Lists of teams" }).getByRole("tablist")).toHaveCount(2);

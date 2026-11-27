@@ -16,8 +16,8 @@ export function Library({ processes, standardIds, onNew, onAi, feedback, meta }:
     <div className="page library">
       <section className="hero list-hero">
         <div>
-          <h1>How do I get…?</h1>
-          <p className="lead">Step by step: who does what, and your own checklist.</p>
+          <h1>Patterns</h1>
+          <p className="lead">The company’s processes, the proven ways of getting something done: step by step, who does what, and your own checklist.</p>
         </div>
         {editor && (
           <div className="hero-actions">

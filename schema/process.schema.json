@@ -321,6 +321,7 @@
             "verify",
             "decision",
             "subprocess",
+            "service",
             "task"
           ]
         },
@@ -373,6 +374,10 @@
         "subProcessId": {
           "$ref": "#/$defs/slug",
           "description": "Id of another process that explains this step in detail. Required when type is \"subprocess\"."
+        },
+        "service": {
+          "$ref": "#/$defs/slug",
+          "description": "Id of a service from the services list that this step requests, for example a DNS record change. Required when type is \"service\", and only then."
         },
         "next": {
           "type": "array",

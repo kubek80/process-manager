@@ -27,7 +27,7 @@ import (
 )
 
 // DefaultName is the portal's name when the admin has not given one.
-const DefaultName = "Process Manager"
+const DefaultName = "Pattern Catalog"
 
 // MaxName is the most characters the name may have.
 const MaxName = 40

@@ -111,7 +111,7 @@ test("change an existing process with AI, then delete it", async ({ page }) => {
 
   await more(page, "Delete…");
   await answer(page, "Delete this process?", "Delete process");
-  await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Patterns", level: 1 })).toBeVisible();
   await expect(page.locator(".card", { hasText: "Request VPN access" })).toHaveCount(0);
   expect(await readProcess(page, "request-vpn-access")).toBeUndefined();
 });

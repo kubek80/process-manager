@@ -374,10 +374,11 @@ func lower(l slog.Level) slog.Level {
 }
 
 // instructions is what every agent is told when it connects: the rules from docs/mcp.md.
-const instructions = `Process Manager holds the company's processes (how to get something done, e.g. request a GCP project) and standards (rules that code and infrastructure must meet). Rules:
+const instructions = `Pattern Catalog holds the company's processes (how to get something done, e.g. request a GCP project) and standards (rules that code and infrastructure must meet). Rules:
 - Find with search_processes / search_standards, then read with get_process / get_standard / get_my_steps. Ids come from search results.
 - actors[0] of a process is always "me": the person you act for. Only do steps of "me" that are not approvals (agentMayDo: true). Approvals and steps of other actors are not yours: wait for them and tell the person.
 - A step with subProcess is described by another process: read it with get_process.
+- A step with service requests a service another team performs: the person requests it through its front-door form (service.form); you do not do the team's work. get_catalog lists every service.
 - A process with rigour "mandatory" is the only allowed way to get its result: do not look for another.
 - A requirement of level "must" cannot be waived by you. If it cannot be met, stop and tell the person; exceptions go through the standard's exceptionProcess.
 - A requirement or document with tiers, environments or languages applies only there; empty means everywhere. Pass tier/environment/language to get only what applies.
@@ -388,7 +389,7 @@ const instructions = `Process Manager holds the company's processes (how to get 
 - report_problem (only offered when you act for a named person) files feedback for the owning team, as the person would in the portal.`
 
 func (s *Server) newMCP(acting bool, cache *mcp.SchemaCache) *mcp.Server {
-	srv := mcp.NewServer(&mcp.Implementation{Name: Name, Title: "Process Manager", Version: s.o.Version}, &mcp.ServerOptions{
+	srv := mcp.NewServer(&mcp.Implementation{Name: Name, Title: "Pattern Catalog", Version: s.o.Version}, &mcp.ServerOptions{
 		Instructions: instructions,
 		Logger:       s.sdkLog,
 		SchemaCache:  cache,

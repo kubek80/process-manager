@@ -11,8 +11,8 @@ const flow = (id: string, title: string, summary: string, others: [string, strin
   steps,
 });
 
-export const followFlow = flow("guide-follow", "Follow a process", "How a reader gets something done with Process Manager.",
-  [["app", "Process Manager"], ["others", "Other teams"]],
+export const followFlow = flow("guide-follow", "Follow a process", "How a reader gets something done with Pattern Catalog.",
+  [["app", "Pattern Catalog"], ["others", "Other teams"]],
   [
     s("find", "Find the process", "me", "task", ["show"], "search or filter"),
     s("show", "Show map and checklist", "app", "automation", ["ready"]),
@@ -26,7 +26,7 @@ export const followFlow = flow("guide-follow", "Follow a process", "How a reader
   ]);
 
 export const aiFlow = flow("guide-ai", "Describe a process with AI", "How an editor turns free text into a checked process with any chat assistant.",
-  [["llm", "Chat assistant"], ["app", "Process Manager"]],
+  [["llm", "Chat assistant"], ["app", "Pattern Catalog"]],
   [
     s("describe", "Paste the description", "me", "document", ["build-prompt"], "email, wiki, notes"),
     s("build-prompt", "Build the prompt", "app", "automation", ["ask"], "rules and schema"),
@@ -39,7 +39,7 @@ export const aiFlow = flow("guide-ai", "Describe a process with AI", "How an edi
   ]);
 
 export const feedbackFlow = flow("guide-feedback", "Feedback loop", "How a problem reported by a reader reaches the owner and gets fixed.",
-  [["app", "Process Manager"], ["owner", "Process owner"]],
+  [["app", "Pattern Catalog"], ["owner", "Process owner"]],
   [
     s("flag", "Flag a step that failed", "me", "form", ["show-flag"], "one sentence"),
     s("show-flag", "Show a red flag on the step", "app", "automation", ["read"], "map and checklist"),
@@ -51,7 +51,7 @@ export const feedbackFlow = flow("guide-feedback", "Feedback loop", "How a probl
   ]);
 
 export const reviewFlow = flow("guide-review", "Periodic review", "How the owner keeps a process correct over time.",
-  [["app", "Process Manager"]],
+  [["app", "Pattern Catalog"]],
   [
     s("due", "Flag the review as due", "app", "automation", ["read"], "every 3-24 months"),
     s("read", "Read the process end to end", "me", "review", ["correct"], "and its open feedback"),
@@ -62,7 +62,7 @@ export const reviewFlow = flow("guide-review", "Periodic review", "How the owner
   ], "Process owner");
 
 export const automationFlow = flow("guide-automation", "Planned: an agent follows the process", "Where this is heading: the same description drives an AI agent.",
-  [["agent", "AI agent"], ["app", "Process Manager"], ["others", "Other teams"]],
+  [["agent", "AI agent"], ["app", "Pattern Catalog"], ["others", "Other teams"]],
   [
     s("ask", "Ask for what you need", "me", "communication", ["lookup"], "“I need a GCP project”"),
     s("lookup", "Look up the process", "agent", "task", ["serve"], "over MCP"),
@@ -86,9 +86,9 @@ export const meaningFlow = flow("guide-meaning", "From a save to a search by mea
   ], "Editor");
 
 export const signInFlow = flow("guide-sign-in", "Signing in", "How you get into the app and how your rights are decided.",
-  [["app", "Process Manager"], ["idp", "Entra ID or Google"]],
+  [["app", "Pattern Catalog"], ["idp", "Entra ID or Google"]],
   [
-    s("open", "Open Process Manager", "me", "task", ["redirect"]),
+    s("open", "Open Pattern Catalog", "me", "task", ["redirect"]),
     s("redirect", "Send you to the company sign-in", "app", "automation", ["sign-in"]),
     s("sign-in", "Sign in as usual", "me", "form", ["confirm"], "password, MFA"),
     s("confirm", "Confirm who you are", "idp", "verify", ["rights"], "name and email"),
@@ -97,7 +97,7 @@ export const signInFlow = flow("guide-sign-in", "Signing in", "How you get into 
   ]);
 
 export const standardFlow = flow("guide-standard", "From a standard to a reviewed pull request", "How a rule written once reaches the code.",
-  [["app", "Process Manager"], ["dev", "Developer and AI assistant"]],
+  [["app", "Pattern Catalog"], ["dev", "Developer and AI assistant"]],
   [
     s("write", "Write or change the standard", "me", "document", ["generate"], "requirements"),
     s("generate", "Generate skill and review agent", "app", "automation", ["install"], "a new version on each publish"),
@@ -110,7 +110,7 @@ export const standardFlow = flow("guide-standard", "From a standard to a reviewe
   ], "Standard editor");
 
 export const versionFlow = flow("guide-versions", "Two people edit the same draft", "What happens when somebody else saved the draft while you were editing it.",
-  [["colleague", "A colleague"], ["app", "Process Manager"]],
+  [["colleague", "A colleague"], ["app", "Pattern Catalog"]],
   [
     s("edit", "Change it on the editing screen", "me", "task", ["colleague-saves"], "with Undo"),
     s("colleague-saves", "Saves the draft first", "colleague", "task", ["save"]),
@@ -123,7 +123,7 @@ export const versionFlow = flow("guide-versions", "Two people edit the same draf
   ]);
 
 export const changeFlow = flow("guide-change", "The life of a change", "From pressing Edit to readers seeing the new version, for whoever may publish it.",
-  [["app", "Process Manager"], ["readers", "Readers"]],
+  [["app", "Pattern Catalog"], ["readers", "Readers"]],
   [
     s("edit", "Press Edit and change it", "me", "task", ["save"], "on the editing screen"),
     s("save", "Save draft", "me", "task", ["ready"], "readers do not see it"),
@@ -136,7 +136,7 @@ export const changeFlow = flow("guide-change", "The life of a change", "From pre
   ], "Editor");
 
 export const themeFlow = flow("guide-theme", "Change the look of the portal", "How an admin gives the portal its name, logo, colours and font.",
-  [["app", "Process Manager"], ["everyone", "Everyone"]],
+  [["app", "Pattern Catalog"], ["everyone", "Everyone"]],
   [
     s("choose", "Choose name, logo, colours, font", "me", "form", ["adjust"], "Admin › Theming"),
     s("adjust", "Keep the colours readable", "app", "automation", ["look"], "and warn in plain words"),
@@ -147,7 +147,7 @@ export const themeFlow = flow("guide-theme", "Change the look of the portal", "H
   ], "Admin");
 
 export const rightsFlow = flow("guide-rights", "Who may change a process or standard", "How the app decides what you may do with one process or standard.",
-  [["app", "Process Manager"]],
+  [["app", "Pattern Catalog"]],
   [
     s("open", "Open a process or standard", "me", "task", ["editor"]),
     s("editor", "Admin, process or standards editor?", "app", "decision", [["change", "Yes"], ["owns", "No"]]),
@@ -162,7 +162,7 @@ export const rightsFlow = flow("guide-rights", "Who may change a process or stan
 
 /** A member of a platform or practice writes, an owner publishes. */
 export const memberFlow = flow("guide-member", "A member writes, an owner publishes", "How a draft by a member of a platform or practice reaches readers.",
-  [["app", "Process Manager"], ["owner", "Owner of the platform"], ["readers", "Readers"]],
+  [["app", "Pattern Catalog"], ["owner", "Owner of the platform"], ["readers", "Readers"]],
   [
     s("write", "Write it and press Save draft", "me", "document", ["wait"], "Publish… is not for you"),
     s("wait", "List it for the owners", "app", "automation", ["read"], "Waiting for you to publish"),

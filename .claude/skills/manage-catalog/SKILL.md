@@ -1,13 +1,13 @@
 ---
 name: manage-catalog
-description: Add, rename or remove the teams, pillars, tribes, domains, practices, platforms, categories, tools, architecture patterns, application tiers, paths, environments and programming languages in the sample lists (catalog/catalog.json), and their descriptions and contact details (group email, Slack, Google Chat, Confluence, page, request form). Use when asked to add a tool, team, pillar, tribe, domain, practice, platform, category, architecture pattern, tier, path, environment or language, change a contact, put a team in a pillar, a pillar in a tribe or a tribe in a domain, or clean up unused entries in this repository.
+description: Add, rename or remove the teams, pillars, tribes, domains, practices, platforms, categories, tools, architecture patterns, application tiers, paths, environments, programming languages and services in the sample lists (catalog/catalog.json), and their descriptions and contact details (group email, Slack, Google Chat, Confluence, page, request form). Use when asked to add a tool, team, pillar, tribe, domain, practice, platform, category, architecture pattern, tier, path, environment, language or service, change a contact, put a team in a pillar, a pillar in a tribe or a tribe in a domain, or clean up unused entries in this repository.
 ---
 
-# Manage the sample lists (teams, pillars, tribes, domains, practices, platforms, categories, tools, architecture patterns, tiers, paths, environments, languages)
+# Manage the sample lists (teams, pillars, tribes, domains, practices, platforms, categories, tools, architecture patterns, tiers, paths, environments, languages, services)
 
-All thirteen lists live in one file: `catalog/catalog.json`, validated by `schema/catalog.schema.json`.
+All fourteen lists live in one file: `catalog/catalog.json`, validated by `schema/catalog.schema.json`.
 
-This file is **sample content**: it fills an empty database on its first start. `demo/catalog/catalog.json` is the list of the larger demo set (`npm run db:demo`): it replaces the stored lists when loaded, so it must hold every entry of `catalog/catalog.json` unchanged plus the entries the demo documents use. Change both files together. A running installation is changed in the portal (Admin › Teams and Admin › Tools), or by loading the files with `npm run db:import`.
+This file is **sample content**: it fills an empty database on its first start. `demo/catalog/catalog.json` is the list of the larger demo set (`npm run db:demo`): it replaces the stored lists when loaded, so it must hold every entry of `catalog/catalog.json` unchanged plus the entries the demo documents use. Change both files together. A running installation is changed in the portal (Admin › Teams, Admin › Tools and Admin › Services), or by loading the files with `npm run db:import`.
 
 ```json
 {
@@ -23,7 +23,8 @@ This file is **sample content**: it fills an empty database on its first start. 
   "platforms": [{ "id": "azure", "name": "Azure", "contact": "Slack #azure-platform" }],
   "categories": [{ "id": "cloud", "name": "Cloud" }],
   "tools": [{ "id": "servicenow", "name": "ServiceNow", "url": "https://…", "description": "…", "icon": "<64 hex>" }],
-  "patterns": [{ "id": "event-driven", "name": "Event-driven", "alsoCalled": ["event-based", "EDA"], "description": "…" }]
+  "patterns": [{ "id": "event-driven", "name": "Event-driven", "alsoCalled": ["event-based", "EDA"], "description": "…" }],
+  "services": [{ "id": "dns-record-change", "name": "DNS record change", "summary": "…", "team": "dns-team", "form": "https://forms.example.com/dns/record-change", "formLabel": "…", "description": "<h3>What you get</h3><p>…</p>" }]
 }
 ```
 
@@ -34,6 +35,7 @@ This file is **sample content**: it fills an empty database on its first start. 
 - A **category** groups processes and standards for readers; it gives no rights.
 - A **path** says which kind of work a process or standard is made for: the sample has `greenfield` (`symbol` `sprout`, something new is built), `brownfield` (`buildings`, something that exists is changed or moved) and `paved-path` (`road`, the ready-made, supported way, also called the golden path). `symbol` is one of `sprout`, `buildings`, `road`, `trail`, `bridge`, `flask`, `rocket`, `sunset` (left out: a neutral signpost); `alsoCalled` lists up to 5 other names (each 1-40 characters, written once) that the search finds it by, and an other name may belong to one path only and never be another path's name; `name` at most 40 characters, `description` at most 200. The order of the list is the order readers see them in. The same three entries are in `demo/catalog/catalog.json` and in `server/internal/upgrade/paths.go` (`DefaultPaths`, compared by a test): change all three together. A path that an installation removed is never added back by an upgrade.
 - An **architecture pattern** (`patterns`, "Architecture patterns" in the portal) is a way systems are built: the sample has API-first, Microservices, Event-driven, Serverless, Batch and data pipelines, and Static site behind a CDN. Processes and standards are **tagged** with the patterns they are truly about; a tag hides nothing from anybody (it is not like a path). `alsoCalled` lists up to 5 other names the search finds it by (as for a path: each 1-40 characters, written once, and never another pattern's name or other name); `name` at most 40 characters, `description` at most 200; no `symbol`. The list is optional: lists without it have no patterns, and nothing adds any to an installation (an organisation names its own). Keep it sorted by name.
+- A **service** is something a team does for others on request (a DNS record change, a firewall rule change, a penetration test): `name` (at most 80), `summary` (one or two plain sentences, at most 200: shown on cards, in the box of a process and to agents), `team` (required: the team of `teams` that performs it), `form` (required: the front-door form where people request it, `http(s)` only, at most 300; sample and demo forms are on `forms.example.com`), `formLabel` (optional, at most 60, the button's words; left out it reads "Request this service") and `description`. The **description is rich text**: HTML of `<p>`, `<h3>`, `<h4>`, `<strong>`, `<em>`, `<ul>`/`<ol>`/`<li>`, `<a href>` (to `https://…`, `http://…` or `mailto:…` only, written exactly so), `<br>`, `<blockquote>`, `<code>` and `<pre>` and nothing else: no attributes besides `href`, no images, tables, styles, classes or comments (`server/internal/richtext` refuses the whole file otherwise). Write what people get, what to prepare and how long it takes, honestly. A step of a process requests a service as `"type": "service"` with `"service": "<id>"` (see the `edit-process` skill). The sample has six: API key and developer portal access (API Platform team), CDN configuration change (Edge & CDN team), Cloud project support (Cloud Platform team), DNS record change (DNS team), Firewall rule change (Network team) and Penetration test (Cyber Security). Keep them sorted by name. Lists without the key have no services, and nothing adds any to an installation.
 - Ids are unique within one list only: a team, a practice and a platform may share an id (the sample has team `security` and practice `security`).
 
 Processes in `processes/*.json` and standards in `standards/*.json` reference these entries **by id**:
@@ -53,6 +55,7 @@ Processes in `processes/*.json` and standards in `standards/*.json` reference th
 | `patterns` | `patterns` of a process or a standard, never of a requirement (a tag; absent = not tagged) |
 | `environments` | `environments` of a process, a standard or a requirement (absent = all environments) |
 | `languages` | `languages` of a process, a standard or a requirement (absent = any language) |
+| `services` | step `service` of a process (with `"type": "service"`); a service's own `team` names an entry of `teams` |
 
 ## Icons of tools and languages
 
@@ -75,8 +78,8 @@ To add one by hand:
 
 - `id` is kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`), unique within its list, derived from the name (`"GCP console"` → `gcp-console`).
 - **Never change an existing `id`** without updating every reference in `processes/*.json` and `standards/*.json` in the same change. Changing `name` is always safe.
-- Only `id` and `name` are required. Do not invent contact details or URLs for real content; leave optional fields out when unknown. Sample and demo entries may carry made-up details only on `example.com` addresses (as the sample does). Pillars, tribes, domains, categories, tools, architecture patterns, tiers, paths, environments and languages have no `contacts`; categories no `contact` either.
-- Keep `teams`, `pillars`, `tribes`, `domains`, `practices`, `tools`, `patterns` and `languages` sorted by name. Keep `tiers` ordered most critical first, `paths` in the order readers should see them (greenfield, brownfield, paved path) and `environments` in the order work moves through them.
+- Only `id` and `name` are required (a service also needs `team` and `form`). Do not invent contact details or URLs for real content; leave optional fields out when unknown. Sample and demo entries may carry made-up details only on `example.com` addresses (as the sample does). Pillars, tribes, domains, categories, tools, architecture patterns, tiers, paths, environments and languages have no `contacts`; categories no `contact` either.
+- Keep `teams`, `pillars`, `tribes`, `domains`, `practices`, `tools`, `patterns`, `languages` and `services` sorted by name. Keep `tiers` ordered most critical first, `paths` in the order readers should see them (greenfield, brownfield, paved path) and `environments` in the order work moves through them.
 - Do not add fields that are not in the schema. Only tools and languages have `icon`; only paths have `symbol`; only paths and architecture patterns have `alsoCalled`.
 
 ## Add an entry

@@ -201,6 +201,19 @@
       "outcome": "Both deployments behave the same",
       "next": [
         {
+          "to": "open-firewall"
+        }
+      ]
+    },
+    {
+      "id": "open-firewall",
+      "title": "Request the firewall rule to the database",
+      "actor": "me",
+      "type": "service",
+      "description": "The new hosting reaches the database from other addresses than the old one: ask the Network team to open the connection before traffic moves.",
+      "service": "firewall-rule-change",
+      "next": [
+        {
           "to": "switch-traffic"
         }
       ]

@@ -154,6 +154,7 @@ export const mcp: CodeCategory = {
         { text: "The search tools' `path` means \"applies to this path\", like My application in the portal: what names the path and what names none (most documents). Not the portal's Path filter, which keeps only what is made for the path. Test: `mcpserver/paths_test.go`.", at: "func (p Profile) onPath(paths []string) bool {" },
         { text: "Every header carries `patterns`, the architecture patterns it is tagged with, as references with their other names, `[]` when it is tagged with none. There is no pattern parameter: a tag beside the \"applies to\" `path` would mix two meanings; agents find patterns by words or meaning.", at: "type PatternRef struct {" },
         { text: "Every header carries `paths` as references with the entry's other names (`alsoCalled`), `[]` when the document names none.", at: "type PathRef struct {" },
+        { text: "A step that requests a service gives the service with its team and front-door form; `get_catalog` lists every service, its description as plain text (`richtext.PlainText`), never as HTML. Test: `TestGetProcess`, `TestGetCatalog`.", at: "out.Service = serviceOf(l.lists, st.Service)" },
       ],
       tests: ["server/internal/mcpserver/server_test.go", "server/internal/mcpserver/search_test.go"],
     },

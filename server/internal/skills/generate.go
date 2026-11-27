@@ -64,6 +64,7 @@ type process struct {
 		Duration     string     `json:"duration"`
 		Outcome      string     `json:"outcome"`
 		SubProcessID string     `json:"subProcessId"`
+		Service      string     `json:"service"`
 		Resources    []resource `json:"resources"`
 		Next         []struct {
 			To    string `json:"to"`
@@ -316,7 +317,7 @@ You act for the person who needs the result. In the steps below they are **You**
 - Do only the steps marked **You**, in order, using the exact actions given.
 - Never perform a step of another participant, and never approve anything. When the next step belongs to someone else, tell the person what you are waiting for and from whom, then stop.
 - Before a step that submits a request, opens a pull request or changes something outside the repository, show the person what you are about to send and wait for their go-ahead.
-- If a step does not match reality, do not improvise. Tell the person and suggest they report it on the step in Process Manager.
+- If a step does not match reality, do not improvise. Tell the person and suggest they report it on the step in Pattern Catalog.
 - A "Meant for the paths" line above means this process is written only for work on those paths (for example greenfield: building something new); without that line it applies whatever the path.
 
 `)
@@ -374,6 +375,9 @@ You act for the person who needs the result. In the steps below they are **You**
 			} else {
 				fmt.Fprintf(&b, "   - This step is the process “%s”, which has no skill at the moment: ask the person how to do it.\n", c.title(docs.Process, s.SubProcessID))
 			}
+		}
+		if s.Service != "" {
+			b.WriteString(serviceLine(c.Lists, s.Service))
 		}
 		if s.URL != "" {
 			label := s.URLLabel
@@ -597,4 +601,17 @@ func ForStandard(body []byte, c Context, extra map[string]string) ([]Generated, 
 	fmt.Fprintf(&a, "Then one closing line: `Blocks merge: yes` if there is at least one blocker, otherwise `Blocks merge: no`.\nIf you find nothing, say: `No violations of “%s” found.`\n\nNever invent a requirement or an id. A blocker can only be waived through an exception: %s\n", s.Title, exception)
 	a.WriteString(extraSection(extra[agentID]))
 	return append(out, Generated{ID: agentID, Kind: KindReview, Title: "Review: " + s.Title, Body: a.String()}), nil
+}
+
+// serviceLine: a step that requests a service says from whom and through which front-door form.
+func serviceLine(l docs.Lists, id string) string {
+	sv, ok := l.Service(id)
+	if !ok {
+		return fmt.Sprintf("   - This step requests the service “%s”, which is not in the lists at the moment: ask the person how to request it.\n", id)
+	}
+	line := fmt.Sprintf("   - Request the service “%s” from the team “%s” through its front-door form: <%s>", sv.Name, docs.Name(l.Teams, sv.Team), sv.Form)
+	if sv.Summary != "" {
+		line += " (" + strings.TrimSpace(sv.Summary) + ")"
+	}
+	return line + "\n"
 }

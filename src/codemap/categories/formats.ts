@@ -179,6 +179,8 @@ export const formats: CodeCategory = {
         { text: "Every architecture pattern a process or standard is tagged with must be in the list (the app's `checkPatterns` says the same); the patterns count as uses, so `stillUsed` protects them. Test: `docs/patterns_test.go`.", at: "add(\"patterns[%d]: %q is not a known architecture pattern. Known architecture patterns: %s\", i, id, ids(l.Patterns))" },
         { text: "A team's pillar, a pillar's tribe and a tribe's domain must be entries of their lists, said as the app says it (`unknownGroupSentence`). Test: `docs/tribes_test.go`.", at: "add(\"teams[%d].pillar: %s\", i, unknownGroup(\"team\", t, \"pillar\"))" },
         { text: "`Removed` gives the entries a new version of the lists drops, as `<list>/<id>`; `stillUsed` refuses them while a document or a role still names them.", at: "func Removed(old, new Lists) []string {" },
+        { text: "A service is performed by a team of the list and requested through a web link; its description passes the rich-text gate (`richtext.Check`). The sentences are the app's (`unknownTeamSentence`, `listIssueText`). Test: `docs/services_test.go`.", at: "if p := richtext.Check(s.Description, what); p != \"\" {" },
+        { text: "A service step names a service of the list, and only a service step names one (the app's `serviceStepIssue`); what a step requests counts as a use, so the service cannot be removed. Test: `docs/services_test.go`.", at: "case s.Service != \"\" && !has(l.Services, s.Service):" },
       ],
       tests: ["server/internal/docs/check_test.go", "server/internal/httpapi/versions_test.go"],
     },
@@ -263,6 +265,27 @@ export const formats: CodeCategory = {
         { text: "The element count is a limit on the work a browser does to draw an icon.", at: "if elements > maxElements {" },
       ],
       tests: ["server/internal/icons/inspect_test.go", "server/internal/httpapi/icons_test.go"],
+    },
+    {
+      path: "server/internal/richtext/richtext.go",
+      role: "The one gate for rich text (a service's description): an allow-list of elements and attributes, checked token by token as a browser reads it; anything else is refused in words, never cleaned silently. Also the plain text of a description for skills and agents.",
+      requirements: [
+        { text: "An allow-list, never a deny-list: paragraphs, two levels of headings, bold, italic, lists, links, line breaks, a block quote and code; a link only to `http(s)` or `mailto:`, written exactly so. The app's `RICH_ELEMENTS` is the same list: `richText.test.ts` reads this file. Test: `TestHostileContentIsRefused`.", at: "var Elements = []string{\"p\", \"h3\", \"h4\", \"strong\", \"em\", \"ul\", \"ol\", \"li\", \"a\", \"br\", \"blockquote\", \"code\", \"pre\"}" },
+        { text: "Every tag, also one a tree builder would drop (`<body onload>`) or one inside another's text (`<noscript>`, `<template>`, `<title>`), is read as the tokenizer sees it, so nothing reaches storage that a browser could read differently. Comments and a document type are refused too.", at: "z := html.NewTokenizer(strings.NewReader(in))" },
+        { text: "Every attribute but a link's address is refused (`on…`, `style`, `class`, `id`, `data-…`), and an address is checked after its entities are decoded (`&#106;avascript:`).", at: "if attr == \"href\" && !ValidHref(string(val)) {" },
+        { text: "At most `MaxLength` characters, its formatting included.", at: "const MaxLength = 20000" },
+      ],
+      tests: ["server/internal/richtext/richtext_test.go", "server/internal/docs/services_test.go", "e2e/services.spec.ts"],
+    },
+    {
+      path: "src/lib/richText.ts",
+      role: "Rich text in the app: the same allow-list as the server's gate, the tree a description is rebuilt as (`richTree`, from an inert parsed document), the HTML that is saved (`cleanRichHtml`, what the editor and a paste give) and the plain words for search (`plainOfHtml`).",
+      requirements: [
+        { text: "What a paste uses for the same formatting becomes the allowed element (`b` → `strong`, `h1` → `h3`); an unknown element gives its words; script, style, svg, math, iframe, template, forms and images give nothing; a link with any other address is its words only.", at: "const DROP = new Set([" },
+        { text: "Words are escaped when the HTML is written, attributes too, so a description's words never become markup.", at: "const escapeAttr = (s: string) => escapeText(s).replace(/\"/g, \"&quot;\");" },
+        { text: "Parsed with `DOMParser` into a document that runs and loads nothing; never `innerHTML` on the page.", at: "const doc = new DOMParser().parseFromString(`<!doctype html><body>${html}`, \"text/html\");" },
+      ],
+      tests: ["src/lib/__tests__/richText.test.ts"],
     },
     {
       path: "server/internal/icons/inspect.go",

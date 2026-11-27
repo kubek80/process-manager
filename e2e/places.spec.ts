@@ -17,7 +17,7 @@ test("Teams and Tools are two places of the top bar, each with its own heading, 
   await signIn(page, SAM);
   await open(page, "/");
   const bar = page.locator("nav.nav");
-  await expect(bar.getByRole("link")).toHaveText(["Home", "Processes", "Standards", "Requests", "Teams", "Tools", "Guide"]);
+  await expect(bar.getByRole("link")).toHaveText(["Home", "Patterns", "Standards", "Services", "Requests", "Teams", "Tools", "Guide"]);
   await navigate(page, "Teams");
   await expect(page).toHaveURL(/#\/teams$/);
   await expect(page).toHaveTitle(/^Teams · /);
@@ -95,7 +95,7 @@ test("Admin › Teams and Admin › Tools are one page with one draft: changes u
   const before = await page.request.get("/api/catalog");
   const version = Number(before.headers()["x-document-version"]);
   await open(page, "/admin/teams");
-  await expect(sideMenu(page).getByRole("link")).toHaveText(["Teams", "Tools", "Skills", "Health"]); // a lists manager
+  await expect(sideMenu(page).getByRole("link")).toHaveText(["Teams", "Tools", "Services", "Skills", "Health"]); // a lists manager
   await expect(sideMenu(page).getByRole("link", { name: "Teams" })).toHaveAttribute("aria-current", "page");
   await expect(page.locator(".admin-main > header.admin-head h1")).toHaveText("Teams");
   await expect(tabs(page)).toHaveText(TEAM_TABS);

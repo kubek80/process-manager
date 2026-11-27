@@ -223,6 +223,7 @@ order by n.distance, n.kind, n.doc_id, n.part, n.item
         { text: "The paths a document is for, by name with their other names, in its summary part: \"golden path\" finds the paved path by meaning too. A field worth finding goes here as well as into `src/lib/search.ts`. Test: `chunking/paths_test.go`.", at: "{text: line(\"Meant for the paths\", docs.PathNames(l.Paths, c.Paths))}," },
         { text: "The architecture patterns a document is tagged with, by name with their other names, in its summary part; a document tagged with none gets no line, so its text and vector stay as they were and `Version` stays (`chunking/patterns_test.go`).", at: "{text: line(\"Architecture patterns\", docs.PatternNames(l.Patterns, c.Patterns))}," },
         { text: "Must change with a change of how the texts are written that the fingerprints would not show: it is part of the settings, so the index embeds everything again (and search by meaning answers \"not ready\" until it has). A new line in some parts, such as the paths', needs no change: their texts change, and the start's catch-up embeds only those parts again (`retrieval/paths_test.go`).", at: "const Version = 2" },
+        { text: "A service step carries the service's name, summary and team; a step without one reads as before, so `Version` did not change (only documents with such steps, which are new, get new text). Test: `TestSampleTexts`.", at: "section{text: line(\"Requests the service\", service)}," },
       ],
       tests: ["server/internal/chunking/chunking_test.go"],
     },

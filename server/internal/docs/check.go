@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/kubek80/process-manager/server/internal/richtext"
 )
 
 // The format of a document is checked against the JSON schema. This file checks what a schema
@@ -106,6 +108,7 @@ type processShape struct {
 		Type         string `json:"type"`
 		Tool         string `json:"tool"`
 		SubProcessID string `json:"subProcessId"`
+		Service      string `json:"service"`
 		Next         []struct {
 			To    string `json:"to"`
 			Label string `json:"label"`
@@ -234,6 +237,15 @@ func Check(kind string, body []byte, l Lists) error {
 			if s.SubProcessID != "" && s.SubProcessID == p.ID {
 				add("steps[%d].subProcessId: A process cannot be its own sub-process.", i)
 			}
+			// a service step requests a service of the list (serviceStepIssues in src/lib/validate.ts)
+			switch {
+			case s.Type == "service" && s.Service == "":
+				add("steps[%d].service: A service step needs the service it requests: choose it under “Service”.", i)
+			case s.Service != "" && s.Type != "service":
+				add("steps[%d].service: Only a step of the kind Service requests a service: make it a Service step, or remove the service.", i)
+			case s.Service != "" && !has(l.Services, s.Service):
+				add("steps[%d].service: The service “%s” is not in the list of services: choose one of the list.", i, s.Service)
+			}
 		}
 		for i, q := range p.Prerequisites {
 			if q.ProcessID != "" && q.ProcessID == p.ID {
@@ -318,6 +330,28 @@ func Check(kind string, body []byte, l Lists) error {
 				add("tribes[%d].domain: %s", i, unknownGroup("tribe", t, "domain"))
 			}
 		}
+		// a service is performed by a team of the list and requested through a web link; its
+		// description is rich text of the allow-list (serviceIssues in src/lib/validate.ts)
+		for i, s := range c.Services {
+			what := EntryWords("service", s)
+			switch {
+			case strings.TrimSpace(s.Team) == "":
+				add("services[%d].team: Choose the team that performs %s.", i, what)
+			case !has(c.Teams, s.Team):
+				add("services[%d].team: %s is performed by the team “%s”, which is not in the list of teams: choose another team.", i, upper(what), s.Team)
+			}
+			switch {
+			case strings.TrimSpace(s.Form) == "":
+				add("services[%d].form: Give the front-door form of %s: the link where people request it.", i, what)
+			case len(s.Form) > 300:
+				add("services[%d].form: Shorten the front-door form of %s to at most 300 characters.", i, what)
+			case !ValidLink(s.Form):
+				add("services[%d].form: The front-door form of %s is not a whole link: write it with https:// at the start.", i, what)
+			}
+			if p := richtext.Check(s.Description, what); p != "" {
+				add("services[%d].description: %s", i, p)
+			}
+		}
 		sort.Strings(problems) // the lists are visited in no fixed order
 	}
 	if len(problems) == 0 {
@@ -338,6 +372,8 @@ func unknownGroup(kind string, n Named, of string) string {
 	return fmt.Sprintf("%s%s is part of the %s “%s”, which is not in the list of %ss: choose another %s, or none.", strings.ToUpper(who[:1]), who[1:], of, id, of, of)
 }
 
+func upper(s string) string { return strings.ToUpper(s[:1]) + s[1:] }
+
 // EntryWords names an entry of the lists in a sentence as the app does (listEntryWords in
 // src/lib/editing.ts): by its name, else by its id, never by its place: `the platform “Google Cloud”`.
 func EntryWords(noun string, n Named) string {
@@ -351,7 +387,7 @@ func EntryWords(noun string, n Named) string {
 }
 
 // ListKeys are the keys of the lists in the catalog document, in the order it has them.
-var ListKeys = []string{"tiers", "paths", "environments", "languages", "teams", "practices", "platforms", "categories", "tools", "patterns", "pillars", "tribes", "domains"}
+var ListKeys = []string{"tiers", "paths", "environments", "languages", "teams", "practices", "platforms", "categories", "tools", "patterns", "pillars", "tribes", "domains", "services"}
 
 // Uses is what one process or standard takes from the lists and which other documents it
 // names. Keys of Lists: see ListKeys.
@@ -412,6 +448,7 @@ func UsesOf(kind string, body []byte) Uses {
 		}
 		for _, s := range p.Steps {
 			list("tools", s.Tool)
+			list("services", s.Service)
 			doc(Process, s.SubProcessID)
 		}
 	case Standard:

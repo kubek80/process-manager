@@ -20,7 +20,9 @@ import { ContactFields, type DetailsValue } from "./ContactFields";
 import { ContactList, PartOf, RankMark } from "./GroupParts";
 import { GroupMembers } from "./TeamMembers";
 import { confirmDialog, Modal, notify } from "./ui";
+import { servicesOfTeam } from "../lib/services";
 import "../group.css";
+import "../services.css";
 
 const ICON: Record<GroupKind, typeof Users> = { team: Users, platform: Boxes, practice: Compass };
 /** How many of what belongs to it are shown before "Show all". */
@@ -86,6 +88,18 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta, onNe
           <h2 id="group-reach" className="group-h">How to reach them</h2>
           <ContactList entry={entry} name={entry.name} empty={mayDetails ? "Nothing is known yet. Use Edit details to add how people reach them." : "Nothing is known yet about how to reach them."} />
         </section>
+
+        {/* a team: the services it performs, a quiet section only when there are any */}
+        {kind === "team" && servicesOfTeam(catalog, id).length > 0 && (
+          <section className="group-services" aria-labelledby="group-services">
+            <h2 id="group-services" className="group-h">Services this team performs</h2>
+            <ul className="group-service-list">
+              {servicesOfTeam(catalog, id).map((s) => (
+                <li key={s.id}><a href={href({ page: "service", id: s.id })}><strong>{s.name}</strong></a>{s.summary && <span className="muted small">{s.summary}</span>}</li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <section className="group-people" aria-label="People">
           <GroupMembers kind={kind} id={id} name={entry.name} saved manage heading="h2" members={members} membersError={membersError} onChanged={reloadMembers} reachAbove />

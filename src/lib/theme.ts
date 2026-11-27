@@ -56,7 +56,7 @@ export type ColorPart = "brand" | "secondary" | "ink" | "process" | "standard" |
 export const COLOR_PARTS: ColorPart[] = ["brand", "secondary", "ink", "process", "standard", "mainButton", "otherButtons", "success", "warning", "info", "problem", "highlight", "quiet"];
 export const STATE_PARTS: StatePart[] = ["success", "warning", "info", "problem"];
 
-export const DEFAULT_NAME = "Process Manager";
+export const DEFAULT_NAME = "Pattern Catalog";
 export const MAX_NAME = 40;
 /** The designer's palette: primary Ocean, Sky, Snow and Midnight; secondary Sun, Earth, Grain, Land and Berry. */
 export const DESIGNER = {

@@ -1,4 +1,4 @@
-// Command server runs the Process Manager backend.
+// Command server runs the Pattern Catalog backend.
 package main
 
 import (

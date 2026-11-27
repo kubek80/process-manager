@@ -83,7 +83,7 @@ export interface Option { value: string; label: string; count: number; chosen: b
 export interface SearchInput {
   processes: Process[];
   standards: Standard[];
-  catalog: Pick<Catalog, "teams" | "tools"> & Partial<Pick<Catalog, "categories" | "practices" | "platforms" | "tiers" | "environments" | "languages" | "paths" | "patterns">>;
+  catalog: Pick<Catalog, "teams" | "tools"> & Partial<Pick<Catalog, "categories" | "practices" | "platforms" | "tiers" | "environments" | "languages" | "paths" | "patterns" | "services">>;
   q?: string;
   filters?: Filters;
   /**
@@ -147,6 +147,12 @@ function patternsNamed(c: SearchInput["catalog"], ids: unknown): string[] {
 }
 const pathIds = (ids: unknown) => (Array.isArray(ids) ? ids.filter((x): x is string => typeof x === "string" && x !== "") : []);
 
+/** A service step is found by the service's name and summary (the chunk text of the search by meaning has them too). */
+function serviceTexts(c: SearchInput["catalog"], id: unknown): string[] {
+  const s = typeof id === "string" && id ? (c.services ?? []).find((x) => x.id === id) : undefined;
+  return s ? [s.name, s.summary ?? ""] : [];
+}
+
 function item(hit: Hit, texts: unknown[]): Item {
   const t = texts.map(str).filter(Boolean);
   return { hit, texts: t, norms: t.map(fold) };
@@ -165,7 +171,7 @@ function index(kind: TargetKind, d: Process | Standard, c: SearchInput["catalog"
   let rules = 0;
   if (kind === "process") {
     const p = d as Process;
-    for (const s of list(p.steps)) items.push(item({ where: "step", item: str(s.id), label: str(s.title) || str(s.id) }, [s.title, s.description, nameIn(c.tools, s.tool)]));
+    for (const s of list(p.steps)) items.push(item({ where: "step", item: str(s.id), label: str(s.title) || str(s.id) }, [s.title, s.description, nameIn(c.tools, s.tool), ...serviceTexts(c, s.service)]));
     for (const pr of list(p.prerequisites)) items.push(item({ where: "prerequisite", label: str(pr.title) }, [pr.title, pr.description]));
     if (p.rigour && RIGOUR_LABEL[p.rigour]) rigour[p.rigour] = 1;
   } else {

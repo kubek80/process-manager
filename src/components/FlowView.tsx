@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, Clock, Expand, Flag, Hand, Maximize2, Minus, Plus, User, Workflow, Wrench } from "lucide-react";
-import type { Feedback, Process, StepType } from "../types";
+import { Check, Clock, Expand, Flag, Hand, Maximize2, Minus, Plus, User, Workflow, Wrench, ConciergeBell } from "lucide-react";
+import type { Catalog, Feedback, Process, StepType } from "../types";
 import { diamondPoints, L as L_FULL, L_COMPACT, layoutProcess } from "../lib/layout";
 import { LANE_COLORS, LANE_TILES, STEP_META } from "../lib/stepMeta";
 import { toolName, useCatalog } from "../lib/catalog";
@@ -12,6 +12,13 @@ import { scrollBehavior, TypeIcon } from "./ui";
 
 import { QuickAdd, type InsertAt } from "./QuickAdd";
 import "../detail.css";
+
+/** What the block of a service step says under its name: the team that performs it (the step's panel has the service and its form). */
+function serviceLine(c: Catalog, id: string): string {
+  const s = (c.services ?? []).find((x) => x.id === id);
+  if (!s) return "a service no longer listed";
+  return `service of ${c.teams.find((t) => t.id === s.team)?.name ?? s.team}`;
+}
 
 export type { InsertAt };
 interface Adding extends InsertAt { x: number; y: number }
@@ -484,6 +491,7 @@ export function FlowView({ process, selectedId, done, feedback, onSelect, onInse
                       {s.tool && <span className="meta-tool">{toolIcon(s.tool) ? <EntryIcon icon={toolIcon(s.tool)} size={12} /> : <Wrench size={11} />}{toolName(catalog, s.tool)}</span>}
                       {s.duration && <span className="meta-time"><Clock size={11} />{s.duration}</span>}
                       {s.subProcessId && !s.tool && <span><Workflow size={11} />opens a sub-process</span>}
+                      {s.service && !s.tool && <span className="meta-service"><ConciergeBell size={11} aria-hidden="true" />{serviceLine(catalog, s.service)}</span>}
                     </span>
                   </span>
                 </Main>

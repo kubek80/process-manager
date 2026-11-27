@@ -45,7 +45,7 @@ describe("the activity list", () => {
   it("says that the portal itself imported or upgraded content", () => {
     const e = describeEntry(entry("content.import", "sample content", { email: "import", name: "Import", detail: "25 documents added or changed" }), titles);
     expect(e).toMatchObject({ who: "The portal", person: false, words: "imported", target: { text: "the sample content" } });
-    expect(describeEntry(entry("content.convert", "lists", { email: "system", name: "Process Manager" }), titles).target).toBeUndefined();
+    expect(describeEntry(entry("content.convert", "lists", { email: "system", name: "Pattern Catalog" }), titles).target).toBeUndefined();
   });
   it("has no raw name for the change of the look", () => {
     const e = describeEntry(entry("theme.change", "look", { detail: "Brand colour #0055aa" }), titles);

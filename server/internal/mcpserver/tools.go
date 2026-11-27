@@ -223,7 +223,7 @@ func (s *Server) addTools(srv *mcp.Server) {
 	tool(s, srv, &mcp.Tool{
 		Name:        "get_catalog",
 		Annotations: readOnly("Read the lists"),
-		Description: "The lists processes and standards refer to: teams, practices and platforms (with contact and, when you present the shared secret, members), categories, tools (with link), application tiers, paths (greenfield, brownfield, paved path and any the company added, with their other names), environments and programming languages. " +
+		Description: "The lists processes and standards refer to: teams, practices and platforms (with contact and, when you present the shared secret, members), categories, tools (with link), application tiers, paths (greenfield, brownfield, paved path and any the company added, with their other names), environments, programming languages, architecture patterns, and the services teams perform on request (each with its team, front-door form and description as plain text). " +
 			"Use it to find the ids and names the search filters take.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (Catalog, string, error) {
 		out, err := s.catalog(ctx)
@@ -464,6 +464,7 @@ type Catalog struct {
 	Environments []Ref        `json:"environments"`
 	Languages    []Ref        `json:"languages"`
 	Patterns     []PatternRef `json:"patterns" jsonschema:"the architecture patterns processes and standards can be tagged with (such as event-driven or microservices); empty when the company lists none"`
+	Services     []Service    `json:"services" jsonschema:"what teams do for others on request, each with the team that performs it and its front-door form; a process step can request one; empty when the company lists none"`
 	MembersShown bool         `json:"membersShown" jsonschema:"false: members are only given to callers that present the shared secret"`
 }
 
@@ -521,6 +522,7 @@ func (s *Server) catalog(ctx context.Context) (Catalog, error) {
 		Categories: plain(lists.Categories), Tools: plain(lists.Tools), Tiers: plain(lists.Tiers), Environments: plain(lists.Environments), Languages: plain(lists.Languages),
 		Paths:        pathRefs(lists.Paths, idsOf(lists.Paths)),
 		Patterns:     patternRefs(lists.Patterns, idsOf(lists.Patterns)),
+		Services:     services(lists),
 		MembersShown: show,
 	}, nil
 }
@@ -612,11 +614,11 @@ func myStepsText(m MySteps) string {
 }
 
 func catalogText(c Catalog) string {
-	return fmt.Sprintf("%s, %s, %s, %s, %s, %s, %s, %s, %s, %s.",
+	return fmt.Sprintf("%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s.",
 		plural(len(c.Teams), "team", "teams"), plural(len(c.Practices), "practice", "practices"), plural(len(c.Platforms), "platform", "platforms"),
 		plural(len(c.Categories), "category", "categories"), plural(len(c.Tools), "tool", "tools"), plural(len(c.Tiers), "tier", "tiers"),
 		plural(len(c.Paths), "path", "paths"), plural(len(c.Environments), "environment", "environments"), plural(len(c.Languages), "language", "languages"),
-		plural(len(c.Patterns), "architecture pattern", "architecture patterns"))
+		plural(len(c.Patterns), "architecture pattern", "architecture patterns"), plural(len(c.Services), "service", "services"))
 }
 
 // idsOf is the ids of a list, in its order.
@@ -624,6 +626,14 @@ func idsOf(list []docs.Named) []string {
 	out := make([]string, 0, len(list))
 	for _, n := range list {
 		out = append(out, n.ID)
+	}
+	return out
+}
+
+func services(l docs.Lists) []Service {
+	out := []Service{}
+	for _, sv := range l.Services {
+		out = append(out, *serviceOf(l, sv.ID))
 	}
 	return out
 }

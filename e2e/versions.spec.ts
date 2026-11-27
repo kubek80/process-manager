@@ -363,7 +363,7 @@ test("the Back button closes a step and never opens again what was closed", asyn
   await expect(page.locator(".drawer")).toHaveCount(0);
   await expect(page).toHaveURL(/#\/p\/request-gcp-project\/flow$/);
   await page.goBack(); // and the next one leaves the process
-  await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Patterns", level: 1 })).toBeVisible();
 });
 
 test("Back with unsaved changes leaves the history as it was, whatever the answer", async ({ page }) => {
@@ -371,7 +371,7 @@ test("Back with unsaved changes leaves the history as it was, whatever the answe
   await copyOf(page, "history-demo", "History demo");
   await open(page, "/guide");
   await page.getByRole("link", { name: "Standards" }).click();
-  await page.getByRole("link", { name: "Processes" }).click();
+  await page.getByRole("link", { name: "Patterns", exact: true }).click();
   await page.locator(".card", { hasText: "History demo" }).click();
   await page.getByRole("link", { name: "Edit", exact: true }).click();
   await outline(page, "About");
@@ -386,7 +386,7 @@ test("Back with unsaved changes leaves the history as it was, whatever the answe
   await answer(page, "Save your changes before you leave?", "Leave without saving");
   await expect(page).toHaveURL(/#\/p\/history-demo\/flow/);
   await page.goBack();
-  await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Patterns", level: 1 })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/#\/standards/);
   await page.goBack();
@@ -519,7 +519,7 @@ test("deleting something with unsaved changes does not ask about them afterwards
   await fields(page).getByLabel(/^Summary/).fill("A change that goes down with the process.");
   await more(page, "Delete…");
   await answer(page, "Delete this process?", "Delete process");
-  await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Patterns", level: 1 })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(await readProcess(page, "delete-dirty-demo")).toBeUndefined();
 });

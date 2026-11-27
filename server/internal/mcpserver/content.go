@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kubek80/process-manager/server/internal/docs"
+	"github.com/kubek80/process-manager/server/internal/richtext"
 	"github.com/kubek80/process-manager/server/internal/skills"
 )
 
@@ -63,6 +64,7 @@ type rawStep struct {
 	Duration     string     `json:"duration"`
 	Outcome      string     `json:"outcome"`
 	SubProcessID string     `json:"subProcessId"`
+	Service      string     `json:"service"`
 	Resources    []resource `json:"resources"`
 	Next         []struct {
 		To    string `json:"to"`
@@ -478,8 +480,33 @@ type Step struct {
 	Duration     string     `json:"duration,omitempty"`
 	Outcome      string     `json:"outcome,omitempty"`
 	SubProcess   *DocRef    `json:"subProcess,omitempty" jsonschema:"another process that describes this step"`
+	Service      *Service   `json:"service,omitempty" jsonschema:"the service this step requests from another team: request it through its front-door form"`
 	Resources    []Resource `json:"resources"`
 	Next         []Next     `json:"next" jsonschema:"steps that follow; empty: the process ends here"`
+}
+
+// Service is something a team does for others on request, requested through its front-door form.
+type Service struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Summary     string `json:"summary,omitempty"`
+	Team        *Ref   `json:"team,omitempty" jsonschema:"the team that performs it"`
+	Form        string `json:"form" jsonschema:"the front-door form: the link where people request it"`
+	FormLabel   string `json:"formLabel" jsonschema:"the words of the button that opens the form"`
+	Description string `json:"description,omitempty" jsonschema:"what people get, what to prepare and how long it takes, as plain text"`
+}
+
+// serviceOf: a service of the lists as agents get it; nil for an id the lists do not have.
+func serviceOf(l docs.Lists, id string) *Service {
+	sv, ok := l.Service(id)
+	if !ok || id == "" {
+		return nil
+	}
+	out := &Service{ID: sv.ID, Name: sv.Name, Summary: sv.Summary, Form: sv.Form, FormLabel: sv.FormWords(), Description: richtext.PlainText(sv.Description)}
+	if sv.Team != "" {
+		out.Team = ref(l.Teams, sv.Team)
+	}
+	return out
 }
 
 // SkillRef names a generated skill or review agent.
@@ -544,6 +571,7 @@ func (s *Server) step(l *library, lanes map[string]Actor, i int, st rawStep) Ste
 	if st.Tool != "" {
 		out.Tool = ref(l.lists.Tools, st.Tool)
 	}
+	out.Service = serviceOf(l.lists, st.Service)
 	for _, n := range st.Next {
 		out.Next = append(out.Next, Next{To: n.To, Label: n.Label})
 	}

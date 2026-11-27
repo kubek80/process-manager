@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, ArrowUpRight, Boxes, CircleAlert, Code2, Compass, Server, ExternalLink, Layers, Network, Plus, Search, Shapes, Signpost, Tag, Trash2, Users, UsersRound, Wrench, Columns3 } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowDown, ArrowRight, ArrowUp, ArrowUpRight, Boxes, CircleAlert, Code2, Compass, ConciergeBell, Server, ExternalLink, Layers, Network, Plus, Search, Shapes, Signpost, Tag, Trash2, Users, UsersRound, Wrench, Columns3 } from "lucide-react";
 import type { Catalog, Contacts, Issue, Membership, PathSymbol, Process, Standard } from "../types";
 import { PATH_SYMBOLS, PathMark, PathSymbolIcon } from "./marks";
 import { otherNames } from "../lib/paths";
@@ -9,7 +9,7 @@ import { ContactList, PartOf, RankMark } from "./GroupParts";
 import { EntryIcon } from "./EntryIcon";
 import { IconField } from "./IconField";
 import { hasMembers, membersOf, type GroupKind } from "../lib/members";
-import { KIND_OF_LIST, NO_DOMAIN, NO_PILLAR, NO_TRIBE, ownFirst, type GroupingList, partOf, summaryLine, teamSections, tidyLists } from "../lib/groups";
+import { KIND_OF_LIST, NO_DOMAIN, NO_PILLAR, NO_TRIBE, ownFirst, type GroupingList, partOf, summaryLine, teamChoices, teamSections, tidyLists } from "../lib/groups";
 import { groupRank } from "../lib/rights";
 import { useChangeBlocked, usePerms } from "../lib/session";
 import { slugify, uniqueId } from "../lib/edit";
@@ -22,9 +22,13 @@ import { checkerSummary, issueText, listIssueField, listIssuePlace, refusalText 
 import { focusWhenShown, useFieldMarks } from "../lib/fieldMarks";
 import { addressedList, searchStays, tabAfterKey } from "../lib/listTabs";
 import { Field, IssueList, notify, useScrollFade } from "./ui";
+import { plainOfHtml, RICH_MAX } from "../lib/richText";
+// the editor of a service's description is loaded only where it is used: Admin › Services
+const RichEditor = lazy(() => import("./RichEditor"));
 
-type Key = "teams" | "pillars" | "tribes" | "domains" | "practices" | "platforms" | "categories" | "tools" | "patterns" | "tiers" | "paths" | "environments" | "languages";
-type Row = { id: string; name: string; contact?: string; contacts?: Contacts; url?: string; description?: string; icon?: string; symbol?: PathSymbol; alsoCalled?: string[]; pillar?: string; tribe?: string; domain?: string };
+type Key = "teams" | "pillars" | "tribes" | "domains" | "practices" | "platforms" | "categories" | "tools" | "patterns" | "tiers" | "paths" | "environments" | "languages" | "services";
+type Row = { id: string; name: string; contact?: string; contacts?: Contacts; url?: string; description?: string; icon?: string; symbol?: PathSymbol; alsoCalled?: string[]; pillar?: string; tribe?: string; domain?: string;
+  summary?: string; team?: string; form?: string; formLabel?: string };
 
 const KINDS: Record<Key, {
   title: string; noun: string; icon: typeof Users; blurb: string;
@@ -98,6 +102,11 @@ const KINDS: Record<Key, {
     blurb: "Some processes only apply to one language. Most apply to any.",
     fields: [{ field: "description", label: "Notes", placeholder: "e.g. Includes TypeScript", long: true }],
   },
+  services: {
+    title: "Services", noun: "service", icon: ConciergeBell,
+    blurb: "What a team does for others on request, with the front-door form to request it. A step of a process can request one.",
+    fields: [], // the details of a service are its own fields (ServiceFields)
+  },
 };
 /**
  * The lists are two places (`PLACE_LISTS` in the store): Teams and Tools, in the top bar and in
@@ -116,11 +125,14 @@ const GROUPS: Record<ListPlace, { id: string; name: string; keys: Key[] }[]> = {
     { id: "what", name: "Tools and how things are filed", keys: ["tools", "categories", "patterns"] },
     { id: "where", name: "Where rules apply", keys: ["tiers", "paths", "environments", "languages"] },
   ],
+  // one list: no row of tabs, the place's heading says what it is
+  services: [{ id: "services", name: "Services", keys: ["services"] }],
 };
 /** What each place says at the top, for readers and in Admin. */
 export const PLACE_HEAD: Record<ListPlace, { title: string; lead: string }> = {
   teams: { title: "Teams", lead: "Who owns what, how teams are grouped in pillars, tribes and domains, who belongs to each team, platform and practice, and how to reach them." },
   tools: { title: "Tools", lead: "The systems used for the work, how things are filed, and where rules apply." },
+  services: { title: "Services", lead: "What teams do for others on request: who performs each one and the front-door form to request it." },
 };
 /** What a section of the grouped teams is called where it has no domain. */
 const SECTION_WORDS = { "no-domain": NO_DOMAIN, "no-tribe": NO_TRIBE, "no-pillar": NO_PILLAR, all: "" } as const;
@@ -158,8 +170,8 @@ function usesOf(key: Key, id: string, processes: (Process | Standard)[]): Use[] 
       if (Array.isArray(p.patterns) && p.patterns.includes(id)) how.push("tagged with this pattern");
     } else if (INNER[key]) {
       // tribes and domains group entries of the lists, not documents
-    } else if (key === "tools") {
-      const n = "steps" in p ? p.steps?.filter((s) => s.tool === id).length ?? 0 : 0;
+    } else if (key === "tools" || key === "services") {
+      const n = "steps" in p ? p.steps?.filter((s) => (key === "tools" ? s.tool : s.service) === id).length ?? 0 : 0;
       if (n) how.push(`${n} step${n > 1 ? "s" : ""}`);
     } else if (key === "tiers" || key === "environments" || key === "languages") {
       const inReq = "requirements" in p && Array.isArray(p.requirements) && p.requirements.some((r) => r?.[key]?.includes(id));
@@ -250,7 +262,10 @@ export function CatalogPage({ processes, standards, editable: editor, place: rou
   const group = GROUP_OF[key];
   const mine = (id: string) => !!group && !!groupRank(perms, group, id);
   // the person's own groups first, then by name; tiers and environments keep their order
-  const found = rows.filter((r) => `${r.name} ${r.contact ?? ""} ${summaryLine(r)} ${r.description ?? ""} ${r.url ?? ""}`.toLowerCase().includes(q.toLowerCase()));
+  const teamName = (id?: string) => (id ? draft.teams.find((t) => t.id === id)?.name ?? id : "");
+  const found = rows.filter((r) => (key === "services"
+    ? `${r.name} ${r.summary ?? ""} ${teamName(r.team)} ${plainOfHtml(r.description)}`
+    : `${r.name} ${r.contact ?? ""} ${summaryLine(r)} ${r.description ?? ""} ${r.url ?? ""}`).toLowerCase().includes(q.toLowerCase()));
   const shown = ORDERED.includes(key) ? found : ownFirst(found, mine);
   // readers: the teams under their domain, tribe and pillar, when the lists have pillars
   const sections = !editor && key === "teams" && (draft.pillars ?? []).length > 0 ? teamSections(draft, shown) : null;
@@ -263,6 +278,8 @@ export function CatalogPage({ processes, standards, editable: editor, place: rou
   const grouped = current ? innerOf(current.id) : [];
   // people who are still members: the server refuses to remove an entry that roles point to
   const stillMembers = current && GROUP_OF[key] && members ? membersOf(members, GROUP_OF[key]!, current.id).length + membersOf(members, GROUP_OF[key]!, current.id, "member").length : 0;
+  // the services a team performs: the server refuses to remove a team that still performs one
+  const performs = current && key === "teams" ? ((draft.services ?? []) as Row[]).filter((s) => s.team === current.id) : [];
   // two entries with the same id: removing one leaves everything that uses the id with the other
   const twin = !!current && rows.filter((r) => r.id === current.id).length > 1;
   const isNew = (id: string) => !((catalog[key] ?? []) as Row[]).some((r) => r.id === id);
@@ -347,7 +364,7 @@ export function CatalogPage({ processes, standards, editable: editor, place: rou
               <strong>{r.name || "Unnamed"}{isNew(r.id) && <i>new</i>}</strong>
               {group && !isNew(r.id) && <RankMark rank={groupRank(perms, group, r.id)} />}
             </span>
-            <em>{summaryLine(r)}</em>
+            <em>{key === "services" ? r.summary || "No summary yet" : summaryLine(r)}</em>
           </span>
           <span className={`cat-uses ${n ? "" : "none"}`} title={inner ? (n ? `${n} ${n === 1 ? inner.noun : inner.many} in it` : `No ${inner.many} in it`) : n ? `Used by ${countOf(used)}` : "Not used by any process or standard"}>{n}</span>
         </button>
@@ -369,8 +386,9 @@ export function CatalogPage({ processes, standards, editable: editor, place: rou
         </div>
       )}
 
-      {/* one set of tabs for the keyboard: one Tab stop, the arrows through all of them (`tabAfterKey`) */}
-      <div className="cat-kinds-groups" role="group" aria-label={`Lists of ${PLACE_HEAD[place].title.toLowerCase()}`} onKeyDown={(e) => {
+      {/* one set of tabs for the keyboard: one Tab stop, the arrows through all of them (`tabAfterKey`);
+          a place of one list (Services) has none */}
+      {GROUPS[place].flatMap((g) => g.keys).length > 1 && <div className="cat-kinds-groups" role="group" aria-label={`Lists of ${PLACE_HEAD[place].title.toLowerCase()}`} onKeyDown={(e) => {
         const to = tabAfterKey(shownKeys, key, e.key);
         if (!to) return;
         e.preventDefault();
@@ -393,7 +411,7 @@ export function CatalogPage({ processes, standards, editable: editor, place: rou
             </ListTabs>
           );
         })}
-      </div>
+      </div>}
       <div ref={saveBar} className={`cat-toolbar ${editor ? "with-save" : ""} ${editor && dirty ? "dirty" : ""}`}>
         <p className="cat-blurb">{kind.blurb}</p>
         {/* the lists are saved together: Undo, Redo and Save stay in view above the list and the details */}
@@ -459,7 +477,7 @@ export function CatalogPage({ processes, standards, editable: editor, place: rou
               <h2>New {kind.noun}</h2>
               <p className="muted">Give it the name people already use. You can add the details afterwards.</p>
               <Field label="Name">
-                <input autoFocus value={newName} maxLength={40} placeholder={`e.g. ${key === "teams" ? "Cloud Platform team" : key === "pillars" ? "Compute" : key === "tribes" ? "Cloud" : key === "domains" ? "Platforms and infrastructure" : key === "practices" ? "Cyber security" : key === "platforms" ? "Google Cloud" : key === "categories" ? "Cloud" : key === "tools" ? "ServiceNow" : key === "tiers" ? "Tier 4" : key === "paths" ? "Lift and shift" : key === "patterns" ? "Event-driven" : key === "environments" ? "Pre-production" : "Rust"}`}
+                <input autoFocus value={newName} maxLength={key === "services" ? 80 : 40} placeholder={`e.g. ${key === "services" ? "DNS record change" : key === "teams" ? "Cloud Platform team" : key === "pillars" ? "Compute" : key === "tribes" ? "Cloud" : key === "domains" ? "Platforms and infrastructure" : key === "practices" ? "Cyber security" : key === "platforms" ? "Google Cloud" : key === "categories" ? "Cloud" : key === "tools" ? "ServiceNow" : key === "tiers" ? "Tier 4" : key === "paths" ? "Lift and shift" : key === "patterns" ? "Event-driven" : key === "environments" ? "Pre-production" : "Rust"}`}
                   onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
               </Field>
               <p className="muted small">Id: <code>{slugify(newName) ? newId : "…"}</code>. It is made from the name and never changes, even if you rename.</p>
@@ -481,6 +499,7 @@ export function CatalogPage({ processes, standards, editable: editor, place: rou
                   <span className="eyebrow">{kind.noun}</span>
                   <h2>{group && !isNew(current.id) ? <a className="group-link" href={href({ page: "group", kind: group, id: current.id })}>{current.name || "Unnamed"}</a>
                     : inner && !isNew(current.id) ? <a className="group-link" href={href({ page: KIND_OF_LIST[key as GroupingList], id: current.id })}>{current.name || "Unnamed"}</a>
+                    : key === "services" && !isNew(current.id) ? <a className="group-link" href={href({ page: "service", id: current.id })}>{current.name || "Unnamed"}</a>
                     : current.name || "Unnamed"}</h2>
                   {group && !isNew(current.id) && <RankMark rank={groupRank(perms, group, current.id)} className="cat-rank" />}
                   {editor && <p className="cat-id">Id <code>{current.id}</code></p>}
@@ -495,7 +514,8 @@ export function CatalogPage({ processes, standards, editable: editor, place: rou
 
               {editor ? (
                 <div className="form">
-                  <Field label="Name"><input data-field="name" value={current.name} maxLength={40} onChange={(e) => upd({ name: e.target.value })} /></Field>
+                  <Field label="Name"><input data-field="name" value={current.name} maxLength={key === "services" ? 80 : 40} onChange={(e) => upd({ name: e.target.value })} /></Field>
+                  {key === "services" && <ServiceFields key={current.id} value={current} teams={teamChoices(draft)} onChange={upd} />}
                   {WITH_ICON.includes(key) && <IconField key={current.id} icon={current.icon} name={current.name} onChange={(icon) => upd({ icon })} />}
                   {WITH_OTHER_NAMES.includes(key) && (
                     <Field label="Also called" hint={key === "paths" ? "Other names people use for it, separated by commas, e.g. golden path. Searching for one finds what is for this path." : "Other names people use for it, separated by commas, e.g. EDA. Searching for one finds what is tagged with this pattern."}>
@@ -614,10 +634,11 @@ export function CatalogPage({ processes, standards, editable: editor, place: rou
 
               {editor && (
                 <div className="cat-danger">
-                  <button className="btn danger" disabled={!twin && (uses.length > 0 || stillMembers > 0 || grouped.length > 0)} onClick={() => remove(current)}>
+                  <button className="btn danger" disabled={!twin && (uses.length > 0 || stillMembers > 0 || grouped.length > 0 || performs.length > 0)} onClick={() => remove(current)}>
                     <Trash2 size={15} />Remove this {kind.noun}
                   </button>
-                  <span className="muted small">{twin ? `Another ${kind.noun} has the same id: what uses it keeps the other one.` : inner && grouped.length ? groupedHint(grouped.length, inner, kind.noun) : removeHint(countOf(uses), stillMembers, kind.noun)}</span>
+                  <span className="muted small">{twin ? `Another ${kind.noun} has the same id: what uses it keeps the other one.` : inner && grouped.length ? groupedHint(grouped.length, inner, kind.noun)
+                    : performs.length && !uses.length && !stillMembers ? performsHint(performs.length) : removeHint(countOf(uses), stillMembers, kind.noun)}</span>
                 </div>
               )}
             </>
@@ -698,5 +719,47 @@ function SymbolField({ value, onChange }: { value?: PathSymbol; onChange: (symbo
       </div>
       <p className="symbol-caption" aria-hidden="true">{shown ?? `Chosen: ${label}`}</p>
     </div>
+  );
+}
+
+/** Why a team that performs services cannot be removed yet. */
+function performsHint(n: number): string {
+  return `Still performs ${n} service${n === 1 ? "" : "s"} (under Services). Give ${n === 1 ? "it" : "them"} another team first, then it can be removed.`;
+}
+
+/**
+ * The fields of a service: what it is in a sentence or two, the team that performs it (chosen as
+ * the owning team is), its front-door form and the words of its button, and its description, as
+ * rich text (the editor is loaded only here).
+ */
+function ServiceFields({ value, teams, onChange }: { value: Row; teams: ReturnType<typeof teamChoices>; onChange: (patch: Partial<Row>) => void }) {
+  return (
+    <>
+      <Field label="Summary" hint="One or two plain sentences: what people get. Shown on cards, in the box of a process and to AI agents.">
+        <textarea data-field="summary" rows={2} maxLength={200} value={value.summary ?? ""} placeholder="e.g. A new or changed DNS record in the company's zones, within one working day"
+          onChange={(e) => onChange({ summary: e.target.value || undefined })} />
+      </Field>
+      <Field label="Performed by" hint="The team that does the work">
+        <select data-field="team" value={value.team ?? ""} onChange={(e) => onChange({ team: e.target.value || undefined })}>
+          <option value="">Choose the team…</option>
+          {teams.map((g) => (g.label
+            ? <optgroup key={g.label} label={g.label}>{g.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
+            : g.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)))}
+          {value.team && !teams.some((g) => g.teams.some((t) => t.id === value.team)) && <option value={value.team}>{value.team} (not in the list)</option>}
+        </select>
+      </Field>
+      <Field label="Front-door form" hint="The link where people request it">
+        <input data-field="form" type="url" value={value.form ?? ""} placeholder="https://…" onChange={(e) => onChange({ form: e.target.value.trim() || undefined })} />
+      </Field>
+      <Field label="Words of the button" hint="Left empty: “Request this service”">
+        <input data-field="formLabel" maxLength={60} value={value.formLabel ?? ""} placeholder="Request this service" onChange={(e) => onChange({ formLabel: e.target.value || undefined })} />
+      </Field>
+      <div className="field">
+        <span className="field-label" id={`desc-${value.id}`}>Description<em>What people get, what to prepare, how long it takes. Pictures cannot be added.</em></span>
+        <Suspense fallback={<p className="muted small">Loading the editor…</p>}>
+          <RichEditor value={value.description ?? ""} labelledBy={`desc-${value.id}`} max={RICH_MAX} onChange={(html) => onChange({ description: html || undefined })} />
+        </Suspense>
+      </div>
+    </>
   );
 }

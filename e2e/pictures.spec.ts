@@ -22,7 +22,7 @@ async function openGuide(page: Page) {
   if (!page.url().startsWith("http")) await signIn(page, SAM);
   else await page.goto("about:blank");
   await open(page, "/guide");
-  await expect(page.getByRole("heading", { name: "How Process Manager works" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How Pattern Catalog works" })).toBeVisible();
   await expect(guideFigs(page).first().locator(".block").first()).toBeVisible();
 }
 

@@ -4,7 +4,7 @@ import { ALEX, SAM, signIn } from "./helpers";
 test("the app is closed until you sign in", async ({ page, request }) => {
   for (const path of ["/api/processes", "/api/standards", "/api/catalog", "/api/feedback", "/api/skills", "/api/admin/access"]) expect((await request.get(path)).status()).toBe(401);
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Process Manager" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pattern Catalog" })).toBeVisible();
   await expect(page.getByText("Local development.")).toBeVisible();
   await expect(page.locator(".login-users button")).toHaveCount(7);
   await expect(page.locator(".login-users")).toContainText("Jordan Platform");
@@ -17,8 +17,8 @@ test("a reader signs in, sees no editing, and can switch user to an editor who d
   await page.getByRole("button", { name: /Sam Consumer/ }).click();
   // signed in, the app starts at Home: one search over processes and standards
   await expect(page.getByRole("heading", { name: "Find a process or a standard" })).toBeVisible();
-  await page.locator(".nav").getByRole("link", { name: "Processes" }).click();
-  await expect(page.getByRole("heading", { name: "How do I get…?" })).toBeVisible();
+  await page.locator(".nav").getByRole("link", { name: "Patterns", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Patterns", level: 1 })).toBeVisible();
   await expect(page.locator(".mode-switch")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Create from text with AI/ })).toHaveCount(0);
   await expect(page.locator(".nav").getByRole("link", { name: "Admin" })).toHaveCount(0);
@@ -33,7 +33,7 @@ test("a reader signs in, sees no editing, and can switch user to an editor who d
   // an editor gets the editing controls by their rights alone: there is no mode to switch on
   await page.getByRole("button", { name: /Alex Editor/ }).click();
   await expect(page.locator(".topbar")).toBeVisible();
-  await page.locator(".nav").getByRole("link", { name: "Processes" }).click();
+  await page.locator(".nav").getByRole("link", { name: "Patterns", exact: true }).click();
   await expect(page.locator(".mode-switch")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Consumer", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Create from text with AI/ })).toBeVisible();
