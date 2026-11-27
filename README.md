@@ -25,7 +25,7 @@ From both, the portal generates **skills for AI coding assistants** and, for sta
 
 ![The same results as rows](docs/search-rows.png)
 
-![The list of processes](docs/processes.png)
+![Patterns: the list of processes](docs/processes.png)
 
 ![Map view](docs/map.png)
 
@@ -157,6 +157,14 @@ The first admins are named in the server setting `PM_ADMINS`.
 ![The page of a tribe: its domain, its pillars with their teams, and what they look after](docs/tribe.png)
 
 ![The page of a pillar: its tribe and domain, its teams and what they look after](docs/pillar.png)
+
+![Services: what teams do on request, each with its team and its request button](docs/services.png)
+
+![The page of a service: the team that performs it, the button to its front-door form, its description and the processes that use it](docs/service.png)
+
+![A step of a process that requests a service: the block on the map and the box with the request button](docs/service-step.png)
+
+![Admin › Services, with the formatting editor for the description](docs/services-list.png)
 
 ![Admin › Theming with its preview](docs/theming.png)
 
