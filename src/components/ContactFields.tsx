@@ -28,7 +28,7 @@ const ROWS: { key: keyof Contacts; placeholder: string; hint?: string; type?: st
 /**
  * The fields for the description and the contact details of a team, platform or practice: one
  * labelled field per row; a problem is shown on its own field, in plain words, once the field is
- * left (or, with `showAll`, after a save was tried). Used on the group's page and in Admin › Lists.
+ * left (or, with `showAll`, after a save was tried). Used on the group's page and in Admin › Teams.
  */
 export function ContactFields({ kind, value, onChange, showAll = false, idPrefix = "group" }: {
   kind: GroupKind; value: DetailsValue; onChange: (v: DetailsValue) => void;

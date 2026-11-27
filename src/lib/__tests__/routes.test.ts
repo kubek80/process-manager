@@ -49,7 +49,7 @@ describe("addresses of the code map", () => {
 
 describe("addresses", () => {
   const routes: Route[] = [
-    { page: "library" }, { page: "standards" }, { page: "catalog" }, { page: "guide" }, { page: "admin", section: "skills" },
+    { page: "library" }, { page: "standards" }, { page: "catalog", place: "teams" }, { page: "catalog", place: "tools" }, { page: "guide" }, { page: "admin", section: "skills" },
     { page: "process", id: "request-gcp-project", tab: "list" },
     { page: "process", id: "request-gcp-project", tab: "flow", item: "raise-request" },
     { page: "standard", id: "secure-logging", tab: "feedback" },

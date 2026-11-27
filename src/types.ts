@@ -131,9 +131,11 @@ export interface Contacts {
   /** The form where one asks them for something. */
   form?: string;
 }
-/** `tribe`: the tribe it is part of (optional). */
-export interface Team { id: string; name: string; contact?: string; contacts?: Contacts; description?: string; tribe?: string }
-/** A group of teams; `domain`: the domain it is part of (optional). */
+/** `pillar`: the pillar it is part of (optional). */
+export interface Team { id: string; name: string; contact?: string; contacts?: Contacts; description?: string; pillar?: string }
+/** A group of teams; `tribe`: the tribe it is part of (optional). */
+export interface Pillar { id: string; name: string; description?: string; tribe?: string }
+/** A group of pillars; `domain`: the domain it is part of (optional). */
 export interface Tribe { id: string; name: string; description?: string; domain?: string }
 /** A group of tribes. */
 export interface Domain { id: string; name: string; description?: string }
@@ -151,7 +153,8 @@ export interface Catalog {
   paths?: PathEntry[];
   /** The architecture patterns; missing in lists that never had any (the loader fills in an empty one). */
   patterns?: PatternEntry[];
-  /** The tribes that group teams, and the domains that group tribes; missing in lists that never had any. */
+  /** The pillars that group teams, the tribes that group pillars and the domains that group tribes; missing in lists that never had any. */
+  pillars?: Pillar[];
   tribes?: Tribe[];
   domains?: Domain[];
 }

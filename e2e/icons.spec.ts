@@ -49,7 +49,7 @@ async function restore(request: APIRequestContext) {
 test.afterAll(async ({ request }) => { await restore(request); });
 
 const openTool = async (page: Page, name: string) => {
-  await open(page, "/admin/lists");
+  await open(page, "/admin/tools");
   await page.getByRole("tab", { name: /Tools/ }).click();
   await page.locator(".cat-item", { hasText: name }).first().click();
   return page.locator(".cat-detail .icon-field");
@@ -81,7 +81,7 @@ test("a lists manager uploads a PNG and an SVG made here; readers see them on th
   const ctx = await browser.newContext({ baseURL: "http://127.0.0.1:8090" });
   const r = await ctx.newPage();
   await signIn(r, SAM);
-  await open(r, "/catalog");
+  await open(r, "/tools");
   await r.getByRole("tab", { name: /Tools/ }).click();
   await expect(r.locator(".cat-item", { hasText: "Artifact registry" }).locator(`img.entry-icon[src="/api/icons/${sha(image)}"]`)).toBeVisible();
   await expect(r.locator(".cat-item", { hasText: "Akamai Control Center" }).locator(`img.entry-icon[src="/api/icons/${sha(SVG)}"]`)).toBeVisible();

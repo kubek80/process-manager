@@ -3,7 +3,7 @@ import { CASEY, CSRF, DANA, JORDAN, SAM, clearFeedback, navigate, open, report, 
 
 // The frame of the portal and Admin after the fourth round: the Guide's contents on a phone, a
 // long portal name, the Menu's count, the roles in the account menu, the Statistics table, the
-// save bar of Admin › Lists, what is said when the portal cannot be reached, and one form for
+// save bar of Admin › Teams, what is said when the portal cannot be reached, and one form for
 // dates. What a test changes (the look, feedback) is put back afterwards, also when it fails.
 
 /** Sets the look of the portal through the API, as an admin. */
@@ -137,10 +137,10 @@ test("Statistics: the table per process and standard needs no sideways scroll at
   }
 });
 
-test("Admin › Lists shows the id of an entry and keeps its save bar in view; Teams & tools shows no ids", async ({ page }) => {
+test("Admin › Teams shows the id of an entry and keeps its save bar in view; Teams shows no ids", async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });
   await signIn(page, DANA);
-  await open(page, "/admin/lists");
+  await open(page, "/admin/teams");
   await page.locator(".cat-list").getByRole("button", { name: /Cloud Platform team/ }).first().click();
   await expect(page.locator(".cat-detail p.cat-id")).toHaveText("Id cloud-platform-team");
   await expect(page.locator(".tabs .tab svg")).toHaveCount(0); // no tab icons
@@ -162,8 +162,8 @@ test("Admin › Lists shows the id of an entry and keeps its save bar in view; T
   await bar.getByRole("button", { name: "Discard" }).click();
   await expect(page.locator(".cat-toolbar.dirty")).toHaveCount(0);
 
-  // Teams & tools, for everybody: no ids, no tab icons
-  await navigate(page, "Teams & tools");
+  // Teams, for everybody: no ids, no tab icons
+  await navigate(page, "Teams");
   await page.locator(".cat-list").getByRole("button", { name: /Cloud Platform team/ }).first().click();
   await expect(page.locator(".cat-detail h2")).toHaveText("Cloud Platform team");
   await expect(page.locator(".cat-id")).toHaveCount(0);
@@ -186,7 +186,7 @@ test("when the portal cannot be reached: a plain sentence that says what to do a
   await page.unroute("**/api/admin/audit*");
 
   // a change: nothing was saved, and it says so
-  await open(page, "/admin/lists");
+  await open(page, "/admin/teams");
   await page.locator(".cat-list").getByRole("button", { name: /DNS team/ }).first().click();
   await page.locator(".cat-detail").getByLabel("What they do").fill("Changed while the portal is out of reach.");
   await page.route("**/api/catalog?*", (route) => (route.request().method() === "PUT" ? route.abort("internetdisconnected") : route.continue()));
@@ -250,7 +250,7 @@ test("dates in one form: Theming's last change and the Activity log as 2026-11-2
   }
 });
 
-// ---------- the fifth round: the skip link, the main region, Admin › Lists' removal
+// ---------- the fifth round: the skip link, the main region, Admin › Tools' removal
 
 test("“Skip to the page” is the first Tab stop on every signed-in page and moves the keyboard into the page", async ({ page }) => {
   await signIn(page, DANA);
@@ -288,9 +288,9 @@ test("“Skip to the page” is the first Tab stop on every signed-in page and m
   await expect(page.locator("main.edit-middle")).toBeFocused();
 });
 
-test("Admin › Lists: removing an entry says so with Undo, which puts it back where it was; New is a secondary button", async ({ page }) => {
+test("Admin › Tools: removing an entry says so with Undo, which puts it back where it was; New is a secondary button", async ({ page }) => {
   await signIn(page, DANA);
-  await open(page, "/admin/lists");
+  await open(page, "/admin/tools");
   await page.locator(".cat-kinds").getByRole("tab", { name: /^Categories/ }).click();
   const create = page.getByRole("button", { name: "New category" });
   await expect(create).not.toHaveClass(/\bprimary\b/);

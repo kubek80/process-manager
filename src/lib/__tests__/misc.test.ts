@@ -195,7 +195,11 @@ describe("the title of the browser tab", () => {
     const { pageTitle } = await import("../store");
     expect(pageTitle({ page: "library" })).toBe("Processes · Process Manager");
     expect(pageTitle({ page: "standards" })).toBe("Standards · Process Manager");
-    expect(pageTitle({ page: "catalog" })).toBe("Teams & tools · Process Manager");
+    expect(pageTitle({ page: "catalog" })).toBe("Teams · Process Manager");
+    expect(pageTitle({ page: "catalog", place: "tools" })).toBe("Tools · Process Manager");
+    expect(pageTitle({ page: "catalog", list: "paths" })).toBe("Tools · Process Manager");
+    expect(pageTitle({ page: "admin", section: "lists", place: "tools" })).toBe("Tools · Admin · Process Manager");
+    expect(pageTitle({ page: "admin", section: "lists", list: "pillars" })).toBe("Teams · Admin · Process Manager");
     expect(pageTitle({ page: "guide" })).toBe("Guide · Process Manager");
     expect(pageTitle({ page: "admin", section: "access" })).toBe("Access · Admin · Process Manager");
     expect(pageTitle({ page: "process", id: "request-gcp-project", tab: "flow" }, { process: "Request a GCP project" })).toBe("Request a GCP project · Process Manager");

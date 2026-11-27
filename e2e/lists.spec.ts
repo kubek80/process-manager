@@ -30,15 +30,28 @@ test.afterEach(async ({ request }) => {
 });
 
 const tab = (page: Page, name: string) => page.locator(".cat-kinds").getByRole("tab", { name: new RegExp(`^${name}`) });
+/** The lists of the place Tools; the others are in Teams. */
+const IN_TOOLS = ["Tools", "Categories", "Architecture patterns", "Application tiers", "Paths", "Environments", "Languages"];
+/** Opens a list's tab, going first to its place (Admin's side menu, or the top bar for readers) when the page shows the other. */
+async function openTab(page: Page, name: string) {
+  await expect(page.locator(".cat-kinds-groups")).toBeVisible();
+  if (!(await tab(page, name).count())) {
+    const place = IN_TOOLS.includes(name) ? "Tools" : "Teams";
+    const admin = page.locator(".admin-nav");
+    if (await admin.count()) await admin.getByRole("link", { name: place, exact: true }).click();
+    else await open(page, place === "Tools" ? "/tools" : "/teams");
+  }
+  await tab(page, name).click();
+}
 const item = (page: Page, name: string) => page.locator(".cat-item", { hasText: name });
 
 test("an admin adds a platform, a practice and a category, uses them, and can remove them only when nothing uses them", async ({ page }) => {
   test.setTimeout(90_000);
   await copy(page, "lists-demo", "Lists demo");
     await signIn(page, DANA);
-    await open(page, "/admin/lists");
+    await open(page, "/admin/teams");
     for (const [list, noun, name] of [["Platforms", "platform", "Kubernetes"], ["Practices", "practice", "Data"], ["Categories", "category", "Containers"]]) {
-      await tab(page, list).click();
+      await openTab(page, list);
       await page.getByRole("button", { name: `New ${noun}` }).click();
       await page.locator(".cat-new").getByLabel("Name").fill(name);
       await page.keyboard.press("Enter");
@@ -64,9 +77,9 @@ test("an admin adds a platform, a practice and a category, uses them, and can re
     expect((await readProcess(page, "lists-demo"))!).toMatchObject({ category: "containers", platform: "kubernetes", practice: "data" });
 
     // while it is used, none of them can be removed
-    await open(page, "/admin/lists");
+    await open(page, "/admin/teams");
     for (const [list, noun, name] of [["Platforms", "platform", "Kubernetes"], ["Practices", "practice", "Data"], ["Categories", "category", "Containers"]]) {
-      await tab(page, list).click();
+      await openTab(page, list);
       await item(page, name).click();
       await expect(page.locator(".cat-usage")).toContainText("Lists demo");
       await expect(page.getByRole("button", { name: `Remove this ${noun}` })).toBeDisabled();
@@ -82,9 +95,9 @@ test("an admin adds a platform, a practice and a category, uses them, and can re
     // once nothing uses them, they go
     await remove(page, "lists-demo");
     await signIn(page, DANA);
-    await open(page, "/admin/lists");
+    await open(page, "/admin/teams");
     for (const [list, noun, name] of [["Platforms", "platform", "Kubernetes"], ["Practices", "practice", "Data"], ["Categories", "category", "Containers"]]) {
-      await tab(page, list).click();
+      await openTab(page, list);
       await item(page, name).click();
       await expect(page.locator(".cat-usage")).toContainText("nothing yet");
       await page.getByRole("button", { name: `Remove this ${noun}` }).click();
@@ -99,8 +112,8 @@ test("an admin adds a platform, a practice and a category, uses them, and can re
 
 test("an admin makes somebody an owner of a platform and of a practice, and takes it back", async ({ page }) => {
   await signIn(page, DANA);
-  await open(page, "/admin/lists");
-  await tab(page, "Platforms").click();
+  await open(page, "/admin/teams");
+  await openTab(page, "Platforms");
   await item(page, "Azure").click();
   const owners = page.locator('.cat-members[data-rank="owner"]');
   await expect(owners).toContainText("Nobody yet. Until somebody is added, only the editors can publish what belongs to this platform.");
@@ -122,8 +135,8 @@ test("an admin makes somebody an owner of a platform and of a practice, and take
 
   // a practice works the same way
   await signIn(page, DANA);
-  await open(page, "/admin/lists");
-  await tab(page, "Practices").click();
+  await open(page, "/admin/teams");
+  await openTab(page, "Practices");
   await item(page, "Service management").click();
   await owners.getByLabel("Email of the new owner").fill(SAM);
   await owners.getByRole("button", { name: "Add owner" }).click();
@@ -134,13 +147,13 @@ test("an admin makes somebody an owner of a platform and of a practice, and take
 
   // taking it away again: the editing controls go with it
   await signIn(page, DANA);
-  await open(page, "/admin/lists");
-  await tab(page, "Practices").click();
+  await open(page, "/admin/teams");
+  await openTab(page, "Practices");
   await item(page, "Service management").click();
   await owners.getByRole("button", { name: `Remove ${SAM} as Practice owner` }).click();
   await page.getByRole("dialog", { name: "Remove this owner?" }).getByRole("button", { name: "Remove", exact: true }).click();
   await expect(owners.locator("li", { hasText: "Sam Consumer" })).toHaveCount(0);
-  await tab(page, "Platforms").click();
+  await openTab(page, "Platforms");
   await item(page, "Azure").click();
   await owners.getByRole("button", { name: `Remove ${SAM} as Platform owner` }).click();
   await page.getByRole("dialog", { name: "Remove this owner?" }).getByRole("button", { name: "Remove", exact: true }).click();
@@ -155,10 +168,10 @@ test("an admin makes somebody an owner of a platform and of a practice, and take
 test("everyone sees who the members of a platform, a practice and a team are", async ({ page }) => {
   await signIn(page, SAM);
   expect((await page.request.get("/api/members")).ok()).toBeTruthy();
-  await open(page, "/catalog");
+  await open(page, "/teams");
   const members = page.locator(".cat-members");
   const check = async (list: string, name: string, owners: string[], drafters: string[] = []) => {
-    await tab(page, list).click();
+    await openTab(page, list);
     await item(page, name).click();
     await expect(page.locator(".cat-detail h2")).toHaveText(name);
     // by name, each a mail link; the role is said once, by the heading and its sentence, not on every person
@@ -180,7 +193,7 @@ test("everyone sees who the members of a platform, a practice and a team are", a
   await expect(members.getByLabel("Email of the new member")).toHaveCount(0);
   await expect(members.getByRole("button")).toHaveCount(0);
   await expect(members.getByRole("textbox")).toHaveCount(0);
-  await tab(page, "Platforms").click();
+  await openTab(page, "Platforms");
   await item(page, "Azure").click();
   // no owner: one line, which points at the ways to reach them; no Members block when there are none
   await expect(members).toHaveText(["No owner yet."]);
@@ -321,8 +334,8 @@ test("a process without a category is listed under Other", async ({ page }) => {
 
 test("a platform that still has members cannot be removed until they are gone", async ({ page }) => {
   await signIn(page, DANA);
-  await open(page, "/admin/lists");
-  await tab(page, "Platforms").click();
+  await open(page, "/admin/teams");
+  await openTab(page, "Platforms");
   await page.getByRole("button", { name: "New platform" }).click();
   await page.locator(".cat-new").getByLabel("Name").fill("Mainframe");
   await page.keyboard.press("Enter");
@@ -345,16 +358,16 @@ test("a platform that still has members cannot be removed until they are gone", 
 
   // a lists manager who is not an admin sees the same, from the members everyone may read
   await signIn(page, ALEX);
-  await open(page, "/admin/lists");
-  await tab(page, "Platforms").click();
+  await open(page, "/admin/teams");
+  await openTab(page, "Platforms");
   await item(page, "Mainframe").click();
   await expect(members.locator("li", { hasText: "Sam Consumer" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Remove this platform" })).toBeDisabled();
   await expect(page.locator(".cat-danger")).toContainText("1 person is still one of its owners or members");
 
   await signIn(page, DANA);
-  await open(page, "/admin/lists");
-  await tab(page, "Platforms").click();
+  await open(page, "/admin/teams");
+  await openTab(page, "Platforms");
   // without its member it goes
   await item(page, "Mainframe").click();
   await members.getByRole("button", { name: `Remove ${SAM} as Platform member` }).click();
@@ -370,7 +383,7 @@ for (const [width, theme] of [[1440, "light"], [390, "dark"]] as const) {
     await page.setViewportSize({ width, height: 844 });
     await signIn(page, DANA);
     await page.addInitScript((t) => { try { localStorage.setItem("pm:theme", t); } catch { /* ignore */ } }, theme);
-    await open(page, "/admin/lists");
+    await open(page, "/admin/teams");
     await item(page, "DNS team").click();
     await page.locator(".cat-detail").getByLabel("What they do").fill("Changed for a test that is not saved.");
     // the server refuses the save, with a long message
@@ -412,7 +425,7 @@ for (const who of [DANA, ALEX]) {
   test(`broken lists say what to fix by name, and each problem leads to its field (${who.split("@")[0]})`, async ({ page }) => {
     test.setTimeout(60_000);
     await signIn(page, who);
-    await open(page, "/admin/lists");
+    await open(page, "/admin/teams");
     const panel = page.locator("section.issues-panel.cat-issues");
     await expect(item(page, "Cloud Platform team")).toBeVisible();
     await expect(panel).toHaveCount(0);
@@ -421,10 +434,10 @@ for (const who of [DANA, ALEX]) {
     await item(page, "Cloud Platform team").click();
     await page.locator("#lists-team-email").fill("cloud-platform-at-company");
     await page.locator("#lists-team-slackUrl").fill("cloud-platform");
-    await tab(page, "Categories").click();
+    await openTab(page, "Categories");
     await item(page, "Network").click();
     await fillUnlimited(page, '[data-field="description"]', "Everything about networks. ".repeat(10));
-    await tab(page, "Tools").click();
+    await openTab(page, "Tools");
     await page.locator(".cat-item", { has: page.getByText("GitHub", { exact: true }) }).click();
     await page.locator('.cat-detail [data-field="url"]').fill("github");
     await item(page, "ServiceNow").click();
@@ -451,7 +464,7 @@ for (const who of [DANA, ALEX]) {
     await expect(page.getByRole("button", { name: "Save changes" })).toHaveAttribute("title", "Fix the problems first");
 
     // each one leads to its list, its entry and its field, which says the same
-    await tab(page, "Languages").click();
+    await openTab(page, "Languages");
     for (const [sentence, listName, entry, isField] of wanted) {
       await list.locator("li", { hasText: sentence }).getByRole("button", { name: sentence }).click();
       await expect(tab(page, listName)).toHaveAttribute("aria-selected", "true");
@@ -478,9 +491,9 @@ for (const who of [DANA, ALEX]) {
   });
 }
 
-test("a save the server refuses reads as the same sentences; a reader of Teams & tools sees no problems", async ({ page }) => {
+test("a save the server refuses reads as the same sentences; a reader of Teams sees no problems", async ({ page }) => {
   await signIn(page, DANA);
-  await open(page, "/admin/lists");
+  await open(page, "/admin/teams");
   await item(page, "DNS team").click();
   await page.locator(".cat-detail").getByLabel("What they do").fill("Changed for a test that is refused.");
   // the lists as the app sends them, broken on the way: only the server finds it. The server
@@ -519,7 +532,7 @@ test("a save the server refuses reads as the same sentences; a reader of Teams &
   const refused = await page.request.put(`/api/catalog?base=${version}`, { data: broken, headers: CSRF });
   expect(refused.status()).toBe(400);
 
-  // Teams & tools changes nothing, so it shows no problems, even of lists stored broken
+  // the reader's Teams changes nothing, so it shows no problems, even of lists stored broken
   await signIn(page, SAM);
   await page.route("**/api/catalog", async (route) => {
     const res = await route.fetch();
@@ -527,8 +540,8 @@ test("a save the server refuses reads as the same sentences; a reader of Teams &
     body.teams = body.teams.map((t: { id: string }) => (t.id === "dns-team" ? { ...t, name: "", contacts: { email: "not an address" } } : t));
     await route.fulfill({ response: res, json: body });
   });
-  await open(page, "/catalog");
-  await expect(page.getByRole("heading", { name: /Teams, tools/ })).toBeVisible();
+  await open(page, "/teams");
+  await expect(page.getByRole("heading", { name: "Teams", level: 1 })).toBeVisible();
   await expect(item(page, "Cloud Platform team")).toBeVisible();
   await expect(page.locator(".cat-issues, .issues-panel")).toHaveCount(0);
 });
@@ -537,7 +550,7 @@ test("the problems of the lists on a phone in dark: no sideways scroll, readable
   await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page, ALEX);
   await page.addInitScript(() => { try { localStorage.setItem("pm:theme", "dark"); } catch { /* ignore */ } });
-  await open(page, "/admin/lists");
+  await open(page, "/admin/teams");
   await item(page, "Cloud Platform team").click();
   await page.locator("#lists-team-slackUrl").fill("a channel without a link");
   await page.locator(".cat-detail").getByLabel("Name", { exact: true }).fill("");

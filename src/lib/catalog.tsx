@@ -2,14 +2,14 @@ import { createContext, useContext } from "react";
 import type { Catalog } from "../types";
 import type { GroupKind } from "./members";
 
-export const EMPTY_CATALOG: Catalog = { tiers: [], environments: [], languages: [], teams: [], practices: [], platforms: [], categories: [], tools: [], paths: [], patterns: [], tribes: [], domains: [] };
+export const EMPTY_CATALOG: Catalog = { tiers: [], environments: [], languages: [], teams: [], practices: [], platforms: [], categories: [], tools: [], paths: [], patterns: [], pillars: [], tribes: [], domains: [] };
 
 /** The lists with every list present: one that is missing (an older file, an older server) is empty. */
 export const completeCatalog = (c: Partial<Catalog> | null | undefined): Catalog => ({
   ...c,
   tiers: c?.tiers ?? [], environments: c?.environments ?? [], languages: c?.languages ?? [],
   teams: c?.teams ?? [], practices: c?.practices ?? [], platforms: c?.platforms ?? [], categories: c?.categories ?? [],
-  tools: c?.tools ?? [], paths: c?.paths ?? [], patterns: c?.patterns ?? [], tribes: c?.tribes ?? [], domains: c?.domains ?? [],
+  tools: c?.tools ?? [], paths: c?.paths ?? [], patterns: c?.patterns ?? [], pillars: c?.pillars ?? [], tribes: c?.tribes ?? [], domains: c?.domains ?? [],
 });
 
 export interface CatalogApi {

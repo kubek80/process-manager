@@ -1,14 +1,14 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, CalendarCheck, ChartColumn, CodeXml, Flag, KeyRound, List, Palette, Search, Server, ShieldCheck, Sparkles, Workflow } from "lucide-react";
+import { Activity, CalendarCheck, ChartColumn, CodeXml, Flag, KeyRound, List, Palette, Search, Server, ShieldCheck, Sparkles, Users, Workflow, Wrench } from "lucide-react";
 import type { AuditEntry, FeedbackByTarget, Process, Skill, Standard, TargetKind } from "../types";
 import { teamName, useCatalog } from "../lib/catalog";
 import { reviewOf, statusOf } from "../lib/lifecycle";
 import { usePerms } from "../lib/session";
-import { go, href, loadAudit, loadMembers, loadSkills, loadUsers, loadSystem, type AdminSection, type CatalogList, type MetaById, type SystemInfo } from "../lib/store";
+import { go, href, loadAudit, loadMembers, loadSkills, loadUsers, loadSystem, placeOfView, type AdminSection, type CatalogList, type ListPlace, type MetaById, type SystemInfo } from "../lib/store";
 import { KindTag } from "./marks";
 import { describeEntry, detailParts, type Names } from "../lib/activity";
 import { reviewsDue } from "../lib/responsibilities";
-import { CatalogPage } from "./CatalogPage";
+import { CatalogPage, PLACE_HEAD } from "./CatalogPage";
 import { UsersSection } from "./UsersSection";
 import { openCount } from "./Feedback";
 import { SKILL_KIND, SkillPanel } from "./SkillPanel";
@@ -24,7 +24,8 @@ const CodeMapPage = lazy(() => import("./CodeMapPage").then((m) => ({ default: m
 
 const SECTIONS: { id: AdminSection; label: string; icon: typeof List; admin?: boolean; hint: string }[] = [
   { id: "access", label: "Access", icon: KeyRound, admin: true, hint: "Who may do what" },
-  { id: "lists", label: "Lists", icon: List, hint: "Teams, practices, platforms, categories, tools and more" },
+  // the lists: two entries, Teams and Tools (`PLACE_HEAD`), on one page with one draft
+  { id: "lists", label: "Lists", icon: List, hint: "" },
   { id: "skills", label: "Skills", icon: Sparkles, hint: "Generated skills and review agents" },
   { id: "health", label: "Health", icon: CalendarCheck, hint: "Reviews due and open feedback" },
   { id: "activity", label: "Activity", icon: Activity, admin: true, hint: "Who changed what" },
@@ -238,10 +239,10 @@ function SystemSection() {
   );
 }
 
-export function AdminPage({ section, list, id, processes, standards, feedback, meta }: {
+export function AdminPage({ section, place, list, id, processes, standards, feedback, meta }: {
   section: AdminSection;
-  /** Admin › Lists opened at one list and entry (`#/admin/lists/tribes/payments`). */
-  list?: CatalogList; id?: string;
+  /** The lists' two entries, Teams and Tools, at a list and an entry (`#/admin/teams/pillars/compute`). */
+  place?: ListPlace; list?: CatalogList; id?: string;
   processes: Process[]; standards: Standard[]; feedback: FeedbackByTarget;
   /** When each was first published (`meta[id].publishedAt`): where the first review is counted from. */
   meta?: Partial<Record<TargetKind, MetaById>>;
@@ -249,6 +250,8 @@ export function AdminPage({ section, list, id, processes, standards, feedback, m
   const perms = usePerms();
   const allowed = SECTIONS.filter((s) => (s.admin ? perms.admin : s.id === "lists" ? perms.catalog : true));
   const current = allowed.find((s) => s.id === section) ?? allowed[0];
+  // which of the lists' two entries the address is at (the page itself moves it, going to a problem of the other)
+  const listPlace = placeOfView({ place, list });
   // on a phone the sections are one row that scrolls sideways: the current one is brought into it
   const nav = useRef<HTMLElement>(null);
   useScrollFade(nav); // the cut edge fades: there is more to either side
@@ -261,15 +264,21 @@ export function AdminPage({ section, list, id, processes, standards, feedback, m
     <div className={`page admin ${current.id === "code" ? "cm-admin" : ""}`}>
       <aside ref={nav} className="admin-nav" aria-label="Admin">
         <p className="admin-nav-title">Admin</p>
-        {allowed.map((s) => (
-          <a key={s.id} className={current.id === s.id ? "on" : ""} aria-current={current.id === s.id ? "page" : undefined} href={href({ page: "admin", section: s.id })} title={s.hint}><s.icon size={16} />{s.label}</a>
-        ))}
+        {allowed.flatMap((s) => (s.id === "lists"
+          ? (["teams", "tools"] as const).map((p) => {
+            const on = current.id === "lists" && listPlace === p;
+            const Icon = p === "teams" ? Users : Wrench;
+            return <a key={p} className={on ? "on" : ""} aria-current={on ? "page" : undefined} href={href({ page: "admin", section: "lists", place: p })} title={PLACE_HEAD[p].lead}><Icon size={16} />{PLACE_HEAD[p].title}</a>;
+          })
+          : [<a key={s.id} className={current.id === s.id ? "on" : ""} aria-current={current.id === s.id ? "page" : undefined} href={href({ page: "admin", section: s.id })} title={s.hint}><s.icon size={16} />{s.label}</a>]))}
       </aside>
       <div className="admin-main">
         {/* the code map has a heading of its own: the category or the file that is open */}
-        {current.id !== "code" && <header className="admin-head"><h1>{current.label}</h1><p className="lead">{current.hint}</p></header>}
+        {current.id !== "code" && <header className="admin-head">{current.id === "lists"
+          ? <><h1>{PLACE_HEAD[listPlace].title}</h1><p className="lead">{PLACE_HEAD[listPlace].lead}</p></>
+          : <><h1>{current.label}</h1><p className="lead">{current.hint}</p></>}</header>}
         {current.id === "access" && <UsersSection />}
-        {current.id === "lists" && <CatalogPage processes={processes} standards={standards} editable list={list} id={id} />}
+        {current.id === "lists" && <CatalogPage processes={processes} standards={standards} editable place={place} list={list} id={id} />}
         {current.id === "skills" && <SkillsSection />}
         {current.id === "health" && <HealthSection processes={processes} standards={standards} feedback={feedback} meta={meta} />}
         {current.id === "activity" && <ActivitySection processes={processes} standards={standards} feedback={feedback} />}

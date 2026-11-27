@@ -194,7 +194,7 @@ export const look: CodeCategory = {
     },
     {
       path: "src/paths.css",
-      role: "The paths' pictures and \"Which path is this for\": the plate, the lanes of the road, the chips of the editing screen and the picker of Admin › Lists.",
+      role: "The paths' pictures and \"Which path is this for\": the plate, the lanes of the road, the chips of the editing screen and the picker of Admin › Teams / Tools.",
       requirements: [
         { text: "Each picture has an ink, a plate and a line built only on tokens of the look that are no state: greenfield on `--mark-green`, brownfield on the quiet surface, the paved path on the brand and its Ocean tints, the rest neutral. Never the problem or warning colour, so a path never reads as something wrong; it follows light, dark and a changed look.", at: "--path-sprout: var(--mark-green);" },
       ],

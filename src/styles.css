@@ -172,7 +172,7 @@ code { background: var(--surface-2); border: 1px solid var(--line); border-radiu
    the full name in the link's tooltip) and goes below 1200, then the spacing. Below 1120 the places no longer fit
    with their names: they move into the menu (a labelled button and a sheet), and the portal's name comes back while
    there is room. The logo always stays. The widths fit the longest top bar: an admin who also answers for something,
-   with eight links. */
+   with nine links. */
 @media (max-width: 1440px) { .user-name { display: none; } .user-btn { padding: 0 3px; } }
 @media (max-width: 1199px) { .brand-name { display: none; } }
 @media (max-width: 1320px) { .topbar { gap: 10px; } .nav-link { padding: 0 8px; } }
@@ -662,6 +662,9 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 .cat-section + .cat-section { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
 .cat-section-domain { margin: 0; padding: 6px 10px 0; color: var(--text-3); font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); letter-spacing: .06em; text-transform: uppercase; }
 .cat-section-name { margin: 0; padding: 8px 10px 4px; color: var(--text-2); font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: var(--fw-strong); }
+/* the tribe before its pillar, quieter: "Cloud › Compute" */
+.cat-section-name .cat-section-up { color: var(--text-3); font-weight: var(--fw-medium); }
+.cat-section-sep { color: var(--text-3); font-weight: var(--fw-medium); }
 .cat-item { display: flex; align-items: center; gap: 11px; width: 100%; padding: 8px 10px; border-radius: 10px; }
 .cat-item:hover { background: color-mix(in srgb, var(--line) 55%, transparent); }
 .cat-item.on { background: var(--surface); box-shadow: var(--shadow-1), inset 0 0 0 1px var(--ocean-75); }

@@ -34,7 +34,7 @@ export const people: CodeCategory = {
         ]),
     },
     {
-      caption: "An owner of a platform or practice adds a member on its page or in Admin › Lists (`GroupMembers` in `TeamMembers.tsx`, `addMember` in `server/internal/httpapi/groups.go`).",
+      caption: "An owner of a platform or practice adds a member on its page or in Admin › Teams / Tools (`GroupMembers` in `TeamMembers.tsx`, `addMember` in `server/internal/httpapi/groups.go`).",
       process: flow("code-people-member", "An owner adds a member", "How a member is added to a platform or practice.",
         [["owner", "Owner"], ["app", "Browser"], ["server", "Server"]],
         [
@@ -90,7 +90,7 @@ export const people: CodeCategory = {
     },
     {
       path: "src/components/TeamMembers.tsx",
-      role: "`GroupMembers`: the owners or members of a team, platform or practice, on its page and in Admin › Lists, with adding and removing where the person may.",
+      role: "`GroupMembers`: the owners or members of a team, platform or practice, on its page and in Admin › Teams / Tools, with adding and removing where the person may.",
       requirements: [
         { text: "Owners can be changed here only by an admin, through `/api/admin/access`; for anybody else the list is read-only. The server allows that call to admins only (`server/internal/httpapi/api.go`).", at: 'const ownersByAdmin = rank === "owner" && manage && perms.admin;' },
         { text: "Members can be changed by an admin or an owner of that platform or practice (`canManageMembers`); the server checks the same in `memberCall` (`server/internal/httpapi/groups.go`) and answers `403` with who can.", at: "const membersByManager =" },

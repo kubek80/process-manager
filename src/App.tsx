@@ -1,10 +1,10 @@
 import { createPortal } from "react-dom";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, ClipboardCheck, LayoutGrid, LogOut, Menu, Moon, Search, Settings2, ShieldCheck, Sun, Users, X } from "lucide-react";
+import { BookOpen, ClipboardCheck, LayoutGrid, LogOut, Menu, Moon, Search, Settings2, ShieldCheck, Sun, Users, Wrench, X } from "lucide-react";
 import { Lightbulb } from "lucide-react";
 import type { Catalog, DocMeta, Feedback, FeedbackByTarget, Me, Process, Standard, TargetKind } from "./types";
 import {
-  ApiError, confirmReview, createFeedback, deleteFeedback, go, href, loadCatalog, loadFeedback, loadMe, loadProcesses, loadStandards, logout, pageTitle, putCatalog, putProcess, putStandard,
+  ApiError, confirmReview, createFeedback, deleteFeedback, go, href, loadCatalog, loadFeedback, loadMe, loadProcesses, loadStandards, logout, pageTitle, placeOfView, putCatalog, putProcess, putStandard,
   removeProcess, removeStandard, savedMeta, setAlsoHit, setResolved, SIGNED_OUT, forgetUnsaved, hasUnsaved, unsavedSaver, unsavedWork, useRoute, type MetaById,
 } from "./lib/store";
 import { CatalogContext, EMPTY_CATALOG, useCatalog } from "./lib/catalog";
@@ -48,7 +48,7 @@ const AiDialog = lazy(() => import("./components/AiDialog").then((m) => ({ defau
  * A page for something that is not there (deleted, or never existed). The lists in memory may be
  * older than the address - somebody may have created it since - so the server is asked once first.
  */
-function NotFound({ noun, recheck }: { noun: "process" | "standard" | GroupKind | "tribe" | "domain"; recheck?: () => Promise<unknown> }) {
+function NotFound({ noun, recheck }: { noun: "process" | "standard" | GroupKind | "pillar" | "tribe" | "domain"; recheck?: () => Promise<unknown> }) {
   const [checked, setChecked] = useState(!recheck);
   useEffect(() => { if (recheck) void recheck().catch(() => {}).finally(() => setChecked(true)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!checked) return <Loading page />;
@@ -58,7 +58,7 @@ function NotFound({ noun, recheck }: { noun: "process" | "standard" | GroupKind 
       <p className="muted">This {noun} does not exist (any more). It may have been {doc ? "renamed or deleted" : "removed from the lists"}.</p>
       {doc
         ? <a className="btn" href={href({ page: noun === "process" ? "library" : "standards" })}>Back to all {noun === "process" ? "processes" : "standards"}</a>
-        : <a className="btn" href={href({ page: "catalog" })}>Back to Teams &amp; tools</a>}</div>
+        : <a className="btn" href={href({ page: "catalog", place: "teams" })}>Back to Teams</a>}</div>
   );
 }
 
@@ -581,8 +581,10 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   // (somebody who may not change it gets the ordinary page, with the top bar, saying so)
   const editing = (route.page === "edit-process" && !!process && canDraft(perms, "process", process))
     || (route.page === "edit-standard" && !!standard && canDraft(perms, "standard", standard));
-  const on = (...pages: string[]) => (pages.includes(route.page) ? "on" : "");
-  const current = (...pages: string[]) => (pages.includes(route.page) ? "page" as const : undefined);
+  // the lists are two places: a list's page is in the place of its list
+  const here = route.page === "catalog" ? `catalog:${placeOfView(route)}` : route.page;
+  const on = (...pages: string[]) => (pages.includes(here) ? "on" : "");
+  const current = (...pages: string[]) => (pages.includes(here) ? "page" as const : undefined);
 
   // the main places, in the top bar and, on small screens, in the menu
   const places: Place[] = [
@@ -592,13 +594,18 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
     { key: "requests", pages: ["requests"], href: href({ page: "requests" }), label: "Requests", title: "Requests: ask for a process or standard that is missing, vote for what others asked for", icon: Lightbulb },
     ...(mine.length > 0 ? [{ key: "mine", pages: ["mine"], href: href({ page: "mine" }), label: "My responsibilities", title: minePl.title, icon: ClipboardCheck, count: waiting,
       name: waiting ? `My responsibilities, ${waiting} waiting` : "My responsibilities" }] : []),
-    { key: "catalog", pages: ["catalog", "group", "tribe", "domain"], href: href({ page: "catalog" }), label: "Teams & tools", title: "Teams & tools", icon: Users },
+    { key: "teams", pages: ["catalog:teams", "group", "pillar", "tribe", "domain"], href: href({ page: "catalog", place: "teams" }), label: "Teams", title: "Teams: who owns what and how to reach them", icon: Users },
+    { key: "tools", pages: ["catalog:tools"], href: href({ page: "catalog", place: "tools" }), label: "Tools", title: "Tools: what things are built with and where rules apply", icon: Wrench },
     { key: "guide", pages: ["guide"], href: href({ page: "guide" }), label: "Guide", title: "Guide", icon: BookOpen },
     ...(canOpenAdmin(perms) ? [{ key: "admin", pages: ["admin"], href: href({ page: "admin", section: perms.admin ? "access" : "lists" }), label: "Admin", title: "Admin", icon: Settings2 }] : []),
   ];
 
+  // an older address of the lists (#/catalog…, #/admin/lists…) is replaced by its new one, in place
+  useEffect(() => {
+    if (/^#\/(catalog|admin\/lists)(\/|$)/.test(window.location.hash)) go(route, { replace: true });
+  }, [route]);
   const group = route.page === "group" ? groupEntry(catalog, route.kind, route.id)
-    : route.page === "tribe" || route.page === "domain" ? clusterEntry(catalog, route.page, route.id) : undefined;
+    : route.page === "pillar" || route.page === "tribe" || route.page === "domain" ? clusterEntry(catalog, route.page, route.id) : undefined;
   const title = pageTitle(route, { process: process?.title, standard: standard?.title, group: group?.name, loading: !processes }, name);
   useEffect(() => { document.title = title; }, [title]);
 
@@ -636,12 +643,12 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       {processes && route.page === "standards" && (
         <StandardsLibrary standards={standards} processes={all} feedback={feedback.standard} meta={standardMeta} onAi={() => setAi("standard")} onNew={newStandard} />
       )}
-      {processes && route.page === "catalog" && <CatalogPage processes={all} standards={standards} editable={false} list={route.list} id={route.id} />}
+      {processes && route.page === "catalog" && <CatalogPage processes={all} standards={standards} editable={false} place={route.place} list={route.list} id={route.id} />}
       {processes && route.page === "group" && (group
         ? <GroupPage key={`${route.kind}/${route.id}`} kind={route.kind} id={route.id} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }}
           onNew={(noun, place) => { setPending(null); setPreset(place); if (noun === "standard") newStandard(); else setNaming("process"); }} />
         : <NotFound key={`g/${route.kind}/${route.id}`} noun={route.kind} recheck={refreshAll} />)}
-      {processes && (route.page === "tribe" || route.page === "domain") && (group
+      {processes && (route.page === "pillar" || route.page === "tribe" || route.page === "domain") && (group
         ? <ClusterPage key={`${route.page}/${route.id}`} kind={route.page} id={route.id} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }} />
         : <NotFound key={`c/${route.page}/${route.id}`} noun={route.page} recheck={refreshAll} />)}
       {processes && route.page === "requests" && <RequestsPage state={route.state} kind={route.kind} processes={all} standards={standards} />}
@@ -651,7 +658,7 @@ function Shell({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       )}
       {processes && route.page === "guide" && <GuidePage />}
       {processes && route.page === "admin" && (canOpenAdmin(perms)
-        ? <AdminPage section={route.section} list={route.list} id={route.id} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }} />
+        ? <AdminPage section={route.section} place={route.place} list={route.list} id={route.id} processes={all} standards={standards} feedback={feedback} meta={{ process: processMeta, standard: standardMeta }} />
         : <div className="page not-found"><h1>Admin</h1><p className="muted">You do not have access to the Admin panel. An admin can give it to you.</p></div>)}
       {processes && route.page === "process" && (process
         ? <ProcessPage key={process.id} process={process} meta={processMeta[process.id]} all={all} standards={standards} tab={route.tab} item={route.item}

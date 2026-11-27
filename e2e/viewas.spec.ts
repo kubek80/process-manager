@@ -208,7 +208,7 @@ test("while viewing, what would change something is greyed with the sentence, on
     await band(page).getByRole("button", { name: "Stop viewing" }).click();
     await expect(band(page)).toHaveCount(0);
 
-    // Alex: process editor and lists manager: the list, a skill's guidance, Admin › Lists
+    // Alex: process editor and lists manager: the list, a skill's guidance, Admin › Tools
     await viewFromAccess(page, "Alex Editor");
     await open(page, "/processes");
     await disabledWithReason(page.getByRole("button", { name: "New process", exact: true }), "Alex Editor", "list: New process");
@@ -218,11 +218,11 @@ test("while viewing, what would change something is greyed with the sentence, on
     await panel.getByRole("button", { name: "Add guidance" }).click();
     await panel.locator(".skill-extra textarea").fill("Typed while viewing.");
     await disabledWithReason(panel.getByRole("button", { name: "Save and regenerate" }), "Alex Editor", "skill: Save and regenerate");
-    await open(page, "/admin/lists");
+    await open(page, "/admin/tools");
     await page.getByRole("tab", { name: /^Tools/ }).click();
     const desc = page.locator(".cat-detail textarea, .cat-detail input").first();
     await desc.fill(`${await desc.inputValue()} (typed while viewing)`);
-    await disabledWithReason(page.getByRole("button", { name: "Save changes" }), "Alex Editor", "Admin › Lists: Save changes");
+    await disabledWithReason(page.getByRole("button", { name: "Save changes" }), "Alex Editor", "Admin › Tools: Save changes");
   } finally {
     await clearFeedback(request, "process", GCP);
   }

@@ -4,7 +4,7 @@ import {
 } from "./helpers";
 
 // The path of a process or standard: Greenfield, Brownfield, Paved path (also called the golden
-// path), a ninth list in Admin › Lists. A document names none (it applies whatever the path), one
+// path), a list in Admin › Tools. A document names none (it applies whatever the path), one
 // or more. It shows as plates on cards and rows, as a road on the reader's page, is a filter and
 // a choice of My application, and is found by its other names. Every test puts back what it changed.
 
@@ -40,10 +40,10 @@ test.afterEach(async ({ request }) => {
   for (const [kind, id] of [["processes", PROC], ["standards", STD]]) await request.delete(`/api/${kind}/${id}`, { headers: CSRF });
 });
 
-test("Admin › Lists has Paths among where it applies: a path with a picture and other names, a used one that cannot be removed", async ({ page }) => {
+test("Admin › Tools has Paths among where rules apply: a path with a picture and other names, a used one that cannot be removed", async ({ page }) => {
   await signIn(page, ALEX);
-  await open(page, "/admin/lists");
-  await expect(page.getByRole("tablist", { name: "Where it applies" }).getByRole("tab")).toHaveText([/^Application tiers/, /^Paths/, /^Environments/, /^Languages/]);
+  await open(page, "/admin/tools");
+  await expect(page.getByRole("tablist", { name: "Where rules apply" }).getByRole("tab")).toHaveText([/^Application tiers/, /^Paths/, /^Environments/, /^Languages/]);
   await tab(page, "Paths").click();
   await expect(page.locator(".cat-item .cat-name, .cat-item strong").first()).toBeVisible();
   for (const name of ["Greenfield", "Brownfield", "Paved path"]) await expect(item(page, name)).toBeVisible();
@@ -66,7 +66,7 @@ test("Admin › Lists has Paths among where it applies: a path with a picture an
   expect(refused.status()).toBe(400);
   expect((await refused.json()).error).toMatch(/still used by “Onboard an API to Apigee”, “Request a GCP project”/);
   await signIn(page, ALEX);
-  await open(page, "/admin/lists");
+  await open(page, "/admin/tools");
   await tab(page, "Paths").click();
   // Brownfield is used by nothing in the sample
   await item(page, "Brownfield").click();
@@ -100,7 +100,7 @@ test("Admin › Lists has Paths among where it applies: a path with a picture an
   expect((await clash.json()).error).toContain("The paths “Paved path” and “Lift” are both also called “Golden Path”: keep it on one of them.");
 
   await signIn(page, ALEX);
-  await open(page, "/admin/lists");
+  await open(page, "/admin/tools");
   await tab(page, "Paths").click();
   await page.getByRole("button", { name: "New path" }).click();
   await page.locator(".cat-new").getByLabel("Name").fill("Lift and shift");
@@ -112,9 +112,9 @@ test("Admin › Lists has Paths among where it applies: a path with a picture an
   await expect(page.locator(".saved")).toBeVisible();
   expect((await readCatalog(page)).paths).toContainEqual({ id: NEW_PATH, name: "Lift and shift", symbol: "bridge", alsoCalled: ["lift", "rehost"], description: "An existing application moved as it is." });
 
-  // Teams & tools shows it to everyone, with its other names
+  // Tools shows it to everyone, with its other names
   await signIn(page, SAM);
-  await open(page, "/catalog");
+  await open(page, "/tools");
   await tab(page, "Paths").click();
   await item(page, "Paved path").click();
   await expect(page.locator(".cat-detail")).toContainText(/Also called\s*golden path, paved road/i);
@@ -332,10 +332,10 @@ test("the paths of a working draft are shown to nobody who may not see the draft
     await expect(road(page)).toHaveCount(0);
     await open(page, "/processes");
     await expect(card(page, "Paths demo process").locator(".path-marks")).toHaveCount(0);
-    // not in the filter's counts, not under the path in Teams & tools
+    // not in the filter's counts, not under the path in Tools
     await pickFilter(page, "Path", "Not tied to a path");
     await expect(card(page, "Paths demo process")).toBeVisible();
-    await open(page, "/catalog");
+    await open(page, "/tools");
     await tab(page, "Paths").click();
     await item(page, "Brownfield").click();
     await expect(page.locator(".cat-detail")).not.toContainText("Paths demo process");

@@ -116,7 +116,7 @@ infrastructure-as-code  1/63 (meaning)                  = 0.0159   by: meaning`,
       requirements: [
         { text: "The words a path is found by: its name and its other names; the server's chunk text and the MCP server use the same names (`docs.PathNames`).", at: "export function pathWords(entry: Pick<PathEntry, \"name\" | \"alsoCalled\">): string[] {" },
         { text: "A path (or an architecture pattern) a document names that is no longer in the list still shows, under its id, after the others: it is never silently dropped.", at: "export function pathsOf<T extends { id: string; name: string } = PathEntry>(list: T[] | undefined, ids: unknown): T[] {" },
-        { text: "The same clash rules and sentences as the server (`otherNameClashes` in `server/internal/docs/paths.go`), so Admin › Lists says before saving what the server would refuse.", at: "export function otherNameClashes(" },
+        { text: "The same clash rules and sentences as the server (`otherNameClashes` in `server/internal/docs/paths.go`), so Admin › Teams / Tools says before saving what the server would refuse.", at: "export function otherNameClashes(" },
       ],
       tests: ["src/lib/__tests__/paths.test.ts"],
     },

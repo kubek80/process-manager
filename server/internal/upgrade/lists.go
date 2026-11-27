@@ -52,6 +52,8 @@ const (
 //     (Greenfield, Brownfield, Paved path), once: lists that have the key "paths" are never
 //     given them again, also when an admin removed every entry (the app always saves the key).
 //     Documents without paths are valid as they are and are not rewritten.
+//   - lists in which teams name a tribe (stored before there were pillars) get a pillar in each
+//     such tribe, with those teams in it (pillars.go); once, since afterwards no team names one.
 //
 // Everything is one transaction, saved as new versions by By with Note, and recorded in the
 // activity log. A document the save refuses is skipped with a warning; one that names a
@@ -87,6 +89,8 @@ type Report struct {
 	Platforms      int
 	Categories     int
 	Paths          int // entries of the list of paths, added because the lists had none
+	Pillars        int // pillars added for the teams that were straight in a tribe
+	TeamsInPillars int // teams put in those pillars
 	RolesConverted int
 	RolesRemoved   int
 }
@@ -118,6 +122,9 @@ func (r Report) String() string {
 	}
 	if r.Paths > 0 {
 		parts = append(parts, fmt.Sprintf("added the list of paths with %d entries", r.Paths))
+	}
+	if r.Pillars > 0 || r.TeamsInPillars > 0 {
+		parts = append(parts, fmt.Sprintf("put %d teams in %d new pillars", r.TeamsInPillars, r.Pillars))
 	}
 	if r.Lists {
 		parts = append(parts, "the lists were updated")
@@ -299,6 +306,12 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) (Report, error) {
 		cat = cat.with("teams", b)
 	}
 
+	// ----- pillars: teams that were put straight in a tribe are put in a pillar of that tribe
+	cat, pillarsAdded, teamsInPillars, inPillars, err := pillarsFromTribes(cat, log)
+	if err != nil {
+		return Report{}, err
+	}
+
 	// ----- the categories: from what readers can see, the same text (whatever its case or the
 	// spaces around it) being one category, a different text getting an id of its own
 	type parsed struct {
@@ -443,6 +456,9 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) (Report, error) {
 	// client that leaves it out, or imported from files made before there were paths) get the
 	// three entries again at the next start.
 	movedLists := catChanged
+	if inPillars {
+		catChanged = true
+	}
 	pathsAdded := 0
 	if _, had := cat.get("paths"); !had {
 		cat = cat.after("paths", DefaultPaths, "tiers")
@@ -564,11 +580,15 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) (Report, error) {
 	}
 
 	// adding the paths alone is said as such in the history of the lists and in the activity log
-	onlyPaths := pathsAdded > 0 && !movedLists && len(changes) == 0 && len(scoped) == 0
+	onlyPaths := pathsAdded > 0 && !inPillars && !movedLists && len(changes) == 0 && len(scoped) == 0
+	onlyPillars := inPillars && pathsAdded == 0 && !movedLists && len(changes) == 0 && len(scoped) == 0
 	if catChanged {
 		note := Note
 		if onlyPaths {
 			note = PathsNote
+		}
+		if onlyPillars {
+			note = PillarsNote
 		}
 		if _, _, err := docs.SaveIn(ctx, tx, docs.Change{Kind: docs.Catalog, ID: docs.CatalogID, Body: cat.bytes(), By: By, Note: note}); err != nil {
 			return Report{}, fmt.Errorf("the lists: %w", err)
@@ -641,10 +661,20 @@ func lists(ctx context.Context, tx pgx.Tx, log *slog.Logger) (Report, error) {
 			summary += "; " + PathsSummary
 		}
 	}
+	if inPillars {
+		said := fmt.Sprintf(PillarsSummary, pillarsAdded)
+		log.Info("teams put in pillars", "pillars", pillarsAdded, "teams", teamsInPillars)
+		if onlyPillars {
+			summary = said
+		} else {
+			summary += "; " + said
+		}
+	}
 	log.Info("database converted to practices, platforms and categories", "documents", saved, "versions", versions, "workingDrafts", workingDrafts, "practices", len(practices.added),
 		"platforms", len(platforms.added), "categories", len(categories.added), "rolesConverted", converted, "rolesRemoved", dropped)
 	report := Report{Converted: true, Lists: catChanged, Documents: saved, Versions: versions, Practices: len(practices.added),
-		Platforms: len(platforms.added), Categories: len(categories.added), Paths: pathsAdded, RolesConverted: converted, RolesRemoved: dropped}
+		Platforms: len(platforms.added), Categories: len(categories.added), Paths: pathsAdded, Pillars: pillarsAdded, TeamsInPillars: teamsInPillars,
+		RolesConverted: converted, RolesRemoved: dropped}
 	return report, audit.AddIn(ctx, tx, By, Name, "content.convert", "lists", summary)
 }
 

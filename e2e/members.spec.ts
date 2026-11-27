@@ -236,7 +236,7 @@ test("a draft on a platform and a practice with different owners: only somebody 
   }
 });
 
-// ---------- Admin › Access and Admin › Lists
+// ---------- Admin › Access and Admin › Teams
 
 test("Admin › Access gives and takes the two member roles", async ({ page }) => {
   await signIn(page, DANA);
@@ -275,9 +275,9 @@ test("Admin › Access gives and takes the two member roles", async ({ page }) =
   }
 });
 
-test("Admin › Lists: contact fields are saved with the lists, an emptied one leaves no trace; a platform with members cannot be removed", async ({ page }) => {
+test("Admin › Teams: contact fields are saved with the lists, an emptied one leaves no trace; a platform with members cannot be removed", async ({ page }) => {
   await signIn(page, ALEX);
-  await open(page, "/admin/lists");
+  await open(page, "/admin/teams");
   await page.getByRole("tab", { name: /^Platforms/ }).click();
   await page.locator(".cat-item", { hasText: "ServiceNow" }).click();
   const detail = page.locator(".cat-detail");

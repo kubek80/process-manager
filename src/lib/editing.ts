@@ -342,7 +342,7 @@ export function issuePlace(kind: TargetKind, doc: unknown, path: string): string
   return (kind === "process" ? PROCESS_SECTIONS : STANDARD_SECTIONS).find((x) => x.id === t.section)?.label ?? "About";
 }
 
-// ---------- the problems of the lists (Admin › Lists)
+// ---------- the problems of the lists (Admin › Teams and Admin › Tools)
 
 /** What a list's entry and its fields are called in a sentence. */
 const LIST_NOUN: Record<string, { one: string; many: string }> = LIST_WORDS;
@@ -350,7 +350,7 @@ const LIST_NOUN: Record<string, { one: string; many: string }> = LIST_WORDS;
 const LIST_FIELD: Record<string, string> = {
   name: "name", id: "id", description: "description", url: "link", icon: "icon", contact: "other ways to reach them", contacts: "contact details",
   email: "group email", slack: "Slack channel", slackUrl: "link to the Slack channel", chat: "Google Chat space", chatUrl: "link to the Chat space",
-  confluence: "Confluence page", page: "page link", form: "request form", symbol: "picture", alsoCalled: "other names", tribe: "tribe", domain: "domain",
+  confluence: "Confluence page", page: "page link", form: "request form", symbol: "picture", alsoCalled: "other names", pillar: "pillar", tribe: "tribe", domain: "domain",
 };
 
 /** Which list, entry and field a problem of the lists is about: "teams[3].contacts.slackUrl". */
@@ -435,7 +435,7 @@ export function refusalText(error: string, kind: TargetKind | "lists", doc: unkn
 }
 
 /**
- * Where the field a problem of the lists is about is in the details of its entry (Admin › Lists),
+ * Where the field a problem of the lists is about is in the details of its entry (Admin › Teams or Tools),
  * to bring the keyboard to it and mark it: CSS selectors to try in order. An id cannot be changed,
  * so its problems lead to the name; a problem of the whole entry too.
  */
@@ -449,6 +449,7 @@ export function listIssueField(path: string): string[] {
     case "icon": return [".icon-field button"];
     case "alsoCalled": return ['[data-field="alsoCalled"]'];
     case "symbol": return [".symbol-picker button"];
+    case "pillar": return ['[data-field="pillar"]'];
     case "tribe": return ['[data-field="tribe"]'];
     case "domain": return ['[data-field="domain"]'];
     default: return ['[data-field="name"]'];

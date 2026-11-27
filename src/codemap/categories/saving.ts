@@ -155,7 +155,7 @@ export const saving: CodeCategory = {
       requirements: [
         { text: "A person's ordinary save of a process or standard uses `RefuseIfDraft`; `draft=R` makes it `ReplaceDraft`. The lists (`catalog`) have no working draft and keep `KeepDraft`.", at: "rule = docs.RefuseIfDraft" },
         { text: "Every save of a person runs the checker on the server, whatever the app checked: a body naming a list entry that does not exist is refused here.", at: "err = docs.Check(kind, body, lists)" },
-        { text: "For the lists, what is still in use is checked before the checker, so removing a tribe that teams are part of (or a domain that tribes are part of) is refused by who is in it (\"the team “X”\"), not only as an unknown tribe. Test: `httpapi/tribes_test.go`.", at: "// within the lists: a tribe the teams are part of, a domain the tribes are part of" },
+        { text: "For the lists, what is still in use is checked before the checker, so removing a pillar that teams are part of (a tribe that pillars are part of, a domain that tribes are part of) is refused by who is in it (\"the team “X”\"), not only as an unknown tribe. Test: `httpapi/tribes_test.go`.", at: "// within the lists: a pillar the teams are part of, a tribe the pillars are part of, a domain the tribes are part of" },
         { text: "A draft that leaves without a version is logged as a discard (`process.discard`), in the same transaction.", at: "DraftDropped: func(ctx context.Context, tx pgx.Tx, d docs.WorkingDraft) error {" },
         { text: "A review confirmation moves a draft based on the reviewed version, in the save's transaction: otherwise the editing screen would say a newer version was published since the draft began (`baseBehindSentence`) when only a review came in between. Publishing itself would still go through: `publishDraft` moves the base when `OnlyReviewDiffers`.", at: "if err := docs.MoveDraftBaseIn(ctx, tx, kind, id, current.Version, saved.Version); err != nil {" },
         { text: "A delete removes feedback, bookmarks, upvotes and counts, marks views and downloads, marks a request it answered (`linked_gone`), and records the delete, all in one transaction: none of them can outlive the document half-way.", at: "if err := engagement.DeleteByTargetIn(ctx, tx, kind, id); err != nil {" },
@@ -190,6 +190,15 @@ export const saving: CodeCategory = {
         { text: "The same entries as the sample lists (`catalog/catalog.json`): an upgraded installation and a new one start alike. Test: `DefaultPaths` compared with the sample.", at: "var DefaultPaths = json.RawMessage(" },
       ],
       tests: ["server/internal/upgrade/paths_test.go"],
+    },
+    {
+      path: "server/internal/upgrade/pillars.go",
+      role: "Lists stored before there were pillars (teams that name a tribe) get one pillar in each such tribe, named like it, with those teams in it; at start (from `lists.go`) and for an import of files of that shape (`importFiles` in `cmd/server/main.go`, through `docs.Store.Prepare`).",
+      requirements: [
+        { text: "Nothing is lost and it runs once: lists in which no team names a tribe come back unchanged, and afterwards no team names one. Test: `TestTeamsInTribesArePutInPillarsOnce`, `TestListsWithoutTeamsInTribesAreLeftAlone`.", at: "if _, had := o.get(\"tribe\"); !had {" },
+        { text: "A pillar's id is the tribe's, with a number when the pillars already have it; a team that named a tribe the lists do not have ends up in no pillar, said in the log. Test: `TestPillarIdsThatWouldClash`.", at: "for n := 2; pillars.ids[pillar]; n++ {" },
+      ],
+      tests: ["server/internal/upgrade/pillars_test.go", "server/cmd/server/main_test.go"],
     },
     {
       path: "server/internal/upgrade/lists.go",

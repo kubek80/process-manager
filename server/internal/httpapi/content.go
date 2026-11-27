@@ -499,7 +499,7 @@ func (a *api) stillUsed(ctx context.Context, s session, body []byte) error {
 			}
 		}
 	}
-	// within the lists: a tribe the teams are part of, a domain the tribes are part of (as the new lists have them)
+	// within the lists: a pillar the teams are part of, a tribe the pillars are part of, a domain the tribes are part of (as the new lists have them)
 	for _, entry := range removed {
 		key, id, _ := strings.Cut(entry, "/")
 		inner := map[string]struct {
@@ -507,7 +507,8 @@ func (a *api) stillUsed(ctx context.Context, s session, body []byte) error {
 			list []docs.Named
 			of   func(docs.Named) string
 		}{
-			"tribes":  {"team", next.Teams, func(n docs.Named) string { return n.Tribe }},
+			"pillars": {"team", next.Teams, func(n docs.Named) string { return n.Pillar }},
+			"tribes":  {"pillar", next.Pillars, func(n docs.Named) string { return n.Tribe }},
 			"domains": {"tribe", next.Tribes, func(n docs.Named) string { return n.Domain }},
 		}
 		if in, ok := inner[key]; ok {

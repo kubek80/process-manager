@@ -331,13 +331,39 @@ export type Route =
   /** The page of a team, a platform or a practice. */
   | { page: "group"; kind: GroupKind; id: string }
   /** The page of a tribe (a group of teams) or a domain (a group of tribes). */
-  | { page: "tribe" | "domain"; id: string };
+  | { page: "pillar" | "tribe" | "domain"; id: string };
 
-/** The lists of Teams & tools, as the address names them. */
-export const CATALOG_LISTS = ["teams", "tribes", "domains", "practices", "platforms", "categories", "tools", "patterns", "tiers", "paths", "environments", "languages"] as const;
+/** The lists, as the address names them. */
+export const CATALOG_LISTS = ["teams", "pillars", "tribes", "domains", "practices", "platforms", "categories", "tools", "patterns", "tiers", "paths", "environments", "languages"] as const;
 export type CatalogList = (typeof CATALOG_LISTS)[number];
-/** Which list of Teams & tools is open and which entry is chosen: `#/catalog/platforms/google-cloud`. */
-export interface CatalogView { list?: CatalogList; id?: string }
+/** Which list of Teams or Tools is open and which entry is chosen: `#/teams/platforms/google-cloud`. */
+export interface CatalogView { place?: ListPlace; list?: CatalogList; id?: string }
+/**
+ * The lists are two places, in the top bar and in Admin: Teams (who: the teams and their groups,
+ * practices, platforms) and Tools (what things are built with and where rules apply). Each list is
+ * in one of them; each place opens on its first list.
+ */
+export type ListPlace = "teams" | "tools";
+export const PLACE_LISTS: Record<ListPlace, readonly CatalogList[]> = {
+  teams: ["teams", "pillars", "tribes", "domains", "practices", "platforms"],
+  tools: ["tools", "categories", "patterns", "tiers", "paths", "environments", "languages"],
+};
+/** The place a list is in. */
+export const placeOfList = (list: CatalogList): ListPlace => (PLACE_LISTS.tools.includes(list) ? "tools" : "teams");
+/** The place a view of the lists is in: its list's, else the one it names, else Teams. */
+export const placeOfView = (v: CatalogView): ListPlace => (v.list ? placeOfList(v.list) : v.place ?? "teams");
+/** `#/teams`, `#/tools/paths`, `#/teams/teams/dns-team`: the place, then the list unless it is the place's first and no entry is named. */
+function listsPath(base: string, v: CatalogView): string {
+  const place = placeOfView(v);
+  const list = v.list && (v.id || v.list !== PLACE_LISTS[place][0]) ? `/${v.list}${v.id ? `/${v.id}` : ""}` : "";
+  return `${base}${place}${list}`;
+}
+/** A place of the lists read from an address: `teams` or `tools`, then a list and an entry; anything not known is left out. */
+function parseLists(place: ListPlace | undefined, list: string | undefined, id: string | undefined): CatalogView {
+  const known = (CATALOG_LISTS as readonly string[]).includes(list ?? "") ? (list as CatalogList) : undefined;
+  if (!known) return place ? { place } : {};
+  return { place: placeOfList(known), list: known, ...(id ? { id } : {}) };
+}
 
 /**
  * What the results page shows: the words searched for and the filters. Several values of one
@@ -445,23 +471,27 @@ const parse = (h: string = location.hash): Route => {
     return { page: list[1] === "processes" ? "library" : "standards", ...listOf(state) };
   }
   if (h.startsWith("#/processes")) return { page: "library" };
+  // Teams and Tools; the older one place "Teams & tools" (#/catalog…) leads to the same list and entry
+  const place = h.match(/^#\/(teams|tools)(?:\/([a-z]+)(?:\/([a-z0-9-]+))?)?\/?$/);
+  if (place) return { page: "catalog", ...parseLists(place[1] as ListPlace, place[2], place[3]) };
   const cat = h.match(/^#\/catalog(?:\/([a-z]+)(?:\/([a-z0-9-]+))?)?\/?$/);
-  if (cat) return { page: "catalog", ...((CATALOG_LISTS as readonly string[]).includes(cat[1] ?? "") ? { list: cat[1] as CatalogList, ...(cat[2] ? { id: cat[2] } : {}) } : {}) };
-  if (h.startsWith("#/catalog")) return { page: "catalog" };
+  if (cat) return { page: "catalog", ...parseLists("teams", cat[1], cat[2]) };
+  if (h.startsWith("#/catalog")) return { page: "catalog", place: "teams" };
   if (h.startsWith("#/guide")) return { page: "guide" };
   if (h.startsWith("#/mine")) return { page: "mine" };
   if (h.startsWith("#/standards")) return { page: "standards" };
-  const cluster = h.match(/^#\/(tribe|domain)\/([a-z0-9-]+)\/?$/);
-  if (cluster) return { page: cluster[1] as "tribe" | "domain", id: cluster[2] };
+  const cluster = h.match(/^#\/(pillar|tribe|domain)\/([a-z0-9-]+)\/?$/);
+  if (cluster) return { page: cluster[1] as "pillar" | "tribe" | "domain", id: cluster[2] };
   const group = h.match(/^#\/(team|platform|practice)\/([a-z0-9-]+)\/?$/);
   if (group) return { page: "group", kind: group[1] as GroupKind, id: group[2] };
   const requests = h.match(/^#\/requests(?:\?(.*))?$/);
   if (requests) return { page: "requests", ...parseRequestsQuery(requests[1] ?? "") };
   const code = h.match(/^#\/admin\/code(?:\/([^/?#]+)(?:\/file(?:\/([^?#]*))?)?)?\/?(?:\?(.*))?$/);
   if (code) return { page: "admin", section: "code", ...parseCode(code[1], code[2], code[3]) };
-  // Admin › Lists opened at one entry ("Edit in Admin › Lists" on a tribe's or a domain's page)
-  const lists = h.match(/^#\/admin\/lists\/([a-z]+)(?:\/([a-z0-9-]+))?\/?$/);
-  if (lists && (CATALOG_LISTS as readonly string[]).includes(lists[1])) return { page: "admin", section: "lists", list: lists[1] as CatalogList, ...(lists[2] ? { id: lists[2] } : {}) };
+  // Admin's two entries of the lists, Teams and Tools, at a list and an entry ("Edit in Admin ›
+  // Teams" on a pillar's page); the older #/admin/lists… opens the right one of the two
+  const adminLists = h.match(/^#\/admin\/(teams|tools|lists)(?:\/([a-z]+)(?:\/([a-z0-9-]+))?)?\/?$/);
+  if (adminLists) return { page: "admin", section: "lists", ...parseLists(adminLists[1] === "tools" ? "tools" : "teams", adminLists[2], adminLists[3]) };
   const admin = h.match(/^#\/admin(?:\/(access|lists|skills|health|activity|statistics|theming|system|code))?/);
   if (admin) return { page: "admin", section: (admin[1] as AdminSection) ?? "access" };
   const es = h.match(/^#\/s\/([a-z0-9-]+)\/(?:edit(?:\/([A-Z][A-Z0-9-]*))?|json)/);
@@ -630,17 +660,17 @@ export const href = (r: Route): string => {
     case "search": return searchHref(r);
     case "library": return searchHref(listOf(r), "#/processes");
     case "standards": return searchHref(listOf(r), "#/standards");
-    case "catalog": return `#/catalog${r.list ? `/${r.list}${r.id ? `/${r.id}` : ""}` : ""}`;
+    case "catalog": return listsPath("#/", r);
     case "guide": return "#/guide";
     case "mine": return "#/mine";
     case "requests": return `#/requests${requestsQuery(r)}`;
-    case "admin": return r.section === "code" ? codeHref(r) : r.section === "lists" && r.list ? `#/admin/lists/${r.list}${r.id ? `/${r.id}` : ""}` : `#/admin/${r.section}`;
+    case "admin": return r.section === "code" ? codeHref(r) : r.section === "lists" ? listsPath("#/admin/", r) : `#/admin/${r.section}`;
     case "standard": return r.tab === "json" ? `#/s/${r.id}/edit` : `#/s/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
     case "process": return r.tab === "json" ? `#/p/${r.id}/edit` : `#/p/${r.id}/${r.tab}${r.item ? `/${r.item}` : ""}`;
     case "edit-process": return `#/p/${r.id}/edit${r.item ? `/${r.item}` : ""}`;
     case "edit-standard": return `#/s/${r.id}/edit${r.item ? `/${r.item}` : ""}`;
     case "group": return `#/${r.kind}/${r.id}`;
-    case "tribe": case "domain": return `#/${r.page}/${r.id}`;
+    case "pillar": case "tribe": case "domain": return `#/${r.page}/${r.id}`;
   }
 };
 /**
@@ -660,18 +690,19 @@ export function pageTitle(r: Route, names: { process?: string; standard?: string
     case "search": here = r.q?.trim() ? `“${r.q.trim()}” · Search` : "Search"; break;
     case "library": here = "Processes"; break;
     case "standards": here = "Standards"; break;
-    case "catalog": here = "Teams & tools"; break;
+    case "catalog": here = placeOfView(r) === "tools" ? "Tools" : "Teams"; break;
     case "guide": here = "Guide"; break;
     case "mine": here = "My responsibilities"; break;
     case "requests": here = "Requests"; break;
-    case "admin": here = r.section !== "code" ? `${r.section.slice(0, 1).toUpperCase()}${r.section.slice(1)} · Admin`
+    case "admin": here = r.section === "lists" ? `${placeOfView(r) === "tools" ? "Tools" : "Teams"} · Admin`
+      : r.section !== "code" ? `${r.section.slice(0, 1).toUpperCase()}${r.section.slice(1)} · Admin`
       : `${r.file ? `${r.file.split("/").pop()} · ` : ""}Code map · Admin`; break;
     case "process": here = of(names.process, "Process not found"); break;
     case "standard": here = of(names.standard, "Standard not found"); break;
     case "edit-process": here = names.process ? `Editing ${names.process}` : of(undefined, "Process not found"); break;
     case "edit-standard": here = names.standard ? `Editing ${names.standard}` : of(undefined, "Standard not found"); break;
     case "group": here = of(names.group, `${r.kind === "team" ? "Team" : r.kind === "platform" ? "Platform" : "Practice"} not found`); break;
-    case "tribe": case "domain": here = of(names.group, `${r.page === "tribe" ? "Tribe" : "Domain"} not found`); break;
+    case "pillar": case "tribe": case "domain": here = of(names.group, `${r.page === "pillar" ? "Pillar" : r.page === "tribe" ? "Tribe" : "Domain"} not found`); break;
   }
   return here ? `${here} · ${APP}` : APP;
 }

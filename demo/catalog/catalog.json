@@ -103,7 +103,7 @@
       "id": "api-platform-team",
       "name": "API Platform team",
       "contact": "Slack #api-platform",
-      "tribe": "connectivity-tribe"
+      "pillar": "edge-and-apis"
     },
     {
       "id": "architecture-board",
@@ -115,7 +115,7 @@
       "id": "azure-platform-team",
       "name": "Azure Platform team",
       "contact": "Slack #azure-platform",
-      "tribe": "cloud-tribe"
+      "pillar": "cloud-foundations"
     },
     {
       "id": "cloud-platform-team",
@@ -126,37 +126,37 @@
         "slackUrl": "https://example.slack.com/archives/C0CLOUDPLAT"
       },
       "description": "Runs the Google Cloud platform: landing zones, projects, networks and the shared tooling around them.",
-      "tribe": "cloud-tribe"
+      "pillar": "cloud-foundations"
     },
     {
       "id": "security",
       "name": "Cyber Security",
       "contact": "Slack #security",
-      "tribe": "trust-service-tribe"
+      "pillar": "cyber-defence"
     },
     {
       "id": "dns-team",
       "name": "DNS team",
-      "tribe": "connectivity-tribe"
+      "pillar": "core-network"
     },
     {
       "id": "data-platform-team",
       "name": "Data Platform team",
       "contact": "Slack #data-platform",
       "description": "Runs the data warehouse and the pipelines that load it.",
-      "tribe": "data-tribe"
+      "pillar": "data-platform"
     },
     {
       "id": "developer-experience-team",
       "name": "Developer Experience team",
       "contact": "Slack #devex",
-      "tribe": "developer-tools-tribe"
+      "pillar": "engineering-productivity"
     },
     {
       "id": "edge-cdn-team",
       "name": "Edge & CDN team",
       "contact": "Slack #edge-cdn",
-      "tribe": "connectivity-tribe"
+      "pillar": "edge-and-apis"
     },
     {
       "id": "fulfilment-team",
@@ -167,46 +167,101 @@
       "name": "Identity & Access team",
       "contact": "Slack #identity",
       "description": "Runs single sign-on, access requests and access reviews.",
-      "tribe": "trust-service-tribe"
+      "pillar": "cyber-defence"
     },
     {
       "id": "kubernetes-platform-team",
       "name": "Kubernetes Platform team",
       "contact": "Slack #kubernetes",
       "description": "Runs the shared Kubernetes clusters.",
-      "tribe": "cloud-tribe"
+      "pillar": "runtime"
     },
     {
       "id": "network-team",
       "name": "Network team",
       "contact": "Slack #network",
-      "tribe": "connectivity-tribe"
+      "pillar": "core-network"
     },
     {
       "id": "observability-team",
       "name": "Observability team",
       "contact": "Slack #observability",
       "description": "Runs dashboards, alerting and the central log platform.",
-      "tribe": "developer-tools-tribe"
+      "pillar": "quality-and-observability"
     },
     {
       "id": "quality-engineering-team",
       "name": "Quality Engineering team",
       "contact": "Slack #quality",
       "description": "Helps teams test their software and runs the load test tooling.",
-      "tribe": "developer-tools-tribe"
+      "pillar": "quality-and-observability"
     },
     {
       "id": "service-management",
       "name": "Service Management",
-      "tribe": "trust-service-tribe"
+      "pillar": "service-operations"
     },
     {
       "id": "site-reliability-team",
       "name": "Site Reliability team",
       "contact": "Slack #sre",
       "description": "Keeps production running: releases, on-call and incident handling.",
-      "tribe": "cloud-tribe"
+      "pillar": "runtime"
+    }
+  ],
+  "pillars": [
+    {
+      "id": "cloud-foundations",
+      "name": "Cloud foundations",
+      "tribe": "cloud-tribe",
+      "description": "The teams that set up and run the company's Google Cloud and Azure estates."
+    },
+    {
+      "id": "core-network",
+      "name": "Core network",
+      "tribe": "connectivity-tribe",
+      "description": "The teams that run the company network and its names."
+    },
+    {
+      "id": "cyber-defence",
+      "name": "Cyber defence",
+      "tribe": "trust-service-tribe",
+      "description": "The teams that keep services, data and people safe from attack."
+    },
+    {
+      "id": "data-platform",
+      "name": "Data platform",
+      "tribe": "data-tribe",
+      "description": "The teams that run the data warehouse and the pipelines that fill it."
+    },
+    {
+      "id": "edge-and-apis",
+      "name": "Edge and APIs",
+      "tribe": "connectivity-tribe",
+      "description": "The teams that put websites and APIs in front of customers: the CDN and the API gateway."
+    },
+    {
+      "id": "engineering-productivity",
+      "name": "Engineering productivity",
+      "tribe": "developer-tools-tribe",
+      "description": "The teams that give engineers repositories, pipelines and templates."
+    },
+    {
+      "id": "quality-and-observability",
+      "name": "Quality and observability",
+      "tribe": "developer-tools-tribe",
+      "description": "The teams that help services stay tested, watched and reliable."
+    },
+    {
+      "id": "runtime",
+      "name": "Runtime",
+      "tribe": "cloud-tribe",
+      "description": "The teams that run the shared Kubernetes clusters and keep production up."
+    },
+    {
+      "id": "service-operations",
+      "name": "Service operations",
+      "description": "The teams that run the service desk and the requests people make through it."
     }
   ],
   "tribes": [
@@ -237,7 +292,7 @@
     {
       "id": "trust-service-tribe",
       "name": "Trust and service",
-      "description": "The teams that keep the company secure and run its service desk."
+      "description": "The teams that keep the company, its services and its data secure."
     }
   ],
   "domains": [

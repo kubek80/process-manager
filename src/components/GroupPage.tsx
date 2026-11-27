@@ -62,7 +62,7 @@ export function GroupPage({ kind, id, processes, standards, feedback, meta, onNe
 
   return (
     <div className="page group-page" data-group={kind}>
-      <a className="back" href={href({ page: "catalog", list: LIST_OF[kind], id })}><ArrowLeft size={16} aria-hidden="true" />Teams &amp; tools</a>
+      <a className="back" href={href({ page: "catalog", list: LIST_OF[kind], id })}><ArrowLeft size={16} aria-hidden="true" />Teams</a>
       <header className="group-head">
         <div className="group-kicker">
           <span className="group-kind"><Icon size={14} aria-hidden="true" />{KIND_WORD[kind]}</span>

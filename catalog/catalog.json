@@ -98,13 +98,13 @@
       "id": "api-platform-team",
       "name": "API Platform team",
       "contact": "Slack #api-platform",
-      "tribe": "connectivity-tribe"
+      "pillar": "edge-and-apis"
     },
     {
       "id": "azure-platform-team",
       "name": "Azure Platform team",
       "contact": "Slack #azure-platform",
-      "tribe": "cloud-tribe"
+      "pillar": "cloud-foundations"
     },
     {
       "id": "cloud-platform-team",
@@ -115,30 +115,30 @@
         "slackUrl": "https://example.slack.com/archives/C0CLOUDPLAT"
       },
       "description": "Runs the Google Cloud platform: landing zones, projects, networks and the shared tooling around them.",
-      "tribe": "cloud-tribe"
+      "pillar": "cloud-foundations"
     },
     {
       "id": "security",
       "name": "Cyber Security",
       "contact": "Slack #security",
-      "tribe": "trust-service-tribe"
+      "pillar": "cyber-defence"
     },
     {
       "id": "dns-team",
       "name": "DNS team",
-      "tribe": "connectivity-tribe"
+      "pillar": "core-network"
     },
     {
       "id": "developer-experience-team",
       "name": "Developer Experience team",
       "contact": "Slack #devex",
-      "tribe": "developer-tools-tribe"
+      "pillar": "engineering-productivity"
     },
     {
       "id": "edge-cdn-team",
       "name": "Edge & CDN team",
       "contact": "Slack #edge-cdn",
-      "tribe": "connectivity-tribe"
+      "pillar": "edge-and-apis"
     },
     {
       "id": "fulfilment-team",
@@ -148,12 +148,49 @@
       "id": "network-team",
       "name": "Network team",
       "contact": "Slack #network",
-      "tribe": "connectivity-tribe"
+      "pillar": "core-network"
     },
     {
       "id": "service-management",
       "name": "Service Management",
-      "tribe": "trust-service-tribe"
+      "pillar": "service-operations"
+    }
+  ],
+  "pillars": [
+    {
+      "id": "cloud-foundations",
+      "name": "Cloud foundations",
+      "tribe": "cloud-tribe",
+      "description": "The teams that set up and run the company's Google Cloud and Azure estates."
+    },
+    {
+      "id": "core-network",
+      "name": "Core network",
+      "tribe": "connectivity-tribe",
+      "description": "The teams that run the company network and its names."
+    },
+    {
+      "id": "cyber-defence",
+      "name": "Cyber defence",
+      "tribe": "trust-service-tribe",
+      "description": "The teams that keep services, data and people safe from attack."
+    },
+    {
+      "id": "edge-and-apis",
+      "name": "Edge and APIs",
+      "tribe": "connectivity-tribe",
+      "description": "The teams that put websites and APIs in front of customers: the CDN and the API gateway."
+    },
+    {
+      "id": "engineering-productivity",
+      "name": "Engineering productivity",
+      "tribe": "developer-tools-tribe",
+      "description": "The teams that give engineers repositories, pipelines and templates."
+    },
+    {
+      "id": "service-operations",
+      "name": "Service operations",
+      "description": "The teams that run the service desk and the requests people make through it."
     }
   ],
   "tribes": [
@@ -178,7 +215,7 @@
     {
       "id": "trust-service-tribe",
       "name": "Trust and service",
-      "description": "The teams that keep the company secure and run its service desk."
+      "description": "The teams that keep the company, its services and its data secure."
     }
   ],
   "domains": [

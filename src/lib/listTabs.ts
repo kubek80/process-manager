@@ -1,5 +1,5 @@
 /**
- * The tabs of the lists (Admin › Lists, Teams & tools): twelve tabs in three named groups that
+ * The tabs of the lists (Teams and Tools, for readers and in Admin): a place's tabs in two sets that
  * behave as one set of tabs for the keyboard: one Tab stop (the chosen tab), the arrow keys move
  * through all of them in order across the groups (and choose, as the app's other one-of-several
  * controls do), Home and End go to the first and the last.
@@ -19,12 +19,16 @@ export function tabAfterKey<K extends string>(keys: readonly K[], current: K, ke
 }
 
 /**
- * What an address of the lists asks to show (`#/admin/lists/tribes/payments`, `#/catalog/tools`):
- * the list and the entry it names. An address without a list (`#/admin/lists`) asks nothing of
- * Admin › Lists, which then stays where it is with its unsaved changes; on Teams & tools, which
- * keeps the list in the address, it means the first list.
+ * What an address of the lists asks to show (`#/admin/teams/pillars/compute`, `#/tools/paths`): the
+ * list and the entry it names. An address that names only its place (`#/teams`, `#/admin/tools`)
+ * opens the place's first list on the reader's side; Admin stays where it is when the list shown
+ * is already in that place (its unsaved changes stay in any case: it is one page), else it opens
+ * the place's first list. `placeOf` says which place a list is in.
  */
-export function addressedList<K extends string>(editor: boolean, list: K | undefined, id: string | undefined, first: K): { list: K; id: string | null } | null {
-  if (!list) return editor ? null : { list: first, id: null };
-  return { list, id: id ?? null };
+export function addressedList<K extends string, P extends string>(
+  editor: boolean, place: P, list: K | undefined, id: string | undefined, current: K, firstOf: (place: P) => K, placeOf: (list: K) => P,
+): { list: K; id: string | null } | null {
+  if (list) return { list, id: id ?? null };
+  if (editor && placeOf(current) === place) return null;
+  return { list: firstOf(place), id: null };
 }

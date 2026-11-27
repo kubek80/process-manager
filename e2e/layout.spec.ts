@@ -4,8 +4,8 @@ import { ALEX, CASEY, CSRF, DANA, JORDAN, RILEY, SAM, fields, meaningReady, open
 // What a phone, a tablet and a small laptop show. A page that scrolls sideways hides controls
 // off screen, so no page may be wider than the screen.
 const PAGES = ["/", "/search?q=gcp", "/search?q=logging&type=standard&rigour=mandatory", "/processes", "/standards", "/p/request-gcp-project/flow", "/p/request-gcp-project/list", "/p/request-gcp-project/flow/raise-request",
-  "/s/secure-logging/doc", "/s/secure-logging/doc/SEC-LOG-02", "/catalog", "/guide", "/mine", "/requests", "/requests?state=all"];
-const ADMIN = ["/p/request-gcp-project/edit", "/p/request-gcp-project/edit/raise-request", "/s/secure-logging/edit", "/s/secure-logging/edit/SEC-LOG-02", "/admin/access", "/admin/lists", "/admin/skills", "/admin/health", "/admin/activity", "/admin/statistics", "/admin/system", "/admin/code", "/admin/code/tables", "/admin/code/vectors/file/server/internal/retrieval/retrieval.go"];
+  "/s/secure-logging/doc", "/s/secure-logging/doc/SEC-LOG-02", "/teams", "/tools", "/pillar/core-network", "/guide", "/mine", "/requests", "/requests?state=all"];
+const ADMIN = ["/p/request-gcp-project/edit", "/p/request-gcp-project/edit/raise-request", "/s/secure-logging/edit", "/s/secure-logging/edit/SEC-LOG-02", "/admin/access", "/admin/teams", "/admin/tools", "/admin/skills", "/admin/health", "/admin/activity", "/admin/statistics", "/admin/system", "/admin/code", "/admin/code/tables", "/admin/code/vectors/file/server/internal/retrieval/retrieval.go"];
 
 // the server listens before its index is complete: wait until search by meaning answers
 test.beforeAll(async ({ request }) => { await meaningReady(request); });
@@ -64,7 +64,7 @@ for (const width of [390, 360]) {
         await expect(menu).toHaveAttribute("aria-expanded", "true");
         const sheet = page.getByRole("navigation", { name: "Main" });
         await expect(sheet).toBeVisible();
-        const places = ["Home", "Processes", "Standards", "Requests", /^My responsibilities/, "Teams & tools", "Guide", ...(who === DANA ? ["Admin"] : [])];
+        const places = ["Home", "Processes", "Standards", "Requests", /^My responsibilities/, "Teams", "Tools", "Guide", ...(who === DANA ? ["Admin"] : [])];
         for (const place of places) {
           const link = sheet.getByRole("link", { name: place });
           await expect(link, `${who} at ${width}px: ${place}`).toBeInViewport({ ratio: 1 });
@@ -103,7 +103,7 @@ test("the longest top bar fits every width without scrolling sideways", async ({
   expect((await page.request.post("/api/admin/access", { data: role, headers: CSRF })).ok()).toBeTruthy();
   try {
     await open(page, "/");
-    await expect(page.locator(".nav a")).toHaveCount(8);
+    await expect(page.locator(".nav a")).toHaveCount(9);
     for (const width of [1440, 1366, 1280, 1200, 1100, 1024, 1000, 900, 800, 700, 600, 520, 480, 440, 414, 400, 375, 360]) {
       await page.setViewportSize({ width, height: 800 });
       expect(await sideways(page), `top bar at ${width}px`).toBe(0);
@@ -451,7 +451,7 @@ for (const theme of ["light", "dark"] as const) {
       expect(await sideways(page), `the roles dialog at ${at}`).toBe(0);
       await dialog.getByRole("button", { name: "Cancel" }).click();
 
-      await open(page, "/admin/lists");
+      await open(page, "/admin/tools");
       await page.getByRole("tab", { name: /Tools/ }).click();
       await page.locator(".cat-item", { hasText: "GitHub" }).first().click();
       const field = page.locator(".icon-field");

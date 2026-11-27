@@ -3,7 +3,7 @@ import {
   ALEX, CSRF, DANA, RILEY, SAM, editState, open, openEditor, outline, pickFilter, readCatalog, readProcess, saveDraft, signIn, unfold,
 } from "./helpers";
 
-// The architecture patterns: a tenth list in Admin › Lists, and on a process or standard a tag
+// The architecture patterns: a list in Admin › Tools, and on a process or standard a tag
 // ("this is about systems built this way"). A tag hides nothing: it is a fact in the head of the
 // page, a filter of the lists and the search, and words the search finds. Every test puts back
 // what it changed.
@@ -124,9 +124,9 @@ test("a process is tagged on the editing screen, shows its patterns in its head,
   await expect(page.locator('[data-filter="pattern"] .filter-dd-value')).toHaveText("Nothing to choose");
 });
 
-test("Admin › Lists has Architecture patterns: other names, a used one that cannot be removed, shown on Teams & tools", async ({ page }) => {
+test("Admin › Tools has Architecture patterns: other names, a used one that cannot be removed, shown on Tools", async ({ page }) => {
   await signIn(page, ALEX);
-  await open(page, "/admin/lists");
+  await open(page, "/admin/tools");
   await tab(page, "Architecture patterns").click();
   for (const name of ["API-first", "Event-driven", "Static site behind a CDN"]) await expect(item(page, name)).toBeVisible();
   const detail = page.locator(".cat-detail");
@@ -143,7 +143,7 @@ test("Admin › Lists has Architecture patterns: other names, a used one that ca
   expect((await refused.json()).error).toBe("cannot remove what is still in use: “api-first” is still used by “Onboard an API to Apigee”. Change those first.");
   // and the page says the same when it is tried there: Undo is offered by the page, the save is refused
   await signIn(page, ALEX);
-  await open(page, "/admin/lists");
+  await open(page, "/admin/tools");
   await tab(page, "Architecture patterns").click();
   await item(page, "Serverless").click();
   await expect(page.locator(".cat-danger")).toContainText("Nothing uses it, so it is safe to remove.");
@@ -164,14 +164,14 @@ test("Admin › Lists has Architecture patterns: other names, a used one that ca
   await expect(page.locator(".saved")).toBeVisible();
   expect((await readCatalog(page)).patterns).toContainEqual({ id: NEW, name: "Cell-based", alsoCalled: ["cells", "cellular"], description: "The system is split into independent copies, each serving part of the users." });
 
-  // Teams & tools shows them to everyone, with their other names
+  // Tools shows them to everyone, with their other names
   await signIn(page, SAM);
-  await open(page, "/catalog");
+  await open(page, "/tools");
   await tab(page, "Architecture patterns").click();
   await item(page, "Cell-based").click();
   await expect(page.locator(".cat-detail")).toContainText(/Also called\s*cells, cellular/i);
   await expect(page.locator(".cat-detail")).toContainText(/Used by\s*nothing yet/i);
-  await expect(page).toHaveURL(/#\/catalog\/patterns\/cell-based$/);
+  await expect(page).toHaveURL(/#\/tools\/patterns\/cell-based$/);
 });
 
 test("with no patterns listed, readers see nothing about them; whoever manages the lists is told where to add them", async ({ page }) => {
@@ -200,7 +200,7 @@ test("with no patterns listed, readers see nothing about them; whoever manages t
   await open(page, "/processes");
   await expect(page.locator('[data-filter="category"]')).toBeVisible();
   await expect(page.locator('[data-filter="pattern"]')).toHaveCount(0);
-  await open(page, "/catalog");
+  await open(page, "/tools");
   await expect(tab(page, "Tools")).toBeVisible();
   await expect(tab(page, "Architecture patterns")).toHaveCount(0);
 
@@ -216,11 +216,11 @@ test("with no patterns listed, readers see nothing about them; whoever manages t
   await outline(page, "About");
   await unfold(page, "Architecture patterns");
   const none = page.locator(".edit-fields .patterns-none");
-  await expect(none).toHaveText("No architecture patterns are listed yet. Add the ones your organisation uses in Admin › Lists, under Architecture patterns.");
-  await expect(none.getByRole("link", { name: "Admin › Lists" })).toHaveAttribute("href", "#/admin/lists/patterns");
-  // the link opens Admin › Lists at the architecture patterns, the empty list to fill
-  await none.getByRole("link", { name: "Admin › Lists" }).click();
-  await expect(page).toHaveURL(/#\/admin\/lists\/patterns$/);
+  await expect(none).toHaveText("No architecture patterns are listed yet. Add the ones your organisation uses in Admin › Tools, under Architecture patterns.");
+  await expect(none.getByRole("link", { name: "Admin › Tools" })).toHaveAttribute("href", "#/admin/tools/patterns");
+  // the link opens Admin › Tools at the architecture patterns, the empty list to fill
+  await none.getByRole("link", { name: "Admin › Tools" }).click();
+  await expect(page).toHaveURL(/#\/admin\/tools\/patterns$/);
   await expect(tab(page, "Architecture patterns")).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".cat-list")).toContainText("No architecture patterns yet.");
 });

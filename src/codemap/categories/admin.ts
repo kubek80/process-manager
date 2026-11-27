@@ -32,7 +32,7 @@ export const admin: CodeCategory = {
         ]),
     },
     {
-      caption: "Admin › Lists: removing an entry and saving the lists. The app keeps Remove off for an entry in use and Save off while the checker finds an error; the server refuses a save from an older version (`409`, then the conflict dialog) and the removal of an entry still in use (`400`, `stillUsed`).",
+      caption: "Admin › Teams / Tools: removing an entry and saving the lists. The app keeps Remove off for an entry in use and Save off while the checker finds an error; the server refuses a save from an older version (`409`, then the conflict dialog) and the removal of an entry still in use (`400`, `stillUsed`).",
       process: flow("code-admin-lists", "Remove an entry and save the lists", "How a change of the lists reaches the server.",
         [["admin", "Lists manager"], ["app", "Browser"], ["server", "Server"]],
         [
@@ -60,22 +60,22 @@ export const admin: CodeCategory = {
     },
     {
       path: "src/lib/listTabs.ts",
-      role: "The lists' tabs as one set for the keyboard (`tabAfterKey`: the arrows through all twelve across the three groups, Home and End), and what an address of the lists asks to show (`addressedList`).",
+      role: "The lists' tabs as one set for the keyboard (`tabAfterKey`: the arrows through the tabs of the place one is in, across its two sets, Home and End), and what an address of the lists asks to show (`addressedList`).",
       requirements: [
-        { text: "An address without a list asks nothing of Admin › Lists: the page stays where it is, and its unsaved changes with it. Admin › Lists is never remounted by its address (no `key` on it in `AdminPage`): its draft is the page's own state, and `#/admin/lists…` is one place to `moveTo`, which asks nothing. Test: `e2e/tribes.spec.ts`.", at: "if (!list) return editor ? null : { list: first, id: null };" },
+        { text: "An address that names only its place asks nothing of Admin when the list shown is in that place: the page stays where it is, and its unsaved changes with it; the other place opens its first list on the same page. Admin › Teams and Admin › Tools are one page, never remounted by its address (no `key` on it in `AdminPage`): its draft is the page's own state, and every `#/admin/teams|tools…` is one place to `moveTo`, which asks nothing. Test: `e2e/tribes.spec.ts`, `e2e/places.spec.ts`.", at: "if (editor && placeOf(current) === place) return null;" },
         { text: "The arrows go round in the order of the tabs shown, across the groups; the chosen tab is the one Tab stop (`tabIndex` in `CatalogPage`).", at: "case \"ArrowRight\": return keys[(at + 1) % keys.length];" },
       ],
       tests: ["src/lib/__tests__/listTabs.test.ts", "e2e/catalog.spec.ts", "e2e/tribes.spec.ts"],
     },
     {
       path: "src/components/CatalogPage.tsx",
-      role: "The twelve lists, their tabs in three named groups (who: teams, tribes, domains, practices, platforms; what: categories, tools, architecture patterns; where it applies: tiers, paths, environments, languages): a directory for everyone under Teams & tools (the teams under their domain and tribe when there are tribes; an empty optional list left out for readers), and their editor in Admin › Lists (a path with its picture and other names, an architecture pattern with its other names, a team's tribe, a tribe's domain).",
+      role: "The thirteen lists in their two places, Teams and Tools (`PLACE_LISTS`), each with its own heading and lead (`PLACE_HEAD`) and its tabs in one row of two sets (`GROUPS`): a directory for everyone (the teams under their domain, each pillar with its tribe, when there are pillars; an empty optional list left out for readers), and in Admin the two entries Teams and Tools as one page with one draft (a path with its picture and other names, an architecture pattern with its other names, a team's pillar, a pillar's tribe, a tribe's domain).",
       requirements: [
         { text: "The lists are edited as one document through `useDraft`, as a process is: Undo, Redo, a conflict when somebody else saved first, a question before leaving with unsaved changes.", at: "const d = useDraft<Catalog>(" },
         { text: "`usesOf` sees only the processes and standards the person sees, so it can miss a draft; the server's `stillUsed` counts those too and refuses the save.", at: "function usesOf(key: Key, id: string" },
         { text: "Remove is off while the entry is used, still has owners or members, or (a tribe, a domain) still groups teams or tribes: removing it would leave documents, roles or entries pointing at nothing. One of two entries with the same id (lists imported with a mistake) can be removed, and only that one: what uses the id keeps the other.", at: "disabled={!twin && (uses.length > 0 || stillMembers > 0 || grouped.length > 0)}" },
         { text: "Undo of a removal puts the entry back at its old place only if it is not there already: pressing the message's Undo twice adds no second entry with the same id.", at: "if (have.some((r) => r.id === entry.id)) return;" },
-        { text: "What stops saving is listed by `issueText` with \"lists\" (the entry by name, never a path), with how many are to fix; readers of Teams & tools, who can change nothing, do not see it.", at: "{editor && issues.length > 0 && (" },
+        { text: "What stops saving is listed by `issueText` with \"lists\" (the entry by name, never a path), with how many are to fix; readers of the reader's Teams and Tools, who can change nothing, do not see it.", at: "{editor && issues.length > 0 && (" },
         { text: "Pressing a problem opens that list's tab and that entry and brings the keyboard to the field; the fields of the entry shown are marked by `useFieldMarks`, as on the editing screen.", at: "setKey(at.list); setSelected(at.entry.id); setAdding(false); setQ(\"\");" },
         { text: "A save the server refused reads like a problem the page found (`refusalText`).", at: "refusalText(d.error, \"lists\", clean)" },
       ],
@@ -83,7 +83,7 @@ export const admin: CodeCategory = {
     },
     {
       path: "src/components/IconField.tsx",
-      role: "The Icon field of a tool or language in Admin › Lists: upload, preview, remove.",
+      role: "The Icon field of a tool or language in Admin › Teams / Tools: upload, preview, remove.",
       requirements: [
         { text: "A file of the wrong type, empty or over 64 KB is refused before it is sent (`iconFileProblem`); the server checks it again (`server/internal/icons`) and its refusal is shown as it is.", at: "if (wrong) { setProblem(wrong); return; }" },
         { text: "Only the returned id goes into the entry; it is stored with the lists' next save, so leaving without saving drops it like any other change.", at: "onChange(id);" },
@@ -127,8 +127,8 @@ export const admin: CodeCategory = {
     },
     {
       path: "src/components/TeamMembers.tsx",
-      role: "The Owners and Members of a team, platform or practice in Admin › Lists (see People and their work).",
-      requirements: [{ text: "In Admin › Lists an admin gives and takes owners as roles (`/api/admin/access`, admins only in the server); a lists manager who is not an admin only sees them.", at: 'const ownersByAdmin = rank === "owner" && manage && perms.admin;' }],
+      role: "The Owners and Members of a team, platform or practice in Admin › Teams / Tools (see People and their work).",
+      requirements: [{ text: "In Admin › Teams / Tools an admin gives and takes owners as roles (`/api/admin/access`, admins only in the server); a lists manager who is not an admin only sees them.", at: 'const ownersByAdmin = rank === "owner" && manage && perms.admin;' }],
       tests: ["e2e/lists.spec.ts", "e2e/catalog.spec.ts"],
     },
   ],

@@ -187,6 +187,9 @@ type Store struct {
 	Pool *pgxpool.Pool
 	// Log is told what an import does to working drafts; nil: the default logger.
 	Log *slog.Logger
+	// Prepare converts a file of an earlier shape before it is imported (the lists in which teams
+	// name a tribe: upgrade.PillarsFromTribes); nil: files are imported as they are.
+	Prepare func(kind string, body []byte) ([]byte, error)
 }
 
 // Pretty re-indents JSON without changing the order of the keys.
@@ -530,6 +533,14 @@ func (s *Store) ImportDir(ctx context.Context, dir, by string, validate func(kin
 			problems = append(problems, fmt.Sprintf("%s: %v", file, readErr))
 			return
 		}
+		if s.Prepare != nil {
+			converted, err := s.Prepare(kind, data)
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("%s: %v", file, err))
+				return
+			}
+			data = converted
+		}
 		if validate != nil {
 			if err := validate(kind, data); err != nil {
 				problems = append(problems, fmt.Sprintf("%s: %v", file, err))
@@ -695,7 +706,9 @@ type Named struct {
 	// AlsoCalled: the other names of a path ("golden path") or an architecture pattern ("EDA"),
 	// found by the search.
 	AlsoCalled []string `json:"alsoCalled,omitempty"`
-	// Tribe: the tribe a team is part of; Domain: the domain a tribe is part of. Both optional.
+	// Pillar: the pillar a team is part of; Tribe: the tribe a pillar is part of; Domain: the
+	// domain a tribe is part of. All optional.
+	Pillar string `json:"pillar,omitempty"`
 	Tribe  string `json:"tribe,omitempty"`
 	Domain string `json:"domain,omitempty"`
 }
@@ -730,13 +743,15 @@ type Lists struct {
 	// Patterns: the architecture patterns documents are tagged with; missing in lists that never
 	// had any, which is an empty list (nothing is added for them).
 	Patterns []Named `json:"patterns"`
-	// Tribes group teams and Domains group tribes, all optional; missing lists are empty.
+	// Pillars group teams, Tribes group pillars and Domains group tribes, all optional; missing
+	// lists are empty.
+	Pillars []Named `json:"pillars"`
 	Tribes  []Named `json:"tribes"`
 	Domains []Named `json:"domains"`
 }
 
 // EmptyCatalog is served before any lists exist.
-const EmptyCatalog = `{"tiers":[],"paths":[],"environments":[],"languages":[],"teams":[],"practices":[],"platforms":[],"categories":[],"tools":[],"patterns":[],"tribes":[],"domains":[]}`
+const EmptyCatalog = `{"tiers":[],"paths":[],"environments":[],"languages":[],"teams":[],"practices":[],"platforms":[],"categories":[],"tools":[],"patterns":[],"pillars":[],"tribes":[],"domains":[]}`
 
 // Lists returns the catalog. A missing catalog is empty, not an error.
 func (s *Store) Lists(ctx context.Context) (Lists, error) {
@@ -814,6 +829,8 @@ func (l Lists) ByKey(key string) []Named {
 		return l.Tools
 	case "patterns":
 		return l.Patterns
+	case "pillars":
+		return l.Pillars
 	case "tribes":
 		return l.Tribes
 	case "domains":

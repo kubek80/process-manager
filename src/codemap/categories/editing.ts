@@ -16,7 +16,7 @@ export const editing: CodeCategory = {
     "Retire, Unpublish, Bring back and Delete are in the More menu only and are ordinary saves (or the delete) of the stored document. The app offers them only to whoever may publish what is stored and blocks the first three while a working draft or unsaved changes exist. The server refuses a member (`notPublisher` in `server/internal/httpapi/content.go`) and any ordinary save while a working draft exists (`DraftPending` from `docs.Store.Save`, answered by `draftPending` in `server/internal/httpapi/drafts.go`).",
     "Nothing is lost by accident: leaving with unsaved changes asks first (`guardLeaving`), every change on the screen can be undone, Discard changes too (`UNDO_LIMIT` 100 steps, typing in one field within `BURST_MS` 800 ms is one step), a version saved by somebody else is followed only while there are no edits (`serverHas`), and a fault while drawing shows `EditingBoundary`, below the draft.",
     "Moving and deleting steps go through `moveStepInFlow`, `nudgeStep` and `deleteStep` (`src/lib/edit.ts`): they change the flow, not only the numbering, never ask first, never rename an answer of a decision, and say with Undo what changed in the flow (`restructureNotice`).",
-    "A problem is worded only by `issueText` and marked on its field only by `useFieldMarks` (`src/lib/fieldMarks.ts`, shared with Admin › Lists and the JSON view); the example texts of `EXAMPLE` are errors to fix before publishing (`exampleIssues`), not before saving; Undo and Redo say what they did through `steppedMessage` and `editNotice`, one message at a time, gone when the screen is left.",
+    "A problem is worded only by `issueText` and marked on its field only by `useFieldMarks` (`src/lib/fieldMarks.ts`, shared with Admin › Teams / Tools and the JSON view); the example texts of `EXAMPLE` are errors to fix before publishing (`exampleIssues`), not before saving; Undo and Redo say what they did through `steppedMessage` and `editNotice`, one message at a time, gone when the screen is left.",
   ],
   charts: [
     {
@@ -159,14 +159,14 @@ POST /api/processes/request-gcp-project/publish?rev=1&note=Shorter%20summary&ove
         { text: "After \"Save mine over theirs\" the revision sent is theirs (0 when it is gone, which creates a new draft); in every other case the one the changes came from.", at: "if (over?.draft) return over.exists ? over.version ?? 0 : 0;" },
         { text: "Creating the working draft sends `base` = the version the changes started from; without it the server would start the draft on the current version and a publish since would be overwritten unseen.", at: "if (rev === 0) return startedFrom || undefined;" },
         { text: "A message that is already a whole sentence (from the server or the checker's own rules) is kept; any other is rebuilt from the field's label, so no schema word or path reaches the person.", at: "if (/^[A-Z“]/.test(message)) return message;" },
-        { text: "A problem of the lists names its list and entry (`listEntryWords`: by name, else by id, never by place), since Admin › Lists shows all of them at once; one nobody foresaw is still a sentence about its entry. A save the server refused is worded the same way (`refusalText`).", at: 'if (kind === "lists") return listIssueText(path, message, doc);' },
+        { text: "A problem of the lists names its list and entry (`listEntryWords`: by name, else by id, never by place), since Admin › Teams / Tools shows all of them at once; one nobody foresaw is still a sentence about its entry. A save the server refused is worded the same way (`refusalText`).", at: 'if (kind === "lists") return listIssueText(path, message, doc);' },
         { text: "An example text left in is an error with one fixed message (`isExampleIssue` tells it apart): it blocks Publish… but not Save draft. A text added to `EXAMPLE` must be checked here too, or it could be published.", at: "const flag = (path: string) => out.push({ level: \"error\", path, message: EXAMPLE_MESSAGE });" },
       ],
       tests: ["src/lib/__tests__/editing.test.ts", "src/lib/__tests__/saveDecision.test.ts", "src/lib/__tests__/editNames.test.ts", "src/lib/__tests__/editMove.test.ts", "src/lib/__tests__/listIssues.test.ts"],
     },
     {
       path: "src/lib/fieldMarks.ts",
-      role: "Marks each field that has a problem, on the editing screen and in Admin › Lists alike (`useFieldMarks`), and brings the keyboard to a field once it is shown (`focusWhenShown`).",
+      role: "Marks each field that has a problem, on the editing screen and in Admin › Teams / Tools alike (`useFieldMarks`), and brings the keyboard to a field once it is shown (`focusWhenShown`).",
       requirements: [
         { text: "Only errors mark a field (`aria-invalid`, the words of `issueText` under it); suggestions never do, so a field is red only for what blocks publishing.", at: 'if (issue.level !== "error") continue;' },
         { text: "The marks are classes and attributes set on what React drew (`.has-problem`, `data-problem`), never elements added to it; a mark whose problem is gone is taken off on the next draw.", at: 'el.classList.remove("has-problem", "has-example");' },
@@ -175,7 +175,7 @@ POST /api/processes/request-gcp-project/publish?rev=1&note=Shorter%20summary&ove
     },
     {
       path: "src/lib/draft.ts",
-      role: "`useDraft`: editing with a safety net, shared by processes, standards and the lists (Admin › Lists).",
+      role: "`useDraft`: editing with a safety net, shared by processes, standards and the lists (Admin › Teams / Tools).",
       requirements: [
         { text: "A save is always made on top of the base the edits started from, never on the newest version the page has heard of: that is what lets the server refuse it with a conflict instead of overwriting.", at: "return send(latest.current.base, note);" },
         { text: "\"Save mine over theirs\" goes on top of the version (or revision) the conflict names, or 0 when it was deleted or the draft is gone; the finishing touch of the refused save (e.g. `status: \"active\"`) is applied again.", at: "send(conflict?.exists ? (conflict.version ?? 0) : 0, note, conflict ?? undefined)" },

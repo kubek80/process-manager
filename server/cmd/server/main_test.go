@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -184,6 +185,33 @@ func TestExportThenImportRoundTrip(t *testing.T) {
 	apigee, err := os.ReadFile(filepath.Join(out, "processes/onboard-api-to-apigee.json"))
 	if err != nil || !strings.Contains(string(apigee), `"patterns": [`+"\n"+`    "api-first"`) {
 		t.Fatalf("the exported process lost its patterns: %s %v", apigee, err)
+	}
+}
+
+// Files exported by the version before pillars (teams straight in a tribe) are imported with the
+// teams put in pillars, as the conversion at start does.
+func TestImportOfListsBeforePillars(t *testing.T) {
+	st := newStores(t)
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "catalog"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"tiers":[],"environments":[],"languages":[],"tools":[],"teams":[{"id":"a","name":"Alpha","tribe":"cloud"},{"id":"b","name":"Beta"}],"tribes":[{"id":"cloud","name":"Cloud"}]}`
+	if err := os.WriteFile(filepath.Join(dir, "catalog", "catalog.json"), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st.validate = func(kind string, body []byte) error {
+		if strings.Contains(string(body), `"tribe":"cloud"}`) && strings.Contains(string(body), `"name":"Alpha","tribe"`) {
+			return fmt.Errorf("a team still names a tribe")
+		}
+		return nil
+	}
+	if err := importFiles(ctx, st, dir, quiet); err != nil {
+		t.Fatal(err)
+	}
+	lists, err := st.docs.Lists(ctx)
+	if err != nil || len(lists.Pillars) != 1 || lists.Pillars[0].ID != "cloud" || lists.Pillars[0].Tribe != "cloud" || lists.Teams[0].Pillar != "cloud" || lists.Teams[0].Tribe != "" || lists.Teams[1].Pillar != "" {
+		t.Fatalf("imported: %+v %v", lists, err)
 	}
 }
 

@@ -373,10 +373,10 @@ export const reading: CodeCategory = {
     },
     {
       path: "src/components/ClusterPage.tsx",
-      role: "The page of a tribe or a domain (`#/tribe/:id`, `#/domain/:id`): a sibling of the team's page with its head and body, its teams (a domain: its tribes, each with its teams) as links, and what those teams own through the team's page's `GroupDocs`. No owners, members, contacts or rights: whoever manages the lists gets \"Edit in Admin › Lists\" at the entry.",
+      role: "The page of a pillar, a tribe or a domain (`#/pillar/:id`, `#/tribe/:id`, `#/domain/:id`): a sibling of the team's page with its head and body, what is in it (a pillar: its teams; a tribe: its pillars with their teams; a domain: its tribes with their pillars and how many teams each has; all as links), and what those teams own through the team's page's `GroupDocs`. No owners, members, contacts or rights: whoever manages the lists gets \"Edit in Admin › Teams\" at the entry.",
       requirements: [
         { text: "What its teams own is the team's page's own part with an owner filter of every team in it; a tribe without teams has no filter at all, since an empty one would mean everything.", at: "<GroupDocs filters={clusterFilter(contents.teams)}" },
-        { text: "Only a lists manager gets the way to change it, and only in Admin › Lists; the page itself changes nothing, so it opens while viewing as somebody else.", at: "{canManageLists(perms) && <a className=\"btn\" href={href({ page: \"admin\", section: \"lists\", list: CLUSTER_LIST[kind], id })}>" },
+        { text: "Only a lists manager gets the way to change it, and only in Admin › Teams / Tools; the page itself changes nothing, so it opens while viewing as somebody else.", at: "{canManageLists(perms) && <a className=\"btn\" href={href({ page: \"admin\", section: \"lists\", list: CLUSTER_LIST[kind], id })}>" },
       ],
       tests: ["e2e/tribes.spec.ts", "src/lib/__tests__/tribes.test.ts"],
     },
@@ -390,7 +390,7 @@ export const reading: CodeCategory = {
     },
     {
       path: "src/components/ContactFields.tsx",
-      role: "The one place contact details of a group are edited (its page and Admin › Lists).",
+      role: "The one place contact details of a group are edited (its page and Admin › Teams / Tools).",
       requirements: [
         { text: "A link typed without its beginning gets `https://` when the field is left; anything with another scheme is left for the check to refuse.", at: "if (LINK_KEYS.includes(r.key)) { const v = withScheme(e.target.value);" },
       ],
@@ -398,11 +398,11 @@ export const reading: CodeCategory = {
     },
     {
       path: "src/lib/groups.ts",
-      role: "The rules of a group's page and of the rows of Teams & tools: what belongs to a group, contact details and their checks; tribes and domains: where a team belongs (`partOf`), the teams of Teams & tools under their domain and tribe (`teamSections`), the owning team chosen by tribe (`teamChoices`), and what a tribe's or a domain's page lists (`clusterContents`, `clusterFilter`).",
+      role: "The rules of a group's page and of the rows of the reader's Teams and Tools: what belongs to a group, contact details and their checks; tribes and domains: where a team belongs (`partOf`), the teams of the reader's Teams and Tools under their domain and tribe (`teamSections`), the owning team chosen by tribe (`teamChoices`), and what a tribe's or a domain's page lists (`clusterContents`, `clusterFilter`).",
       requirements: [
         { text: "Only `http(s)` links of at most 300 characters are links; the schema (`$defs/contacts`) and the server (`docs/contacts.go`) check the same, so a `javascript:` link can never be drawn.", at: "export const isWebLink = (v: unknown): v is string =>" },
         { text: "A Slack or Chat link that fails the check is dropped, and the plain name shown instead.", at: "const link = isWebLink(url) ? url!.trim() : undefined;" },
-        { text: "With no tribes in the lists the teams are one plain section, so Teams & tools looks exactly as without tribes; teams in no tribe come last, under \"Not in a tribe\".", at: "if (!(c.tribes ?? []).length) return [{ domain: null, tribes: [{ teams }] }];" },
+        { text: "With no pillars in the lists the teams are one plain section, so the reader's list looks exactly as without them; what has no domain, tribe or pillar comes after, each under plain words, the teams in no pillar last.", at: "if (!(c.pillars ?? []).length) return [{ heading: \"all\", groups: [{ teams }] }];" },
         { text: "A tribe without teams finds nothing: null, never an empty owner filter (which would match everything).", at: "export const clusterFilter = (teams: { id: string }[]): Filters | null => (teams.length ? { owner: teams.map((t) => t.id) } : null);" },
       ],
       tests: ["src/lib/__tests__/groups.test.ts", "src/lib/__tests__/tribes.test.ts"],

@@ -88,7 +88,7 @@ test("only admins see Theming and may change the look; everyone, signed in or no
   await signIn(page, ALEX);
   await open(page, "/admin/theming");
   await expect(page.locator(".admin-nav")).not.toContainText("Theming");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Lists");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Teams");
   await expect(page.locator(".theme-section")).toHaveCount(0);
 
   // signed out: the look and its logo are there for the sign-in page
@@ -548,7 +548,7 @@ const near = (got: number[], want: number[], what: string) => { for (let i = 0; 
 const SNOW = "#ffffff", MIDNIGHT = "#0e0d26", OCEAN = "#1971ed", SKY = "#66c5ff";
 
 /** The pages a sample of the look is taken on: home, a list, a process, a standard, the editing screen, the search, Admin. */
-const LOOK_PAGES = ["/", "/processes", "/p/request-gcp-project/flow", "/s/secure-logging", "/p/request-gcp-project/edit", "/search?q=gcp", "/admin/access", "/admin/lists"];
+const LOOK_PAGES = ["/", "/processes", "/p/request-gcp-project/flow", "/s/secure-logging", "/p/request-gcp-project/edit", "/search?q=gcp", "/admin/access", "/admin/teams"];
 async function eachLookPage(page: Page, each: (hash: string) => Promise<void>) {
   for (const hash of LOOK_PAGES) {
     await page.goto("about:blank");
@@ -778,22 +778,18 @@ for (const mode of ["light", "dark"] as const) {
   });
 }
 
-test("the lists' tabs in their three groups: each group one row, nothing scrolled away at 1366, in Admin › Lists and in Teams & tools", async ({ page }) => {
+test("each place's tabs are one row, nothing scrolled away at 1366, for readers and in Admin", async ({ page }) => {
   await signIn(page, DANA);
   await page.setViewportSize({ width: 1366, height: 900 });
-  for (const hash of ["/admin/lists", "/catalog"]) {
+  for (const [hash, count] of [["/admin/teams", 6], ["/admin/tools", 7], ["/teams", 6], ["/tools", 7]] as const) {
     await open(page, hash);
-    const groups = page.locator(".cat-kinds-group");
-    await expect(groups.locator(".cat-kinds-name")).toHaveText(["Who", "What", "Where it applies"]);
-    await expect(page.getByRole("tab")).toHaveCount(12);
-    for (const [name, count] of [["Who", 5], ["What", 3], ["Where it applies", 4]] as const) {
-      const list = page.getByRole("tablist", { name });
-      await expect(list.getByRole("tab")).toHaveCount(count);
-      const tops = await list.getByRole("tab").evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().top)));
-      expect(new Set(tops).size, `${hash} ${name}: one row`).toBe(1);
-      expect(await list.evaluate((e) => e.scrollWidth - e.clientWidth), `${hash} ${name}: nothing scrolled away`).toBeLessThanOrEqual(0);
-      await expect(list.getByRole("tab").last()).toBeInViewport({ ratio: 1 });
-    }
+    const tabs = page.locator(".cat-kinds-groups").getByRole("tab");
+    await expect(tabs).toHaveCount(count);
+    const tops = await tabs.evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().top)));
+    expect(new Set(tops).size, `${hash}: one row`).toBe(1);
+    for (const list of await page.locator(".cat-kinds-groups").getByRole("tablist").all())
+      expect(await list.evaluate((e) => e.scrollWidth - e.clientWidth), `${hash}: nothing scrolled away`).toBeLessThanOrEqual(0);
+    await expect(tabs.last()).toBeInViewport({ ratio: 1 });
   }
 });
 

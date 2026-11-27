@@ -3,7 +3,7 @@ import type { Issue } from "../types";
 
 /**
  * Marking the fields that have a problem, for every screen that shows a checker's problems on
- * their fields: the editing screen of a process or standard (`EditFrame`) and Admin › Lists
+ * their fields: the editing screen of a process or standard (`EditFrame`) and Admin › Teams / Tools
  * (`CatalogPage`). The words are always `issueText`'s; each screen only says where a problem's
  * field is (`find`). The look is in styles.css (`.has-problem`, `[data-problem]`).
  */

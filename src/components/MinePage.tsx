@@ -101,7 +101,7 @@ export function MinePage({ processes, standards, feedback, meta, onReviewed }: {
           <li><Compass size={15} /><span>You are <b>Practice owner</b> of the practice it belongs to: you may also change it.</span></li>
           <li><Boxes size={15} /><span>You are <b>Platform member</b> or <b>Practice member</b> of the platform or practice it belongs to: you may create drafts and suggest changes, which an owner publishes.</span></li>
         </ul>
-        <p className="muted">Who belongs to which team, platform and practice is shown under <a href={href({ page: "catalog" })}>Teams &amp; tools</a>.</p>
+        <p className="muted">Who belongs to which team, platform and practice is shown under <a href={href({ page: "catalog", place: "teams" })}>Teams</a>.</p>
       </div>
     );
   }

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { open, pickFilter, SAM, signIn, watchErrors } from "./helpers";
+import { navigate, open, pickFilter, SAM, signIn, watchErrors } from "./helpers";
 
 test.beforeEach(async ({ page }) => { await signIn(page, SAM); });
 
@@ -116,9 +116,9 @@ test("a prerequisite links to the process that provides it", async ({ page }) =>
 });
 
 test("teams and tools are a read-only directory", async ({ page }) => {
-  await open(page, "/catalog");
-  await expect(page.getByRole("heading", { name: /Teams, tools/ })).toBeVisible();
-  await expect(page.getByRole("tab")).toHaveCount(12); // teams, tribes, domains, practices, platforms, categories, tools, architecture patterns, tiers, paths, environments, languages
+  await open(page, "/teams");
+  await expect(page.getByRole("heading", { name: "Teams", level: 1 })).toBeVisible();
+  await expect(page.getByRole("tab")).toHaveCount(6); // teams, pillars, tribes, domains, practices, platforms
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   await expect(page.locator(".cat-detail .contact-row[data-contact=\"slack\"]")).toHaveText("Slack channel#cloud-platform");
   await expect(page.locator(".cat-detail .eyebrow")).toHaveText("team");
@@ -126,7 +126,9 @@ test("teams and tools are a read-only directory", async ({ page }) => {
   await expect(page.locator(".cat-usage")).toContainText("Infrastructure as code"); // the standard this team issues
   await expect(page.locator(".cat-detail input")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /New team/ })).toHaveCount(0);
-  await page.getByRole("tab", { name: /Tools/ }).click();
+  // the tools are a place of their own, which opens on them
+  await navigate(page, "Tools");
+  await expect(page.getByRole("tab")).toHaveCount(7);
   await page.locator(".cat-item", { hasText: "ServiceNow" }).click();
   await expect(page.getByRole("link", { name: "Open ServiceNow" })).toBeVisible();
 });

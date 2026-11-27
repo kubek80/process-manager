@@ -3,7 +3,7 @@ import { ALEX, CSRF, DANA, JORDAN, MORGAN, SAM, navigate, open, putDoc, readCata
 
 // The pages of a platform, a practice and a team (`#/platform/:id`, `#/practice/:id`,
 // `#/team/:id`): what it is, how to reach it, who is behind it and what belongs to it; the way
-// there from Home's Browse and from Teams & tools; its details changed by an owner. Every test
+// there from Home's Browse and from Teams; its details changed by an owner. Every test
 // puts back what it changed: the lists and the people are shared with every other test.
 
 const GC = "google-cloud";
@@ -63,8 +63,8 @@ test("Home › Browse: counts in brackets, chips that open a group's page, a cat
   await browse.getByRole("region", { name: "By team" }).getByRole("link", { name: /^Cloud Platform team, \d+ results?$/ }).click();
   await expect(page).toHaveURL(/#\/team\/cloud-platform-team$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Cloud Platform team");
-  // the top bar marks Teams & tools on a group's page, and the tab is the group's name
-  await expect(page.locator("nav.nav").getByRole("link", { name: "Teams & tools", exact: true })).toHaveAttribute("aria-current", "page");
+  // the top bar marks Teams on a group's page, and the tab is the group's name
+  await expect(page.locator("nav.nav").getByRole("link", { name: "Teams", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(page).toHaveTitle(/^Cloud Platform team/);
   await page.goBack();
   // a category still runs a search
@@ -78,8 +78,8 @@ test("a reader sees a platform's page: how to reach it, who is behind it, what b
   await signIn(page, SAM);
   await open(page, `/platform/${GC}`);
   await expect(page).toHaveTitle(/^Google Cloud/);
-  await expect(page.locator("a.back")).toHaveText("Teams & tools");
-  await expect(page.locator("a.back")).toHaveAttribute("href", "#/catalog/platforms/google-cloud");
+  await expect(page.locator("a.back")).toHaveText("Teams");
+  await expect(page.locator("a.back")).toHaveAttribute("href", "#/teams/platforms/google-cloud");
   await expect(page.locator(".group-kind")).toHaveText("Platform");
   await expect(page.locator(".rank-mark")).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Google Cloud");
@@ -200,8 +200,8 @@ test("a group that does not exist, and an empty team", async ({ page }) => {
   await open(page, "/platform/no-such-platform");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Platform not found");
   await expect(page.getByText("This platform does not exist (any more). It may have been removed from the lists.")).toBeVisible();
-  await page.getByRole("link", { name: "Back to Teams & tools" }).click();
-  await expect(page).toHaveURL(/#\/catalog/);
+  await page.getByRole("link", { name: "Back to Teams" }).click();
+  await expect(page).toHaveURL(/#\/teams$/);
 
   // the DNS team: nothing known, no owner, nothing looked after
   await open(page, "/team/dns-team");
@@ -442,23 +442,23 @@ test("an admin adds and removes owners on the page; an owner as a member is a no
   }
 });
 
-// ---------- Teams & tools
+// ---------- Teams
 
-test("Teams & tools: own groups first with a mark, “N yours” on the tabs, the entry in the address", async ({ page }) => {
+test("Teams: own groups first with a mark, “N yours” on the tabs, the entry in the address", async ({ page }) => {
   await signIn(page, JORDAN);
   await open(page, "/");
-  await navigate(page, "Teams & tools");
-  await expect(page).toHaveURL(/#\/catalog(\/teams)?$/);
-  const tabs = page.getByRole("group", { name: "Lists" });
+  await navigate(page, "Teams");
+  await expect(page).toHaveURL(/#\/teams$/);
+  const tabs = page.getByRole("group", { name: "Lists of teams" });
   await expect(tabs.getByRole("tab", { name: /^Teams/ }).locator(".tab-yours")).toHaveText("1 yours");
   await expect(tabs.getByRole("tab", { name: /^Platforms/ }).locator(".tab-yours")).toHaveText("1 yours");
   await expect(tabs.getByRole("tab", { name: /^Practices/ }).locator(".tab-yours")).toHaveText("1 yours");
   await expect(tabs.getByRole("tab", { name: /^Tools/ }).locator(".tab-yours")).toHaveCount(0);
 
-  // the teams are under their tribes (the sample has tribes): in his tribe his own team first,
-  // with the mark on its line; in every tribe the rest by name
+  // the teams are under their pillars (the sample has pillars): in his pillar his own team first,
+  // with the mark on its line; in every pillar the rest by name
   const rows = page.locator(".cat-item");
-  const cloud = page.locator(".cat-section-tribe", { has: page.getByRole("heading", { name: "Cloud (tribe)" }) }).locator(".cat-item");
+  const cloud = page.locator(".cat-section-tribe", { has: page.getByRole("heading", { name: "Cloud foundations (pillar)" }) }).locator(".cat-item");
   await expect(cloud.first()).toContainText("Cloud Platform team");
   await expect(cloud.first().locator(".cat-item-line .rank-mark")).toHaveText("You are an owner");
   await expect(rows.locator(".rank-mark")).toHaveCount(1);
@@ -472,31 +472,31 @@ test("Teams & tools: own groups first with a mark, “N yours” on the tabs, th
 
   // the tab and the entry follow in the address, and survive a reload
   await tabs.getByRole("tab", { name: /^Platforms/ }).click();
-  await expect(page).toHaveURL(/#\/catalog\/platforms(\/google-cloud)?$/);
+  await expect(page).toHaveURL(/#\/teams\/platforms(\/google-cloud)?$/);
   await expect(rows.first()).toContainText("Google Cloud");
   await page.locator(".cat-item", { hasText: "Akamai" }).click();
-  await expect(page).toHaveURL(/#\/catalog\/platforms\/akamai$/);
+  await expect(page).toHaveURL(/#\/teams\/platforms\/akamai$/);
   await page.reload();
   await expect(tabs.getByRole("tab", { name: /^Platforms/ })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".cat-detail h2")).toHaveText("Akamai");
   await expect(page.locator(".cat-detail .contact-list")).toContainText("edge-cdn@example.com");
   // the old address still works
-  await open(page, "/catalog");
+  await open(page, "/teams");
   await expect(page.locator(".cat-item").first()).toBeVisible();
 
   // into the group's page, and its back link returns to that tab and entry
-  await open(page, "/catalog/platforms/google-cloud");
+  await open(page, "/teams/platforms/google-cloud");
   await expect(page.locator(".cat-detail .rank-mark")).toHaveText("You are an owner");
   await page.locator(".cat-detail").getByRole("link", { name: "Open the page of Google Cloud" }).click();
   await expect(page).toHaveURL(/#\/platform\/google-cloud$/);
   await page.locator("a.back").click();
-  await expect(page).toHaveURL(/#\/catalog\/platforms\/google-cloud$/);
+  await expect(page).toHaveURL(/#\/teams\/platforms\/google-cloud$/);
   await expect(tabs.getByRole("tab", { name: /^Platforms/ })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".cat-detail h2")).toHaveText("Google Cloud");
 
   // a reader has no marks and no "yours"
   await signIn(page, SAM);
-  await open(page, "/catalog/teams");
+  await open(page, "/teams");
   await expect(page.locator(".cat-item").first()).toBeVisible();
   await expect(page.locator(".tab-yours")).toHaveCount(0);
   await expect(page.locator(".cat-item .rank-mark")).toHaveCount(0);

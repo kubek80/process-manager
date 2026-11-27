@@ -101,7 +101,7 @@ function AddPerson({ label, button, busy, note, onAdd }: {
  * Who is behind a team, a platform or a practice, for one rank: its owners, or (platforms and
  * practices only) its members.
  * - Owners are given and taken by admins only: an admin changes them where `manage` is set
- *   (Admin › Lists, the group's page), as giving or taking the role under Access, seen from the
+ *   (Admin › Teams, the group's page), as giving or taking the role under Access, seen from the
  *   group's side. Everyone else sees who they are.
  * - Members are added and removed by an admin or an owner of that platform or practice, where
  *   `manage` is set.

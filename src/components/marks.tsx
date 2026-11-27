@@ -199,7 +199,7 @@ const DRAWN: Record<PathSymbol | "none", ReactNode> = {
     <path d="M12 12H6.2l-2 2.2 2 2.3H12" />
   </>,
 };
-/** The built-in pictures, in the order Admin › Lists offers them, each with what it suggests. */
+/** The built-in pictures, in the order Admin › Tools offers them, each with what it suggests. */
 export const PATH_SYMBOLS: { symbol: PathSymbol; label: string }[] = [
   { symbol: "sprout", label: "A field with a sprout: something new" },
   { symbol: "buildings", label: "Existing buildings: something that is there already" },

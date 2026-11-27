@@ -193,7 +193,7 @@ export function newDocPlaces(p: Perms, kind: TargetKind): { kind: BelongsField; 
   return out;
 }
 
-/** May change the lists (Admin › Lists): an admin or a lists manager. */
+/** May change the lists (Admin › Teams and Admin › Tools): an admin or a lists manager. */
 export const canManageLists = (p: Perms) => p.admin || p.catalog;
 
 /** The Admin panel has something for admins and for people who manage the lists. */

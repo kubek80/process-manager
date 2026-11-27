@@ -82,7 +82,7 @@ test("only an admin sees the statistics; the server refuses everybody else", asy
   await signIn(page, ALEX);
   await open(page, "/admin/statistics");
   await expect(page.locator(".admin-nav")).not.toContainText("Statistics");
-  await expect(page.locator(".admin-main > header.admin-head h1")).toHaveText("Lists");
+  await expect(page.locator(".admin-main > header.admin-head h1")).toHaveText("Teams");
   await expect(page.locator(".stat-table")).toHaveCount(0);
 });
 

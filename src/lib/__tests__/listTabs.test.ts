@@ -25,14 +25,21 @@ describe("the lists' tabs with the keyboard", () => {
 });
 
 describe("the address of the lists", () => {
-  it("in Admin › Lists, opens what it names and otherwise leaves the page as it is (its unsaved changes too)", () => {
-    expect(addressedList(true, "tribes", "cloud-tribe", "teams")).toEqual({ list: "tribes", id: "cloud-tribe" });
-    expect(addressedList(true, "domains", undefined, "teams")).toEqual({ list: "domains", id: null });
-    expect(addressedList(true, undefined, undefined, "teams")).toBeNull();
+  const first = (p: "teams" | "tools") => (p === "teams" ? "teams" : "tools");
+  const placeOf = (l: string): "teams" | "tools" => (["teams", "pillars", "tribes", "domains", "practices", "platforms"].includes(l) ? "teams" : "tools");
+  const at = (editor: boolean, place: "teams" | "tools", list: string | undefined, id: string | undefined, current: string) => addressedList(editor, place, list, id, current, first, placeOf);
+  it("in Admin, opens what it names; an address of the place it shows leaves the page as it is (its unsaved changes too)", () => {
+    expect(at(true, "teams", "tribes", "cloud-tribe", "teams")).toEqual({ list: "tribes", id: "cloud-tribe" });
+    expect(at(true, "teams", "domains", undefined, "teams")).toEqual({ list: "domains", id: null });
+    expect(at(true, "teams", undefined, undefined, "pillars")).toBeNull();
+    // the other place: its first list, on the same page (one draft)
+    expect(at(true, "tools", undefined, undefined, "pillars")).toEqual({ list: "tools", id: null });
+    expect(at(true, "teams", undefined, undefined, "paths")).toEqual({ list: "teams", id: null });
   });
-  it("on Teams & tools, follows it always: no list is the first list", () => {
-    expect(addressedList(false, undefined, undefined, "teams")).toEqual({ list: "teams", id: null });
-    expect(addressedList(false, "tools", "github", "teams")).toEqual({ list: "tools", id: "github" });
+  it("for readers, follows it always: a place without a list is its first list", () => {
+    expect(at(false, "teams", undefined, undefined, "pillars")).toEqual({ list: "teams", id: null });
+    expect(at(false, "tools", undefined, undefined, "teams")).toEqual({ list: "tools", id: null });
+    expect(at(false, "tools", "paths", "greenfield", "teams")).toEqual({ list: "paths", id: "greenfield" });
   });
 });
 

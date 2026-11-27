@@ -266,12 +266,42 @@ describe("the name of somebody just added", () => {
   });
 });
 
-describe("the address of Teams & tools", () => {
-  it("carries the list and the entry, and the old address still works", () => {
-    const routes: Route[] = [{ page: "catalog" }, { page: "catalog", list: "platforms" }, { page: "catalog", list: "platforms", id: "google-cloud" }];
+describe("the addresses of Teams and Tools", () => {
+  it("carry the place, the list and the entry, short where they can be", () => {
+    const routes: Route[] = [
+      { page: "catalog", place: "teams" }, { page: "catalog", place: "tools" },
+      { page: "catalog", place: "teams", list: "platforms" }, { page: "catalog", place: "teams", list: "platforms", id: "google-cloud" },
+      { page: "catalog", place: "tools", list: "paths" }, { page: "catalog", place: "tools", list: "tools", id: "github" },
+      { page: "catalog", place: "teams", list: "teams", id: "cloud-platform-team" },
+    ];
     for (const r of routes) expect(parseRoute(href(r))).toEqual(r);
-    expect(href({ page: "catalog", list: "teams", id: "cloud-platform-team" })).toBe("#/catalog/teams/cloud-platform-team");
-    expect(parseRoute("#/catalog")).toEqual({ page: "catalog" });
-    expect(parseRoute("#/catalog/nonsense/x")).toEqual({ page: "catalog" });
+    expect(href({ page: "catalog" })).toBe("#/teams");
+    expect(href({ page: "catalog", place: "tools" })).toBe("#/tools");
+    expect(href({ page: "catalog", list: "teams" })).toBe("#/teams");
+    expect(href({ page: "catalog", list: "tools" })).toBe("#/tools");
+    expect(href({ page: "catalog", list: "pillars" })).toBe("#/teams/pillars");
+    expect(href({ page: "catalog", list: "patterns" })).toBe("#/tools/patterns");
+    expect(href({ page: "catalog", list: "teams", id: "cloud-platform-team" })).toBe("#/teams/teams/cloud-platform-team");
+    expect(href({ page: "catalog", list: "tools", id: "github" })).toBe("#/tools/tools/github");
+    // a list asked of the wrong place goes to its own place
+    expect(parseRoute("#/teams/paths/greenfield")).toEqual({ page: "catalog", place: "tools", list: "paths", id: "greenfield" });
+    expect(parseRoute("#/teams/nonsense/x")).toEqual({ page: "catalog", place: "teams" });
+  });
+  it("of the one place before (#/catalog…) lead to the same list and entry in its new place", () => {
+    expect(parseRoute("#/catalog")).toEqual({ page: "catalog", place: "teams" });
+    expect(parseRoute("#/catalog/nonsense/x")).toEqual({ page: "catalog", place: "teams" });
+    expect(href(parseRoute("#/catalog/tools"))).toBe("#/tools");
+    expect(href(parseRoute("#/catalog/platforms/google-cloud"))).toBe("#/teams/platforms/google-cloud");
+    expect(href(parseRoute("#/catalog/languages/go"))).toBe("#/tools/languages/go");
+    expect(href(parseRoute("#/catalog/teams"))).toBe("#/teams");
+  });
+  it("in Admin are two entries of one page; the older #/admin/lists… opens the right one", () => {
+    expect(href({ page: "admin", section: "lists" })).toBe("#/admin/teams");
+    expect(href({ page: "admin", section: "lists", place: "tools" })).toBe("#/admin/tools");
+    expect(href({ page: "admin", section: "lists", list: "pillars", id: "compute" })).toBe("#/admin/teams/pillars/compute");
+    expect(parseRoute("#/admin/tools/paths/greenfield")).toEqual({ page: "admin", section: "lists", place: "tools", list: "paths", id: "greenfield" });
+    expect(parseRoute("#/admin/lists")).toEqual({ page: "admin", section: "lists", place: "teams" });
+    expect(href(parseRoute("#/admin/lists/patterns/event-driven"))).toBe("#/admin/tools/patterns/event-driven");
+    expect(href(parseRoute("#/admin/lists/domains"))).toBe("#/admin/teams/domains");
   });
 });

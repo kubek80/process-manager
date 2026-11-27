@@ -232,16 +232,16 @@ export const LIST_WORDS = {
   teams: { one: "team", many: "teams" }, practices: { one: "practice", many: "practices" }, platforms: { one: "platform", many: "platforms" },
   categories: { one: "category", many: "categories" }, tools: { one: "tool", many: "tools" },
   patterns: { one: "architecture pattern", many: "architecture patterns" },
-  tribes: { one: "tribe", many: "tribes" }, domains: { one: "domain", many: "domains" },
+  pillars: { one: "pillar", many: "pillars" }, tribes: { one: "tribe", many: "tribes" }, domains: { one: "domain", many: "domains" },
 } as const;
 
 /**
  * A team that names a tribe, or a tribe that names a domain, the lists do not have: in words, the
  * same as the server's (`docs.Check`). `who` is the entry by its name, else by its id.
  */
-export function unknownGroupSentence(kind: "team" | "tribe", who: { id?: string; name?: string }, id: string): string {
+export function unknownGroupSentence(kind: "team" | "pillar" | "tribe", who: { id?: string; name?: string }, id: string): string {
   const name = typeof who.name === "string" && who.name.trim() ? `the ${kind} “${who.name.trim()}”` : `the ${kind} with the id “${who.id ?? ""}”`;
-  const of = kind === "team" ? "tribe" : "domain";
+  const of = kind === "team" ? "pillar" : kind === "pillar" ? "tribe" : "domain";
   return `${name[0].toUpperCase()}${name.slice(1)} is part of the ${of} “${id}”, which is not in the list of ${of}s: choose another ${of}, or none.`;
 }
 
@@ -273,7 +273,8 @@ export function validateCatalog(data: unknown): Issue[] {
   // an other name of a path belongs to one path only (the server says the same: docs.Check)
   for (const clash of otherNameClashes(c.paths)) issues.push({ level: "error", path: `paths[${clash.index}].alsoCalled`, message: clash.message });
   // a team's tribe and a tribe's domain are entries of their lists (all optional)
-  c.teams.forEach((t, i) => { if (t.tribe && !(c.tribes ?? []).some((x) => x.id === t.tribe)) issues.push({ level: "error", path: `teams[${i}].tribe`, message: unknownGroupSentence("team", t, t.tribe) }); });
+  c.teams.forEach((t, i) => { if (t.pillar && !(c.pillars ?? []).some((x) => x.id === t.pillar)) issues.push({ level: "error", path: `teams[${i}].pillar`, message: unknownGroupSentence("team", t, t.pillar) }); });
+  (c.pillars ?? []).forEach((p, i) => { if (p.tribe && !(c.tribes ?? []).some((x) => x.id === p.tribe)) issues.push({ level: "error", path: `pillars[${i}].tribe`, message: unknownGroupSentence("pillar", p, p.tribe) }); });
   (c.tribes ?? []).forEach((t, i) => { if (t.domain && !(c.domains ?? []).some((x) => x.id === t.domain)) issues.push({ level: "error", path: `tribes[${i}].domain`, message: unknownGroupSentence("tribe", t, t.domain) }); });
   // and of an architecture pattern to one pattern only
   for (const clash of patternNameClashes(c.patterns)) issues.push({ level: "error", path: `patterns[${clash.index}].alsoCalled`, message: clash.message });

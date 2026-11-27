@@ -312,11 +312,11 @@ test("the app runs under a strict security policy", async ({ page }) => {
   await page.getByRole("dialog", { name: "Publish your changes" }).getByRole("button", { name: "Not yet" }).click();
   await page.locator(".edit-bar").getByRole("button", { name: "Discard changes" }).click();
   // the icons on the reader's pages
-  await open(page, "/catalog");
+  await open(page, "/tools");
   await page.getByRole("tab", { name: /Tools/ }).click();
   await expect(page.locator("img.entry-icon").first()).toBeVisible();
   expect(await page.locator("img.entry-icon").first().evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(0);
-  for (const hash of ["/", "/search?q=gcp", "/processes", "/standards", "/s/secure-logging/doc", "/catalog", "/guide", "/admin/skills", "/requests", "/requests?state=all", "/admin/statistics"]) {
+  for (const hash of ["/", "/search?q=gcp", "/processes", "/standards", "/s/secure-logging/doc", "/teams", "/guide", "/admin/skills", "/requests", "/requests?state=all", "/admin/statistics"]) {
     await open(page, hash);
     await expect(page.locator("h1").first()).toBeVisible();
   }

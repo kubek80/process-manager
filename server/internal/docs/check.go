@@ -304,8 +304,13 @@ func Check(kind string, body []byte, l Lists) error {
 		// a team's tribe and a tribe's domain are entries of their lists; all of it is optional
 		// (unknownGroupSentence in src/lib/validate.ts says the same)
 		for i, t := range c.Teams {
-			if t.Tribe != "" && !has(c.Tribes, t.Tribe) {
-				add("teams[%d].tribe: %s", i, unknownGroup("team", t, "tribe"))
+			if t.Pillar != "" && !has(c.Pillars, t.Pillar) {
+				add("teams[%d].pillar: %s", i, unknownGroup("team", t, "pillar"))
+			}
+		}
+		for i, p := range c.Pillars {
+			if p.Tribe != "" && !has(c.Tribes, p.Tribe) {
+				add("pillars[%d].tribe: %s", i, unknownGroup("pillar", p, "tribe"))
 			}
 		}
 		for i, t := range c.Tribes {
@@ -328,10 +333,7 @@ func Check(kind string, body []byte, l Lists) error {
 
 // unknownGroup: a team that names a tribe, or a tribe that names a domain, the lists do not have.
 func unknownGroup(kind string, n Named, of string) string {
-	id := n.Tribe
-	if of == "domain" {
-		id = n.Domain
-	}
+	id := map[string]string{"pillar": n.Pillar, "tribe": n.Tribe, "domain": n.Domain}[of]
 	who := EntryWords(kind, n)
 	return fmt.Sprintf("%s%s is part of the %s “%s”, which is not in the list of %ss: choose another %s, or none.", strings.ToUpper(who[:1]), who[1:], of, id, of, of)
 }
@@ -349,7 +351,7 @@ func EntryWords(noun string, n Named) string {
 }
 
 // ListKeys are the keys of the lists in the catalog document, in the order it has them.
-var ListKeys = []string{"tiers", "paths", "environments", "languages", "teams", "practices", "platforms", "categories", "tools", "patterns", "tribes", "domains"}
+var ListKeys = []string{"tiers", "paths", "environments", "languages", "teams", "practices", "platforms", "categories", "tools", "patterns", "pillars", "tribes", "domains"}
 
 // Uses is what one process or standard takes from the lists and which other documents it
 // names. Keys of Lists: see ListKeys.

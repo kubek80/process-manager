@@ -1,4 +1,4 @@
-import type { Catalog, Contacts, Domain, Platform, Practice, Team, Tribe } from "../types";
+import type { Catalog, Contacts, Domain, Pillar, Platform, Practice, Team, Tribe } from "../types";
 import type { GroupKind, GroupRank } from "./members";
 import { looksLikeEmail } from "./members";
 import type { Filters } from "./search";
@@ -6,7 +6,7 @@ import type { Filters } from "./search";
 /**
  * The page of a team, a platform or a practice (`#/team/:id`, `#/platform/:id`, `#/practice/:id`):
  * what it is, how to reach it, who is behind it and what belongs to it. The rules of that page and
- * of the rows of Teams & tools live here, so that both say the same.
+ * of the rows of the list of teams live here, so that both say the same.
  */
 
 export type GroupEntry = Team | Platform | Practice;
@@ -90,13 +90,13 @@ export function tidyListEntry<T extends { id: string; name: string; contacts?: C
   return contacts ? { ...withNames, contacts } : withNames;
 }
 
-/** The lists without empty optional fields (`tidyListEntry`): what Admin › Lists compares with the saved lists, and saves. */
+/** The lists without empty optional fields (`tidyListEntry`): what Admin (Teams, Tools) compares with the saved lists, and saves. */
 export const tidyLists = (c: Catalog): Catalog => ({
   ...c,
   teams: c.teams.map(tidyListEntry), practices: (c.practices ?? []).map(tidyListEntry), platforms: (c.platforms ?? []).map(tidyListEntry),
   categories: (c.categories ?? []).map(tidyListEntry), tools: c.tools.map(tidyListEntry), tiers: c.tiers.map(tidyListEntry),
   environments: c.environments.map(tidyListEntry), languages: c.languages.map(tidyListEntry), paths: (c.paths ?? []).map(tidyListEntry),
-  patterns: (c.patterns ?? []).map(tidyListEntry), tribes: (c.tribes ?? []).map(tidyListEntry), domains: (c.domains ?? []).map(tidyListEntry),
+  patterns: (c.patterns ?? []).map(tidyListEntry), pillars: (c.pillars ?? []).map(tidyListEntry), tribes: (c.tribes ?? []).map(tidyListEntry), domains: (c.domains ?? []).map(tidyListEntry),
 });
 
 /**
@@ -160,7 +160,7 @@ export function contactView(e: { contact?: string; contacts?: Contacts } | undef
 }
 
 /**
- * The one line a row of Teams & tools says under the name: how to reach them first (the Slack
+ * The one line a row of the lists says under the name: how to reach them first (the Slack
  * channel, then the group email, then the Chat space, then the free line), else what it is.
  */
 export function summaryLine(e: { contact?: string; contacts?: Contacts; description?: string; url?: string }): string {
@@ -217,7 +217,7 @@ export function withScheme(v: string): string {
 }
 
 /**
- * The order of a list in Teams & tools: the person's own groups first, then by name. `mine` says
+ * The order of a list of Teams for readers: the person's own groups first, then by name. `mine` says
  * whether an entry is theirs.
  */
 export function ownFirst<T extends { id: string; name: string }>(rows: T[], mine: (id: string) => boolean): T[] {
@@ -239,129 +239,167 @@ export function nameFromMembers(members: readonly { email: string; name?: string
   return members?.find((m) => m.email.toLowerCase() === e && !!m.name?.trim())?.name?.trim();
 }
 
-// ---------- tribes and domains: optional groups of teams
+// ---------- pillars, tribes and domains: optional groups of teams
 
 /**
- * Teams can be grouped in tribes, and tribes in domains. Everything is optional: a team without a
- * tribe, a tribe without a domain, a tribe without teams and a domain without tribes are all fine.
- * Tribes and domains give no rights; each has a read-only page of its own (`ClusterPage`, `#/tribe/:id`,
- * `#/domain/:id`), and otherwise they only group what readers see.
+ * Teams can be grouped in pillars, pillars in tribes, and tribes in domains. Everything is
+ * optional: a team without a pillar, a pillar without a tribe, a tribe without a domain, and any
+ * of them without anything in it are all fine. They give no rights; each has a read-only page of
+ * its own (`ClusterPage`, `#/pillar/:id`, `#/tribe/:id`, `#/domain/:id`), and otherwise they only
+ * group what readers see.
  */
 
-/** The tribe a team is part of; undefined without one, or when it names one the lists do not have. */
-export const tribeOf = (c: Pick<Catalog, "tribes">, team: { tribe?: string } | undefined): Tribe | undefined =>
-  team?.tribe ? (c.tribes ?? []).find((t) => t.id === team.tribe) : undefined;
+const findIn = <T extends { id: string }>(list: T[] | undefined, id: string | undefined): T | undefined => (id ? (list ?? []).find((x) => x.id === id) : undefined);
+/** The pillar a team is part of; undefined without one, or when it names one the lists do not have. */
+export const pillarOf = (c: Pick<Catalog, "pillars">, team: { pillar?: string } | undefined): Pillar | undefined => findIn(c.pillars, team?.pillar);
+/** The tribe a pillar is part of, the same way. */
+export const tribeOf = (c: Pick<Catalog, "tribes">, pillar: { tribe?: string } | undefined): Tribe | undefined => findIn(c.tribes, pillar?.tribe);
 /** The domain a tribe is part of, the same way. */
-export const domainOf = (c: Pick<Catalog, "domains">, tribe: { domain?: string } | undefined): Domain | undefined =>
-  tribe?.domain ? (c.domains ?? []).find((d) => d.id === tribe.domain) : undefined;
-
-/** The teams that name a tribe, by name. */
-export const teamsOfTribe = (c: Pick<Catalog, "teams">, id: string): Team[] =>
-  c.teams.filter((t) => t.tribe === id).sort(byName);
-/** The tribes that name a domain, by name. */
-export const tribesOfDomain = (c: Pick<Catalog, "tribes">, id: string): Tribe[] =>
-  (c.tribes ?? []).filter((t) => t.domain === id).sort(byName);
+export const domainOf = (c: Pick<Catalog, "domains">, tribe: { domain?: string } | undefined): Domain | undefined => findIn(c.domains, tribe?.domain);
 
 const byName = (a: { id: string; name: string }, b: { id: string; name: string }) =>
   a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.id.localeCompare(b.id);
 
-/** One piece of the sentence that says where a team belongs; an entry of the lists links to it. */
-export interface PartOfPiece { text: string; list?: "tribes" | "domains"; id?: string }
+/** The teams that name a pillar, by name. */
+export const teamsOfPillar = (c: Pick<Catalog, "teams">, id: string): Team[] => c.teams.filter((t) => t.pillar === id).sort(byName);
+/** The pillars that name a tribe, by name. */
+export const pillarsOfTribe = (c: Pick<Catalog, "pillars">, id: string): Pillar[] => (c.pillars ?? []).filter((p) => p.tribe === id).sort(byName);
+/** The tribes that name a domain, by name. */
+export const tribesOfDomain = (c: Pick<Catalog, "tribes">, id: string): Tribe[] => (c.tribes ?? []).filter((t) => t.domain === id).sort(byName);
+
+/** The lists of the groups of teams, and the page each kind of entry has. */
+export type GroupingList = "pillars" | "tribes" | "domains";
+/** One piece of the sentence that says where something belongs; an entry of the lists links to its page. */
+export interface PartOfPiece { text: string; list?: GroupingList; id?: string }
+
+/** "Part of the pillar X, in the tribe Y, in the domain Z": the levels that exist, from `pillar`, `tribe` or `domain` up. */
+function chain(steps: { noun: string; list: GroupingList; entry?: { id: string; name: string } }[]): PartOfPiece[] {
+  const out: PartOfPiece[] = [];
+  for (const s of steps) {
+    if (!s.entry) break;
+    out.push({ text: out.length ? `, in the ${s.noun} ` : `Part of the ${s.noun} ` }, { text: s.entry.name, list: s.list, id: s.entry.id });
+  }
+  return out;
+}
 
 /**
- * Where a team belongs, as the head of its page says it: "Part of the tribe Payments, in the
- * domain Digital Channels", "Part of the tribe Payments" (a tribe without a domain); nothing for a
- * team without a tribe. The names are pieces of their own, so the page can link them to the lists.
+ * Where a team belongs, as the head of its page says it: "Part of the pillar Compute, in the tribe
+ * Cloud, in the domain Platforms and infrastructure", as far as the levels go ("Part of the pillar
+ * Compute" for a pillar in no tribe); nothing for a team in no pillar. The names are pieces of
+ * their own, so the page can link them to their pages.
  */
-export function partOf(c: Pick<Catalog, "tribes" | "domains">, team: { tribe?: string } | undefined): PartOfPiece[] {
-  const tribe = tribeOf(c, team);
-  if (!tribe) return [];
-  const domain = domainOf(c, tribe);
-  return [
-    { text: "Part of the tribe " }, { text: tribe.name, list: "tribes", id: tribe.id },
-    ...(domain ? [{ text: ", in the domain " }, { text: domain.name, list: "domains" as const, id: domain.id }] : []),
-  ];
+export function partOf(c: Pick<Catalog, "pillars" | "tribes" | "domains">, team: { pillar?: string } | undefined): PartOfPiece[] {
+  const pillar = pillarOf(c, team), tribe = tribeOf(c, pillar), domain = domainOf(c, tribe);
+  return chain([{ noun: "pillar", list: "pillars", entry: pillar }, { noun: "tribe", list: "tribes", entry: tribe }, { noun: "domain", list: "domains", entry: domain }]);
 }
 /** The same as one plain sentence. */
-export const partOfText = (c: Pick<Catalog, "tribes" | "domains">, team: { tribe?: string } | undefined) => partOf(c, team).map((p) => p.text).join("");
-
-/** A heading of the teams in Teams & tools: a domain, a tribe, or what has none. */
-export interface TeamSection {
-  /** The domain, undefined for the tribes that are in none; null for the teams that are in no tribe. */
-  domain?: Domain | null;
-  tribes: { tribe?: Tribe; teams: Team[] }[];
+export const partOfText = (c: Pick<Catalog, "pillars" | "tribes" | "domains">, team: { pillar?: string } | undefined) => partOf(c, team).map((p) => p.text).join("");
+/** Where a pillar or a tribe belongs, for the head of its page: "Part of the tribe Cloud, in the domain …". */
+export function placeOf(c: Pick<Catalog, "tribes" | "domains">, kind: ClusterKind, entry: { tribe?: string; domain?: string }): PartOfPiece[] {
+  if (kind === "pillar") { const tribe = tribeOf(c, entry); return chain([{ noun: "tribe", list: "tribes", entry: tribe }, { noun: "domain", list: "domains", entry: domainOf(c, tribe) }]); }
+  if (kind === "tribe") return chain([{ noun: "domain", list: "domains", entry: domainOf(c, entry) }]);
+  return [];
 }
-/** What the headings say where there is no domain or no tribe. */
-export const NO_DOMAIN = "Not in a domain";
-export const NO_TRIBE = "Not in a tribe";
 
 /**
- * The teams of Teams & tools grouped under their domain and tribe: the domains by name, each with
- * its tribes by name; then the tribes in no domain; the teams in no tribe last. A tribe or domain
- * none of the `teams` is in is left out. With no tribes in the lists, one section with all the
- * teams as they are (the page then looks as it does without tribes). `teams` keep their order
- * within a tribe.
+ * A section of the teams on the reader's side: a domain, or what is in none ("no-domain": the
+ * tribes in no domain; "no-tribe": the pillars in no tribe; "no-pillar": the teams in no pillar).
+ * Each group is one pillar with its tribe (none for "no-pillar").
  */
-export function teamSections(c: Pick<Catalog, "tribes" | "domains">, teams: Team[]): TeamSection[] {
-  if (!(c.tribes ?? []).length) return [{ domain: null, tribes: [{ teams }] }];
+export interface TeamSection {
+  heading: Domain | "no-domain" | "no-tribe" | "no-pillar" | "all";
+  groups: { tribe?: Tribe; pillar?: Pillar; teams: Team[] }[];
+}
+/** What the headings say where there is no domain, tribe or pillar. */
+export const NO_DOMAIN = "Not in a domain";
+export const NO_TRIBE = "Not in a tribe";
+export const NO_PILLAR = "Not in a pillar";
+
+/**
+ * The teams of the reader's list grouped under their domain, tribe and pillar: the domains by
+ * name, in each its tribes by name and in each tribe its pillars by name; then the tribes in no
+ * domain; then the pillars in no tribe; the teams in no pillar last. A pillar, tribe or domain none
+ * of the `teams` is in is left out. With no pillars in the lists, one section with all the teams as
+ * they are (the page then looks as it does without them). `teams` keep their order within a pillar.
+ */
+export function teamSections(c: Pick<Catalog, "pillars" | "tribes" | "domains">, teams: Team[]): TeamSection[] {
+  if (!(c.pillars ?? []).length) return [{ heading: "all", groups: [{ teams }] }];
+  const pillarsOf = (tribe?: Tribe) => [...(c.pillars ?? [])].filter((p) => tribeOf(c, p)?.id === tribe?.id).sort(byName)
+    .map((pillar) => ({ tribe, pillar, teams: teams.filter((t) => pillarOf(c, t)?.id === pillar.id) })).filter((g) => g.teams.length);
+  const tribesIn = (domain?: Domain) => [...(c.tribes ?? [])].filter((t) => domainOf(c, t)?.id === domain?.id).sort(byName).flatMap((t) => pillarsOf(t));
   const out: TeamSection[] = [];
-  const tribesWith = (list: Tribe[]) => list.sort(byName).map((tribe) => ({ tribe, teams: teams.filter((t) => tribeOf(c, t)?.id === tribe.id) })).filter((x) => x.teams.length);
   for (const domain of [...(c.domains ?? [])].sort(byName)) {
-    const tribes = tribesWith((c.tribes ?? []).filter((t) => domainOf(c, t)?.id === domain.id));
-    if (tribes.length) out.push({ domain, tribes });
+    const groups = tribesIn(domain);
+    if (groups.length) out.push({ heading: domain, groups });
   }
-  const loose = tribesWith((c.tribes ?? []).filter((t) => !domainOf(c, t)));
-  if (loose.length) out.push({ domain: undefined, tribes: loose });
-  const alone = teams.filter((t) => !tribeOf(c, t));
-  if (alone.length) out.push({ domain: null, tribes: [{ teams: alone }] });
+  const loose = tribesIn(undefined);
+  if (loose.length) out.push({ heading: "no-domain", groups: loose });
+  const noTribe = pillarsOf(undefined);
+  if (noTribe.length) out.push({ heading: "no-tribe", groups: noTribe });
+  const alone = teams.filter((t) => !pillarOf(c, t));
+  if (alone.length) out.push({ heading: "no-pillar", groups: [{ teams: alone }] });
   return out;
 }
 
 /**
  * The teams to choose from in a long list (the owning team on the editing screen), grouped by
- * tribe as a choice box groups them: "Payments (Digital Channels)", …, then "Not in a tribe". With
- * no tribes in the lists, one group without a name.
+ * pillar as a choice box groups them, each named with its tribe: "Compute (Cloud)", …, then "Not
+ * in a pillar". With no pillars in the lists, one group without a name.
  */
-export function teamChoices(c: Pick<Catalog, "teams" | "tribes" | "domains">): { label?: string; teams: Team[] }[] {
-  if (!(c.tribes ?? []).length) return [{ teams: c.teams }];
-  return teamSections(c, [...c.teams].sort(byName)).flatMap((s) => s.tribes.map((x) => ({
-    label: x.tribe ? (s.domain ? `${x.tribe.name} (${s.domain.name})` : x.tribe.name) : NO_TRIBE,
-    teams: x.teams,
+export function teamChoices(c: Pick<Catalog, "teams" | "pillars" | "tribes" | "domains">): { label?: string; teams: Team[] }[] {
+  if (!(c.pillars ?? []).length) return [{ teams: c.teams }];
+  return teamSections(c, [...c.teams].sort(byName)).flatMap((s) => s.groups.map((g) => ({
+    label: g.pillar ? (g.tribe ? `${g.pillar.name} (${g.tribe.name})` : g.pillar.name) : NO_PILLAR,
+    teams: g.teams,
   })));
 }
 
-// ---------- the page of a tribe or a domain
+// ---------- the page of a pillar, a tribe or a domain
 
-/** A tribe or a domain: each has a page of its own (`#/tribe/:id`, `#/domain/:id`). */
-export type ClusterKind = "tribe" | "domain";
-export const CLUSTER_LIST: Record<ClusterKind, "tribes" | "domains"> = { tribe: "tribes", domain: "domains" };
-export const CLUSTER_WORD: Record<ClusterKind, string> = { tribe: "Tribe", domain: "Domain" };
+/** A pillar, a tribe or a domain: each has a page of its own (`#/pillar/:id`, `#/tribe/:id`, `#/domain/:id`). */
+export type ClusterKind = "pillar" | "tribe" | "domain";
+export const CLUSTER_KINDS: ClusterKind[] = ["pillar", "tribe", "domain"];
+export const CLUSTER_LIST: Record<ClusterKind, GroupingList> = { pillar: "pillars", tribe: "tribes", domain: "domains" };
+export const CLUSTER_WORD: Record<ClusterKind, string> = { pillar: "Pillar", tribe: "Tribe", domain: "Domain" };
+/** The page of an entry of the grouping lists. */
+export const KIND_OF_LIST: Record<GroupingList, ClusterKind> = { pillars: "pillar", tribes: "tribe", domains: "domain" };
 
-/** The entry of the lists a tribe's or a domain's page is about; undefined for an id that does not exist. */
-export const clusterEntry = (c: Pick<Catalog, "tribes" | "domains">, kind: ClusterKind, id: string): Tribe | Domain | undefined =>
-  ((kind === "tribe" ? c.tribes : c.domains) ?? []).find((e) => e.id === id);
+/** The entry of the lists a pillar's, tribe's or domain's page is about; undefined for an id that does not exist. */
+export const clusterEntry = (c: Pick<Catalog, "pillars" | "tribes" | "domains">, kind: ClusterKind, id: string): Pillar | Tribe | Domain | undefined =>
+  findIn(c[CLUSTER_LIST[kind]] as { id: string; name: string }[] | undefined, id) as Pillar | Tribe | Domain | undefined;
 
+/** A pillar with its teams; a tribe with its pillars. */
+export interface PillarTeams { pillar: Pillar; teams: Team[] }
+export interface TribePillars { tribe: Tribe; pillars: PillarTeams[] }
 /**
- * What a tribe's or a domain's page lists: a tribe its teams; a domain its tribes, each with its
- * teams. `teams` are all the teams in it, whose processes and standards the page shows.
+ * What the page of a pillar, tribe or domain lists: a pillar its teams; a tribe its pillars, each
+ * with its teams; a domain its tribes, each with its pillars (and their teams). `teams` are all
+ * the teams in it, whose processes and standards the page shows.
  */
-export function clusterContents(c: Pick<Catalog, "teams" | "tribes" | "domains">, kind: ClusterKind, id: string): { tribes: { tribe: Tribe; teams: Team[] }[]; teams: Team[] } {
-  const tribes = kind === "tribe"
-    ? (c.tribes ?? []).filter((t) => t.id === id)
-    : tribesOfDomain(c, id);
-  const grouped = tribes.map((tribe) => ({ tribe, teams: teamsOfTribe(c, tribe.id) }));
-  return { tribes: grouped, teams: grouped.flatMap((g) => g.teams) };
+export function clusterContents(c: Pick<Catalog, "teams" | "pillars" | "tribes" | "domains">, kind: ClusterKind, id: string): { tribes: TribePillars[]; pillars: PillarTeams[]; teams: Team[] } {
+  const withTeams = (p: Pillar): PillarTeams => ({ pillar: p, teams: teamsOfPillar(c, p.id) });
+  if (kind === "pillar") {
+    const p = findIn(c.pillars, id);
+    const pillars = p ? [withTeams(p)] : [];
+    return { tribes: [], pillars, teams: pillars.flatMap((x) => x.teams) };
+  }
+  const tribes = (kind === "tribe" ? (c.tribes ?? []).filter((t) => t.id === id) : tribesOfDomain(c, id))
+    .map((tribe) => ({ tribe, pillars: pillarsOfTribe(c, tribe.id).map(withTeams) }));
+  const pillars = tribes.flatMap((t) => t.pillars);
+  return { tribes, pillars, teams: pillars.flatMap((p) => p.teams) };
 }
 
 /**
- * The search filter that finds what the teams of a tribe or domain own: the same as a team's page
- * uses (`groupFilter`), for several teams. Null when it has no teams: then nothing belongs to it
- * (an empty owner filter would mean everything).
+ * The search filter that finds what the teams of a pillar, tribe or domain own: the same as a
+ * team's page uses (`groupFilter`), for several teams. Null when it has no teams: then nothing
+ * belongs to it (an empty owner filter would mean everything).
  */
 export const clusterFilter = (teams: { id: string }[]): Filters | null => (teams.length ? { owner: teams.map((t) => t.id) } : null);
 
-/** What a tribe or a domain without teams or tribes says, in plain words. */
-export const clusterEmpty = (kind: ClusterKind, contents: { tribes: unknown[]; teams: unknown[] }): string =>
-  kind === "domain" && !contents.tribes.length ? "No tribe is part of this domain yet."
-    : !contents.teams.length ? (kind === "tribe" ? "No team is part of this tribe yet." : "No team is part of the tribes of this domain yet.")
-    : "";
+/** What a pillar, tribe or domain with nothing in it says, in plain words; "" when it has teams. */
+export function clusterEmpty(kind: ClusterKind, contents: { tribes: unknown[]; pillars: unknown[]; teams: unknown[] }): string {
+  if (kind === "domain" && !contents.tribes.length) return "No tribe is part of this domain yet.";
+  if (kind === "tribe" && !contents.pillars.length) return "No pillar is part of this tribe yet.";
+  if (contents.teams.length) return "";
+  return kind === "pillar" ? "No team is part of this pillar yet." : kind === "tribe" ? "No team is part of the pillars of this tribe yet." : "No team is part of the tribes of this domain yet.";
+}

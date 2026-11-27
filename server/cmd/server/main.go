@@ -617,6 +617,19 @@ func devRoles(ctx context.Context, st stores, log *slog.Logger) error {
 }
 
 func importFiles(ctx context.Context, st stores, dir string, log *slog.Logger) error {
+	// Lists in the shape of the version before pillars (teams that name a tribe) are converted as
+	// they are at start (upgrade.PillarsFromTribes), so that files exported by that version can
+	// still be imported.
+	st.docs.Prepare = func(kind string, body []byte) ([]byte, error) {
+		if kind != docs.Catalog {
+			return body, nil
+		}
+		out, pillars, teams, err := upgrade.PillarsFromTribes(body, log)
+		if pillars > 0 || teams > 0 {
+			log.Info("imported lists of an earlier shape: teams put in pillars", "pillars", pillars, "teams", teams)
+		}
+		return out, err
+	}
 	if _, err := importIcons(ctx, st, dir, log); err != nil {
 		return err
 	}

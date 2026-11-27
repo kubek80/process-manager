@@ -202,7 +202,7 @@ test("nobody but an admin gets the people with their roles, or changes them", as
 
 test("the Owners section of a platform still adds and removes, as Access does", async ({ page }) => {
   await signIn(page, DANA);
-  await open(page, "/admin/lists");
+  await open(page, "/admin/teams");
   await page.locator(".cat-kinds").getByRole("tab", { name: /^Platforms/ }).click();
   await page.locator(".cat-item", { hasText: "Akamai" }).click();
   const owners = page.locator('.cat-members[data-rank="owner"]');
@@ -213,7 +213,7 @@ test("the Owners section of a platform still adds and removes, as Access does", 
   await expect(owners.locator(".member-note")).toHaveText("Nobody with this address has done anything in the portal yet. Check it is right.");
   await open(page, "/admin/access");
   await expect(page.locator("li.user-row", { hasText: NEW }).locator(".user-roles li")).toHaveText(["Platform owner for Akamai"]);
-  await open(page, "/admin/lists");
+  await open(page, "/admin/teams");
   await page.locator(".cat-kinds").getByRole("tab", { name: /^Platforms/ }).click();
   await page.locator(".cat-item", { hasText: "Akamai" }).click();
   await owners.getByRole("button", { name: `Remove ${NEW} as Platform owner` }).click();

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { BadgeCheck, BookOpen, ExternalLink, Globe, Hash, Mail, MessageSquare, UserCheck } from "lucide-react";
 import type { Contacts, TargetKind } from "../types";
 import { ownedBy, teamName, useCatalog } from "../lib/catalog";
-import { contactView, groupEntry, OTHER_LABEL, rankText, splitOwnerLine, type ContactItem, type PartOfPiece } from "../lib/groups";
+import { contactView, groupEntry, OTHER_LABEL, rankText, splitOwnerLine, KIND_OF_LIST, type ContactItem, type PartOfPiece } from "../lib/groups";
 import type { GroupKind, GroupRank } from "../lib/members";
 import { href } from "../lib/store";
 import "../group.css";
@@ -100,5 +100,5 @@ export function ContactList({ entry, name, empty }: { entry: { contact?: string;
 
 /** Where a team belongs, in the words of `partOf` (src/lib/groups.ts); the tribe and the domain lead to their pages. */
 export function PartOf({ pieces }: { pieces: PartOfPiece[] }) {
-  return <>{pieces.map((p, i) => (p.list && p.id ? <a key={i} href={href({ page: p.list === "tribes" ? "tribe" : "domain", id: p.id })}>{p.text}</a> : <span key={i}>{p.text}</span>))}</>;
+  return <>{pieces.map((p, i) => (p.list && p.id ? <a key={i} href={href({ page: KIND_OF_LIST[p.list], id: p.id })}>{p.text}</a> : <span key={i}>{p.text}</span>))}</>;
 }

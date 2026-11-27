@@ -126,7 +126,7 @@ test("a practice owner sees what belongs to the practice; somebody who owns noth
 
 test("an admin adds and removes the Owners of a team on the team itself", async ({ page }) => {
   await signIn(page, DANA);
-  await open(page, "/admin/lists");
+  await open(page, "/admin/teams");
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   const owners = page.locator('.cat-members[data-rank="owner"]');
   // owners by name (a mail link), since when and by whom, and a button to remove each (the role is the section's)
@@ -153,7 +153,7 @@ test("an admin adds and removes the Owners of a team on the team itself", async 
 
   // and removing asks first, then takes it away again
   await signIn(page, DANA);
-  await open(page, "/admin/lists");
+  await open(page, "/admin/teams");
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   await owners.getByRole("button", { name: `Remove ${SAM} as Owner` }).click();
   const ask = page.getByRole("dialog", { name: "Remove this owner?" });
@@ -170,7 +170,7 @@ test("an admin adds and removes the Owners of a team on the team itself", async 
 
 test("a practice has owners and members, each with the one role it gives; a new team needs saving first", async ({ page }) => {
   await signIn(page, DANA);
-  await open(page, "/admin/lists");
+  await open(page, "/admin/teams");
   // the team Cyber Security: Riley is its Owner
   await page.locator(".cat-item", { hasText: "Cyber Security" }).click();
   await expect(page.locator(".cat-members").getByRole("button", { name: `Remove ${RILEY} as Owner` })).toBeVisible();
@@ -211,7 +211,7 @@ test("a practice has owners and members, each with the one role it gives; a new 
 
 test("who is an Owner is changed by admins only: somebody who only manages the lists sees them, nothing to change", async ({ page }) => {
   await signIn(page, ALEX);
-  await open(page, "/admin/lists");
+  await open(page, "/admin/teams");
   await page.locator(".cat-item", { hasText: "Cloud Platform team" }).click();
   const owners = page.locator('.cat-members[data-rank="owner"]');
   await expect(owners).toContainText("Owners review what this team looks after and answer its feedback. An admin gives and takes this role.");
